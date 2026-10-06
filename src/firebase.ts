@@ -473,9 +473,46 @@ export const deleteUserFromFirestore = async (userId: string) => {
 // 4. FIREBASE STORAGE: COMPANY QR CODE & ASSET UPLOADS
 // -------------------------------------------------------------
 
+// Helper: Compress image to small Base64 string for free Firestore storage
+const compressImageToBase64 = (file: File | Blob, maxWidth = 800, quality = 0.85): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = () => resolve(e.target?.result as string);
+    };
+    reader.onerror = reject;
+  });
+};
+
 /**
- * Upload Company Official BCEL QR Code to Firebase Storage (dealership_config/company_qr.jpg)
- * and update Firestore settings/dealership_config
+ * Upload Company Official BCEL QR Code
+ * - Attempts Firebase Storage first if enabled
+ * - Automatically falls back to Firestore compressed document storage (100% FREE Spark Plan, $0 cost)
+ * - Updates Firestore settings/dealership_config in real-time
  */
 export const uploadCompanyQrCodeToStorage = async (
   file: File | Blob, 
@@ -485,35 +522,35 @@ export const uploadCompanyQrCodeToStorage = async (
     throw new Error('ສິດບໍ່ພຽງພໍ: ສະເພາະ Admin ໃຫຍ່ (Super Admin) ເທົ່ານັ້ນທີ່ມີສິດອັບໂຫລດ QR ບໍລິສັດ');
   }
 
-  // If Firebase Storage is configured, upload directly to Cloud Storage
+  let finalUrl = '';
+
+  // Try Firebase Storage if available
   if (storage && isFirebaseConfigured()) {
-    const timestamp = Date.now();
-    const storagePath = `dealership_config/company_qr_${timestamp}.jpg`;
-    const storageReference = ref(storage, storagePath);
-    
-    await uploadBytes(storageReference, file);
-    const downloadUrl = await getDownloadURL(storageReference);
-
-    // Update settings/dealership_config in Firestore
-    await saveDealershipConfigToFirestore({
-      companyQrImageUrl: downloadUrl,
-      uploadedBy: superAdminUser.id,
-      updatedBy: `${superAdminUser.name} (${superAdminUser.roleTitleLo})`,
-    });
-
-    return downloadUrl;
-  } else {
-    // Local / Offline fallback: Convert file to Base64 data URL
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64Url = reader.result as string;
-        resolve(base64Url);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+    try {
+      const timestamp = Date.now();
+      const storagePath = `dealership_config/company_qr_${timestamp}.jpg`;
+      const storageReference = ref(storage, storagePath);
+      
+      await uploadBytes(storageReference, file);
+      finalUrl = await getDownloadURL(storageReference);
+    } catch (storageErr) {
+      console.warn('Firebase Storage unavailable or requires billing. Falling back to 100% Free Firestore storage:', storageErr);
+    }
   }
+
+  // If Storage not used or failed, use compressed Base64 stored directly in Firestore (100% Free Spark Plan)
+  if (!finalUrl) {
+    finalUrl = await compressImageToBase64(file);
+  }
+
+  // Update settings/dealership_config in Firestore so all staff devices sync instantly
+  await saveDealershipConfigToFirestore({
+    companyQrImageUrl: finalUrl,
+    uploadedBy: superAdminUser.id,
+    updatedBy: `${superAdminUser.name} (${superAdminUser.roleTitleLo})`,
+  });
+
+  return finalUrl;
 };
 
 // -------------------------------------------------------------
