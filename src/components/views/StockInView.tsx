@@ -1,0 +1,1280 @@
+import { useState } from 'react';
+import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceBillRecord, StockLogRecord, CustomCurrencyConfig } from '../../types';
+import { getStoredCurrencies } from '../../data/currencies';
+import { 
+  saveInventoryItemToFirestore, 
+  saveBillToFirestore, 
+  saveVehicleModelToFirestore 
+} from '../../firebase';
+import AvatrLogo from '../layout/AvatrLogo';
+import { 
+  PackagePlus, 
+  Truck, 
+  Car, 
+  ShieldCheck, 
+  MapPin, 
+  CheckCircle2, 
+  FileText, 
+  DollarSign, 
+  Calendar, 
+  User, 
+  Printer, 
+  ArrowRight,
+  Sparkles,
+  X,
+  Upload,
+  Image as ImageIcon,
+  Clock,
+  Gift,
+  BadgePercent,
+  Flame,
+  Crown,
+  Plus,
+  Lock
+} from 'lucide-react';
+
+interface StockInViewProps {
+  inventory: InventoryItem[];
+  setInventory: React.Dispatch<React.SetStateAction<InventoryItem[]>>;
+  bills: InvoiceBillRecord[];
+  setBills: React.Dispatch<React.SetStateAction<InvoiceBillRecord[]>>;
+  stockLogs: StockLogRecord[];
+  setStockLogs: React.Dispatch<React.SetStateAction<StockLogRecord[]>>;
+  vehicles: VehicleModel[];
+  setVehicles?: React.Dispatch<React.SetStateAction<VehicleModel[]>>;
+  isSuperAdmin?: boolean;
+  lang: Language;
+  onNavigateToStock: () => void;
+  onNavigateToBills: () => void;
+}
+
+export default function StockInView({
+  inventory,
+  setInventory,
+  bills,
+  setBills,
+  stockLogs,
+  setStockLogs,
+  vehicles,
+  setVehicles,
+  isSuperAdmin = false,
+  lang,
+  onNavigateToStock,
+  onNavigateToBills,
+}: StockInViewProps) {
+  // Form State - Empty by default
+  const [model, setModel] = useState<string>('AVATR 12');
+  const [vin, setVin] = useState('');
+  const [plateNumber, setPlateNumber] = useState('');
+  const [color, setColor] = useState('');
+  const [interiorColor, setInteriorColor] = useState('');
+  const [trim, setTrim] = useState('');
+  const [battery, setBattery] = useState('');
+  const [quantity, setQuantity] = useState<number | ''>('');
+  const [priceValue, setPriceValue] = useState<number | ''>('');
+  const [currencies] = useState<CustomCurrencyConfig[]>(() => getStoredCurrencies());
+  const [priceCurrency, setPriceCurrency] = useState<string>('USD');
+  const [status, setStatus] = useState<StockStatus>('ready');
+  const [customImage, setCustomImage] = useState<string>('');
+  const [eventCampaign, setEventCampaign] = useState<string>('ໂຊຣູມທົ່ວໄປ (Standard Showroom)');
+  // Schedule and Campaign fields for Event & Promotion
+  const [eventStartDate, setEventStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [eventEndDate, setEventEndDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [eventLocation, setEventLocation] = useState<string>('ສູນການຄ້າ ITECC Mall ບູດ A-04');
+  const [promotionDiscountUSD, setPromotionDiscountUSD] = useState<number>(1500);
+  const [promotionNotes, setPromotionNotes] = useState<string>('ດອກເບ້ຍ 0% ນານ 12 ເດືອນ + ຟຣີ Wallbox Charger 22kW + ປະກັນໄພຊັ້ນ 1 VIP');
+
+  // Quick preset days for event & promotion timeframe
+  const handleSetQuickPresetDays = (days: number) => {
+    const start = new Date(eventStartDate || new Date());
+    const end = new Date(start);
+    end.setDate(end.getDate() + days);
+    setEventEndDate(end.toISOString().slice(0, 10));
+  };
+
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setCustomImage(event.target?.result as string);
+        triggerToast('ອັບໂຫຼດຮູບລົດຈາກອຸປະກອນສຳເລັດ!');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Customs & Logistics - Empty by default
+  const [supplierName, setSupplierName] = useState('');
+  const [customsDocNumber, setCustomsDocNumber] = useState('');
+  const [importEntryPort, setImportEntryPort] = useState('');
+  const [destinationWarehouse, setDestinationWarehouse] = useState('');
+  
+  // PDI Inspection - Empty by default
+  const [pdiStatus, setPdiStatus] = useState<PDIStatus>('passed');
+  const [pdiInspector, setPdiInspector] = useState('');
+  const [pdiNotes, setPdiNotes] = useState('');
+
+  const [recordedBy, setRecordedBy] = useState('');
+  const [notes, setNotes] = useState('');
+
+  // Created Bill for instant preview modal
+  const [createdBill, setCreatedBill] = useState<InvoiceBillRecord | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const triggerToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  // Model selection without forcing auto-filled text onto blank form
+  const handleModelChange = (selectedModel: string) => {
+    setModel(selectedModel);
+  };
+
+  // Generate a random standard VIN
+  const generateRandomVin = () => {
+    const chars = '0123456789ABCDEFGHJKLMNPRSTUVWXYZ';
+    let randomSuffix = '';
+    for (let i = 0; i < 6; i++) {
+      randomSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const prefix = model.includes('12') ? 'LVV9C12E' : model.includes('11') ? 'LVV9C11E' : model.includes('07') ? 'LVV9C07E' : 'LVV9C88E';
+    setVin(`${prefix}7RA${randomSuffix}`);
+  };
+
+  // Super Admin: Add New Vehicle Model State & Handlers
+  const [isAddModelOpen, setIsAddModelOpen] = useState(false);
+  const [newModelName, setNewModelName] = useState('');
+  const [newModelCategory, setNewModelCategory] = useState('Luxury SUV Coupé');
+  const [newModelTagline, setNewModelTagline] = useState('');
+  const [newModelPriceUSD, setNewModelPriceUSD] = useState<number>(45000);
+  const [newModelBattery, setNewModelBattery] = useState('94.5 kWh CATL (700 km)');
+  const [newModelPowertrain, setNewModelPowertrain] = useState('Dual-Motor AWD (578 hp)');
+  const [newModelImage, setNewModelImage] = useState('');
+
+  const handleAddNewVehicleModel = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSuperAdmin) {
+      triggerToast('ສະເພາະ Admin ໃຫຍ່ ຈຶ່ງສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໄດ້!');
+      return;
+    }
+    if (!newModelName.trim()) {
+      triggerToast('ກະລຸນາປ້ອນຊື່ລຸ້ນຍານຍົນ!');
+      return;
+    }
+    const cleanName = newModelName.trim();
+    if (vehicles.some(v => v.name.toLowerCase() === cleanName.toLowerCase())) {
+      triggerToast('ລຸ້ນຍານຍົນນີ້ມີຢູ່ໃນລະບົບແລ້ວ!');
+      return;
+    }
+
+    const newVehicle: VehicleModel = {
+      id: `avatr-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+      name: cleanName,
+      subTitle: newModelCategory || 'Next-Gen Intelligent EV',
+      tagline: newModelTagline.trim() || 'ຍົນລະກຳອັດສະລິຍະພຣີມຽມ',
+      category: newModelCategory,
+      priceStartingUSD: Number(newModelPriceUSD) || 45000,
+      priceStartingLAK: (Number(newModelPriceUSD) || 45000) * 22000,
+      acceleration: '3.98s (0-100 km/h)',
+      rangeCLTC: '700 km',
+      batteryCapacity: newModelBattery || '94.5 kWh',
+      batterySupplier: 'CATL High-Energy Density Battery',
+      chargingSpeed: '800V Ultra-Fast Charging (10-80% in 15min)',
+      smartDriving: 'Huawei Qiankun ADS 3.0',
+      powertrain: newModelPowertrain || 'Dual-Motor AWD (578 ps)',
+      colors: [
+        { name: 'Onyx Black', hex: '#09090b', previewClass: 'bg-black border border-zinc-700' },
+        { name: 'Pure White', hex: '#ffffff', previewClass: 'bg-white border border-zinc-400' },
+        { name: 'Liquid Titanium', hex: '#71717a', previewClass: 'bg-zinc-600 border border-zinc-500' },
+      ],
+      description: `AVATR ${cleanName} ລຸ້ນຍານຍົນໃໝ່ເພີ່ມໂດຍ Admin ໃຫຍ່.`,
+      features: [
+        'Huawei Qiankun ADS 3.0 Autonomous Driving',
+        'HarmonyOS Intelligent Luxury Cockpit',
+        'CATL Shenxing Ultra-Fast Charging Battery',
+      ],
+      stockCount: 0,
+      heroImage: newModelImage.trim() || 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80',
+      gallery: [
+        'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80',
+      ],
+    };
+
+    if (setVehicles) {
+      setVehicles(prev => [...prev, newVehicle]);
+    }
+    try {
+      saveVehicleModelToFirestore(newVehicle);
+    } catch (e) {
+      console.warn('Firestore save model fallback:', e);
+    }
+    setModel(cleanName);
+    setIsAddModelOpen(false);
+    triggerToast(`Admin ໃຫຍ່ ໄດ້ເພີ່ມຕົວເລືອກລຸ້ນ ${cleanName} ສຳເລັດແລ້ວ! (Firestore Synced)`);
+    setNewModelName('');
+    setNewModelTagline('');
+    setNewModelImage('');
+  };
+
+  // SUBMIT IMPORT & GENERATE INBOUND BILL
+  const handleSubmitStockIn = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!vin.trim()) {
+      triggerToast('ກະລຸນາປ້ອນເລກຖັງ (VIN) ກ່ອນ!');
+      return;
+    }
+
+    const defaultImage = model === 'AVATR 12'
+      ? 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80'
+      : model === 'AVATR 11'
+      ? 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80'
+      : 'https://images.unsplash.com/photo-1541348263662-e0c8de4259ba?auto=format&fit=crop&w=800&q=80';
+
+    const cleanVin = vin.toUpperCase().trim();
+    const qty = Number(quantity) || 1;
+
+    // Validate Event / Promotion Timeframe
+    if (status === 'event' || status === 'promotion') {
+      if (!eventStartDate || !eventEndDate) {
+        triggerToast('ກະລຸນາກຳນົດວັນທີເລີ່ມຕົ້ນ ແລະ ວັນທີສິ້ນສຸດ ສຳລັບສິນຄ້າ Event / ໂປຣໂມຊັນ!');
+        return;
+      }
+      if (eventEndDate < eventStartDate) {
+        triggerToast('ວັນທີສິ້ນສຸດ ຕ້ອງເທົ່າກັບ ຫຼື ຫຼັງຈາກວັນທີເລີ່ມຕົ້ນ!');
+        return;
+      }
+    }
+
+    const rawVal = Number(priceValue) || (model === 'AVATR 12' ? 45000 : model === 'AVATR 11' ? 42000 : 38000);
+    const currObj = currencies.find(c => c.code === priceCurrency) || { rateToUSD: 1, symbol: '$' };
+    let finalPriceUSD = rawVal;
+    if (currObj.rateToUSD && currObj.rateToUSD !== 1) {
+      finalPriceUSD = Math.round(rawVal / currObj.rateToUSD);
+    }
+    let finalPriceLAK = priceCurrency === 'LAK' ? rawVal : Math.round(finalPriceUSD * 22000);
+    const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const grnNumber = `GRN-AVATR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // 1. ADD TO INVENTORY
+    const newItem: InventoryItem = {
+      vin: cleanVin,
+      model,
+      image: customImage.trim() || defaultImage,
+      plateNumber: plateNumber.trim() || 'ກມ ປ້າຍແດງ',
+      color,
+      colorHex: color.includes('White') || color.includes('ຂາວ') ? '#ffffff' : '#0a0a0b',
+      interiorColor,
+      trim,
+      battery,
+      priceUSD: finalPriceUSD,
+      priceLAK: finalPriceLAK,
+      status,
+      pdiStatus,
+      pdiInspector,
+      pdiNotes,
+      location: destinationWarehouse,
+      arrivalDate: new Date().toISOString().slice(0, 10),
+      mileageKm: 0,
+      stockQuantity: qty,
+      eventCampaign: (status === 'event' || status === 'promotion') 
+        ? (eventCampaign.trim() || (status === 'event' ? 'ງານ Event ພິເສດ' : 'ໂປຣໂມຊັນພິເສດ'))
+        : eventCampaign,
+      eventStartDate: (status === 'event' || status === 'promotion') ? eventStartDate : undefined,
+      eventEndDate: (status === 'event' || status === 'promotion') ? eventEndDate : undefined,
+      eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
+      promotionDiscountUSD: (status === 'event' || status === 'promotion') ? promotionDiscountUSD : undefined,
+      promotionNotes: (status === 'event' || status === 'promotion') ? promotionNotes : undefined,
+    };
+
+    setInventory(prev => [newItem, ...prev]);
+
+    try {
+      saveInventoryItemToFirestore(newItem);
+    } catch (e) {
+      console.warn('Firestore stock in save item fallback:', e);
+    }
+
+    // 2. CREATE OFFICIAL INBOUND BILL (GOODS RECEIPT NOTE)
+    const newBill: InvoiceBillRecord = {
+      id: grnNumber,
+      billType: 'import',
+      billNumber: grnNumber,
+      date: now,
+      vin: cleanVin,
+      model,
+      trim,
+      plateNumber: newItem.plateNumber,
+      color,
+      interiorColor,
+      battery,
+      quantity: qty,
+      unitPriceUSD: finalPriceUSD,
+      unitPriceLAK: finalPriceLAK,
+      discountUSD: 0,
+      discountLAK: 0,
+      netTotalUSD: finalPriceUSD * qty,
+      netTotalLAK: finalPriceLAK * qty,
+      amountUSD: finalPriceUSD * qty,
+      amountLAK: finalPriceLAK * qty,
+      supplierName,
+      customsDocNumber,
+      importEntryPort,
+      destinationWarehouse,
+      inspectorName: pdiInspector,
+      pdiStatusInitial: pdiStatus,
+      statusInitial: status,
+      eventCampaign: (status === 'event' || status === 'promotion') ? eventCampaign : undefined,
+      eventStartDate: (status === 'event' || status === 'promotion') ? eventStartDate : undefined,
+      eventEndDate: (status === 'event' || status === 'promotion') ? eventEndDate : undefined,
+      eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
+      recordedBy,
+      notes: notes || 'ຮັບເຂົ້າສາງທາງການ ຜ່ານດ່ານສາກົນບໍ່ເຕັນ ກວດສອບສະພາບ 100%',
+    };
+
+    setBills(prev => [newBill, ...prev]);
+
+    try {
+      saveBillToFirestore(newBill);
+    } catch (e) {
+      console.warn('Firestore bill save fallback:', e);
+    }
+
+    // 3. RECORD TRANSACTION LOG
+    const newStockLog: StockLogRecord = {
+      id: `LOG-IN-${Date.now().toString().slice(-6)}`,
+      type: 'stock_in',
+      vin: cleanVin,
+      model,
+      plateNumber: newItem.plateNumber,
+      color,
+      quantity: qty,
+      priceUSD: finalPriceUSD,
+      priceLAK: finalPriceLAK,
+      timestamp: now,
+      recordedBy,
+      notes: `ນຳເຂົ້າລົດໃໝ່ ${qty} ຄັນ ໃບຮັບເລກທີ ${grnNumber} (ສາງ: ${destinationWarehouse})`,
+      remainingStock: qty,
+    };
+
+    setStockLogs(prev => [newStockLog, ...prev]);
+
+    // Open Instant Bill View & Notification
+    setCreatedBill(newBill);
+    triggerToast(`ນຳເຂົ້າລົດ ${model} (VIN: ${cleanVin}) ສຳເລັດ ແລະ ອອກໃບຮັບເຂົ້າສິນຄ້າແລ້ວ!`);
+
+    // Reset Form for next entry
+    setVin('');
+  };
+
+  return (
+    <div className="space-y-6 pb-16">
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="fixed top-20 right-6 z-50 bg-emerald-950 border border-emerald-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
+      {/* Top Banner */}
+      <div className="bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="p-1.5 bg-blue-500 text-white rounded-lg">
+              <PackagePlus className="w-5 h-5" />
+            </span>
+            <span className="text-xs font-mono uppercase tracking-widest text-blue-400 font-bold">
+              VEHICLE IMPORT & STOCK-IN ENTRY
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            ປ້ອນຂໍ້ມູນນຳເຂົ້າລົດຍົນ (Stock-In)
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+            ແບບຟອມລະອຽດສຳລັບບັນທຶກລົດຍົນນຳເຂົ້າໃໝ່ • ອອກໃບຮັບເຂົ້າສິນຄ້າ (GRN) ແລະ ອັບເດດສະຕ໋ອກທັນທີ
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onNavigateToStock}
+            className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors"
+          >
+            <Car className="w-4 h-4 text-zinc-400" />
+            <span>ເບິ່ງສະຕ໋ອກລົດ ({inventory.length} ລາຍການ)</span>
+          </button>
+
+          <button
+            onClick={onNavigateToBills}
+            className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors"
+          >
+            <FileText className="w-4 h-4 text-zinc-400" />
+            <span>ເບິ່ງບິນນຳເຂົ້າ ({bills.filter(b => b.billType === 'import').length})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* MAIN IMPORT FORM */}
+      <form onSubmit={handleSubmitStockIn} className="space-y-6">
+        {/* Step 1: Vehicle Model & Identifiers */}
+        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5">
+          <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
+            <Car className="w-4 h-4 text-blue-400" />
+            <span>1. ຂໍ້ມູນຍານຍົນ ແລະ ເລກຖັງ (Vehicle & Identity)</span>
+          </div>
+
+          {/* Model Selection Tabs */}
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+              <label className="text-zinc-400 font-medium text-xs flex items-center gap-2">
+                <span>ເລືອກລຸ້ນຍານຍົນ AVATR *</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
+                  {vehicles.length} ລຸ້ນໃນລະບົບ
+                </span>
+              </label>
+
+              {/* Admin ໃຫຍ່ ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້ */}
+              {isSuperAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAddModelOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold shadow-md transition-all cursor-pointer"
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  <span>+ ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນ (Admin ໃຫຍ່)</span>
+                </button>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 text-[11px] font-mono">
+                  <Lock className="w-3 h-3 text-zinc-500" />
+                  <span>ລຸ້ນຍານຍົນມາດຕະຖານ</span>
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {vehicles.map((v) => {
+                const isSelected = model === v.name;
+                const isCustom = !['AVATR 12', 'AVATR 11', 'AVATR 07'].includes(v.name);
+                return (
+                  <button
+                    key={v.id || v.name}
+                    type="button"
+                    onClick={() => handleModelChange(v.name)}
+                    className={`p-4 rounded-2xl border text-left transition-all relative ${
+                      isSelected
+                        ? 'bg-zinc-900 border-white text-white shadow-xl ring-1 ring-white/30'
+                        : 'bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <strong className="block text-sm font-bold text-white">{v.name}</strong>
+                      {isCustom && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/40 font-bold">
+                          Admin Custom
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-zinc-400 font-sans block mt-0.5 truncate">
+                      {v.subTitle || v.category} {v.rangeCLTC ? `(${v.rangeCLTC})` : ''}
+                    </span>
+                    <div className="flex items-center justify-between mt-1 text-[10px] font-mono">
+                      <span className="text-emerald-400 font-semibold">
+                        ເລີ່ມຕົ້ນ ${v.priceStartingUSD?.toLocaleString()}
+                      </span>
+                      {v.powertrain && (
+                        <span className="text-zinc-500 truncate max-w-[120px]">
+                          {v.powertrain}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            {/* Stock Image: Choose or Upload from Device */}
+            <div className="sm:col-span-2 lg:col-span-3 p-4 bg-zinc-900/60 rounded-2xl border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-zinc-300 font-semibold text-xs flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-emerald-400" />
+                  <span>ຮູບພາບລົດໃນສະຕ໋ອກ (Stock Image - ເລືອກຈາກ File on Device ຫຼື ໃຊ້ຮູບມາດຕະຖານ)</span>
+                </label>
+                {customImage && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomImage('')}
+                    className="text-[10px] text-red-400 hover:underline flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" /> ລ້າງຮູບທີ່ອັບໂຫຼດ
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="w-24 h-16 rounded-xl bg-zinc-800 overflow-hidden border border-zinc-700 flex-shrink-0 relative">
+                  <img
+                    src={customImage || (model === 'AVATR 12' ? 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80' : model === 'AVATR 11' ? 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80' : 'https://images.unsplash.com/photo-1541348263662-e0c8de4259ba?auto=format&fit=crop&w=800&q=80')}
+                    alt="Stock preview"
+                    className="w-full h-full object-cover"
+                  />
+                  {customImage && (
+                    <span className="absolute bottom-1 right-1 px-1 py-0.2 bg-emerald-500 text-black text-[8px] font-bold rounded">
+                      Device File
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="cursor-pointer inline-flex items-center gap-2 px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl border border-zinc-700 font-semibold text-xs transition-colors shadow-sm">
+                    <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>ເລືອກຮູບຈາກອຸປະກອນ (Choose Image File on Device)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <p className="text-[10px] text-zinc-500 font-mono">
+                    ຮອງຮັບໄຟລ໌ JPG, PNG, WEBP (ສາມາດຖ່າຍຮູບລົດຕົວຈິງ ຫຼື ເລືອກຈາກຄັງຮູບໃນເຄື່ອງ)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* VIN with Quick Random Generator */}
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-zinc-400 font-medium">ເລກຖັງ (VIN) *</label>
+                <button
+                  type="button"
+                  onClick={generateRandomVin}
+                  className="text-[10px] text-blue-400 hover:underline font-mono"
+                >
+                  + ສຸ່ມເລກ VIN
+                </button>
+              </div>
+              <input
+                type="text"
+                required
+                value={vin}
+                onChange={(e) => setVin(e.target.value)}
+                placeholder="e.g. LVV9C12E7RA008812"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-white"
+              />
+            </div>
+
+            {/* Plate Number */}
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ທະບຽນ / ສະຖານະປ້າຍ</label>
+              <input
+                type="text"
+                value={plateNumber}
+                onChange={(e) => setPlateNumber(e.target.value)}
+                placeholder="e.g. ກມ ປ້າຍແດງ, ລໍຖ້າປ້າຍ..."
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+              />
+            </div>
+
+            {/* Color */}
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ສີຕົວລົດ (Exterior Color)</label>
+              <select
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              >
+                <option value="">-- ເລືອກສີຕົວລົດ --</option>
+                <option value="Obsidian Black (ດຳ Onyx)">Obsidian Black (ດຳ Onyx)</option>
+                <option value="Ceramic White (ຂາວເຊລາມິກ)">Ceramic White (ຂາວເຊລາມິກ)</option>
+                <option value="Liquid Titanium (ເທົາເງິນ)">Liquid Titanium (ເທົາເງິນ)</option>
+                <option value="Pure Mist Green (ຂຽວໝອກ)">Pure Mist Green (ຂຽວໝອກ)</option>
+                <option value="Carbon Graphite (ເທົາຄາຣ໌ບອນ)">Carbon Graphite (ເທົາຄາຣ໌ບອນ)</option>
+              </select>
+            </div>
+
+            {/* Interior */}
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ສີພາຍໃນ (Interior Trim)</label>
+              <input
+                type="text"
+                value={interiorColor}
+                onChange={(e) => setInteriorColor(e.target.value)}
+                placeholder="e.g. Luxury Nappa Leather (ດຳ-ເທົາ)"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              />
+            </div>
+
+            {/* Powertrain / Trim */}
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ລະບົບຂັບເຄື່ອນ (Trim / Motor)</label>
+              <input
+                type="text"
+                value={trim}
+                onChange={(e) => setTrim(e.target.value)}
+                placeholder="e.g. Dual-Motor AWD Performance (578 hp)"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              />
+            </div>
+
+            {/* Battery Spec */}
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ສະເປັກແບັດເຕີຣີ CATL</label>
+              <input
+                type="text"
+                value={battery}
+                onChange={(e) => setBattery(e.target.value)}
+                placeholder="e.g. 94.5 kWh CATL Ternary Lithium (700 km)"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
+              />
+            </div>
+
+            {/* Event & Campaign Category */}
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ໝວດສິນຄ້າ / Event Campaign</label>
+              <select
+                value={eventCampaign}
+                onChange={(e) => setEventCampaign(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              >
+                <option value="ໂຊຣູມທົ່ວໄປ (Standard Showroom)">ໂຊຣູມທົ່ວໄປ (Standard Showroom)</option>
+                <option value="ງານ Motor Show 2026">ງານ Motor Show 2026</option>
+                <option value="ງານ ITECC EV Expo">ງານ ITECC EV Expo</option>
+                <option value="ໂປຣໂມຊັ່ນ Event ພິເສດ">ໂປຣໂມຊັ່ນ Event ພິເສດ</option>
+                <option value="ລົດທົດລອງຂັບ VIP Event">ລົດທົດລອງຂັບ VIP Event</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Step 2: Logistics, Customs & Warehouse */}
+        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5">
+          <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
+            <Truck className="w-4 h-4 text-blue-400" />
+            <span>2. ຂໍ້ມູນຂົນສົ່ງ, ພາສີ ແລະ ສາງເກັບຮັກສາ (Customs & Logistics)</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ຜູ້ສະໜອງ / ແຫຼ່ງຜະລິດ (Supplier)</label>
+              <input
+                type="text"
+                value={supplierName}
+                onChange={(e) => setSupplierName(e.target.value)}
+                placeholder="e.g. AVATR Technology Co., Ltd."
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ໃບແຈ້ງພາສີ B01 (Customs Doc No.)</label>
+              <input
+                type="text"
+                value={customsDocNumber}
+                onChange={(e) => setCustomsDocNumber(e.target.value)}
+                placeholder="e.g. B01-LAO-2026-90823"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ດ່ານສາກົນນຳເຂົ້າ (Port of Entry)</label>
+              <select
+                value={importEntryPort}
+                onChange={(e) => setImportEntryPort(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              >
+                <option value="">-- ເລືອກດ່ານສາກົນນຳເຂົ້າ --</option>
+                <option value="ດ່ານສາກົນບໍ່ເຕັນ (Lao-China Border)">ດ່ານສາກົນບໍ່ເຕັນ (ລາວ-ຈີນ)</option>
+                <option value="ດ່ານຂົວມິດຕະພາບ 1 (Vientiane-Nong Khai)">ດ່ານຂົວມິດຕະພາບ 1 (ວຽງຈັນ)</option>
+                <option value="ດ່ານສາກົນວັງເຕົ່າ (Chong Mek)">ດ່ານສາກົນວັງເຕົ່າ (ຈຳປາສັກ)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ສາງເກັບລົດ (Destination Warehouse)</label>
+              <select
+                value={destinationWarehouse}
+                onChange={(e) => setDestinationWarehouse(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              >
+                <option value="">-- ເລືອກສາງເກັບລົດ --</option>
+                <option value="ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ (Main Showroom)">ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ</option>
+                <option value="ສາງໃຫຍ່ດົງໂດກ (Dongdok Central Depot)">ສາງໃຫຍ່ດົງໂດກ (Central Depot)</option>
+                <option value="ສູນກວດສະພາບ PDI ຫຼັກ 8">ສູນກວດສະພາບ PDI ຫຼັກ 8</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ສະຖານະສິນຄ້າເບື້ອງຕົ້ນ *</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as any)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
+              >
+                <option value="ready">ພ້ອມຂາຍທັນທີ (Ready)</option>
+                <option value="pdi">ກຳລັງ PDI (Inspection)</option>
+                <option value="imported">ນຳເຂົ້າ / ລໍຖ້າກຽມຂາຍ (Imported)</option>
+                <option value="event">ລົດງານ Event (Motor Expo / Roadshow)</option>
+                <option value="promotion">ລົດແຄມເປນໂປຣໂມຊັນ (Special Promotion)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ຜູ້ບັນທຶກການນຳເຂົ້າ</label>
+              <input
+                type="text"
+                value={recordedBy}
+                placeholder="ຊື່ຜູ້ບັນທຶກ..."
+                onChange={(e) => setRecordedBy(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Schedule & Campaign Details (ສະເພາະສິນຄ້າປະເພດ Event & ໂປຣໂມຊັນ) */}
+        {(status === 'event' || status === 'promotion') && (
+          <div className="bg-gradient-to-b from-amber-950/40 via-zinc-950 to-zinc-950 border-2 border-amber-500/70 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl transition-all">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-amber-500/30">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 bg-amber-400 text-black rounded-xl">
+                  <Calendar className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-white font-extrabold text-base flex items-center gap-2">
+                    <span>ຂໍ້ມູນກຳນົດເວລາ {status === 'event' ? 'ງານ Event' : 'ແຄມເປນໂປຣໂມຊັນ'} (Schedule & Campaign Details)</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-400 text-black font-bold uppercase">
+                      ບັງຄັບປ້ອນກຳນົດເວລາ
+                    </span>
+                  </h3>
+                  <p className="text-xs text-amber-300/80 mt-0.5">
+                    ກຳນົດວັນທີເລີ່ມຕົ້ນ, ວັນທີສິ້ນສຸດ ແລະ ລາຍລະອຽດງານເພື່ອຕິດຕາມໄລຍະເວລາຈັດສະແດງ
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              {/* Campaign Title */}
+              <div className="sm:col-span-2">
+                <label className="block text-amber-200 mb-1.5 font-bold">
+                  ຊື່ງານ Event / ຊື່ໂປຣໂມຊັນ (Campaign Title) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={eventCampaign}
+                  onChange={(e) => setEventCampaign(e.target.value)}
+                  placeholder={status === 'event' ? 'e.g. ງານ Vientiane Motor Expo 2026' : 'e.g. ໂປຣໂມຊັນເປີດຕົວລົດໄຟຟ້າ Flagship'}
+                  className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3.5 py-2.5 text-white font-semibold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* Start Date */}
+              <div>
+                <label className="block text-amber-200 mb-1.5 font-bold flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                  <span>ວັນທີເລີ່ມຕົ້ນ (Start Date) *</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={eventStartDate}
+                  onChange={(e) => setEventStartDate(e.target.value)}
+                  className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* End Date */}
+              <div>
+                <label className="block text-amber-200 mb-1.5 font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>ວັນທີສິ້ນສຸດ (End Date) *</span>
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {[7, 14, 30, 60].map(days => (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => handleSetQuickPresetDays(days)}
+                        className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-amber-400 hover:text-black text-zinc-300 transition-colors"
+                      >
+                        +{days}ວັນ
+                      </button>
+                    ))}
+                  </div>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={eventEndDate}
+                  onChange={(e) => setEventEndDate(e.target.value)}
+                  className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              {/* Event Location */}
+              <div>
+                <label className="block text-zinc-300 mb-1 font-medium flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>ສະຖານທີ່ຈັດງານ / ພື້ນທີ່ໂຊຣູມ</span>
+                </label>
+                <input
+                  type="text"
+                  value={eventLocation}
+                  onChange={(e) => setEventLocation(e.target.value)}
+                  placeholder="e.g. ສູນການຄ້າ ITECC Mall ບູດ A-04 ຫຼື ໂຊຣູມຫຼັກ 3"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-white"
+                />
+              </div>
+
+              {/* Special Discount or Benefit */}
+              <div>
+                <label className="block text-zinc-300 mb-1 font-medium flex items-center gap-1">
+                  <BadgePercent className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>ມູນຄ່າສ່ວນຫຼຸດພິເສດ ($ USD)</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={promotionDiscountUSD || ''}
+                  onChange={(e) => setPromotionDiscountUSD(Number(e.target.value) || 0)}
+                  placeholder="e.g. 2500"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white font-mono focus:outline-none focus:border-white"
+                />
+              </div>
+            </div>
+
+            {/* Campaign Notes & Conditions */}
+            <div className="text-xs">
+              <label className="block text-zinc-300 mb-1 font-medium flex items-center gap-1">
+                <Gift className="w-3.5 h-3.5 text-zinc-400" />
+                <span>ເງື່ອນໄຂໂປຣໂມຊັນ & ຂອງແຖມພິເສດໃນຊ່ວງເວລານີ້</span>
+              </label>
+              <input
+                type="text"
+                value={promotionNotes}
+                onChange={(e) => setPromotionNotes(e.target.value)}
+                placeholder="e.g. ດອກເບ້ຍ 0% ນານ 12 ເດືອນ + ຟຣີ Wallbox Charger 22kW + ປະກັນໄພຊັ້ນ 1 VIP"
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-white"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Valuation, Quantity & PDI */}
+        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5">
+          <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
+            <DollarSign className="w-4 h-4 text-emerald-400" />
+            <span>3. ມູນຄ່າ, ຈຳນວນຄັນ ແລະ ການກວດ PDI (Pricing & PDI)</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            <div className="sm:col-span-2">
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
+                <label className="text-zinc-400 font-medium">ລາຄາຕໍ່ຄັນ (Pricing per Unit) *</label>
+                <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800 text-[10px] font-mono flex-wrap">
+                  {currencies.map((curr) => (
+                    <button
+                      key={curr.code}
+                      type="button"
+                      onClick={() => setPriceCurrency(curr.code)}
+                      className={`px-2 py-0.5 rounded transition-colors ${
+                        priceCurrency === curr.code
+                          ? 'bg-emerald-500 text-black font-black shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {curr.code} ({curr.symbol})
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 font-mono text-xs font-bold">
+                  {currencies.find(c => c.code === priceCurrency)?.symbol || '$'}
+                </span>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  placeholder={`ປ້ອນລາຄາເປັນ (${priceCurrency})...`}
+                  value={priceValue}
+                  onChange={(e) => setPriceValue(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-white"
+                />
+              </div>
+
+              {priceValue !== '' && Number(priceValue) > 0 && (
+                <div className="text-[11px] text-zinc-400 font-mono mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {currencies
+                    .filter(c => c.code !== priceCurrency && ['USD', 'LAK', 'THB'].includes(c.code))
+                    .map(c => {
+                      const selectedRate = currencies.find(sc => sc.code === priceCurrency)?.rateToUSD || 1;
+                      const valInUSD = Number(priceValue) / selectedRate;
+                      const converted = Math.round(valInUSD * c.rateToUSD);
+                      return (
+                        <span key={c.code} className="text-zinc-300">
+                          ≈ {c.symbol} {converted.toLocaleString()} {c.code}
+                        </span>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ຈຳນວນທີ່ນຳເຂົ້າ (ຄັນ) *</label>
+              <input
+                type="number"
+                required
+                min="1"
+                max="50"
+                placeholder="ຈຳນວນຄັນ..."
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ຜົນການກວດສອບ PDI</label>
+              <select
+                value={pdiStatus}
+                onChange={(e) => setPdiStatus(e.target.value as any)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              >
+                <option value="passed">ຜ່ານມາດຕະຖານ 100% (Passed)</option>
+                <option value="in_progress">ກຳລັງກວດລະບົບ (In Progress)</option>
+                <option value="pending">ລໍຖ້າກວດເຊັກ (Pending)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1 font-medium">ຊ່າງກວດສອບ PDI</label>
+              <input
+                type="text"
+                value={pdiInspector}
+                placeholder="ຊື່ຊ່າງກວດສອບ..."
+                onChange={(e) => setPdiInspector(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="text-xs">
+            <label className="block text-zinc-400 mb-1 font-medium">ໝາຍເຫດການກວດເຊັກ / ບັນທຶກເພີ່ມເຕີມ</label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. ລົດນຳເຂົ້າລັອດໃໝ່ ສະພາບແບັດເຕີຣີ CATL 100%, ລະບົບ LiDAR ສົມບູນ ພ້ອມສົ່ງມອບ"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+            />
+          </div>
+        </div>
+
+        {/* Submit Action Card */}
+        <div className="bg-zinc-950 border border-blue-900/60 rounded-3xl p-6 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
+          <div>
+            <div className="text-sm font-bold text-white">
+              ມູນຄ່ານຳເຂົ້າລວມ (Total Inbound Valuation):
+            </div>
+            <div className="text-2xl font-black font-mono text-blue-400">
+              ${(
+                (priceCurrency === 'USD' 
+                  ? (Number(priceValue) || 0) 
+                  : priceCurrency === 'THB' 
+                  ? Math.round((Number(priceValue) || 0) / 35.5) 
+                  : Math.round((Number(priceValue) || 0) / 22000)) * (Number(quantity) || 0)
+              ).toLocaleString()} USD <span className="text-xs text-zinc-400 font-sans">({Number(quantity) || 0} ຄັນ)</span>
+            </div>
+            <div className="text-[11px] text-zinc-400 font-mono">
+              ≈ ₭ {(
+                (priceCurrency === 'USD' 
+                  ? (Number(priceValue) || 0) * 22000 
+                  : priceCurrency === 'THB' 
+                  ? (Number(priceValue) || 0) * 620 
+                  : (Number(priceValue) || 0)) * (Number(quantity) || 0)
+              ).toLocaleString()} LAK
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm rounded-2xl transition-all shadow-xl flex items-center gap-2 hover:scale-[1.01]"
+          >
+            <PackagePlus className="w-5 h-5" />
+            <span>ບັນທຶກນຳເຂົ້າ & ອອກໃບຮັບສິນຄ້າ (Save & Issue Bill)</span>
+          </button>
+        </div>
+      </form>
+
+      {/* POPUP MODAL: INSTANT VIEW OF GENERATED IMPORT BILL */}
+      {createdBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
+          <div className="relative w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 text-white space-y-4 max-h-[92vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2 text-blue-400">
+                <CheckCircle2 className="w-5 h-5" />
+                <h3 className="font-bold text-base text-white">ນຳເຂົ້າສຳເລັດ • ອອກໃບຮັບເຂົ້າສິນຄ້າແລ້ວ</h3>
+              </div>
+              <button
+                onClick={() => setCreatedBill(null)}
+                className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 bg-black border border-zinc-800 rounded-2xl space-y-3 text-xs font-mono">
+              <div className="flex justify-between items-start pb-3 border-b border-zinc-800">
+                <div>
+                  <span className="font-black text-white text-sm block">AVATR AUTO SERVICE</span>
+                  <span className="text-[10px] text-zinc-400">ໃບຮັບເຂົ້າສິນຄ້າ (GOODS RECEIPT NOTE)</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-blue-400 font-bold block">{createdBill.billNumber}</span>
+                  <span className="text-zinc-500 text-[10px]">{createdBill.date}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 text-zinc-300">
+                <div><span className="text-zinc-500 font-sans">ລຸ້ນລົດ:</span> <strong className="text-white">{createdBill.model}</strong> ({createdBill.trim})</div>
+                <div><span className="text-zinc-500 font-sans">ເລກຖັງ (VIN):</span> <span className="text-white">{createdBill.vin}</span></div>
+                <div><span className="text-zinc-500 font-sans">ສີ/ປ້າຍ:</span> {createdBill.color} • {createdBill.plateNumber}</div>
+                <div><span className="text-zinc-500 font-sans">ແຫຼ່ງທີ່ມາ:</span> {createdBill.supplierName}</div>
+                <div><span className="text-zinc-500 font-sans">ສາງເກັບ:</span> {createdBill.destinationWarehouse}</div>
+                <div className="pt-2 flex justify-between text-sm font-bold text-white border-t border-zinc-900">
+                  <span>ມູນຄ່ານຳເຂົ້າ:</span>
+                  <span className="text-blue-400">${createdBill.netTotalUSD.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setCreatedBill(null);
+                  onNavigateToBills();
+                }}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold border border-zinc-700"
+              >
+                ເບິ່ງໃນເມນູໃບບິນ
+              </button>
+              <button
+                onClick={() => {
+                  setCreatedBill(null);
+                  onNavigateToStock();
+                }}
+                className="px-4 py-2 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold"
+              >
+                ໄປທີ່ໜ້າສະຕ໋ອກລົດ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADMIN ໃຫຍ່ ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນ (Super Admin Add Vehicle Model) */}
+      {isSuperAdmin && isAddModelOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
+          <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 text-white space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2.5 rounded-2xl bg-amber-400 text-black shadow-lg shadow-amber-400/20">
+                  <Crown className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                    <span>ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໃໝ່</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 font-bold">
+                      Admin ໃຫຍ່ (Super Admin)
+                    </span>
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    ສ້າງ ແລະ ເພີ່ມລຸ້ນຍານຍົນ AVATR ເຂົ້າໃນລະບົບຕົວເລືອກ Stock-In, ສະຕ໋ອກລົດ, ໃບສະເໜີລາຄາ ແລະ POS
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModelOpen(false)}
+                className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="space-y-1.5 p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800/80">
+              <label className="text-[11px] text-zinc-400 font-medium block">
+                ກົດເລືອກຕົວຢ່າງລຸ້ນຍານຍົນແນະນຳດ່ວນ (Quick Presets):
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { name: 'AVATR 011 MMW Edition', cat: 'Ultra-Luxury Limited Edition', price: 95000, bat: '116.8 kWh (700 km)', pwr: 'Dual-Motor AWD (578 hp)' },
+                  { name: 'AVATR 06 Gran Turismo', cat: 'Intelligent Sports Sedan', price: 39000, bat: '90 kWh CATL (650 km)', pwr: 'Dual-Motor AWD (510 hp)' },
+                  { name: 'AVATR 15 Extended Range', cat: 'Smart SUV EREV (Extended Range)', price: 36000, bat: '45 kWh + Range Extender (1,150 km)', pwr: 'Dual-Motor AWD' },
+                  { name: 'AVATR 07 Ultra Performance', cat: 'Urban Smart SUV', price: 43000, bat: '100 kWh (720 km)', pwr: 'Dual-Motor AWD (598 hp)' },
+                ].map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => {
+                      setNewModelName(preset.name);
+                      setNewModelCategory(preset.cat);
+                      setNewModelPriceUSD(preset.price);
+                      setNewModelBattery(preset.bat);
+                      setNewModelPowertrain(preset.pwr);
+                    }}
+                    className="text-[11px] px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-amber-400 hover:text-black text-zinc-300 border border-zinc-800 transition-all font-medium"
+                  >
+                    + {preset.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleAddNewVehicleModel} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Model Name */}
+                <div className="sm:col-span-2">
+                  <label className="block text-zinc-300 font-bold mb-1">
+                    ຊື່ລຸ້ນຍານຍົນ (Model Name) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newModelName}
+                    onChange={(e) => setNewModelName(e.target.value)}
+                    placeholder="e.g. AVATR 011 MMW Edition ຫຼື AVATR 06"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                {/* Category */}
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">
+                    ປະເພດຍານຍົນ (Category / Subtitle)
+                  </label>
+                  <input
+                    type="text"
+                    value={newModelCategory}
+                    onChange={(e) => setNewModelCategory(e.target.value)}
+                    placeholder="e.g. Luxury Sports Coupé"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+
+                {/* Price Starting USD */}
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">
+                    ລາຄາເລີ່ມຕົ້ນ ($ USD)
+                  </label>
+                  <input
+                    type="number"
+                    min="1000"
+                    value={newModelPriceUSD}
+                    onChange={(e) => setNewModelPriceUSD(Number(e.target.value) || 0)}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white font-mono focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+
+                {/* Tagline */}
+                <div className="sm:col-span-2">
+                  <label className="block text-zinc-400 font-medium mb-1">
+                    ຄຳຂວັນລຸ້ນ / Tagline
+                  </label>
+                  <input
+                    type="text"
+                    value={newModelTagline}
+                    onChange={(e) => setNewModelTagline(e.target.value)}
+                    placeholder="e.g. ຍົນລະກຳອັດສະລິຍະລະດັບ Masterpiece ຮ່ວມມືກັບ Matthew M. Williams"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+
+                {/* Battery & Range */}
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">
+                    ຄວາມຈຸແບັດເຕີຣີ / ໄລຍະທາງ (Battery & Range)
+                  </label>
+                  <input
+                    type="text"
+                    value={newModelBattery}
+                    onChange={(e) => setNewModelBattery(e.target.value)}
+                    placeholder="e.g. 94.5 kWh CATL (700 km)"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+
+                {/* Powertrain */}
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">
+                    ລະບົບຂັບເຄື່ອນ (Powertrain / Motor)
+                  </label>
+                  <input
+                    type="text"
+                    value={newModelPowertrain}
+                    onChange={(e) => setNewModelPowertrain(e.target.value)}
+                    placeholder="e.g. Dual-Motor AWD (578 hp)"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+
+                {/* Image URL */}
+                <div className="sm:col-span-2">
+                  <label className="block text-zinc-400 font-medium mb-1">
+                    ຮູບພາບລຸ້ນລົດ (Image URL ຫຼື ປ່ອຍວ່າງເພື່ອໃຊ້ຮູບມາດຕະຖານ)
+                  </label>
+                  <input
+                    type="url"
+                    value={newModelImage}
+                    onChange={(e) => setNewModelImage(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white font-mono text-xs focus:outline-none focus:border-zinc-500"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModelOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-900 text-xs font-semibold"
+                >
+                  ຍົກເລີກ
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold transition-all shadow-lg flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>ບັນທຶກ ແລະ ເພີ່ມລຸ້ນເຂົ້າລະບົບຕົວເລືອກ</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

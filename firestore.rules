@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ຟັງຊັນກວດສອບວ່າເຂົ້າສູ່ລະບົບແລ້ວຫຼືບໍ່
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // ຟັງຊັນກວດສອບວ່າແມ່ນ Admin ໃຫຍ່ (Super Admin) ຫຼືບໍ່
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin');
+    }
+
+    // ຕາຕະລາງຜູ້ໃຊ້: ທຸກຄົນທີ່ Login ເບິ່ງໄດ້, ແຕ່ມີພຽງ Admin ໃຫຍ່ ທີ່ແກ້ໄຂສິດໄດ້
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin() || (isAuthenticated() && request.auth.uid == userId);
+    }
+
+    // ຕາຕະລາງສະຕ໋ອກ: Login ແລ້ວອ່ານ/ຕັດສະຕ໋ອກໄດ້, ແຕ່ Admin ໃຫຍ່ ເທົ່ານັ້ນທີ່ລົບລົດໄດ້
+    match /inventory/{vin} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ຕາຕະລາງລຸ້ນຍານຍົນ: ອ່ານໄດ້ທຸກຄົນ, ແຕ່ Admin ໃຫຍ່ ເທົ່ານັ້ນທີ່ມີສິດເພີ່ມ/ແກ້ໄຂ
+    match /vehicle_models/{modelId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+
+    // ຕາຕະລາງໃບບິນ: ອ່ານ ແລະ ສ້າງບິນຂາຍໄດ້, ແຕ່ Admin ໃຫຍ່ ເທົ່ານັ້ນທີ່ລົບບິນໄດ້
+    match /bills/{billId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // ຕາຕະລາງຕັ້ງຄ່າ (QR Code ບໍລິສັດ & ສະກຸນເງິນ): Admin ໃຫຍ່ ເທົ່ານັ້ນທີ່ມີສິດແກ້ໄຂ
+    match /settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+  }
+}

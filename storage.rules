@@ -1,0 +1,34 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ຟັງຊັນກວດສອບວ່າເຂົ້າສູ່ລະບົບແລ້ວຫຼືບໍ່
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ຟັງຊັນກວດສອບວ່າແມ່ນ Admin ໃຫຍ່ (Super Admin) ຫຼືບໍ່ ຜ່ານ Firestore
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
+    }
+
+    // ຮູບ QR Code ບໍລິສັດ & ຕັ້ງຄ່າ: ສະເພາະ Admin ໃຫຍ່ ເທົ່ານັ້ນທີ່ອັບໂຫລດ ຫຼື ລົບໄດ້
+    match /dealership_config/{allPaths=**} {
+      allow read: if true; // ໃຫ້ສະແກນ ແລະ ສະແດງຜົນໄດ້
+      allow write: if isSuperAdmin();
+    }
+
+    // ຮູບພາບລົດຍົນ ແລະ ສະຕ໋ອກ
+    match /inventory/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // ຮູບພາບລຸ້ນຍານຍົນ
+    match /vehicle_models/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+  }
+}

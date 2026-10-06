@@ -1,0 +1,6 @@
+{
+  "name": "avatrAutoService CRM & Dashboard",
+  "description": "ລະບົບຈັດການລູກຄ້າ ແລະ ໂຊຣູມລົດໄຟຟ້າ AVATR Auto Service Dashboard - minimal luxury CRM, showroom, test drive & maintenance management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
