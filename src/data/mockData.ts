@@ -156,31 +156,7 @@ export const FAQ_LIST = [
 
 export const INITIAL_INVENTORY: InventoryItem[] = [];
 
-export const INITIAL_USERS: SystemUser[] = [
-  {
-    id: 'USR-001',
-    name: 'Admin ໃຫຍ່ (Super Admin)',
-    email: 'admin@avatr.la',
-    phone: '020 55575537',
-    role: 'super_admin',
-    roleTitleLo: 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)',
-    department: 'Executive Management & Direction',
-    status: 'active',
-    avatarInitials: 'AD',
-    permissions: {
-      canManageUsers: true,
-      canDeleteUsers: true,
-      canGrantRoles: true,
-      canEditInventory: true,
-      canUploadQR: true,
-      canAddModels: true,
-      canDeductPOS: true,
-      canViewFinancials: true,
-    },
-    createdAt: new Date().toISOString().slice(0, 10),
-    lastLogin: '',
-  },
-];
+export const INITIAL_USERS: SystemUser[] = [];
 
 export const INITIAL_STOCK_LOGS: StockLogRecord[] = [];
 

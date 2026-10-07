@@ -84,10 +84,10 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('home');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Automatic clean-up of old mock data from previous versions
+  // Automatic clean-up of old mock data & cached users from previous versions
   useEffect(() => {
     try {
-      const isCleaned = localStorage.getItem('avatr_db_clean_init_v1');
+      const isCleaned = localStorage.getItem('avatr_db_clean_init_v2');
       if (!isCleaned) {
         localStorage.removeItem('avatr_inventory_v3');
         localStorage.removeItem('avatr_inventory_v2');
@@ -97,12 +97,38 @@ export default function App() {
         localStorage.removeItem('avatr_stock_logs_v2');
         localStorage.removeItem('avatr_invoice_bills_v2');
         localStorage.removeItem('avatr_system_users_v2');
-        localStorage.setItem('avatr_db_clean_init_v1', 'true');
+        localStorage.removeItem('avatr_system_users_prod_v1');
+        localStorage.removeItem('avatr_active_user_id_v1');
+        localStorage.removeItem('avatr_logged_in');
+        localStorage.setItem('avatr_db_clean_init_v2', 'true');
       }
     } catch (e) {
       console.warn('Storage cleanup notice:', e);
     }
   }, []);
+
+  const FALLBACK_EMPTY_USER: SystemUser = {
+    id: 'USR-ADMIN',
+    name: 'Admin ໃຫຍ່ (Super Admin)',
+    email: '',
+    phone: '',
+    role: 'super_admin',
+    roleTitleLo: 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)',
+    department: 'Executive Management & Direction',
+    status: 'active',
+    avatarInitials: 'AD',
+    permissions: {
+      canManageUsers: true,
+      canDeleteUsers: true,
+      canGrantRoles: true,
+      canEditInventory: true,
+      canUploadQR: true,
+      canAddModels: true,
+      canDeductPOS: true,
+      canViewFinancials: true,
+    },
+    createdAt: new Date().toISOString().slice(0, 10),
+  };
 
   // Users State (with LocalStorage persistence)
   const [users, setUsers] = useState<SystemUser[]>(() => {
@@ -114,14 +140,14 @@ export default function App() {
     }
   });
 
-  // Current logged in user (default: Super Admin)
+  // Current logged in user
   const [currentUser, setCurrentUser] = useState<SystemUser>(() => {
     try {
       const savedId = localStorage.getItem('avatr_active_user_id_v1');
       const found = users.find(u => u.id === savedId);
-      return found || users[0] || INITIAL_USERS[0];
+      return found || users[0] || FALLBACK_EMPTY_USER;
     } catch {
-      return INITIAL_USERS[0];
+      return FALLBACK_EMPTY_USER;
     }
   });
 
@@ -258,9 +284,11 @@ export default function App() {
       });
 
       const unsubUsers = subscribeToUsers((uList) => {
-        if (uList && uList.length > 0) {
-          setUsers(uList);
-          const activeUpdated = uList.find(u => u.id === currentUser.id);
+        const list = uList || [];
+        setUsers(list);
+        if (list.length > 0) {
+          const savedId = localStorage.getItem('avatr_active_user_id_v1');
+          const activeUpdated = list.find(u => u.id === currentUser.id) || list.find(u => u.id === savedId) || list[0];
           if (activeUpdated) {
             setCurrentUser(activeUpdated);
           }
@@ -300,9 +328,10 @@ export default function App() {
   // Authentication State
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('avatr_logged_in') !== 'false';
+      const savedLoggedIn = localStorage.getItem('avatr_logged_in');
+      return savedLoggedIn === 'true';
     } catch {
-      return true;
+      return false;
     }
   });
 
@@ -313,7 +342,8 @@ export default function App() {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
-    localStorage.setItem('avatr_logged_in', 'false');
+    localStorage.removeItem('avatr_logged_in');
+    localStorage.removeItem('avatr_active_user_id_v1');
     triggerToast('ທ່ານໄດ້ອອກຈາກລະບົບຮຽບຮ້ອຍແລ້ວ');
   };
 
@@ -429,13 +459,12 @@ export default function App() {
         onLoginSuccess={(user, remember) => {
           setCurrentUser(user);
           setIsLoggedIn(true);
-          if (remember) {
-            localStorage.setItem('avatr_logged_in', 'true');
-          }
+          localStorage.setItem('avatr_logged_in', 'true');
+          localStorage.setItem('avatr_active_user_id_v1', user.id);
           triggerToast(`ຍິນດີຕ້ອນຮັບ: ${user.name}`);
         }}
         onRegisterUser={(newUser) => {
-          setUsers(prev => [newUser, ...prev]);
+          setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)]);
         }}
         lang={lang}
       />
