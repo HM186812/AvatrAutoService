@@ -331,7 +331,17 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
       }
     }
 
-    // Create New User Object (Always default to General User / Staff)
+    // Check if this is the very first user or no super_admin exists in the system
+    const isFirstUser = !users || users.length === 0 || !users.some(u => u.role === 'super_admin');
+
+    const assignedRole: UserRole = isFirstUser ? 'super_admin' : 'general_user';
+    const roleTitleLo = isFirstUser 
+      ? 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)' 
+      : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)';
+    const department = isFirstUser 
+      ? 'Executive Management & Direction' 
+      : 'General Staff';
+
     const initials = cleanName.slice(0, 2);
     let newUserId = `USR-${Math.floor(100 + Math.random() * 900)}`;
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -353,20 +363,20 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
       name: cleanName,
       email: cleanEmail || `${cleanPhone.replace(/\s+/g, '')}@avatr.phone.la`,
       phone: cleanPhone,
-      role: 'general_user',
-      roleTitleLo: 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
-      department: 'General Staff',
+      role: assignedRole,
+      roleTitleLo: roleTitleLo,
+      department: department,
       status: 'active',
       avatarInitials: initials,
       permissions: {
-        canManageUsers: false,
-        canDeleteUsers: false,
-        canGrantRoles: false,
-        canEditInventory: false,
-        canUploadQR: false,
-        canAddModels: false,
-        canDeductPOS: false,
-        canViewFinancials: false,
+        canManageUsers: isFirstUser,
+        canDeleteUsers: isFirstUser,
+        canGrantRoles: isFirstUser,
+        canEditInventory: isFirstUser,
+        canUploadQR: isFirstUser,
+        canAddModels: isFirstUser,
+        canDeductPOS: isFirstUser,
+        canViewFinancials: isFirstUser,
       },
       createdAt: now,
       lastLogin: now,
@@ -381,7 +391,11 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
     }
 
     playSound('success');
-    setSuccessMessage(`ສ້າງບັນຊີໃໝ່ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${newUser.name}`);
+    setSuccessMessage(
+      isFirstUser 
+        ? `🎉 ສ້າງບັນຊີທຳອິດສຳເລັດ! ທ່ານໄດ້ຮັບສິດ Admin ໃຫຍ່ (Super Admin)` 
+        : `ສ້າງບັນຊີໃໝ່ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${newUser.name}`
+    );
 
     if (onRegisterUser) {
       onRegisterUser(newUser);
