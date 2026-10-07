@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { CustomCurrencyConfig } from '../../types';
+import { CustomCurrencyConfig, Language } from '../../types';
+import { translations } from '../../data/translations';
 import { saveStoredCurrencies } from '../../data/currencies';
 import { saveDealershipConfigToFirestore } from '../../firebase';
 import { DollarSign, Plus, Trash2, Check, X, RefreshCw, Crown, Lock } from 'lucide-react';
@@ -12,6 +13,7 @@ interface CurrencyModalProps {
   activeCurrencyCode: string;
   onSelectActiveCurrency: (code: string) => void;
   isSuperAdmin?: boolean;
+  lang?: Language;
 }
 
 export default function CurrencyModal({
@@ -22,7 +24,9 @@ export default function CurrencyModal({
   activeCurrencyCode,
   onSelectActiveCurrency,
   isSuperAdmin = false,
+  lang = 'lo',
 }: CurrencyModalProps) {
+  const t = translations[lang] || translations.lo;
   const [list, setList] = useState<CustomCurrencyConfig[]>(currencies);
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [tempRate, setTempRate] = useState<number>(1);
@@ -128,8 +132,8 @@ export default function CurrencyModal({
               <DollarSign className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-white">ຕັ້ງຄ່າສະກຸນເງິນ & ອັດຕາແລກປ່ຽນ (Custom Currency)</h3>
-              <p className="text-[11px] text-zinc-400">ກຳນົດສະກຸນເງິນ ແລະ ປັບອັດຕາແລກປ່ຽນທຽບກັບ 1 USD</p>
+              <h3 className="font-bold text-base text-white">{t.currencyTitle}</h3>
+              <p className="text-[11px] text-zinc-400">{t.currencySubtitle}</p>
             </div>
           </div>
           <button

@@ -23,6 +23,7 @@ import {
   INITIAL_BILLS 
 } from './data/mockData';
 import { getStoredCurrencies } from './data/currencies';
+import { translations } from './data/translations';
 import { 
   isFirebaseConfigured, 
   seedFirestoreIfEmpty, 
@@ -75,12 +76,71 @@ import {
   Lock,
   Cloud,
   CloudCheck,
-  Radio
+  Radio,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export default function App() {
   const [currentMenu, setCurrentMenu] = useState<ActiveMenu>('dashboard');
-  const [lang, setLang] = useState<Language>('lo');
+  const [lang, setLang] = useState<Language>(() => {
+    try {
+      const saved = localStorage.getItem('avatr_app_lang');
+      if (saved === 'lo' || saved === 'en' || saved === 'th') {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'lo';
+  });
+
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const saved = localStorage.getItem('avatr_app_theme');
+      if (saved === 'dark' || saved === 'light') {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'dark';
+  });
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    try {
+      localStorage.setItem('avatr_app_theme', nextTheme);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.remove('light');
+      document.documentElement.classList.add('dark');
+    }
+  }, [theme]);
+
+  const handleSetLang = (newLang: Language) => {
+    setLang(newLang);
+    try {
+      localStorage.setItem('avatr_app_lang', newLang);
+      document.documentElement.lang = newLang;
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const [activeSection, setActiveSection] = useState('home');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
@@ -461,15 +521,18 @@ export default function App() {
           setIsLoggedIn(true);
           localStorage.setItem('avatr_logged_in', 'true');
           localStorage.setItem('avatr_active_user_id_v1', user.id);
-          triggerToast(`ຍິນດີຕ້ອນຮັບ: ${user.name}`);
+          triggerToast(`${t.success}: ${user.name}`);
         }}
         onRegisterUser={(newUser) => {
           setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)]);
         }}
         lang={lang}
+        setLang={handleSetLang}
       />
     );
   }
+
+  const t = translations[lang] || translations.lo;
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
@@ -481,12 +544,12 @@ export default function App() {
         </div>
       )}
 
-      {/* LEFT SIDEBAR (ປ່ຽນເມນູມາຢູ່ດ້ານຂ້າງ ດ້ານຊ້າຍ) */}
+      {/* LEFT SIDEBAR */}
       <Sidebar
         currentMenu={currentMenu}
         setCurrentMenu={setCurrentMenu}
         lang={lang}
-        setLang={setLang}
+        setLang={handleSetLang}
         leadCount={leads.length}
         stockCount={inventory.length}
         lowStockCount={lowStockCount}
@@ -496,15 +559,17 @@ export default function App() {
         allUsers={users}
         onSwitchUser={(u) => {
           setCurrentUser(u);
-          triggerToast(`ສະຫຼັບບັນຊີເປັນ: ${u.name} (${u.role === 'super_admin' ? 'Admin ໃຫຍ່' : 'ຜູ້ໃຊ້ທົ່ວໄປ'})`);
+          triggerToast(`User: ${u.name} (${u.role === 'super_admin' ? t.roleSuperAdmin : t.roleGeneralUser})`);
         }}
         isMobileOpen={isMobileSidebarOpen}
         setIsMobileOpen={setIsMobileSidebarOpen}
         onLogout={handleLogout}
         onOpenCurrencyModal={() => setIsCurrencyModalOpen(true)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
-      {/* MAIN CONTENT CANVAS (OFFSET BY SIDEBAR ON LARGE SCREENS) */}
+      {/* MAIN CONTENT CANVAS */}
       <div className="lg:pl-72 flex-1 flex flex-col min-w-0 min-h-screen">
         {/* Top Header Strip inside Main Area */}
         <header className="sticky top-0 z-30 bg-black/90 backdrop-blur-md border-b border-zinc-800/80 px-4 sm:px-8 py-3 flex items-center justify-between gap-3">
@@ -532,15 +597,15 @@ export default function App() {
 
               <div className="min-w-0">
                 <h2 className="text-xs sm:text-sm font-bold text-white truncate leading-tight">
-                  {currentMenu === 'dashboard' && 'Dashboard • ພາບລວມລະບົບ'}
-                  {currentMenu === 'customers' && 'ລູກຄ້າ CRM • ຖານຂໍ້ມູນ & ຕິດຕາມ'}
-                  {currentMenu === 'inventory' && 'ສະຕ໋ອກລົດ AVATR • ຄັງສິນຄ້າທັງໝົດ'}
-                  {currentMenu === 'stock_in' && 'ປ້ອນນຳເຂົ້າລົດ • Stock-In Entry'}
-                  {currentMenu === 'pos' && 'POS ຂາຍລົດຍົນ • ອອກໃບບິນ & ຕັດສະຕ໋ອກ'}
-                  {currentMenu === 'bills' && 'ບັນທຶກບິນທັງໝົດ • ໃບຮັບ & ໃບຂາຍ'}
-                  {currentMenu === 'alerts' && 'ແຈ້ງເຕືອນສະຕ໋ອກ • ໃກ້ໝົດ & ສັ່ງເພີ່ມ'}
-                  {currentMenu === 'users' && 'ອະນຸຍາດສະມາຊິກ • ມອບສິດ (Admin ໃຫຍ່)'}
-                  {currentMenu === 'profile' && 'ໂປຣໄຟລ໌ຜູ້ໃຊ້ • ຂໍ້ມູນບັນຊີ'}
+                  {currentMenu === 'dashboard' && t.headerDashboard}
+                  {currentMenu === 'customers' && t.headerCustomers}
+                  {currentMenu === 'inventory' && t.headerInventory}
+                  {currentMenu === 'stock_in' && t.headerStockIn}
+                  {currentMenu === 'pos' && t.headerPOS}
+                  {currentMenu === 'bills' && t.headerBills}
+                  {currentMenu === 'alerts' && t.headerAlerts}
+                  {currentMenu === 'users' && t.headerUsers}
+                  {currentMenu === 'profile' && t.headerProfile}
                 </h2>
               </div>
             </div>
@@ -558,7 +623,7 @@ export default function App() {
               }`}
             >
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>+ ຂາຍລົດ (POS)</span>
+              <span>{t.quickPOSBtn}</span>
             </button>
 
             {/* Quick Stock-In Shortcut */}
@@ -571,7 +636,7 @@ export default function App() {
               }`}
             >
               <PackagePlus className="w-3.5 h-3.5" />
-              <span>+ ນຳເຂົ້າລົດ</span>
+              <span>{t.quickStockInBtn}</span>
             </button>
 
             {/* Cloud Firestore Spark Plan Live Status Indicator */}
@@ -583,25 +648,44 @@ export default function App() {
               }`}
               title={
                 isFirebaseConfigured()
-                  ? 'Cloud Firestore & Firebase Auth (Spark Free Plan) ກຳລັງເຊື່ອມຕໍ່ Real-time'
-                  : 'ລະບົບໃຊ້ IndexedDB Offline Persistence (ເພີ່ມ VITE_FIREBASE_API_KEY ເພື່ອເຊື່ອມຕໍ່ Cloud Firestore)'
+                  ? 'Cloud Firestore & Firebase Auth Real-time'
+                  : 'Offline IndexedDB Persistence'
               }
             >
               <span className={`w-2 h-2 rounded-full ${isFirebaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
-              <span>{isFirebaseConfigured() ? 'Firestore Live Sync' : 'Offline Persistence'}</span>
+              <span>{isFirebaseConfigured() ? t.firestoreLiveSync : t.offlineSync}</span>
             </div>
 
             {/* Currency Button */}
             <button
               onClick={() => setIsCurrencyModalOpen(true)}
               className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors"
-              title="ກົດເພື່ອເບິ່ງ ຫຼື ປັບອັດຕາແລກປ່ຽນ USD / LAK / THB"
+              title={t.currencyTooltip}
             >
               <Coins className="w-3.5 h-3.5 text-emerald-400" />
               <span className="font-mono text-[11px] hidden xs:inline">USD · LAK · THB</span>
             </button>
 
-            {/* Quick Role Switcher Pill (ທົດສອບສະຫຼັບສິດ Admin ໃຫຍ່ vs User ທຳມະດາ) */}
+            {/* Theme Toggle Button (Light / Night Mode) */}
+            <button
+              onClick={toggleTheme}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors"
+              title={theme === 'dark' ? t.lightMode : t.darkMode}
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[11px] font-medium hidden sm:inline">{t.lightMode}</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="text-[11px] font-medium hidden sm:inline">{t.darkMode}</span>
+                </>
+              )}
+            </button>
+
+            {/* Quick Role Switcher Pill */}
             <button
               onClick={() => {
                 const nextRole = currentUser.role === 'super_admin' ? 'general_user' : 'super_admin';
@@ -630,31 +714,31 @@ export default function App() {
                   }
                   return [updated, ...prev];
                 });
-                triggerToast(`ສະຫຼັບສິດເປັນ: ${isSuper ? '👑 Admin ໃຫຍ່ (Super Admin)' : '👤 User ທຳມະດາ (General User)'}`);
+                triggerToast(`${t.switchRoleBtn}: ${isSuper ? t.roleSuperAdmin : t.roleGeneralUser}`);
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border shadow-sm ${
                 currentUser.role === 'super_admin'
                   ? 'bg-amber-950/90 text-amber-300 border-amber-500 hover:bg-amber-900'
                   : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
               }`}
-              title="ກົດເພື່ອສະຫຼັບທົດສອບລະຫວ່າງ Admin ໃຫຍ່ (Super Admin) ແລະ User ທຳມະດາ"
+              title="Switch between Super Admin and General User"
             >
               {currentUser.role === 'super_admin' ? (
                 <>
                   <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                  <span className="hidden sm:inline">Admin ໃຫຍ່</span>
-                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-200">ປ່ຽນສິດ</span>
+                  <span className="hidden sm:inline">{t.roleSuperAdmin}</span>
+                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-200">{t.switchRoleBtn}</span>
                 </>
               ) : (
                 <>
                   <Lock className="w-3.5 h-3.5 text-zinc-400" />
-                  <span className="hidden sm:inline">User ທຳມະດາ</span>
-                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400">ປ່ຽນສິດ</span>
+                  <span className="hidden sm:inline">{t.roleGeneralUser}</span>
+                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400">{t.switchRoleBtn}</span>
                 </>
               )}
             </button>
 
-            {/* Right Status Indicator (Clean Luxury Header) */}
+            {/* Right Status Indicator */}
             <button
               onClick={() => setCurrentMenu('profile')}
               className={`flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs transition-colors border ${
@@ -662,7 +746,7 @@ export default function App() {
                   ? 'bg-white text-black border-white font-bold shadow-md'
                   : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-300'
               }`}
-              title="ເບິ່ງໂປຣໄຟລ໌ສ່ວນຕົວ"
+              title={t.profileTooltip}
             >
               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentUser.role === 'super_admin' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
               <span className="font-medium truncate max-w-[90px] sm:max-w-none">{currentUser.name.split(' ')[0]}</span>
@@ -729,6 +813,8 @@ export default function App() {
               lang={lang}
               onNavigateToStock={() => setCurrentMenu('inventory')}
               onNavigateToBills={() => setCurrentMenu('bills')}
+              activeCurrency={activeCurrency}
+              currencies={currencies}
             />
           )}
 
@@ -792,6 +878,12 @@ export default function App() {
               onLogout={handleLogout}
               lang={lang}
               onClose={() => setCurrentMenu('dashboard')}
+              users={users}
+              setUsers={setUsers}
+              onSwitchUser={(u) => {
+                setCurrentUser(u);
+                triggerToast(`ສະຫຼັບບັນຊີເປັນ: ${u.name}`);
+              }}
             />
           )}
         </main>

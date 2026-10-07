@@ -93,12 +93,12 @@ if (typeof window !== 'undefined') {
       }
       
       storage = getStorage(app);
-      console.log('🔥 [Firebase Spark] Firebase Client SDK connected successfully with Offline Persistence enabled.');
+      console.log('[Firebase Spark] Firebase Client SDK connected successfully with Offline Persistence enabled.');
     } else {
-      console.info('ℹ️ [Firebase Spark] Running in Local Storage Mode (Add VITE_FIREBASE_API_KEY in .env.local to activate Cloud Firestore).');
+      console.info('[Firebase Spark] Running in Local Storage Mode (Add VITE_FIREBASE_API_KEY in .env.local to activate Cloud Firestore).');
     }
   } catch (err) {
-    console.warn('⚠️ [Firebase] Initialization fallback:', err);
+    console.warn('[Firebase] Initialization fallback:', err);
   }
 }
 

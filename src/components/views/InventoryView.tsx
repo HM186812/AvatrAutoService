@@ -274,10 +274,10 @@ export default function InventoryView({
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            ສະຕ໋ອກລົດຍົນ (Vehicle Inventory & Sales)
+            {t.inventoryViewTitle}
           </h1>
           <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            ມີແຖວ Input ປ້ອນລົດໃໝ່ໄດ້ທັນທີ • ມີປຸ່ມຂາຍອອກພ້ອມບັນທຶກປະຫວັດການຂາຍຢ່າງຄົບຖ້ວນ
+            {t.inventoryViewSubtitle}
           </p>
         </div>
 
@@ -292,7 +292,7 @@ export default function InventoryView({
             }`}
           >
             <Car className="w-4 h-4" />
-            <span>ລົດໃນສະຕ໋ອກ ({inventory.length})</span>
+            <span>{t.tabStockList} ({inventory.length})</span>
           </button>
 
           <button
@@ -304,22 +304,22 @@ export default function InventoryView({
             }`}
           >
             <History className="w-4 h-4" />
-            <span>ປະຫວັດຮັບເຂົ້າ & ຂາຍອອກ ({stockLogs.length})</span>
+            <span>{t.tabStockHistory} ({stockLogs.length})</span>
           </button>
         </div>
       </div>
 
       {activeTab === 'inventory' ? (
         <>
-          {/* DEALERSHIP QUICK ACTIONS BAR (ປຸ່ມເຊື່ອມຫາເມນູນຳເຂົ້າ ແລະ POS) */}
+          {/* DEALERSHIP QUICK ACTIONS BAR */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4 shadow-xl">
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <Car className="w-4 h-4 text-emerald-400" />
-                <span>ຄັງສາງລົດຍົນ AVATR (Warehouse & Showroom Stock)</span>
+                <span>{t.inventoryViewTitle}</span>
               </div>
               <p className="text-zinc-400 text-xs">
-                ສະແດງລົດທັງໝົດໃນສາງ • ສາມາດກັ່ນຕອງຕາມສະຖານະ PDI, ໂຊຣູມ, ແລະ ກວດເຊັກສະເປັກລົດໄດ້
+                {t.inventoryStagesSubtitle}
               </p>
             </div>
 
@@ -331,7 +331,7 @@ export default function InventoryView({
                   className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>+ ປ້ອນນຳເຂົ້າລົດຍົນ (Stock-In)</span>
+                  <span>{t.quickStockInBtn}</span>
                 </button>
               )}
 
@@ -342,7 +342,7 @@ export default function InventoryView({
                   className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-extrabold transition-all shadow-md flex items-center gap-1.5"
                 >
                   <ShoppingBag className="w-4 h-4 fill-black" />
-                  <span>ຂາຍລົດຍົນ (POS Sales)</span>
+                  <span>{t.quickPOSBtn}</span>
                 </button>
               )}
             </div>
@@ -355,7 +355,7 @@ export default function InventoryView({
                 <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="ຄົ້ນຫາເລກຖັງ VIN, ທະບຽນລົດ, ລຸ້ນ..."
+                  placeholder={t.searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white"
@@ -363,31 +363,31 @@ export default function InventoryView({
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-zinc-500">ສະຖານະ:</span>
+                <span className="text-zinc-500">{t.tableStatus}:</span>
                 <select
                   value={selectedStatusFilter}
                   onChange={(e) => setSelectedStatusFilter(e.target.value)}
                   className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
                 >
-                  <option value="all">ທຸກສະຖານະ</option>
-                  <option value="ready">ພ້ອມຂາຍ (Ready)</option>
-                  <option value="pdi">ກຳລັງ PDI</option>
-                  <option value="imported">ນຳເຂົ້າ / ລໍຖ້າກຽມ</option>
-                  <option value="reserved">ຈອງແລ້ວ</option>
-                  <option value="event">ລົດງານ Event (Motor Expo / Roadshow)</option>
-                  <option value="promotion">ລົດແຄມເປນໂປຣໂມຊັນ (Special Promotion)</option>
-                  <option value="sold">ຂາຍແລ້ວ (0 ຄັນ)</option>
+                  <option value="all">{t.filterAllStatus}</option>
+                  <option value="ready">{t.stage3Ready}</option>
+                  <option value="pdi">{t.stage2PDI}</option>
+                  <option value="imported">{t.stage1Imported}</option>
+                  <option value="reserved">{t.stage4Reserved}</option>
+                  <option value="event">{t.stage5Event}</option>
+                  <option value="promotion">{t.stage6Promo}</option>
+                  <option value="sold">{t.stockSold}</option>
                 </select>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-zinc-500">ລຸ້ນ:</span>
+                <span className="text-zinc-500">{t.tableModel}:</span>
                 <select
                   value={selectedModelFilter}
                   onChange={(e) => setSelectedModelFilter(e.target.value)}
                   className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
                 >
-                  <option value="all">ທຸກລຸ້ນ ({vehicles.length})</option>
+                  <option value="all">{t.filterAllModels} ({vehicles.length})</option>
                   {vehicles.map((v) => (
                     <option key={v.id || v.name} value={v.name}>{v.name}</option>
                   ))}
@@ -395,7 +395,7 @@ export default function InventoryView({
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-zinc-500">Event & ໂປຣ:</span>
+                <span className="text-zinc-500">Event:</span>
                 <select
                   value={eventPromoFilter}
                   onChange={(e) => setEventPromoFilter(e.target.value as any)}
@@ -567,7 +567,7 @@ export default function InventoryView({
                           }`}
                         >
                           <ShoppingBag className="w-3.5 h-3.5" />
-                          <span>{item.stockQuantity <= 0 ? 'ສິນຄ້າໝົດແລ້ວ' : 'ຂາຍອອກ (Sell)'}</span>
+                          <span>{item.stockQuantity <= 0 ? t.criticalZeroStock : t.btnSellCar}</span>
                         </button>
 
                         {/* ແກ້ໄຂ (Edit) Button */}
@@ -580,7 +580,7 @@ export default function InventoryView({
                           className="py-2.5 px-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
                         >
                           <Edit3 className="w-3.5 h-3.5 text-zinc-400" />
-                          <span>ແກ້ໄຂ</span>
+                          <span>{t.edit}</span>
                         </button>
                       </div>
 
@@ -590,13 +590,13 @@ export default function InventoryView({
                           className="flex-1 py-1.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-xl text-xs font-medium border border-zinc-800 flex items-center justify-center gap-1"
                         >
                           <FileText className="w-3.5 h-3.5 text-zinc-500" />
-                          <span>ໃບສະເໜີລາຄາ</span>
+                          <span>{t.createQuoteAction}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteItem(item.vin, item.model)}
                           className="p-1.5 text-zinc-500 hover:text-red-400 bg-zinc-900/60 hover:bg-red-950/40 rounded-xl border border-zinc-800 hover:border-red-800 transition-colors"
-                          title="ລົບສິນຄ້າອອກຈາກຖານຂໍ້ມູນ"
+                          title={t.btnDeleteCar}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -618,17 +618,17 @@ export default function InventoryView({
               <div className="flex items-center justify-between text-zinc-400 mb-2">
                 <span className="font-semibold text-xs text-emerald-400 flex items-center gap-1.5">
                   <ArrowDownLeft className="w-3.5 h-3.5" />
-                  <span>ຮັບເຂົ້າສະຕ໋ອກ (Stock-In)</span>
+                  <span>{t.historyStockIn}</span>
                 </span>
                 <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[10px] border border-emerald-800">
                   INBOUND
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
-                {stockLogs.filter(l => l.type === 'stock_in').reduce((acc, curr) => acc + curr.quantity, 0)} <span className="text-xs text-zinc-400 font-sans">ຄັນ</span>
+                {stockLogs.filter(l => l.type === 'stock_in').reduce((acc, curr) => acc + curr.quantity, 0)} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
               <p className="text-[11px] text-zinc-400 mt-1">
-                ຈາກທັງໝົດ {stockLogs.filter(l => l.type === 'stock_in').length} ລັອດນຳເຂົ້າ
+                {stockLogs.filter(l => l.type === 'stock_in').length} {t.unitBills}
               </p>
             </div>
 
@@ -637,17 +637,17 @@ export default function InventoryView({
               <div className="flex items-center justify-between text-zinc-400 mb-2">
                 <span className="font-semibold text-xs text-amber-300 flex items-center gap-1.5">
                   <ArrowUpRight className="w-4 h-4 text-amber-400" />
-                  <span>ຂາຍອອກແລ້ວ (Sold Out)</span>
+                  <span>{t.historyStockOut}</span>
                 </span>
                 <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 font-mono text-[10px] border border-amber-800">
                   OUTBOUND
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
-                {stockLogs.filter(l => l.type === 'stock_out').length} <span className="text-xs text-zinc-400 font-sans">ຄັນສົ່ງມອບ</span>
+                {stockLogs.filter(l => l.type === 'stock_out').length} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
               <div className="text-[11px] text-emerald-400 font-mono font-bold mt-1">
-                ຍອດຂາຍ: ${stockLogs.filter(l => l.type === 'stock_out').reduce((acc, curr) => acc + curr.priceUSD, 0).toLocaleString()}
+                ${stockLogs.filter(l => l.type === 'stock_out').reduce((acc, curr) => acc + curr.priceUSD, 0).toLocaleString()}
               </div>
             </div>
 
@@ -656,17 +656,17 @@ export default function InventoryView({
               <div className="flex items-center justify-between text-zinc-400 mb-2">
                 <span className="font-semibold text-xs text-blue-400 flex items-center gap-1.5">
                   <Car className="w-4 h-4 text-blue-400" />
-                  <span>ຄົງເຫຼືອໃນສາງປະຈຸບັນ</span>
+                  <span>{t.stockAvailable}</span>
                 </span>
                 <span className="px-2 py-0.5 rounded bg-blue-950 text-blue-300 font-mono text-[10px] border border-blue-800">
                   BALANCE
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
-                {inventory.reduce((acc, curr) => acc + curr.stockQuantity, 0)} <span className="text-xs text-zinc-400 font-sans">ຄັນພ້ອມຈອງ/ຂາຍ</span>
+                {inventory.reduce((acc, curr) => acc + curr.stockQuantity, 0)} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
               <p className="text-[11px] text-zinc-400 mt-1">
-                {inventory.filter(i => i.status === 'ready').length} ຄັນ ພ້ອມສົ່ງມອບທັນທີ
+                {inventory.filter(i => i.status === 'ready').length} {t.unitCars} {t.readyForSale}
               </p>
             </div>
           </div>
@@ -677,10 +677,10 @@ export default function InventoryView({
               <div>
                 <h2 className="font-bold text-base text-white flex items-center gap-2">
                   <History className="w-5 h-5 text-emerald-400" />
-                  <span>ປະຫວັດການບັນທຶກ: ຮັບລົດເຂົ້າສະຕ໋ອກ & ຕັດຂາຍອອກ</span>
+                  <span>{t.tabStockHistory}</span>
                 </h2>
                 <p className="text-zinc-400 text-xs mt-0.5">
-                  ບັນທຶກລະອຽດທຸກການເຄື່ອນໄຫວສິນຄ້າ ເພື່ອການກວດສອບທີ່ໂປ່ງໃສ
+                  {t.billsSubtitle}
                 </p>
               </div>
 
@@ -694,7 +694,7 @@ export default function InventoryView({
                       : 'text-zinc-400 hover:text-white'
                   }`}
                 >
-                  ທັງໝົດ ({stockLogs.length})
+                  {t.filterAll} ({stockLogs.length})
                 </button>
                 <button
                   onClick={() => setHistoryFilter('stock_in')}
@@ -705,7 +705,7 @@ export default function InventoryView({
                   }`}
                 >
                   <ArrowDownLeft className="w-3.5 h-3.5" />
-                  <span>ຮັບເຂົ້າ</span>
+                  <span>{t.badgeImport}</span>
                   <span className="font-mono">({stockLogs.filter(l => l.type === 'stock_in').length})</span>
                 </button>
                 <button
@@ -717,7 +717,7 @@ export default function InventoryView({
                   }`}
                 >
                   <ArrowUpRight className="w-3.5 h-3.5" />
-                  <span>ຂາຍອອກ</span>
+                  <span>{t.badgeSale}</span>
                   <span className="font-mono">({stockLogs.filter(l => l.type === 'stock_out').length})</span>
                 </button>
               </div>
@@ -727,13 +727,13 @@ export default function InventoryView({
               <table className="w-full text-left">
                 <thead className="bg-zinc-900 text-zinc-400 font-medium border-b border-zinc-800">
                   <tr>
-                    <th className="py-3 px-4">ປະເພດ / ເລກບິນ</th>
-                    <th className="py-3 px-4">ວັນທີ & ເວລາ</th>
-                    <th className="py-3 px-4">ລຸ້ນລົດ & VIN</th>
-                    <th className="py-3 px-4">ລາຍລະອຽດ / ລູກຄ້າ</th>
-                    <th className="py-3 px-4">ມູນຄ່າ / ລາຄາ (USD)</th>
-                    <th className="py-3 px-4">ຈຳນວນ & ສະຕ໋ອກ</th>
-                    <th className="py-3 px-4">ຜູ້ບັນທຶກ</th>
+                    <th className="py-3 px-4">{t.billType} / ID</th>
+                    <th className="py-3 px-4">{t.billDate}</th>
+                    <th className="py-3 px-4">{t.tableModel} & VIN</th>
+                    <th className="py-3 px-4">{t.buyerInfo}</th>
+                    <th className="py-3 px-4">{t.billAmount} (USD)</th>
+                    <th className="py-3 px-4">{t.tableStock}</th>
+                    <th className="py-3 px-4">{t.assignedOfficer}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/80 font-mono">
@@ -749,12 +749,12 @@ export default function InventoryView({
                           {log.type === 'stock_in' ? (
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1 w-max">
                               <ArrowDownLeft className="w-3 h-3 text-emerald-400" />
-                              <span>ຮັບເຂົ້າສະຕ໋ອກ</span>
+                              <span>{t.historyStockIn}</span>
                             </span>
                           ) : (
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-700 flex items-center gap-1 w-max">
                               <ArrowUpRight className="w-3 h-3 text-amber-400" />
-                              <span>ຂາຍອອກແລ້ວ</span>
+                              <span>{t.historyStockOut}</span>
                             </span>
                           )}
                           <span className="text-zinc-500 text-[10px] block mt-1">{log.id}</span>
@@ -766,13 +766,13 @@ export default function InventoryView({
                           <strong className="text-white font-sans block text-xs">{log.model}</strong>
                           <span className="text-zinc-400 text-[11px] block">{log.vin}</span>
                           {log.plateNumber && (
-                            <span className="text-[10px] text-zinc-500 font-sans">ປ້າຍ: {log.plateNumber}</span>
+                            <span className="text-[10px] text-zinc-500 font-sans">{log.plateNumber}</span>
                           )}
                         </td>
                         <td className="py-3 px-4 font-sans text-xs">
                           {log.type === 'stock_out' ? (
                             <div>
-                              <span className="text-white font-semibold block">{log.customerName || 'ລູກຄ້າທົ່ວໄປ'}</span>
+                              <span className="text-white font-semibold block">{log.customerName || 'Customer'}</span>
                               {log.customerPhone && (
                                 <span className="text-zinc-400 font-mono text-[11px] flex items-center gap-1 mt-0.5">
                                   <Phone className="w-3 h-3 text-zinc-400" />
@@ -781,14 +781,14 @@ export default function InventoryView({
                               )}
                               {log.paymentMethod && (
                                 <span className="text-[10px] text-amber-300 uppercase block font-mono">
-                                  ຊຳລະ: {log.paymentMethod}
+                                  {log.paymentMethod}
                                 </span>
                               )}
                             </div>
                           ) : (
                             <div>
-                              <span className="text-zinc-300 text-xs block">{log.notes || 'ຮັບລົດໃໝ່ເຂົ້າສາງ'}</span>
-                              <span className="text-[10px] text-emerald-400 font-mono">ສະຖານະ: ພ້ອມຈັດການ</span>
+                              <span className="text-zinc-300 text-xs block">{log.notes || t.stockInSubtitle}</span>
+                              <span className="text-[10px] text-emerald-400 font-mono">OK</span>
                             </div>
                           )}
                         </td>
@@ -803,7 +803,7 @@ export default function InventoryView({
                         <td className="py-3 px-4">
                           {log.type === 'stock_in' ? (
                             <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[11px] font-bold border border-emerald-800">
-                              +{log.quantity} ຄັນ
+                              +{log.quantity} {t.unitCars}
                             </span>
                           ) : (
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -811,7 +811,7 @@ export default function InventoryView({
                                 ? 'bg-red-950 text-red-300 border border-red-800'
                                 : 'bg-zinc-900 text-zinc-300 border border-zinc-700'
                             }`}>
-                              ເຫຼືອ {log.remainingStock ?? 0} ຄັນ
+                              {log.remainingStock ?? 0} {t.unitCars}
                             </span>
                           )}
                         </td>
@@ -827,14 +827,14 @@ export default function InventoryView({
         </div>
       )}
 
-      {/* MODAL: SELL CAR CONFIRMATION (ເມື່ອຂາຍອອກ ບັນທຶກຂໍ້ມູນລົງລະບົບ) */}
+      {/* MODAL: SELL CAR CONFIRMATION */}
       {sellingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2 text-emerald-400">
                 <ShoppingBag className="w-5 h-5" />
-                <h3 className="font-bold text-base text-white">ບັນທຶກການຂາຍອອກ (Sell Car)</h3>
+                <h3 className="font-bold text-base text-white">{t.sellModalTitle}</h3>
               </div>
               <button
                 onClick={() => setSellingItem(null)}
@@ -852,25 +852,25 @@ export default function InventoryView({
                   <span className="font-mono text-emerald-400 font-bold">${sellingItem.priceUSD.toLocaleString()}</span>
                 </div>
                 <div className="text-[11px] text-zinc-400 font-mono">
-                  <span>VIN: {sellingItem.vin} | ປ້າຍ: {sellingItem.plateNumber} | ສະຕ໋ອກປະຈຸບັນ: {sellingItem.stockQuantity} ຄັນ</span>
+                  <span>VIN: {sellingItem.vin} | {sellingItem.plateNumber} | {t.tableStock}: {sellingItem.stockQuantity} {t.unitCars}</span>
                 </div>
               </div>
 
               {/* Customer Inputs */}
               <div>
-                <label className="block text-zinc-400 mb-1 font-medium">ຊື່ລູກຄ້າຜູ້ຊື້ *</label>
+                <label className="block text-zinc-400 mb-1 font-medium">{t.buyerName}</label>
                 <input
                   type="text"
                   required
                   value={buyerName}
                   onChange={(e) => setBuyerName(e.target.value)}
-                  placeholder="e.g. ທ່ານ ສົມສັກ ວົງວິໄລ"
+                  placeholder="e.g. Somxay Vongvilay"
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                 />
               </div>
 
               <div>
-                <label className="block text-zinc-400 mb-1 font-medium">ເບີໂທລະສັບລູກຄ້າ *</label>
+                <label className="block text-zinc-400 mb-1 font-medium">{t.buyerPhone}</label>
                 <input
                   type="text"
                   required
@@ -883,7 +883,7 @@ export default function InventoryView({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ລາຄາຂາຍຕົວຈິງ (USD)</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.sellingPrice} (USD)</label>
                   <input
                     type="number"
                     value={soldPriceUSD}
@@ -893,26 +893,26 @@ export default function InventoryView({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ວິທີການຊຳລະ</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.paymentType}</label>
                   <select
                     value={paymentMethod}
                     onChange={(e) => setPaymentMethod(e.target.value as any)}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none"
                   >
-                    <option value="transfer">ຊຳລະເງິນຜ່ານ QR</option>
-                    <option value="cash">ເງິນສົດ (Cash)</option>
-                    <option value="finance">ຜ່ອນໄຟແນນ / ສິນເຊື່ອ</option>
+                    <option value="transfer">{t.paymentTransfer}</option>
+                    <option value="cash">{t.paymentCash}</option>
+                    <option value="finance">{t.paymentInstallments}</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-zinc-400 mb-1 font-medium">ໝາຍເຫດການຂາຍ / ຂອງແຖມ</label>
+                <label className="block text-zinc-400 mb-1 font-medium">{t.notesLabel}</label>
                 <textarea
                   rows={2}
                   value={saleNotes}
                   onChange={(e) => setSaleNotes(e.target.value)}
-                  placeholder="ແຖມຕູ້ສາກ Home Charger 7kW, ຟຣີປະກັນໄພຊັ້ນ 1..."
+                  placeholder="Notes & Perks..."
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none resize-none"
                 />
               </div>
@@ -923,14 +923,14 @@ export default function InventoryView({
                   onClick={() => setSellingItem(null)}
                   className="px-4 py-2 border border-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-900"
                 >
-                  ຍົກເລີກ
+                  {t.cancel}
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition-colors flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
-                  <span>ຢືນຢັນການຂາຍ & ຕັດສະຕ໋ອກ</span>
+                  <span>{t.confirmSaleAndDeduct}</span>
                 </button>
               </div>
             </form>
@@ -945,7 +945,7 @@ export default function InventoryView({
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-amber-400" />
-                <span>ແກ້ໄຂຂໍ້ມູນລົດ: {editingItem.model}</span>
+                <span>{t.editModalTitle}: {editingItem.model}</span>
               </h3>
               <button
                 onClick={() => setEditingItem(null)}
@@ -958,7 +958,7 @@ export default function InventoryView({
             <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ທະບຽນ / ປ້າຍ</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.plateNumber}</label>
                   <input
                     type="text"
                     value={editingItem.plateNumber}
@@ -969,7 +969,7 @@ export default function InventoryView({
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-zinc-400 font-medium">ລາຄາຂາຍ ({editPriceCurrency})</label>
+                    <label className="text-zinc-400 font-medium">{t.tablePrice} ({editPriceCurrency})</label>
                     <div className="flex items-center gap-1 bg-zinc-900 px-1 py-0.5 rounded border border-zinc-800 text-[9px] font-mono">
                       {(['USD', 'LAK', 'THB'] as const).map(c => (
                         <button
@@ -1004,7 +1004,7 @@ export default function InventoryView({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ຈຳນວນສະຕ໋ອກ (ຄັນ)</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.tableStock} ({t.unitCars})</label>
                   <input
                     type="number"
                     min="0"
@@ -1015,19 +1015,19 @@ export default function InventoryView({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ສະຖານະ</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.tableStatus}</label>
                   <select
                     value={editingItem.status}
                     onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value as StockStatus })}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
                   >
-                    <option value="ready">ພ້ອມຂາຍ</option>
-                    <option value="pdi">ກຳລັງ PDI</option>
-                    <option value="imported">ນຳເຂົ້າ / ລໍຖ້າກຽມ</option>
-                    <option value="reserved">ຈອງແລ້ວ</option>
-                    <option value="event">ລົດງານ Event (Motor Expo / Roadshow)</option>
-                    <option value="promotion">ລົດແຄມເປນໂປຣໂມຊັນ (Special Promotion)</option>
-                    <option value="sold">ຂາຍແລ້ວ</option>
+                    <option value="ready">{t.stage3Ready}</option>
+                    <option value="pdi">{t.stage2PDI}</option>
+                    <option value="imported">{t.stage1Imported}</option>
+                    <option value="reserved">{t.stage4Reserved}</option>
+                    <option value="event">{t.stage5Event}</option>
+                    <option value="promotion">{t.stage6Promo}</option>
+                    <option value="sold">{t.stockSold}</option>
                   </select>
                 </div>
               </div>
@@ -1037,12 +1037,12 @@ export default function InventoryView({
                 <div className="p-3.5 bg-amber-950/30 border border-amber-500/50 rounded-2xl space-y-3">
                   <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
                     <Calendar className="w-4 h-4 text-amber-400" />
-                    <span>ກຳນົດເວລາ & ລາຍລະອຽດງານ (Schedule & Campaign)</span>
+                    <span>{t.eventsAndPromotionsTitle}</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <label className="block text-amber-200 mb-1 font-medium">ວັນທີເລີ່ມຕົ້ນ *</label>
+                      <label className="block text-amber-200 mb-1 font-medium">{t.eventStartDateLabel} *</label>
                       <input
                         type="date"
                         value={editingItem.eventStartDate || ''}
@@ -1051,7 +1051,7 @@ export default function InventoryView({
                       />
                     </div>
                     <div>
-                      <label className="block text-amber-200 mb-1 font-medium">ວັນທີສິ້ນສຸດ *</label>
+                      <label className="block text-amber-200 mb-1 font-medium">{t.eventEndDateLabel} *</label>
                       <input
                         type="date"
                         value={editingItem.eventEndDate || ''}
@@ -1063,7 +1063,7 @@ export default function InventoryView({
 
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <label className="block text-zinc-400 mb-1 font-medium">ຊື່ງານ / ແຄມເປນ</label>
+                      <label className="block text-zinc-400 mb-1 font-medium">{t.eventCampaignName}</label>
                       <input
                         type="text"
                         value={editingItem.eventCampaign || ''}
@@ -1073,12 +1073,12 @@ export default function InventoryView({
                       />
                     </div>
                     <div>
-                      <label className="block text-zinc-400 mb-1 font-medium">ສະຖານະຈັດງານ</label>
+                      <label className="block text-zinc-400 mb-1 font-medium">{t.eventLocationLabel}</label>
                       <input
                         type="text"
                         value={editingItem.eventLocation || ''}
                         onChange={(e) => setEditingItem({ ...editingItem, eventLocation: e.target.value })}
-                        placeholder="e.g. ITECC Mall ບູດ A-04"
+                        placeholder="e.g. ITECC Mall"
                         className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none"
                       />
                     </div>
@@ -1090,7 +1090,7 @@ export default function InventoryView({
               <div className="p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800 space-y-2.5">
                 <label className="block text-zinc-300 font-semibold text-xs flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-emerald-400" />
-                  <span>ຮູບພາບລົດ (Stock Photo - ປ່ຽນຮູບຈາກ File on Device)</span>
+                  <span>{t.uploadCarImage}</span>
                 </label>
                 <div className="flex items-center gap-3">
                   <div className="w-20 h-14 rounded-xl bg-zinc-800 overflow-hidden border border-zinc-700 flex-shrink-0">
@@ -1103,7 +1103,7 @@ export default function InventoryView({
                   <div className="space-y-1">
                     <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl border border-zinc-700 font-semibold text-xs transition-colors">
                       <Upload className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>ເລືອກໄຟລ໌ຮູບຈາກເຄື່ອງ (Choose File)</span>
+                      <span>{t.uploadCarImage}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -1112,30 +1112,14 @@ export default function InventoryView({
                       />
                     </label>
                     <p className="text-[10px] text-zinc-500 font-mono">
-                      ອັບໂຫຼດຮູບລົດຕົວຈິງຈາກອຸປະກອນ (JPG, PNG, WEBP)
+                      (JPG, PNG, WEBP)
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Event Campaign */}
               <div>
-                <label className="block text-zinc-400 mb-1 font-medium">ໝວດສິນຄ້າ / Event Campaign</label>
-                <select
-                  value={editingItem.eventCampaign || 'ໂຊຣູມທົ່ວໄປ (Standard Showroom)'}
-                  onChange={(e) => setEditingItem({ ...editingItem, eventCampaign: e.target.value })}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
-                >
-                  <option value="ໂຊຣູມທົ່ວໄປ (Standard Showroom)">ໂຊຣູມທົ່ວໄປ (Standard Showroom)</option>
-                  <option value="ງານ Motor Show 2026">ງານ Motor Show 2026</option>
-                  <option value="ງານ ITECC EV Expo">ງານ ITECC EV Expo</option>
-                  <option value="ໂປຣໂມຊັ່ນ Event ພິເສດ">ໂປຣໂມຊັ່ນ Event ພິເສດ</option>
-                  <option value="ລົດທົດລອງຂັບ VIP Event">ລົດທົດລອງຂັບ VIP Event</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 mb-1 font-medium">ໝາຍເຫດ PDI / ສະພາບລົດ</label>
+                <label className="block text-zinc-400 mb-1 font-medium">{t.notesLabel}</label>
                 <textarea
                   rows={2}
                   value={editingItem.pdiNotes || ''}
@@ -1151,7 +1135,7 @@ export default function InventoryView({
                   className="px-3.5 py-2 bg-red-950/60 hover:bg-red-900 text-red-300 rounded-xl border border-red-800 flex items-center gap-1.5 transition-colors font-medium text-xs"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>ລົບລົດອອກຈາກຖານຂໍ້ມູນ</span>
+                  <span>{t.btnDeleteCar}</span>
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -1160,13 +1144,13 @@ export default function InventoryView({
                     onClick={() => setEditingItem(null)}
                     className="px-4 py-2 border border-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-900"
                   >
-                    ຍົກເລີກ
+                    {t.cancel}
                   </button>
                   <button
                     type="submit"
                     className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors"
                   >
-                    ບັນທຶກການແກ້ໄຂ
+                    {t.saveChanges}
                   </button>
                 </div>
               </div>

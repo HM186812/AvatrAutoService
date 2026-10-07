@@ -6,17 +6,16 @@ import {
   LayoutDashboard, 
   Users, 
   Car, 
-  AlertTriangle,
-  ChevronRight,
-  Crown,
-  Key,
-  ChevronDown,
-  PackagePlus,
-  ShoppingBag,
-  FileText,
-  LogOut,
-  Coins,
-  Sparkles
+  AlertTriangle, 
+  ChevronRight, 
+  Crown, 
+  PackagePlus, 
+  ShoppingBag, 
+  FileText, 
+  LogOut, 
+  Coins, 
+  Sun, 
+  Moon 
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -37,13 +36,15 @@ interface SidebarProps {
   setIsMobileOpen: (open: boolean) => void;
   onLogout?: () => void;
   onOpenCurrencyModal?: () => void;
+  theme?: 'dark' | 'light';
+  onToggleTheme?: () => void;
 }
 
 interface MenuItem {
   id: ActiveMenu;
   labelLo: string;
   labelEn: string;
-  labelZh: string;
+  labelTh: string;
   subLo?: string;
   icon: any;
   badge?: string | number | null;
@@ -54,7 +55,7 @@ interface MenuItem {
 interface MenuGroup {
   groupLo: string;
   groupEn: string;
-  groupZh: string;
+  groupTh: string;
   items: MenuItem[];
 }
 
@@ -76,6 +77,8 @@ export default function Sidebar({
   setIsMobileOpen,
   onLogout,
   onOpenCurrencyModal,
+  theme = 'dark',
+  onToggleTheme,
 }: SidebarProps) {
   const isSuperAdmin = currentUser.role === 'super_admin';
 
@@ -84,13 +87,13 @@ export default function Sidebar({
     {
       groupLo: 'ງານຂາຍ & ລູກຄ້າ',
       groupEn: 'SALES & CRM',
-      groupZh: '销售与客户',
+      groupTh: 'งานขาย & ลูกค้า',
       items: [
         {
           id: 'dashboard',
           labelLo: 'Dashboard (ພາບລວມ)',
           labelEn: 'Dashboard',
-          labelZh: '总览看板',
+          labelTh: 'Dashboard (ภาพรวม)',
           icon: LayoutDashboard,
           badge: null,
           adminOnly: false,
@@ -99,7 +102,7 @@ export default function Sidebar({
           id: 'pos',
           labelLo: 'POS ຂາຍລົດຍົນ',
           labelEn: 'Vehicle Sales POS',
-          labelZh: '销售开单 POS',
+          labelTh: 'POS ขายรถยนต์',
           subLo: 'ອອກບິນ & ຕັດສະຕ໋ອກ',
           icon: ShoppingBag,
           badge: 'ຂາຍ',
@@ -110,7 +113,7 @@ export default function Sidebar({
           id: 'customers',
           labelLo: 'ລູກຄ້າ (CRM)',
           labelEn: 'Customers CRM',
-          labelZh: '客户管理',
+          labelTh: 'ลูกค้า (CRM)',
           icon: Users,
           badge: leadCount > 0 ? leadCount : null,
           adminOnly: false,
@@ -120,13 +123,13 @@ export default function Sidebar({
     {
       groupLo: 'ຄັງສິນຄ້າ & ສະຕ໋ອກ',
       groupEn: 'INVENTORY & STOCK',
-      groupZh: '库存管理',
+      groupTh: 'คลังสินค้า & สต็อก',
       items: [
         {
           id: 'inventory',
           labelLo: 'ສະຕ໋ອກລົດ (Stock)',
           labelEn: 'Vehicle Stock',
-          labelZh: '车辆库存',
+          labelTh: 'สต็อกรถยนต์ (Stock)',
           icon: Car,
           badge: stockCount,
           adminOnly: false,
@@ -135,7 +138,7 @@ export default function Sidebar({
           id: 'stock_in',
           labelLo: 'ປ້ອນນຳເຂົ້າລົດ (Stock-In)',
           labelEn: 'Import Entry (Stock-In)',
-          labelZh: '新车入库录入',
+          labelTh: 'บันทึกนำเข้ารถ (Stock-In)',
           subLo: 'ຮັບລົດ & ອອກໃບຮັບ',
           icon: PackagePlus,
           badge: 'ນຳເຂົ້າ',
@@ -146,7 +149,7 @@ export default function Sidebar({
           id: 'alerts',
           labelLo: 'ແຈ້ງເຕືອນສະຕ໋ອກ',
           labelEn: 'Stock Alerts',
-          labelZh: '库存预警',
+          labelTh: 'แจ้งเตือนสต็อก',
           icon: AlertTriangle,
           badge: (lowStockCount + outOfStockCount) > 0 ? `${lowStockCount + outOfStockCount}` : null,
           badgeColor: 'text-amber-300 bg-amber-950/90 border-amber-700 font-bold',
@@ -157,31 +160,23 @@ export default function Sidebar({
     {
       groupLo: 'ການເງິນ & ບໍລິຫານ',
       groupEn: 'FINANCE & ADMIN',
-      groupZh: '财务与管理',
+      groupTh: 'การเงิน & บริหาร',
       items: [
         {
           id: 'bills',
           labelLo: 'ບັນທຶກບິນ & ໃບຮັບ',
           labelEn: 'Bills & Invoices',
-          labelZh: '单据记录',
+          labelTh: 'บันทึกบิล & ใบรับ',
           icon: FileText,
           badge: billsCount > 0 ? `${billsCount}` : null,
           badgeColor: 'text-zinc-300 bg-zinc-900 border-zinc-700',
           adminOnly: false,
         },
-        {
-          id: 'users',
-          labelLo: 'ອະນຸຍາດ & ມອບສິດ',
-          labelEn: 'User Governance',
-          labelZh: '成员审核与赋权',
-          icon: Key,
-          badge: pendingRequestsCount > 0 ? `${pendingRequestsCount}` : 'Admin',
-          badgeColor: 'text-amber-300 bg-amber-950 border-amber-700 font-bold',
-          adminOnly: true, // Only for Super Admin
-        },
       ],
     },
   ];
+
+  const t = translations[lang] || translations.lo;
 
   return (
     <>
@@ -233,7 +228,7 @@ export default function Sidebar({
 
             if (visibleItems.length === 0) return null;
 
-            const groupLabel = lang === 'lo' ? group.groupLo : lang === 'zh' ? group.groupZh : group.groupEn;
+            const groupLabel = lang === 'lo' ? group.groupLo : lang === 'th' ? group.groupTh : group.groupEn;
 
             return (
               <div key={groupIdx} className="space-y-1">
@@ -246,7 +241,8 @@ export default function Sidebar({
                   {visibleItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = currentMenu === item.id;
-                    const label = lang === 'lo' ? item.labelLo : lang === 'zh' ? item.labelZh : item.labelEn;
+                    const label = lang === 'lo' ? item.labelLo : lang === 'th' ? item.labelTh : item.labelEn;
+                    const badgeText = item.badge === 'ຂາຍ' ? t.badgeSale : item.badge === 'ນຳເຂົ້າ' ? t.badgeImport : item.badge;
 
                     return (
                       <button
@@ -274,11 +270,11 @@ export default function Sidebar({
                           <span className="truncate">{label}</span>
                         </div>
 
-                        {item.badge !== null && item.badge !== undefined && (
+                        {badgeText !== null && badgeText !== undefined && (
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono border flex-shrink-0 ml-1.5 ${
                             item.badgeColor || (isActive ? 'bg-zinc-200 text-black border-zinc-300 font-bold' : 'bg-zinc-900 text-zinc-300 border-zinc-800')
                           }`}>
-                            {item.badge}
+                            {badgeText}
                           </span>
                         )}
                       </button>
@@ -300,17 +296,17 @@ export default function Sidebar({
             >
               <div className="flex items-center gap-1.5 text-amber-300 font-semibold text-xs mb-1">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate">ແຈ້ງເຕືອນສະຕ໋ອກລົດ</span>
+                <span className="truncate">{t.navAlerts}</span>
               </div>
               <div className="text-[11px] text-zinc-400 space-y-0.5">
-                {outOfStockCount > 0 && <span className="text-red-400 block truncate">• ໝົດສະຕ໋ອກ: {outOfStockCount} ລຸ້ນ</span>}
-                {lowStockCount > 0 && <span className="text-amber-300 block truncate">• ໃກ້ໝົດ (≤1): {lowStockCount} ລຸ້ນ</span>}
+                {outOfStockCount > 0 && <span className="text-red-400 block truncate">• {t.criticalStockAlert}: {outOfStockCount}</span>}
+                {lowStockCount > 0 && <span className="text-amber-300 block truncate">• {t.warningStockAlert}: {lowStockCount}</span>}
               </div>
             </div>
           )}
         </div>
 
-        {/* Sidebar Footer: Currency Button, Profile, Language, Logout */}
+        {/* Sidebar Footer: Currency Button, Profile, Theme, Language, Logout */}
         <div className="p-3 border-t border-zinc-900 bg-zinc-950 space-y-2">
           {/* Quick Currency Button */}
           {onOpenCurrencyModal && (
@@ -318,11 +314,11 @@ export default function Sidebar({
               type="button"
               onClick={onOpenCurrencyModal}
               className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-900/70 hover:bg-zinc-800 border border-zinc-800/80 text-zinc-300 hover:text-white text-xs transition-colors"
-              title="ຈັດການສະກຸນເງິນ & ອັດຕາແລກປ່ຽນ"
+              title={t.currencyTooltip}
             >
               <div className="flex items-center gap-2">
                 <Coins className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-[11px] font-medium">ສະກຸນເງິນ (Currencies)</span>
+                <span className="text-[11px] font-medium">{t.navCurrencies}</span>
               </div>
               <span className="font-mono text-[10px] text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-1.5 py-0.5 rounded">
                 USD · LAK · THB
@@ -359,7 +355,7 @@ export default function Sidebar({
                   )}
                 </div>
                 <p className={`text-[10px] truncate ${currentMenu === 'profile' ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                  {isSuperAdmin ? 'Admin ໃຫຍ່' : currentUser.roleTitleLo || 'ຜູ້ໃຊ້ທົ່ວໄປ'} • ໂປຣໄຟລ໌
+                  {isSuperAdmin ? t.roleSuperAdmin : (currentUser.roleTitleLo || t.roleGeneralUser)} • {t.navProfile}
                 </p>
               </div>
             </div>
@@ -369,14 +365,36 @@ export default function Sidebar({
             }`} />
           </button>
 
-          {/* Language Switcher */}
-          <div className="flex items-center justify-between p-1 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs">
-            <span className="text-[10px] text-zinc-500 pl-1.5 font-mono uppercase">ພາສາ:</span>
-            <div className="flex items-center gap-1">
+          {/* Theme & Language Controls Row */}
+          <div className="grid grid-cols-2 gap-1.5">
+            {/* Theme Toggle Button */}
+            {onToggleTheme && (
+              <button
+                type="button"
+                onClick={onToggleTheme}
+                className="flex items-center justify-center gap-1.5 p-1.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs text-zinc-300 hover:text-white transition-colors"
+                title={theme === 'dark' ? t.lightMode : t.darkMode}
+              >
+                {theme === 'dark' ? (
+                  <>
+                    <Sun className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[11px] font-medium">{t.lightMode}</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="text-[11px] font-medium">{t.darkMode}</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Language Switcher */}
+            <div className={`flex items-center justify-around p-1 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs ${!onToggleTheme ? 'col-span-2' : ''}`}>
               <button
                 type="button"
                 onClick={() => setLang('lo')}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
                   lang === 'lo' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -385,7 +403,7 @@ export default function Sidebar({
               <button
                 type="button"
                 onClick={() => setLang('en')}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
                   lang === 'en' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -393,12 +411,12 @@ export default function Sidebar({
               </button>
               <button
                 type="button"
-                onClick={() => setLang('zh')}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                  lang === 'zh' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                onClick={() => setLang('th')}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  lang === 'th' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
                 }`}
               >
-                中文
+                ไทย
               </button>
             </div>
           </div>
@@ -411,7 +429,7 @@ export default function Sidebar({
               className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-red-950/30 hover:bg-red-950/60 text-red-300 hover:text-red-200 border border-red-900/50 text-xs font-semibold transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span>ອອກຈາກລະບົບ (Log Out)</span>
+              <span>{t.navLogout}</span>
             </button>
           )}
         </div>

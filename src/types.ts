@@ -1,4 +1,4 @@
-export type Language = 'lo' | 'en' | 'zh';
+export type Language = 'lo' | 'en' | 'th';
 
 export type ActiveMenu = 'dashboard' | 'customers' | 'inventory' | 'stock_in' | 'pos' | 'bills' | 'alerts' | 'users' | 'profile';
 

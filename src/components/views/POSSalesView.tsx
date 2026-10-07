@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { InventoryItem, VehicleModel, Language, InvoiceBillRecord, StockLogRecord, SystemUser } from '../../types';
 import { getStoredCompanyBankInfo, saveStoredCompanyBankInfo, CompanyBankInfo } from '../../data/companySettings';
+import { translations } from '../../data/translations';
 import { 
   uploadCompanyQrCodeToStorage, 
   saveInventoryItemToFirestore, 
@@ -69,6 +70,7 @@ export default function POSSalesView({
   lang,
   onNavigateToBills,
 }: POSSalesViewProps) {
+  const t = translations[lang] || translations.lo;
   // Available vehicles for sale (not sold and stock > 0)
   const availableVehicles = inventory.filter(i => i.status !== 'sold' && i.stockQuantity > 0);
 
@@ -449,10 +451,10 @@ export default function POSSalesView({
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            ລະບົບຂາຍລົດຍົນ POS & ຕັດສະຕ໋ອກອັດຕະໂນມັດ
+            {t.posHeader || t.posTitle}
           </h1>
           <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            ປ້ອນຂໍ້ມູນການຂາຍລົດຍົນຢ່າງລະອຽດ • ເມື່ອຂາຍອອກລະບົບຈະຕັດສະຕ໋ອກທັນທີ ແລະ ອອກໃບບິນທາງການ
+            {t.posHeaderSub || t.posSubtitle}
           </p>
         </div>
 
@@ -461,7 +463,7 @@ export default function POSSalesView({
           className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors"
         >
           <Receipt className="w-4 h-4 text-zinc-400" />
-          <span>ເບິ່ງປະຫວັດບິນຂາຍ ({bills.filter(b => b.billType === 'sale').length} ບິນ)</span>
+          <span>{t.filterSaleBills} ({bills.filter(b => b.billType === 'sale').length})</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -469,9 +471,15 @@ export default function POSSalesView({
       {availableVehicles.length === 0 ? (
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-12 text-center text-zinc-400 space-y-4">
           <AlertCircle className="w-12 h-12 text-amber-400 mx-auto" />
-          <h3 className="text-lg font-bold text-white">ບໍ່ມີລົດວ່າງພ້ອມຂາຍໃນສະຕ໋ອກ!</h3>
+          <h3 className="text-lg font-bold text-white">
+            {lang === 'lo' ? 'ບໍ່ມີລົດວ່າງພ້ອມຂາຍໃນສະຕ໋ອກ!' : lang === 'th' ? 'ไม่มีรถว่างพร้อมจำหน่ายในสต็อก!' : 'No available vehicles in stock!'}
+          </h3>
           <p className="text-xs text-zinc-400 max-w-md mx-auto">
-            ລົດໃນສາງທັງໝົດຖືກຂາຍ ຫຼື ຈອງໝົດແລ້ວ. ກະລຸນາໄປທີ່ເມນູ <strong>"ນຳເຂົ້າລົດຍົນ"</strong> ເພື່ອເພີ່ມລົດໃໝ່ເຂົ້າສາງກ່ອນ.
+            {lang === 'lo' 
+              ? 'ລົດໃນສາງທັງໝົດຖືກຂາຍ ຫຼື ຈອງໝົດແລ້ວ. ກະລຸນາໄປທີ່ເມນູ "ນຳເຂົ້າລົດຍົນ" ເພື່ອເພີ່ມລົດໃໝ່ເຂົ້າສາງກ່ອນ.' 
+              : lang === 'th' 
+              ? 'รถในคลังทั้งหมดถูกจำหน่ายหรือจองหมดแล้ว กรุณาไปที่เมนู "นำเข้ารถยนต์" เพื่อเพิ่มรถใหม่เข้าสต็อกก่อน' 
+              : 'All vehicles in stock have been sold or reserved. Please go to "Stock-In" to import new vehicles.'}
           </p>
         </div>
       ) : (
@@ -482,10 +490,10 @@ export default function POSSalesView({
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <span className="font-bold text-sm text-white flex items-center gap-2">
                   <Car className="w-4 h-4 text-emerald-400" />
-                  <span>1. ເລືອກລົດໃນສາງທີ່ຈະຂາຍ *</span>
+                  <span>1. {t.selectVehicleToSell} *</span>
                 </span>
                 <span className="text-[10px] font-mono text-zinc-400">
-                  ພ້ອມຂາຍ: {availableVehicles.length} ຄັນ
+                  {t.stockAvailable}: {availableVehicles.length} {t.unitCars}
                 </span>
               </div>
 
@@ -494,7 +502,7 @@ export default function POSSalesView({
                 <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="ຄົ້ນຫາເລກຖັງ VIN, ທະບຽນ, ລຸ້ນ..."
+                  placeholder={t.searchPlaceholder}
                   value={vehicleSearch}
                   onChange={(e) => setVehicleSearch(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white"
@@ -526,7 +534,7 @@ export default function POSSalesView({
                       </div>
                       <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-1">
                         <span>{item.color}</span>
-                        <span className="text-zinc-400 font-mono">ສະຕ໋ອກ: {item.stockQuantity} ຄັນ</span>
+                        <span className="text-zinc-400 font-mono">{t.tableStock}: {item.stockQuantity} {t.unitCars}</span>
                       </div>
                     </div>
                   );
@@ -549,19 +557,19 @@ export default function POSSalesView({
 
                   <div className="space-y-1 text-xs">
                     <div className="flex justify-between text-zinc-400">
-                      <span>ລຸ້ນ/ມໍເຕີ:</span>
+                      <span>{t.trimSpec}:</span>
                       <span className="text-white font-medium text-right truncate max-w-[170px]">{selectedVehicle.trim}</span>
                     </div>
                     <div className="flex justify-between text-zinc-400">
-                      <span>ແບັດເຕີຣີ:</span>
+                      <span>{lang === 'lo' ? 'ແບັດເຕີຣີ:' : lang === 'th' ? 'แบตเตอรี่:' : 'Battery:'}</span>
                       <span className="text-white font-medium">{selectedVehicle.battery}</span>
                     </div>
                     <div className="flex justify-between text-zinc-400">
-                      <span>ສີຕົວລົດ:</span>
+                      <span>{t.bodyColor}:</span>
                       <span className="text-white font-medium">{selectedVehicle.color}</span>
                     </div>
                     <div className="flex justify-between text-zinc-400">
-                      <span>ສະຖານທີ່ຈອດ:</span>
+                      <span>{t.warehouseDest}:</span>
                       <span className="text-zinc-300 font-medium truncate max-w-[170px]">{selectedVehicle.location}</span>
                     </div>
                   </div>
@@ -576,24 +584,24 @@ export default function POSSalesView({
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
                 <User className="w-4 h-4 text-emerald-400" />
-                <span>2. ຂໍ້ມູນລູກຄ້າຜູ້ຊື້ (Customer Information)</span>
+                <span>2. {t.buyerInfo}</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ຊື່ ແລະ ນາມສະກຸນລູກຄ້າ *</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerName} *</label>
                   <input
                     type="text"
                     required
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="e.g. ທ່ານ ບຸນມີ ໄຊຍະວົງ"
+                    placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: ທ່ານ ບຸນມີ ໄຊຍະວົງ' : lang === 'th' ? 'ตัวอย่าง: คุณ สมชาย ใจดี' : 'e.g. John Doe'}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ເບີໂທລະສັບ (Phone) *</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerPhone} *</label>
                   <input
                     type="text"
                     required
@@ -605,40 +613,40 @@ export default function POSSalesView({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ເລກບັດປະຈຳຕົວ / ປຶ້ມສຳມະໂນຄົວ</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerIDPassport}</label>
                   <input
                     type="text"
                     value={customerIDCard}
                     onChange={(e) => setCustomerIDCard(e.target.value)}
-                    placeholder="e.g. ID-01-VTE-884920"
+                    placeholder="ID-01-VTE-884920"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ແຂວງ / ນະຄອນຫຼວງ</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{lang === 'lo' ? 'ແຂວງ / ນະຄອນຫຼວງ' : lang === 'th' ? 'แขวง / นครหลวง' : 'Province / City'}</label>
                   <select
                     value={customerProvince}
                     onChange={(e) => setCustomerProvince(e.target.value)}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
                   >
-                    <option value="">-- ເລືອກແຂວງ / ນະຄອນຫຼວງ --</option>
-                    <option value="ນະຄອນຫຼວງວຽງຈັນ">ນະຄອນຫຼວງວຽງຈັນ</option>
-                    <option value="ແຂວງ ຫຼວງພະບາງ">ແຂວງ ຫຼວງພະບາງ</option>
-                    <option value="ແຂວງ ຈຳປາສັກ">ແຂວງ ຈຳປາສັກ</option>
-                    <option value="ແຂວງ ສະຫວັນນະເຂດ">ແຂວງ ສະຫວັນນະເຂດ</option>
-                    <option value="ແຂວງ ວຽງຈັນ">ແຂວງ ວຽງຈັນ</option>
-                    <option value="ແຂວງ ອື່ນໆ">ແຂວງ ອື່ນໆ</option>
+                    <option value="">-- {lang === 'lo' ? 'ເລືອກແຂວງ / ນະຄອນຫຼວງ' : lang === 'th' ? 'เลือกแขวง / นครหลวง' : 'Select Province'} --</option>
+                    <option value="Vientiane Capital">{lang === 'lo' ? 'ນະຄອນຫຼວງວຽງຈັນ' : lang === 'th' ? 'นครหลวงเวียงจันทน์' : 'Vientiane Capital'}</option>
+                    <option value="Luang Prabang">{lang === 'lo' ? 'ແຂວງ ຫຼວງພະບາງ' : lang === 'th' ? 'แขวงหลวงพระบาง' : 'Luang Prabang'}</option>
+                    <option value="Champasak">{lang === 'lo' ? 'ແຂວງ ຈຳປາສັກ' : lang === 'th' ? 'แขวงจำปาสัก' : 'Champasak'}</option>
+                    <option value="Savannakhet">{lang === 'lo' ? 'ແຂວງ ສະຫວັນນະເຂດ' : lang === 'th' ? 'แขวงสะหวันนะเขต' : 'Savannakhet'}</option>
+                    <option value="Vientiane Province">{lang === 'lo' ? 'ແຂວງ ວຽງຈັນ' : lang === 'th' ? 'แขวงเวียงจันทน์' : 'Vientiane Province'}</option>
+                    <option value="Other Provinces">{lang === 'lo' ? 'ແຂວງ ອື່ນໆ' : lang === 'th' ? 'แขวง / จังหวัดอื่นๆ' : 'Other'}</option>
                   </select>
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block text-zinc-400 mb-1 font-medium">ທີ່ຢູ່ປະຈຸບັນ (ບ້ານ ແລະ ເມືອງ)</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerAddress}</label>
                   <input
                     type="text"
                     value={customerAddress}
                     onChange={(e) => setCustomerAddress(e.target.value)}
-                    placeholder="e.g. ບ້ານ ໂພນສີນວນ, ເມືອງ ສີສັດຕະນາກ"
+                    placeholder="e.g. Phonxay Village, Saysettha District"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   />
                 </div>
@@ -649,7 +657,7 @@ export default function POSSalesView({
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
                 <CreditCard className="w-4 h-4 text-emerald-400" />
-                <span>3. ຮູບແບບການຊຳລະເງິນ & ໄຟແນນສ໌ (Payment & Financing)</span>
+                <span>3. {t.paymentType}</span>
               </div>
 
               {/* Payment Method Selector with Clean Professional Lucide Icons */}
@@ -664,7 +672,7 @@ export default function POSSalesView({
                   }`}
                 >
                   <QrCode className="w-5 h-5 mb-1 text-emerald-400" />
-                  <span>ຊຳລະເງິນຜ່ານ QR</span>
+                  <span>{t.paymentTransfer}</span>
                 </button>
 
                 <button
@@ -677,7 +685,7 @@ export default function POSSalesView({
                   }`}
                 >
                   <Banknote className="w-5 h-5 mb-1 text-emerald-400" />
-                  <span>ເງິນສົດ (Cash)</span>
+                  <span>{t.paymentCash}</span>
                 </button>
 
                 <button
@@ -690,7 +698,7 @@ export default function POSSalesView({
                   }`}
                 >
                   <Building2 className="w-5 h-5 mb-1 text-purple-400" />
-                  <span>ໄຟແນນສ໌ / ຜ່ອນລົດ</span>
+                  <span>{t.paymentInstallments}</span>
                 </button>
               </div>
 
@@ -1073,20 +1081,20 @@ export default function POSSalesView({
               </div>
             </div>
 
-            {/* Step 4: Free Gifts & Privileges Selection with Admin ໃຫຍ່ Management */}
+            {/* Step 4: Free Gifts & Privileges Selection with Admin Management */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
                 <div className="flex items-center gap-2 text-white font-bold text-sm">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>4. ເລືອກຊຸດຂອງແຖມ & ບໍລິການຫຼັງການຂາຍ (Dealership Packages)</span>
+                  <span>4. {lang === 'lo' ? 'ເລືອກຊຸດຂອງແຖມ & ບໍລິການຫຼັງການຂາຍ' : lang === 'th' ? 'เลือกชุดของแถม & บริการหลังการขาย' : 'Dealership Packages & Privileges'}</span>
                 </div>
                 {isSuperAdmin ? (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1 font-mono">
-                    <Crown className="w-3 h-3 fill-amber-400" /> Admin ໃຫຍ່: ຈັດການ & ເພີ່ມໝວດໄດ້
+                    <Crown className="w-3 h-3 fill-amber-400" /> {lang === 'lo' ? 'Admin ໃຫຍ່: ຈັດການ & ເພີ່ມໝວດໄດ້' : lang === 'th' ? 'Admin ใหญ่: จัดการ & เพิ่มหมวดได้' : 'Super Admin Mode'}
                   </span>
                 ) : (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-400 border border-zinc-800 flex items-center gap-1 font-mono">
-                    <Lock className="w-3 h-3 text-zinc-500" /> ລາຍການມາດຕະຖານໂຊຣູມ
+                    <Lock className="w-3 h-3 text-zinc-500" /> {lang === 'lo' ? 'ລາຍການມາດຕະຖານໂຊຣູມ' : lang === 'th' ? 'รายการมาตรฐานโชว์รูม' : 'Standard Showroom Packages'}
                   </span>
                 )}
               </div>
@@ -1097,16 +1105,16 @@ export default function POSSalesView({
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-mono text-amber-300 uppercase flex items-center gap-1">
                       <Crown className="w-3 h-3" />
-                      <span>ສິດ Admin ໃຫຍ່: ເພີ່ມໝວດ / ແພັກເກດຂອງແຖມໃໝ່</span>
+                      <span>{lang === 'lo' ? 'ສິດ Admin ໃຫຍ່: ເພີ່ມໝວດ / ແພັກເກດຂອງແຖມໃໝ່' : lang === 'th' ? 'สิทธิ์ Admin ใหญ่: เพิ่มหมวด / แพ็กเกจของแถมใหม่' : 'Add New Dealership Package'}</span>
                     </span>
-                    <span className="text-[10px] text-zinc-500 font-mono">ບັນທຶກລົງຖານຂໍ້ມູນທັນທີ</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">{t.firestoreLiveSync}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
                       value={newPackageInput}
                       onChange={(e) => setNewPackageInput(e.target.value)}
-                      placeholder="ປ້ອນຊື່ໝວດຂອງແຖມ ຫຼື ບໍລິການໃໝ່..."
+                      placeholder={lang === 'lo' ? 'ປ້ອນຊື່ໝວດຂອງແຖມ ຫຼື ບໍລິການໃໝ່...' : lang === 'th' ? 'กรอกชื่อหมวดของแถม หรือบริการใหม่...' : 'Enter package name...'}
                       className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -1121,22 +1129,9 @@ export default function POSSalesView({
                       className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors flex-shrink-0 shadow-sm"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>ເພີ່ມໝວດ</span>
+                      <span>{t.save}</span>
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* Regular User Notice */}
-              {!isSuperAdmin && (
-                <div className="p-3 bg-zinc-900/60 rounded-2xl border border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-                    <span>ລາຍການໝວດ ແລະ ຕົວເລືອກມາດຕະຖານ (ສະເພາະ Admin ໃຫຍ່ ຈຶ່ງສາມາດເພີ່ມ ຫຼື ລົບ ໝວດໄດ້)</span>
-                  </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
-                    User ທຳມະດາ: ເລືອກໄດ້ສະເພາະຕົວເລືອກທີ່ມີ
-                  </span>
                 </div>
               )}
 
@@ -1164,13 +1159,12 @@ export default function POSSalesView({
                         <span className="truncate">{gift}</span>
                       </div>
 
-                      {/* Admin ໃຫຍ່ Delete Button (Only for Super Admin) */}
                       {isSuperAdmin && (
                         <button
                           type="button"
                           onClick={(e) => handleDeletePackage(gift, e)}
                           className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0"
-                          title="ລົບໝວດນີ້ອອກ (Admin ໃຫຍ່)"
+                          title="Delete"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1182,29 +1176,29 @@ export default function POSSalesView({
 
               <div className="pt-2 flex items-center gap-2 text-[11px] text-emerald-400 font-mono">
                 <ShieldCheck className="w-4 h-4 flex-shrink-0" />
-                <span>ມອບການຮັບປະກັນແບັດເຕີຣີ CATL 8 ປີ / 160,000 km ມາດຕະຖານໂຮງງານ AVATR</span>
+                <span>{lang === 'lo' ? 'ມອບການຮັບປະກັນແບັດເຕີຣີ CATL 8 ປີ / 160,000 km ມາດຕະຖານໂຮງງານ AVATR' : lang === 'th' ? 'รับประกันแบตเตอรี่ CATL 8 ปี / 160,000 กม. มาตรฐานโรงงาน AVATR' : 'CATL Battery 8 Years / 160,000 km Warranty'}</span>
               </div>
             </div>
 
             {/* Step 5: Final Price Summary & Execute Sale Button */}
             <div className="bg-zinc-950 border border-emerald-800/80 rounded-3xl p-6 space-y-4 shadow-2xl">
               <div className="flex justify-between items-baseline pb-3 border-b border-zinc-800 font-mono">
-                <span className="text-zinc-400 text-xs">ມູນຄ່າລົດຕາມລາຄາປ້າຍ:</span>
+                <span className="text-zinc-400 text-xs">{t.sellingPrice}:</span>
                 <span className="text-white text-base">${basePriceUSD.toLocaleString()}</span>
               </div>
 
               {Number(discountUSD) > 0 && (
                 <div className="flex justify-between items-baseline text-red-400 font-mono text-xs">
-                  <span>ສ່ວນຫຼຸດ:</span>
+                  <span>{t.discountAmount}:</span>
                   <span>-${Number(discountUSD).toLocaleString()}</span>
                 </div>
               )}
 
               <div className="flex justify-between items-baseline text-white">
                 <div>
-                  <span className="text-sm font-bold block">ຍອດຊຳລະສຸທິ (Net Selling Total):</span>
+                  <span className="text-sm font-bold block">{t.netPaymentTotal}:</span>
                   <span className="text-xs text-zinc-400 font-mono">
-                    ≈ ₭ {netPriceLAK.toLocaleString()} LAK (ອັດຕາແລກປ່ຽນ 22,000)
+                    ≈ ₭ {netPriceLAK.toLocaleString()} LAK
                   </span>
                 </div>
                 <div className="text-right">
@@ -1220,7 +1214,7 @@ export default function POSSalesView({
                   className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-sm rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 hover:scale-[1.01]"
                 >
                   <ShoppingBag className="w-5 h-5 fill-black" />
-                  <span>ຢືນຢັນການຂາຍ & ຕັດສະຕ໋ອກອອກທັນທີ (Confirm Sale & Cut Stock)</span>
+                  <span>{t.confirmSaleAndDeduct}</span>
                 </button>
               </div>
             </div>
@@ -1257,7 +1251,7 @@ export default function POSSalesView({
                   AVATR AUTO SERVICE LAOS
                 </span>
                 <span className="text-[10px] font-bold text-emerald-600 block">
-                  ຊຳລະເງິນຜ່ານ QR Code • ທາງການບໍລິສັດ
+                  {t.scanQrToPay}
                 </span>
               </div>
 
@@ -1323,7 +1317,7 @@ export default function POSSalesView({
 
               <div className="w-full text-center pt-2 border-t border-zinc-200">
                 <span className="text-xs font-mono font-black text-emerald-700 block">
-                  ຍອດຊຳລະ: ${netPriceUSD.toLocaleString()} USD
+                  {t.netPaymentTotal}: ${netPriceUSD.toLocaleString()} USD
                 </span>
                 <span className="text-[10px] font-mono text-zinc-600 block">
                   ≈ ₭ {netPriceLAK.toLocaleString()} LAK
@@ -1334,11 +1328,11 @@ export default function POSSalesView({
             {/* Quick Bank Accounts List */}
             <div className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 text-xs font-mono space-y-1 text-left">
               <div className="flex justify-between items-center">
-                <span className="text-zinc-400">ເລກບັນຊີ USD:</span>
+                <span className="text-zinc-400">USD:</span>
                 <span className="text-emerald-400 font-bold">{companyBankInfo.usdAccount}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-zinc-400">ເລກບັນຊີ LAK:</span>
+                <span className="text-zinc-400">LAK:</span>
                 <span className="text-zinc-200 font-bold">{companyBankInfo.lakAccount}</span>
               </div>
             </div>
@@ -1348,7 +1342,7 @@ export default function POSSalesView({
               onClick={() => setIsEnlargeQrOpen(false)}
               className="w-full py-2.5 bg-white hover:bg-zinc-200 text-black font-bold text-xs rounded-xl transition-colors"
             >
-              ປິດໜ້າຕ່າງ
+              {t.close}
             </button>
           </div>
         </div>
@@ -1361,7 +1355,7 @@ export default function POSSalesView({
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2 text-emerald-400">
                 <CheckCircle2 className="w-5 h-5" />
-                <h3 className="font-bold text-base text-white">ການຂາຍສຳເລັດ • ຕັດສະຕ໋ອກອອກຮຽບຮ້ອຍ</h3>
+                <h3 className="font-bold text-base text-white">{t.saleCompletedSuccess}</h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -1369,7 +1363,7 @@ export default function POSSalesView({
                   className="px-3 py-1.5 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span>ພິມບິນ</span>
+                  <span>{t.printInvoiceBtn}</span>
                 </button>
                 <button
                   onClick={() => setCreatedBill(null)}
@@ -1385,7 +1379,7 @@ export default function POSSalesView({
               <div className="flex justify-between items-start pb-4 border-b border-zinc-800">
                 <div>
                   <span className="font-black tracking-widest text-base text-white">AVATR AUTO SERVICE</span>
-                  <p className="text-[10px] text-zinc-400 font-mono">ໃບບິນຂາຍລົດຍົນ (OFFICIAL SALES INVOICE)</p>
+                  <p className="text-[10px] text-zinc-400 font-mono">{t.printInvoiceBtn || 'OFFICIAL SALES INVOICE'}</p>
                 </div>
                 <div className="text-right font-mono">
                   <span className="text-emerald-400 font-bold block">{createdBill.billNumber}</span>
@@ -1395,7 +1389,7 @@ export default function POSSalesView({
 
               <div className="grid grid-cols-2 gap-4 text-zinc-300">
                 <div>
-                  <span className="text-zinc-500 font-mono text-[10px] uppercase block">ລູກຄ້າຜູ້ຊື້:</span>
+                  <span className="text-zinc-500 font-mono text-[10px] uppercase block">{t.buyerInfo}:</span>
                   <strong className="text-white text-sm block">{createdBill.customerName}</strong>
                   <span className="font-mono text-zinc-400 flex items-center gap-1 mt-0.5">
                     <Phone className="w-3 h-3 text-zinc-400" />
@@ -1405,7 +1399,7 @@ export default function POSSalesView({
                 </div>
 
                 <div className="text-right">
-                  <span className="text-zinc-500 font-mono text-[10px] uppercase block">ຍານຍົນ:</span>
+                  <span className="text-zinc-500 font-mono text-[10px] uppercase block">{t.tableModel}:</span>
                   <strong className="text-white text-sm block">{createdBill.model}</strong>
                   <span className="text-zinc-400 font-mono block">VIN: {createdBill.vin}</span>
                   <span className="text-zinc-400 block">{createdBill.color} • {createdBill.plateNumber}</span>
@@ -1413,12 +1407,12 @@ export default function POSSalesView({
               </div>
 
               <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 flex justify-between items-center font-mono">
-                <span>ຍອດຊຳລະສຸທິ:</span>
+                <span>{t.netPaymentTotal}:</span>
                 <span className="text-xl font-black text-emerald-400">${createdBill.netTotalUSD.toLocaleString()}</span>
               </div>
 
               <div className="text-[11px] text-zinc-400">
-                ຮູບແບບການຊຳລະ: <strong className="text-white uppercase">{createdBill.paymentMethod}</strong> • ຜູ້ບັນທຶກ: {createdBill.recordedBy}
+                {t.paymentType}: <strong className="text-white uppercase">{createdBill.paymentMethod}</strong> • {t.salesRepresentative}: {createdBill.recordedBy}
               </div>
             </div>
 
@@ -1430,13 +1424,13 @@ export default function POSSalesView({
                 }}
                 className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold border border-zinc-700 transition-colors"
               >
-                ໄປທີ່ໜ້າບັນທຶກບິນທັງໝົດ
+                {t.billsTitle}
               </button>
               <button
                 onClick={() => setCreatedBill(null)}
                 className="px-5 py-2 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition-colors"
               >
-                ສຳເລັດ
+                {t.confirm}
               </button>
             </div>
           </div>

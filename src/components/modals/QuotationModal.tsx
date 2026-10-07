@@ -61,7 +61,7 @@ export default function QuotationModal({
               className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded text-xs transition-colors"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>{lang === 'lo' ? 'ສັ່ງພິມ' : lang === 'zh' ? '打印' : 'Print Quote'}</span>
+              <span>{lang === 'lo' ? 'ສັ່ງພິມ' : lang === 'th' ? 'พิมพ์ใบเสนอราคา' : 'Print Quote'}</span>
             </button>
             <button
               onClick={onClose}

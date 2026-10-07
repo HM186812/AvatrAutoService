@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { InvoiceBillRecord, Language, BillType } from '../../types';
 import { getStoredCompanyBankInfo } from '../../data/companySettings';
+import { translations } from '../../data/translations';
 import AvatrLogo from '../layout/AvatrLogo';
 import { 
   FileText, 
@@ -43,6 +44,7 @@ export default function BillsManagementView({
   onOpenNewSale,
   onOpenNewImport,
 }: BillsManagementViewProps) {
+  const t = translations[lang] || translations.lo;
   const [filterType, setFilterType] = useState<'all' | 'sale' | 'import'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBillForPrint, setSelectedBillForPrint] = useState<InvoiceBillRecord | null>(null);
@@ -89,10 +91,10 @@ export default function BillsManagementView({
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            ບັນທຶກບິນການຂາຍ ແລະ ການນຳເຂົ້າ
+            {t.billsHeader || t.billsTitle}
           </h1>
           <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            ສູນລວມບິນຂາຍລົດຍົນ (Sales Invoices) ແລະ ບິນຮັບເຂົ້າສິນຄ້າ (Goods Receipts) ພ້ອມຮູບແບບໃບບິນທາງການ
+            {t.billsHeaderSub || t.billsSubtitle}
           </p>
         </div>
 
@@ -102,7 +104,7 @@ export default function BillsManagementView({
               onClick={onOpenNewSale}
               className="px-4 py-2.5 bg-white text-black hover:bg-zinc-200 text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-1.5"
             >
-              <span>+ ອອກບິນຂາຍ (POS)</span>
+              <span>+ {t.quickPOSBtn}</span>
             </button>
           )}
 
@@ -111,7 +113,7 @@ export default function BillsManagementView({
               onClick={onOpenNewImport}
               className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors flex items-center gap-1.5"
             >
-              <span>+ ປ້ອນນຳເຂົ້າ</span>
+              <span>+ {t.quickStockInBtn}</span>
             </button>
           )}
         </div>
@@ -124,7 +126,7 @@ export default function BillsManagementView({
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
             <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
               <Receipt className="w-4 h-4" />
-              <span>ຍອດບິນຂາຍລົດຍົນ (Sales)</span>
+              <span>{t.billTotalSalesRevenue}</span>
             </span>
             <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[10px] border border-emerald-800">
               REVENUE
@@ -134,8 +136,8 @@ export default function BillsManagementView({
             ${totalSalesRevenueUSD.toLocaleString()}
           </div>
           <div className="mt-2 pt-2 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400 font-mono">
-            <span>ຈຳນວນບິນຂາຍ:</span>
-            <span className="text-white font-bold">{saleBills.length} ບິນ</span>
+            <span>{t.filterSaleBills}:</span>
+            <span className="text-white font-bold">{saleBills.length} {t.unitBills}</span>
           </div>
         </div>
 
@@ -144,7 +146,7 @@ export default function BillsManagementView({
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
             <span className="font-semibold text-blue-400 flex items-center gap-1.5">
               <PackagePlus className="w-4 h-4" />
-              <span>ມູນຄ່າບິນນຳເຂົ້າ (Imports)</span>
+              <span>{t.billTotalImportValuation}</span>
             </span>
             <span className="px-2 py-0.5 rounded bg-blue-950 text-blue-300 font-mono text-[10px] border border-blue-800">
               VALUATION
@@ -154,8 +156,8 @@ export default function BillsManagementView({
             ${totalImportValuationUSD.toLocaleString()}
           </div>
           <div className="mt-2 pt-2 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400 font-mono">
-            <span>ຈຳນວນບິນນຳເຂົ້າ:</span>
-            <span className="text-white font-bold">{importBills.length} ບິນ</span>
+            <span>{t.filterImportBills}:</span>
+            <span className="text-white font-bold">{importBills.length} {t.unitBills}</span>
           </div>
         </div>
 
@@ -164,18 +166,18 @@ export default function BillsManagementView({
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
             <span className="font-semibold text-amber-300 flex items-center gap-1.5">
               <FileText className="w-4 h-4" />
-              <span>ເອກະສານບິນທັງໝົດ</span>
+              <span>{lang === 'lo' ? 'ເອກະສານບິນທັງໝົດ' : lang === 'th' ? 'เอกสารบิลทั้งหมด' : 'Total Documents'}</span>
             </span>
             <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 font-mono text-[10px] border border-amber-800">
               TOTAL
             </span>
           </div>
           <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-            {bills.length} <span className="text-sm font-sans text-zinc-400">ສະບັບ</span>
+            {bills.length} <span className="text-sm font-sans text-zinc-400">{t.unitBills}</span>
           </div>
           <div className="mt-2 pt-2 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400 font-mono">
-            <span>ສະຖານະ:</span>
-            <span className="text-emerald-400 font-bold">ກວດສອບແລ້ວ 100%</span>
+            <span>{t.tableStatus}:</span>
+            <span className="text-emerald-400 font-bold">{t.firestoreLiveSync}</span>
           </div>
         </div>
       </div>
@@ -187,7 +189,7 @@ export default function BillsManagementView({
             <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
             <input
               type="text"
-              placeholder="ຄົ້ນຫາເລກບິນ, ເລກຖັງ VIN, ຊື່ລູກຄ້າ, ລຸ້ນ..."
+              placeholder={t.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white"
@@ -203,7 +205,7 @@ export default function BillsManagementView({
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              ທັງໝົດ ({bills.length})
+              {t.filterAllBills} ({bills.length})
             </button>
 
             <button
@@ -215,7 +217,7 @@ export default function BillsManagementView({
               }`}
             >
               <Receipt className="w-3.5 h-3.5" />
-              <span>ບິນຂາຍ</span>
+              <span>{t.filterSaleBills}</span>
               <span className="font-mono">({saleBills.length})</span>
             </button>
 
@@ -228,14 +230,14 @@ export default function BillsManagementView({
               }`}
             >
               <PackagePlus className="w-3.5 h-3.5" />
-              <span>ບິນນຳເຂົ້າ</span>
+              <span>{t.filterImportBills}</span>
               <span className="font-mono">({importBills.length})</span>
             </button>
           </div>
         </div>
 
         <span className="text-zinc-400 font-mono text-xs">
-          ກຳລັງສະແດງ: <strong className="text-white">{filteredBills.length}</strong> ບິນ
+          {lang === 'lo' ? 'ກຳລັງສະແດງ:' : lang === 'th' ? 'กำลังแสดง:' : 'Showing:'} <strong className="text-white">{filteredBills.length}</strong> {t.unitBills}
         </span>
       </div>
 
@@ -245,14 +247,14 @@ export default function BillsManagementView({
           <table className="w-full text-left">
             <thead className="bg-zinc-900 text-zinc-400 font-medium border-b border-zinc-800">
               <tr>
-                <th className="py-3.5 px-4">ປະເພດບິນ</th>
-                <th className="py-3.5 px-4">ເລກທີບິນ & ວັນທີ</th>
-                <th className="py-3.5 px-4">ລຸ້ນລົດ & ເລກຖັງ (VIN)</th>
-                <th className="py-3.5 px-4">ລູກຄ້າ / ຜູ້ສະໜອງ</th>
-                <th className="py-3.5 px-4">ຍອດມູນຄ່າສຸທິ</th>
-                <th className="py-3.5 px-4">ຮູບແບບການຊຳລະ</th>
-                <th className="py-3.5 px-4">ຜູ້ອອກບິນ</th>
-                <th className="py-3.5 px-4 text-center">ການດຳເນີນການ</th>
+                <th className="py-3.5 px-4">{t.billType}</th>
+                <th className="py-3.5 px-4">{t.billNumber} & {t.billDate}</th>
+                <th className="py-3.5 px-4">{t.tableModel} & {t.vinNumber}</th>
+                <th className="py-3.5 px-4">{t.buyerInfo} / {t.supplierName}</th>
+                <th className="py-3.5 px-4">{t.billAmount}</th>
+                <th className="py-3.5 px-4">{t.paymentType}</th>
+                <th className="py-3.5 px-4">{lang === 'lo' ? 'ຜູ້ອອກບິນ' : lang === 'th' ? 'ผู้ออกบิล' : 'Issued By'}</th>
+                <th className="py-3.5 px-4 text-center">{t.tableActions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/80 font-mono">
@@ -263,12 +265,12 @@ export default function BillsManagementView({
                     {bill.billType === 'sale' ? (
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1.5 w-max">
                         <Receipt className="w-3 h-3 text-emerald-400" />
-                        <span>ບິນຂາຍລົດ</span>
+                        <span>{t.filterSaleBills}</span>
                       </span>
                     ) : (
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-700 flex items-center gap-1.5 w-max">
                         <PackagePlus className="w-3 h-3 text-blue-400" />
-                        <span>ບິນຮັບເຂົ້າ</span>
+                        <span>{t.filterImportBills}</span>
                       </span>
                     )}
                   </td>
@@ -285,7 +287,7 @@ export default function BillsManagementView({
                     <span className="text-zinc-400 text-[11px] block">{bill.vin}</span>
                     <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-sans mt-0.5">
                       <span>{bill.color}</span>
-                      {bill.plateNumber && <span>• ປ້າຍ: {bill.plateNumber}</span>}
+                      {bill.plateNumber && <span>• {bill.plateNumber}</span>}
                     </div>
                   </td>
 
@@ -293,7 +295,7 @@ export default function BillsManagementView({
                   <td className="py-3.5 px-4 font-sans text-xs">
                     {bill.billType === 'sale' ? (
                       <div>
-                        <span className="text-white font-semibold block">{bill.customerName || 'ລູກຄ້າທົ່ວໄປ'}</span>
+                        <span className="text-white font-semibold block">{bill.customerName || 'VIP Customer'}</span>
                         {bill.customerPhone && (
                           <span className="text-zinc-400 font-mono text-[11px] flex items-center gap-1 mt-0.5">
                             <Phone className="w-3 h-3 text-zinc-500" />
@@ -307,10 +309,10 @@ export default function BillsManagementView({
                     ) : (
                       <div>
                         <span className="text-zinc-200 font-medium block truncate max-w-[180px]">
-                          {bill.supplierName || 'ສາງນຳເຂົ້າ AVATR'}
+                          {bill.supplierName || 'AVATR Technology Co., Ltd.'}
                         </span>
                         {bill.importEntryPort && (
-                          <span className="text-zinc-400 text-[10px] block">ດ່ານ: {bill.importEntryPort}</span>
+                          <span className="text-zinc-400 text-[10px] block">{bill.importEntryPort}</span>
                         )}
                         {bill.customsDocNumber && (
                           <span className="text-[10px] text-blue-400 font-mono block">B01: {bill.customsDocNumber}</span>
@@ -342,19 +344,19 @@ export default function BillsManagementView({
                             ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                             : 'bg-zinc-900 text-zinc-300 border border-zinc-700'
                         }`}>
-                          {bill.paymentMethod === 'finance' ? 'ໄຟແນນສ໌' : bill.paymentMethod === 'transfer' ? 'ຊຳລະເງິນຜ່ານ QR' : 'ເງິນສົດ'}
+                          {bill.paymentMethod === 'finance' ? t.paymentInstallments : bill.paymentMethod === 'transfer' ? t.paymentTransfer : t.paymentCash}
                         </span>
                       </div>
                     ) : (
                       <span className="text-zinc-400 font-sans text-[11px] truncate max-w-[140px] block">
-                        {bill.destinationWarehouse || 'ສາງໂຊຣູມ'}
+                        {bill.destinationWarehouse || 'Showroom Depot'}
                       </span>
                     )}
                   </td>
 
                   {/* Recorder */}
                   <td className="py-3.5 px-4 font-sans text-zinc-300 text-[11px]">
-                    {bill.recordedBy || 'Admin ໃຫຍ່'}
+                    {bill.recordedBy || 'Admin'}
                   </td>
 
                   {/* Action Button */}
@@ -365,18 +367,18 @@ export default function BillsManagementView({
                         className="px-3 py-1.5 bg-zinc-900 hover:bg-white hover:text-black border border-zinc-700 rounded-xl text-xs font-semibold text-zinc-200 transition-all flex items-center justify-center gap-1.5"
                       >
                         <Printer className="w-3.5 h-3.5" />
-                        <span>ເບິ່ງບິນ</span>
+                        <span>{t.printBillBtn}</span>
                       </button>
 
                       {isSuperAdmin && onDeleteBill && (
                         <button
                           onClick={() => {
-                            if (window.confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບບິນເລກທີ "${bill.billNumber}"?`)) {
+                            if (window.confirm(`${t.confirmDeleteBill} (${bill.billNumber})?`)) {
                               onDeleteBill(bill.id);
                             }
                           }}
                           className="p-1.5 bg-red-950/40 hover:bg-red-900 text-red-400 hover:text-white border border-red-800 rounded-xl transition-colors"
-                          title="ລົບບິນ (Super Admin only)"
+                          title="Delete Bill"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

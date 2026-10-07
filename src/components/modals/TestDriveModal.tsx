@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { X, Calendar } from 'lucide-react';
 import { TestDriveBooking, Language } from '../../types';
-import { X, Calendar, MapPin, User, Car } from 'lucide-react';
+import { translations } from '../../data/translations';
 
 interface TestDriveModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTestDrive: (booking: Omit<TestDriveBooking, 'id'>) => void;
   initialModel?: string;
-  lang: Language;
+  lang?: Language;
 }
 
 export default function TestDriveModal({
@@ -15,13 +16,15 @@ export default function TestDriveModal({
   onClose,
   onAddTestDrive,
   initialModel = 'AVATR 12',
-  lang,
+  lang = 'lo',
 }: TestDriveModalProps) {
+  const t = translations[lang] || translations.lo;
+
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [model, setModel] = useState(initialModel);
-  const [date, setDate] = useState('2026-10-06');
-  const [timeSlot, setTimeSlot] = useState('10:00 AM');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [timeSlot, setTimeSlot] = useState('11:00 AM');
   const [location, setLocation] = useState('ໂຊຣູມ AVATR ວຽງຈັນ (ຫຼັກ 3 ຖະໜົນທ່າເດື່ອ)');
 
   if (!isOpen) return null;
@@ -54,10 +57,10 @@ export default function TestDriveModal({
             </div>
             <div>
               <h3 className="font-semibold text-base text-white">
-                {lang === 'lo' ? 'ນັດໝາຍທົດລອງຂັບ AVATR' : lang === 'zh' ? '预约阿维塔试驾体验' : 'Book AVATR Test Drive'}
+                {lang === 'lo' ? 'ນັດໝາຍທົດລອງຂັບ AVATR' : lang === 'th' ? 'นัดหมายทดลองขับ AVATR' : 'Book AVATR Test Drive'}
               </h3>
               <p className="text-xs text-zinc-400">
-                {lang === 'lo' ? 'ສູນບໍລິການ AVATR ຫຼັກ 3 ທ່າເດື່ອ' : 'AVATR Center Lak 3 Thadeua'}
+                {lang === 'lo' ? 'ສູນບໍລິການ AVATR ຫຼັກ 3 ທ່າເດື່ອ' : lang === 'th' ? 'ศูนย์บริการ AVATR หลัก 3 ท่าเดื่อ' : 'AVATR Center Lak 3 Thadeua'}
               </p>
             </div>
           </div>
@@ -72,21 +75,21 @@ export default function TestDriveModal({
         <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-xs">
           <div>
             <label className="block text-zinc-400 mb-1 font-medium">
-              {lang === 'lo' ? 'ຊື່ ແລະ ນາມສະກຸນ *' : 'Full Name *'}
+              {lang === 'lo' ? 'ຊື່ ແລະ ນາມສະກຸນ *' : lang === 'th' ? 'ชื่อและนามสกุล *' : 'Full Name *'}
             </label>
             <input
               type="text"
               required
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="e.g. ທ່ານ ອາລຸນ"
+              placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: ທ່ານ ອາລຸນ' : lang === 'th' ? 'ตัวอย่าง: คุณ สมชาย' : 'e.g. John Doe'}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white"
             />
           </div>
 
           <div>
             <label className="block text-zinc-400 mb-1 font-medium">
-              {lang === 'lo' ? 'ເບີໂທລະສັບ (Laos Mobile) *' : 'Phone Number *'}
+              {lang === 'lo' ? 'ເບີໂທລະສັບ (Laos Mobile) *' : lang === 'th' ? 'เบอร์โทรศัพท์ *' : 'Phone Number *'}
             </label>
             <input
               type="text"
@@ -101,7 +104,7 @@ export default function TestDriveModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ລຸ້ນລົດທີ່ຕ້ອງການທົດລອງຂັບ' : 'Vehicle Model'}
+                {lang === 'lo' ? 'ລຸ້ນລົດທີ່ຕ້ອງການທົດລອງຂັບ' : lang === 'th' ? 'รุ่นรถที่ต้องการทดลองขับ' : 'Vehicle Model'}
               </label>
               <select
                 value={model}
@@ -116,24 +119,24 @@ export default function TestDriveModal({
 
             <div>
               <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ຊ່ວງເວລາ' : 'Time Slot'}
+                {lang === 'lo' ? 'ຊ່ວງເວລາ' : lang === 'th' ? 'ช่วงเวลา' : 'Time Slot'}
               </label>
               <select
                 value={timeSlot}
                 onChange={(e) => setTimeSlot(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-white"
               >
-                <option value="09:30 AM">09:30 AM (ເຊົ້າ)</option>
-                <option value="11:00 AM">11:00 AM (ສວາຍ)</option>
-                <option value="02:00 PM">02:00 PM (ບ່າຍ)</option>
-                <option value="04:30 PM">04:30 PM (ແລງ - Sunset Drive)</option>
+                <option value="09:30 AM">09:30 AM {lang === 'lo' ? '(ເຊົ້າ)' : lang === 'th' ? '(เช้า)' : '(Morning)'}</option>
+                <option value="11:00 AM">11:00 AM {lang === 'lo' ? '(ສວາຍ)' : lang === 'th' ? '(สาย)' : '(Late Morning)'}</option>
+                <option value="02:00 PM">02:00 PM {lang === 'lo' ? '(ບ່າຍ)' : lang === 'th' ? '(บ่าย)' : '(Afternoon)'}</option>
+                <option value="04:30 PM">04:30 PM {lang === 'lo' ? '(ແລງ - Sunset Drive)' : lang === 'th' ? '(เย็น - Sunset Drive)' : '(Evening - Sunset Drive)'}</option>
               </select>
             </div>
           </div>
 
           <div>
             <label className="block text-zinc-400 mb-1 font-medium">
-              {lang === 'lo' ? 'ວັນທີສະດວກ' : 'Date'}
+              {lang === 'lo' ? 'ວັນທີສະດວກ' : lang === 'th' ? 'วันที่สะดวก' : 'Date'}
             </label>
             <input
               type="date"
@@ -145,7 +148,7 @@ export default function TestDriveModal({
 
           <div>
             <label className="block text-zinc-400 mb-1 font-medium">
-              {lang === 'lo' ? 'ສະຖານທີ່ / ເສັ້ນທາງທົດລອງຂັບ' : 'Test Drive Route / Location'}
+              {lang === 'lo' ? 'ສະຖານທີ່ / ເສັ້ນທາງທົດລອງຂັບ' : lang === 'th' ? 'สถานที่ / เส้นทางทดลองขับ' : 'Test Drive Route / Location'}
             </label>
             <select
               value={location}
@@ -153,13 +156,13 @@ export default function TestDriveModal({
               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-white"
             >
               <option value="ໂຊຣູມ AVATR ວຽງຈັນ (ຫຼັກ 3 ຖະໜົນທ່າເດື່ອ)">
-                ໂຊຣູມໃຫຍ່ AVATR ວຽງຈັນ (ຫຼັກ 3 ຖະໜົນທ່າເດື່ອ)
+                {lang === 'lo' ? 'ໂຊຣູມໃຫຍ່ AVATR ວຽງຈັນ (ຫຼັກ 3 ຖະໜົນທ່າເດື່ອ)' : lang === 'th' ? 'โชว์รูมใหญ่ AVATR เวียงจันทน์ (หลัก 3 ถนนท่าเดื่อ)' : 'AVATR Flagship Showroom (Lak 3 Thadeua)'}
               </option>
               <option value="ທົດລອງຂັບເສັ້ນທາງດ່ວນວຽງຈັນ-ວັງວຽງ (Expressway High Speed & Huawei ADS)">
-                ເສັ້ນທາງດ່ວນວຽງຈັນ-ວັງວຽງ (ທົດສອບຄວາມໄວສູງ & ລະບົບ ADS 3.0)
+                {lang === 'lo' ? 'ເສັ້ນທາງດ່ວນວຽງຈັນ-ວັງວຽງ (ທົດສອບຄວາມໄວສູງ & ລະບົບ ADS 3.0)' : lang === 'th' ? 'ทางด่วนเวียงจันทน์-วังเวียง (ทดสอบความเร็วสูง & ระบบ ADS 3.0)' : 'Expressway Vientiane-Vangvieng (ADS 3.0 Test)'}
               </option>
               <option value="ບໍລິການນຳລົດໄປໃຫ້ລອງຂັບເຖິງເຮືອນ/ບ່ອນເຮັດວຽກ (VIP Doorstep Delivery)">
-                ບໍລິການນຳລົດໄປໃຫ້ລອງຂັບເຖິງທີ່ (VIP Doorstep Service)
+                {lang === 'lo' ? 'ບໍລິການນຳລົດໄປໃຫ້ລອງຂັບເຖິງທີ່ (VIP Doorstep Service)' : lang === 'th' ? 'บริการนำรถไปให้ทดลองขับถึงที่ (VIP Doorstep Service)' : 'VIP Doorstep Test Drive Service'}
               </option>
             </select>
           </div>
@@ -170,13 +173,13 @@ export default function TestDriveModal({
               onClick={onClose}
               className="px-4 py-2 border border-zinc-800 hover:bg-zinc-900 text-zinc-300 rounded-lg"
             >
-              {lang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+              {lang === 'lo' ? 'ຍົກເລີກ' : lang === 'th' ? 'ยกเลิก' : 'Cancel'}
             </button>
             <button
               type="submit"
               className="px-5 py-2 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-colors"
             >
-              {lang === 'lo' ? 'ຢືນຢັນການຈອງ' : 'Confirm Booking'}
+              {lang === 'lo' ? 'ຢືນຢັນການຈອງ' : lang === 'th' ? 'ยืนยันการจอง' : 'Confirm Booking'}
             </button>
           </div>
         </form>

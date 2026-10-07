@@ -90,35 +90,34 @@ export default function DashboardView({
     .filter(i => i.status === 'sold')
     .reduce((sum, item) => sum + (item.priceUSD || 0), 0);
 
-  // Timeframe-adjusted KPI multiplier
   const kpiData = {
     day: {
       leads: leads.length,
       revenueUSD: totalRevenueUSD,
       testDrives: testDrives.length,
       deliveries: deliveredCount || soldVehiclesCount,
-      label: 'ມື້ນີ້ (Today)',
+      label: t.tfDay,
     },
     week: {
       leads: leads.length,
       revenueUSD: totalRevenueUSD,
       testDrives: testDrives.length,
       deliveries: deliveredCount || soldVehiclesCount,
-      label: 'ອາທິດນີ້ (This Week)',
+      label: t.tfWeek,
     },
     month: {
       leads: leads.length,
       revenueUSD: totalRevenueUSD,
       testDrives: testDrives.length,
       deliveries: deliveredCount || soldVehiclesCount,
-      label: 'ເດືອນນີ້ (This Month)',
+      label: t.tfMonth,
     },
     year: {
       leads: leads.length,
       revenueUSD: totalRevenueUSD,
       testDrives: testDrives.length,
       deliveries: deliveredCount || soldVehiclesCount,
-      label: 'ປີນີ້ (Annual)',
+      label: t.tfYear,
     },
   }[timeframe];
 
@@ -130,25 +129,25 @@ export default function DashboardView({
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
             <span className="text-[11px] font-mono tracking-widest uppercase text-zinc-400">
-              AVATR AUTO SERVICE MANAGEMENT CONSOLE
+              {t.consoleSubtitle}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Dashboard ພາບລວມທຸລະກິດ
+            {t.dashboardTitle}
           </h1>
           <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            ຕິດຕາມລູກຄ້າ Walk-in / Online / Event ແລະ ສະຖານະຄັງລົດໃນສາງທຸກຂັ້ນຕອນ
+            {t.dashboardSubtitle}
           </p>
         </div>
 
         {/* Timeframe Selector (ມື້, ອາທິດ, ເດືອນ, ປີ) */}
         <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-1.5 rounded-2xl">
-          <span className="text-xs text-zinc-400 px-2 font-mono uppercase">ຊ່ວງເວລາ:</span>
+          <span className="text-xs text-zinc-400 px-2 font-mono uppercase">{t.timeframeSelector}</span>
           {[
-            { key: 'day' as KPITimeframe, labelLo: 'ມື້ (Day)', labelEn: 'Day' },
-            { key: 'week' as KPITimeframe, labelLo: 'ອາທິດ (Week)', labelEn: 'Week' },
-            { key: 'month' as KPITimeframe, labelLo: 'ເດືອນ (Month)', labelEn: 'Month' },
-            { key: 'year' as KPITimeframe, labelLo: 'ປີ (Year)', labelEn: 'Year' },
+            { key: 'day' as KPITimeframe, label: t.tfDay },
+            { key: 'week' as KPITimeframe, label: t.tfWeek },
+            { key: 'month' as KPITimeframe, label: t.tfMonth },
+            { key: 'year' as KPITimeframe, label: t.tfYear },
           ].map((tf) => (
             <button
               key={tf.key}
@@ -159,7 +158,7 @@ export default function DashboardView({
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
               }`}
             >
-              {tf.labelLo}
+              {tf.label}
             </button>
           ))}
         </div>
@@ -174,17 +173,17 @@ export default function DashboardView({
           className="bg-zinc-950 border border-zinc-800 hover:border-zinc-600 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl group"
         >
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-3">
-            <span className="font-medium">ລູກຄ້າທັງໝົດ ({kpiData.label})</span>
+            <span className="font-medium">{t.kpiTotalLeads} ({kpiData.label})</span>
             <span className="p-2 bg-zinc-900 rounded-lg group-hover:bg-white group-hover:text-black transition-colors">
               <Users className="w-4 h-4" />
             </span>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black font-mono text-white">{kpiData.leads}</span>
-            <span className="text-xs text-emerald-400 font-mono">+18% vs ກ່ອນໜ້າ</span>
+            <span className="text-xs text-emerald-400 font-mono">+18% SLA</span>
           </div>
           <div className="mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 group-hover:text-white">
-            <span>ຈັດການຂໍ້ມູນລູກຄ້າ CRM</span>
+            <span>{t.manageCrmAction}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </div>
         </div>
@@ -195,7 +194,7 @@ export default function DashboardView({
           className="bg-zinc-950 border border-zinc-800 hover:border-zinc-600 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl group"
         >
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-3">
-            <span className="font-medium">ລົດໃນສາງທັງໝົດ</span>
+            <span className="font-medium">{t.kpiTotalCars}</span>
             <span className="p-2 bg-zinc-900 rounded-lg group-hover:bg-white group-hover:text-black transition-colors">
               <Car className="w-4 h-4" />
             </span>
@@ -203,11 +202,11 @@ export default function DashboardView({
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black font-mono text-white">{inventory.length}</span>
             <span className="text-xs text-emerald-300 font-semibold bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800">
-              {readyCars.length} ພ້ອມຂາຍ
+              {readyCars.length} {t.readyForSale}
             </span>
           </div>
           <div className="mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 group-hover:text-white">
-            <span>ກວດເຊັກສະຕ໋ອກລົດ</span>
+            <span>{t.checkStockAction}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </div>
         </div>
@@ -216,10 +215,10 @@ export default function DashboardView({
         <div 
           onClick={() => onNavigateMenu('bills')}
           className="bg-zinc-950 border border-zinc-800 hover:border-emerald-500/80 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl group"
-          title="ຄລິກເພື່ອເບິ່ງລາຍການບັນທຶກບິນທັງໝົດ"
+          title="Bills & Invoices"
         >
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-3">
-            <span className="font-medium text-emerald-400">ຍອດມູນຄ່າຂາຍ ({kpiData.label})</span>
+            <span className="font-medium text-emerald-400">{t.kpiRevenueTitle} ({kpiData.label})</span>
             <span className="p-2 bg-zinc-900 rounded-lg group-hover:bg-emerald-500 group-hover:text-black transition-colors">
               <FileText className="w-4 h-4 text-emerald-400 group-hover:text-black" />
             </span>
@@ -230,9 +229,9 @@ export default function DashboardView({
             </span>
           </div>
           <div className="mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 group-hover:text-white">
-            <span className="font-mono text-zinc-400">≈ ₭ {((kpiData.revenueUSD * 22000) / 1000000000).toFixed(2)} ຕື້ (LAK)</span>
+            <span className="font-mono text-zinc-400">≈ ₭ {((kpiData.revenueUSD * 22000) / 1000000000).toFixed(2)} B LAK</span>
             <span className="flex items-center gap-1 text-emerald-400 font-semibold group-hover:underline">
-              <span>ບັນທຶກບິນ</span>
+              <span>{t.viewBillsAction}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </span>
           </div>
@@ -245,10 +244,10 @@ export default function DashboardView({
           <div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Users className="w-5 h-5 text-white" />
-              <span>ສະແດງລູກຄ້າແບ່ງຕາມໝວດ (Walk in, Online, Event)</span>
+              <span>{t.customerCategoryTitle}</span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
-              ແຍກຊ່ອງທາງທີ່ລູກຄ້າຕິດຕໍ່ເຂົ້າມາ ເພື່ອຕິດຕາມການຂາຍໃຫ້ຖືກຕ້ອງ
+              {t.customerCategorySubtitle}
             </p>
           </div>
 
@@ -256,7 +255,7 @@ export default function DashboardView({
             onClick={() => onNavigateMenu('customers')}
             className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1.5 bg-zinc-900 px-3.5 py-1.5 rounded-xl border border-zinc-700"
           >
-            <span>ເບິ່ງລາຍລະອຽດທັງໝົດ</span>
+            <span>{t.viewAllDetails}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -270,8 +269,8 @@ export default function DashboardView({
                   <Store className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white">ລູກຄ້າ Walk-in</h3>
-                  <p className="text-xs text-zinc-400">ມາໜ້າໂຊຣູມ ຫຼັກ 3</p>
+                  <h3 className="font-bold text-base text-white">{t.catWalkIn}</h3>
+                  <p className="text-xs text-zinc-400">Showroom Lak 3</p>
                 </div>
               </div>
               <span className="text-2xl font-black font-mono text-white">{walkInLeads.length}</span>
@@ -279,7 +278,7 @@ export default function DashboardView({
 
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-zinc-400 font-mono">
-                <span>ສັດສ່ວນ:</span>
+                <span>{t.ratioLabel}</span>
                 <span className="text-white font-semibold">
                   {Math.round((walkInLeads.length / Math.max(1, leads.length)) * 100)}%
                 </span>
@@ -293,7 +292,7 @@ export default function DashboardView({
             </div>
 
             <div className="pt-3 border-t border-zinc-800/80 space-y-1.5 text-xs">
-              <span className="text-zinc-500 font-mono text-[11px] uppercase block">ລູກຄ້າຫຼ້າສຸດ:</span>
+              <span className="text-zinc-500 font-mono text-[11px] uppercase block">{t.latestCustomers}</span>
               {walkInLeads.slice(0, 2).map(l => (
                 <div key={l.id} className="flex justify-between items-center text-zinc-300">
                   <span className="font-medium truncate">{l.customerName}</span>
@@ -311,7 +310,7 @@ export default function DashboardView({
                   <Globe className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white">ລູກຄ້າ Online</h3>
+                  <h3 className="font-bold text-base text-white">{t.catOnline}</h3>
                   <p className="text-xs text-zinc-400">Facebook / Web / WA</p>
                 </div>
               </div>
@@ -320,7 +319,7 @@ export default function DashboardView({
 
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-zinc-400 font-mono">
-                <span>ສັດສ່ວນ:</span>
+                <span>{t.ratioLabel}</span>
                 <span className="text-white font-semibold">
                   {Math.round((onlineLeads.length / Math.max(1, leads.length)) * 100)}%
                 </span>
@@ -334,7 +333,7 @@ export default function DashboardView({
             </div>
 
             <div className="pt-3 border-t border-zinc-800/80 space-y-1.5 text-xs">
-              <span className="text-zinc-500 font-mono text-[11px] uppercase block">ລູກຄ້າຫຼ້າສຸດ:</span>
+              <span className="text-zinc-500 font-mono text-[11px] uppercase block">{t.latestCustomers}</span>
               {onlineLeads.slice(0, 2).map(l => (
                 <div key={l.id} className="flex justify-between items-center text-zinc-300">
                   <span className="font-medium truncate">{l.customerName}</span>
@@ -352,7 +351,7 @@ export default function DashboardView({
                   <CalendarCheck className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white">ລູກຄ້າ Event</h3>
+                  <h3 className="font-bold text-base text-white">{t.catEvent}</h3>
                   <p className="text-xs text-zinc-400">Motor Expo / ITECC</p>
                 </div>
               </div>
@@ -361,7 +360,7 @@ export default function DashboardView({
 
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-zinc-400 font-mono">
-                <span>ສັດສ່ວນ:</span>
+                <span>{t.ratioLabel}</span>
                 <span className="text-white font-semibold">
                   {Math.round((eventLeads.length / Math.max(1, leads.length)) * 100)}%
                 </span>
@@ -375,7 +374,7 @@ export default function DashboardView({
             </div>
 
             <div className="pt-3 border-t border-zinc-800/80 space-y-1.5 text-xs">
-              <span className="text-zinc-500 font-mono text-[11px] uppercase block">ລູກຄ້າຫຼ້າສຸດ:</span>
+              <span className="text-zinc-500 font-mono text-[11px] uppercase block">{t.latestCustomers}</span>
               {eventLeads.slice(0, 2).map(l => (
                 <div key={l.id} className="flex justify-between items-center text-zinc-300">
                   <span className="font-medium truncate">{l.customerName}</span>
@@ -399,10 +398,10 @@ export default function DashboardView({
             </div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-amber-400" />
-              <span>ສິນຄ້າ Event ແລະ ໂປຣໂມຊັນພິເສດ (Promotions & Events)</span>
+              <span>{t.eventsAndPromotionsTitle}</span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
-              ລົດທີ່ນຳໄປຈັດສະແດງໃນງານ Event, ງານ Roadshow ແລະ ແຄມເປນຂອງແຖມພິເສດຫຼ້າສຸດ
+              {t.eventsAndPromotionsSubtitle}
             </p>
           </div>
 
@@ -412,14 +411,14 @@ export default function DashboardView({
               className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1.5 bg-zinc-900 px-3.5 py-2 rounded-xl border border-zinc-700 transition-colors"
             >
               <Car className="w-3.5 h-3.5 text-zinc-400" />
-              <span>ເບິ່ງສະຕ໋ອກລົດ Event</span>
+              <span>{t.viewEventStock}</span>
             </button>
             <button
               onClick={() => onNavigateMenu('pos')}
               className="text-xs text-black bg-emerald-400 hover:bg-emerald-300 font-bold flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors shadow-md"
             >
               <BadgePercent className="w-3.5 h-3.5 fill-black" />
-              <span>ເປີດບິນຂາຍ POS ໂປຣໂມຊັນ</span>
+              <span>{t.openPosPromo}</span>
             </button>
           </div>
         </div>
@@ -428,8 +427,8 @@ export default function DashboardView({
         {ACTIVE_PROMOTIONS.length === 0 ? (
           <div className="p-8 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl text-center space-y-2">
             <Sparkles className="w-8 h-8 text-zinc-600 mx-auto" />
-            <p className="text-zinc-400 text-sm font-medium">ຍັງບໍ່ມີແຄມເປນ ຫຼື ໂປຣໂມຊັນພິເສດໃນຕອນນີ້</p>
-            <p className="text-zinc-500 text-xs">ທ່ານສາມາດເພີ່ມລົດແຄມເປນ, ງານ Event ແລະ ໂປຣໂມຊັນຕົວຈິງຜ່ານລະບົບສະຕັອກ (Stock-In)</p>
+            <p className="text-zinc-400 text-sm font-medium">{t.noPromotionsTitle}</p>
+            <p className="text-zinc-500 text-xs">{t.noPromotionsDesc}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -443,7 +442,7 @@ export default function DashboardView({
                   <div className="relative h-40 w-full overflow-hidden bg-zinc-950">
                     <img
                       src={promo.imageUrl}
-                      alt={promo.titleLo}
+                      alt={lang === 'lo' ? promo.titleLo : promo.titleEn}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent"></div>
@@ -466,7 +465,7 @@ export default function DashboardView({
                   <div className="p-4 space-y-3">
                     <div>
                       <h3 className="font-extrabold text-sm text-white group-hover:text-amber-300 transition-colors line-clamp-2">
-                        {promo.titleLo}
+                        {lang === 'lo' ? promo.titleLo : promo.titleEn}
                       </h3>
                       {promo.eventLocation && (
                         <p className="text-[11px] text-zinc-400 flex items-center gap-1 mt-1 truncate">
@@ -480,7 +479,7 @@ export default function DashboardView({
                     <div className="p-2.5 bg-emerald-950/40 border border-emerald-900/60 rounded-xl text-xs space-y-1">
                       <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold uppercase font-mono">
                         <Gift className="w-3 h-3" />
-                        <span>ສິດທິປະໂຫຍດຫຼັກ (Key Privilege)</span>
+                        <span>Privilege</span>
                       </div>
                       <p className="text-zinc-200 font-medium text-[11px] leading-snug">
                         {promo.highlightBenefit}
@@ -489,7 +488,7 @@ export default function DashboardView({
 
                     {/* Free Gifts List */}
                     <div className="space-y-1 pt-1">
-                      <span className="text-[10px] text-zinc-500 font-mono uppercase block">ຂອງແຖມ & ບໍລິການ:</span>
+                      <span className="text-[10px] text-zinc-500 font-mono uppercase block">Perks:</span>
                       <ul className="text-[11px] text-zinc-300 space-y-0.5">
                         {promo.freeGifts.slice(0, 3).map((gift, idx) => (
                           <li key={idx} className="flex items-start gap-1.5 truncate">
@@ -511,19 +510,19 @@ export default function DashboardView({
                       className="flex-1 py-2 px-3 bg-zinc-800 hover:bg-zinc-750 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-zinc-700"
                     >
                       <Car className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>ເບິ່ງລົດໃນງານ</span>
+                      <span>{t.viewEventStock}</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         const targetVehicle = vehicles.find(v => promo.applicableModels.includes(v.name as any)) || vehicles[0];
                         if (targetVehicle) {
-                          onOpenQuote(targetVehicle, `ລູກຄ້າ ${promo.badge}`);
+                          onOpenQuote(targetVehicle, `Customer ${promo.badge}`);
                         }
                       }}
                       className="py-2 px-3 bg-amber-400 hover:bg-amber-300 text-black rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors shadow-sm"
                     >
-                      <span>ໃບສະເໜີ</span>
+                      <span>{t.createQuoteAction}</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -541,10 +540,10 @@ export default function DashboardView({
           <div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Car className="w-5 h-5 text-white" />
-              <span>ສະຖານະຄັງລົດໃນສາງ (ລວມລົດ Event & ໂປຣໂມຊັນ)</span>
+              <span>{t.inventoryStagesTitle}</span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
-              ຕິດຕາມລົດທຸກຄັນ ຕັ້ງແຕ່ນຳເຂົ້າ, PDI, ຈັດສະແດງໃນງານ Event ຈົນເຖິງສົ່ງມອບ
+              {t.inventoryStagesSubtitle}
             </p>
           </div>
 
@@ -552,7 +551,7 @@ export default function DashboardView({
             onClick={() => onNavigateMenu('inventory')}
             className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1.5 bg-zinc-900 px-3.5 py-1.5 rounded-xl border border-zinc-700"
           >
-            <span>ຈັດການຄັງສິນຄ້າທັງໝົດ</span>
+            <span>{t.manageAllStock}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -563,13 +562,13 @@ export default function DashboardView({
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-950 text-blue-300 border border-blue-800">
-                1. ນຳເຂົ້າ
+                {t.stage1Imported}
               </span>
               <span className="text-xl font-black font-mono text-white">{importedCars.length}</span>
             </div>
 
             <p className="text-[11px] text-zinc-400 leading-tight">
-              ມາຮອດດ່ານບໍ່ເຕັນ / ສາງດົງໂດກ ລໍຖ້າກຽມກວດ
+              {t.stage1Desc}
             </p>
 
             <div className="space-y-1.5 pt-2 border-t border-zinc-800/80 text-xs">
@@ -586,13 +585,13 @@ export default function DashboardView({
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-950 text-amber-300 border border-amber-800">
-                2. ກຳລັງ PDI
+                {t.stage2PDI}
               </span>
               <span className="text-xl font-black font-mono text-white">{pdiCars.length}</span>
             </div>
 
             <p className="text-[11px] text-zinc-400 leading-tight">
-              ກວດສອບ 68 ຈຸດ: ແບັດ CATL, LiDAR, OTA
+              {t.stage2Desc}
             </p>
 
             <div className="space-y-1.5 pt-2 border-t border-zinc-800/80 text-xs">
@@ -609,13 +608,13 @@ export default function DashboardView({
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">
-                3. ພ້ອມຂາຍ
+                {t.stage3Ready}
               </span>
               <span className="text-xl font-black font-mono text-white">{readyCars.length}</span>
             </div>
 
             <p className="text-[11px] text-zinc-400 leading-tight">
-              PDI ຜ່ານ 100%, ຈອດຢູ່ໂຊຣູມໃຫຍ່
+              {t.stage3Desc}
             </p>
 
             <div className="space-y-1.5 pt-2 border-t border-zinc-800/80 text-xs">
@@ -632,20 +631,20 @@ export default function DashboardView({
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-950 text-purple-300 border border-purple-800">
-                4. ຈອງແລ້ວ
+                {t.stage4Reserved}
               </span>
               <span className="text-xl font-black font-mono text-white">{reservedCars.length}</span>
             </div>
 
             <p className="text-[11px] text-zinc-400 leading-tight">
-              ລູກຄ້າວາງມັດຈຳ/ເຊັນສັນຍາແລ້ວ
+              {t.stage4Desc}
             </p>
 
             <div className="space-y-1.5 pt-2 border-t border-zinc-800/80 text-xs">
               {reservedCars.slice(0, 1).map(c => (
                 <div key={c.vin} className="p-2 bg-black/40 rounded-lg border border-zinc-900">
                   <div className="font-bold text-white text-xs truncate">{c.model}</div>
-                  <div className="text-[10px] text-purple-300 truncate">{c.reservedForCustomer || 'ລູກຄ້າ VIP'}</div>
+                  <div className="text-[10px] text-purple-300 truncate">{c.reservedForCustomer || 'VIP Client'}</div>
                 </div>
               ))}
             </div>
@@ -656,13 +655,13 @@ export default function DashboardView({
             <div className="flex items-center justify-between">
               <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-950 text-amber-300 border border-amber-600 flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-amber-400" />
-                <span>5. ງານ Event</span>
+                <span>{t.stage5Event}</span>
               </span>
               <span className="text-xl font-black font-mono text-amber-400">{eventCars.length}</span>
             </div>
 
             <p className="text-[11px] text-zinc-400 leading-tight">
-              ຈັດສະແດງໃນງານ Motor Expo & Roadshow
+              {t.stage5Desc}
             </p>
 
             <div className="space-y-1.5 pt-2 border-t border-zinc-800/80 text-xs">
@@ -672,7 +671,7 @@ export default function DashboardView({
                   <div className="text-[10px] text-amber-300 truncate">{c.eventCampaign || 'Motor Show'}</div>
                 </div>
               )) : (
-                <div className="text-[10px] text-zinc-500 py-1 text-center">ບໍ່ມີລົດໃນງານຕອນນີ້</div>
+                <div className="text-[10px] text-zinc-500 py-1 text-center">{t.noEventCarsNow}</div>
               )}
             </div>
           </div>
@@ -682,13 +681,13 @@ export default function DashboardView({
             <div className="flex items-center justify-between">
               <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-950 text-rose-300 border border-rose-600 flex items-center gap-1">
                 <Flame className="w-3 h-3 text-rose-400" />
-                <span>6. ໂປຣໂມຊັນ</span>
+                <span>{t.stage6Promo}</span>
               </span>
               <span className="text-xl font-black font-mono text-rose-400">{promoCars.length}</span>
             </div>
 
             <p className="text-[11px] text-zinc-400 leading-tight">
-              ລົດແຄມເປນພິເສດ ດອກເບ້ຍ 0% & ຂອງແຖມ
+              {t.stage6Desc}
             </p>
 
             <div className="space-y-1.5 pt-2 border-t border-zinc-800/80 text-xs">
@@ -698,7 +697,7 @@ export default function DashboardView({
                   <div className="text-[10px] text-rose-300 truncate">{c.eventCampaign || 'Special Promo'}</div>
                 </div>
               )) : (
-                <div className="text-[10px] text-zinc-500 py-1 text-center">ບໍ່ມີລົດໂປຣຕອນນີ້</div>
+                <div className="text-[10px] text-zinc-500 py-1 text-center">{t.noPromoCarsNow}</div>
               )}
             </div>
           </div>

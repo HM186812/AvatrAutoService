@@ -52,12 +52,14 @@
     font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   body {
     font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
     background-color: #050507;
     color: #f4f4f5;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   input, button, select, textarea, optgroup, option {
@@ -79,6 +81,157 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
+}
+
+/* ========================================================
+   LUXURY LIGHT MODE STYLES & OVERRIDES (.light)
+   ======================================================== */
+html.light, 
+html.light body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Layout containers */
+html.light aside {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.light header {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.light .bg-black {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light .bg-zinc-950 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light .bg-zinc-900 {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .bg-zinc-900\/90,
+html.light .bg-zinc-900\/80,
+html.light .bg-zinc-900\/70,
+html.light .bg-zinc-900\/60,
+html.light .bg-zinc-900\/40,
+html.light .bg-zinc-900\/30 {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .bg-zinc-800 {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light .hover\:bg-zinc-900:hover,
+html.light .hover\:bg-zinc-900\/90:hover {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .hover\:bg-zinc-800:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .border-zinc-800,
+html.light .border-zinc-800\/80,
+html.light .border-zinc-900,
+html.light .border-zinc-700 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Typography Overrides for Light Mode */
+html.light .text-white {
+  color: #0f172a !important;
+}
+
+html.light .text-zinc-400 {
+  color: #64748b !important;
+}
+
+html.light .text-zinc-500 {
+  color: #94a3b8 !important;
+}
+
+html.light .text-zinc-300 {
+  color: #334155 !important;
+}
+
+html.light .text-zinc-200 {
+  color: #1e293b !important;
+}
+
+html.light .text-zinc-100 {
+  color: #0f172a !important;
+}
+
+/* Form Inputs in Light Mode */
+html.light input,
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+  border-color: #0f172a !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Active buttons & Pill badges */
+html.light .bg-white.text-black {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+}
+
+html.light .bg-white.text-black svg {
+  color: #ffffff !important;
+}
+
+html.light .hover\:bg-zinc-200:hover {
+  background-color: #1e293b !important;
+}
+
+/* Modal Backdrops in Light Mode */
+html.light .fixed.inset-0.bg-black\/85,
+html.light .fixed.inset-0.bg-black\/80 {
+  background-color: rgba(15, 23, 42, 0.65) !important;
+}
+
+/* Subtle highlights in light mode */
+html.light .ring-white\/30 {
+  --tw-ring-color: rgba(15, 23, 42, 0.2) !important;
 }
 
 /* Modern Keyframe Animations for Futuristic AVATR Cockpit */

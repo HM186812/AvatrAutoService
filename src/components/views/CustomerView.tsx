@@ -133,16 +133,16 @@ export default function CustomerView({
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            ລະບົບຈັດການລູກຄ້າ (Customers)
+            {t.customerViewTitle}
           </h1>
           <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            ແບ່ງໝວດ 3 ປະເພດ: <strong>Walk in</strong> ({categoryCounts.walk_in}) | <strong>Online</strong> ({categoryCounts.online}) | <strong>Event</strong> ({categoryCounts.event})
+            {t.customerCategoryTitle}: <strong>{t.catWalkIn}</strong> ({categoryCounts.walk_in}) | <strong>{t.catOnline}</strong> ({categoryCounts.online}) | <strong>{t.catEvent}</strong> ({categoryCounts.event})
           </p>
         </div>
 
         <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl text-xs">
-          <span className="text-zinc-400">ຜູ້ຮັບຜິດຊອບ:</span>
-          <span className="text-white font-semibold">{currentUser?.name || 'Admin ໃຫຍ່'}</span>
+          <span className="text-zinc-400">{t.assignedOfficer}</span>
+          <span className="text-white font-semibold">{currentUser?.name || t.roleSuperAdmin}</span>
         </div>
       </div>
 
@@ -153,7 +153,7 @@ export default function CustomerView({
           <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
             <div className="flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-white" />
-              <h2 className="font-bold text-base text-white">ເພີ່ມຂໍ້ມູນລູກຄ້າໃໝ່</h2>
+              <h2 className="font-bold text-base text-white">{t.inputFormHeader}</h2>
             </div>
             <span className="text-[10px] font-mono uppercase px-2 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-300 rounded">
               INPUT FORM
@@ -163,7 +163,7 @@ export default function CustomerView({
           {formSuccess && (
             <div className="p-3 bg-emerald-950/80 border border-emerald-800 rounded-xl text-xs text-emerald-300 flex items-center gap-2 animate-fadeIn">
               <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-              <span>ບັນທຶກລູກຄ້າໃໝ່ເຂົ້າລະບົບຮຽບຮ້ອຍແລ້ວ!</span>
+              <span>{t.savedCustomerSuccess}</span>
             </div>
           )}
 
@@ -171,7 +171,7 @@ export default function CustomerView({
             {/* 3 Categories Radio / Selector */}
             <div>
               <label className="block text-zinc-400 font-medium mb-1.5">
-                ປະເພດລູກຄ້າ (3 ໝວດ) *
+                {t.customerTypeLabel}
               </label>
               <div className="grid grid-cols-3 gap-1.5">
                 <button
@@ -184,7 +184,7 @@ export default function CustomerView({
                   }`}
                 >
                   <Store className="w-3.5 h-3.5" />
-                  <span className="text-[11px]">Walk in</span>
+                  <span className="text-[11px]">{t.catWalkIn.replace('ລູກຄ້າ ', '').replace('ลูกค้า ', '').replace('Leads', '').trim()}</span>
                 </button>
 
                 <button
@@ -197,7 +197,7 @@ export default function CustomerView({
                   }`}
                 >
                   <Globe className="w-3.5 h-3.5" />
-                  <span className="text-[11px]">Online</span>
+                  <span className="text-[11px]">{t.catOnline.replace('ລູກຄ້າ ', '').replace('ลูกค้า ', '').replace('Leads', '').trim()}</span>
                 </button>
 
                 <button
@@ -210,7 +210,7 @@ export default function CustomerView({
                   }`}
                 >
                   <CalendarCheck className="w-3.5 h-3.5" />
-                  <span className="text-[11px]">Event</span>
+                  <span className="text-[11px]">{t.catEvent.replace('ລູກຄ້າ ', '').replace('ลูกค้า ', '').replace('Leads', '').trim()}</span>
                 </button>
               </div>
             </div>
@@ -218,14 +218,14 @@ export default function CustomerView({
             {/* Customer Name */}
             <div>
               <label className="block text-zinc-400 font-medium mb-1">
-                ຊື່ ແລະ ນາມສະກຸນ *
+                {t.customerNameLabel}
               </label>
               <input
                 type="text"
                 required
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
-                placeholder="e.g. ທ່ານ ອາລຸນ ວົງວິໄລ"
+                placeholder="e.g. Somxay Vongvilay"
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
               />
             </div>
@@ -233,7 +233,7 @@ export default function CustomerView({
             {/* Phone */}
             <div>
               <label className="block text-zinc-400 font-medium mb-1">
-                ເບີໂທລະສັບ (020...) *
+                {t.customerPhoneLabel}
               </label>
               <input
                 type="text"
@@ -249,7 +249,7 @@ export default function CustomerView({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-zinc-400 font-medium mb-1">
-                  ລຸ້ນທີ່ສົນໃຈ
+                  {t.interestedModelLabel}
                 </label>
                 <select
                   value={formModel}
@@ -264,16 +264,16 @@ export default function CustomerView({
 
               <div>
                 <label className="block text-zinc-400 font-medium mb-1">
-                  ລະດັບຄວາມສຳຄັນ
+                  {t.priorityLabel}
                 </label>
                 <select
                   value={formPriority}
                   onChange={(e) => setFormPriority(e.target.value as any)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none"
                 >
-                  <option value="vip">VIP (ດ່ວນພິເສດ)</option>
-                  <option value="high">High (ຄວາມສຳຄັນສູງ)</option>
-                  <option value="normal">Normal (ປົກກະຕິ)</option>
+                  <option value="vip">VIP</option>
+                  <option value="high">{t.priorityHigh}</option>
+                  <option value="normal">{t.priorityMedium}</option>
                 </select>
               </div>
             </div>
@@ -281,13 +281,13 @@ export default function CustomerView({
             {/* Budget */}
             <div>
               <label className="block text-zinc-400 font-medium mb-1">
-                ງົບປະມານ
+                {t.budgetLabel}
               </label>
               <input
                 type="text"
                 value={formBudget}
                 onChange={(e) => setFormBudget(e.target.value)}
-                placeholder="ປ້ອນງົບປະມານ (e.g. $45,000)..."
+                placeholder="$45,000"
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
               />
             </div>
@@ -295,13 +295,13 @@ export default function CustomerView({
             {/* Notes */}
             <div>
               <label className="block text-zinc-400 font-medium mb-1">
-                ໝາຍເຫດ / ຄວາມຕ້ອງການ
+                {t.notesLabel}
               </label>
               <textarea
                 rows={2}
                 value={formNotes}
                 onChange={(e) => setFormNotes(e.target.value)}
-                placeholder="ສີດຳ, ຕ້ອງການດາວน์ 30%, ນັດທົດລອງຂັບ..."
+                placeholder="Black color, Down payment 30%, Test drive scheduled..."
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white resize-none"
               />
             </div>
@@ -311,7 +311,7 @@ export default function CustomerView({
               className="w-full py-2.5 bg-white text-black font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-zinc-200 transition-colors shadow-lg flex items-center justify-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
-              <span>ບັນທຶກລູກຄ້າເຂົ້າລະບົບ</span>
+              <span>{t.saveCustomerBtn}</span>
             </button>
           </form>
         </div>
@@ -321,10 +321,10 @@ export default function CustomerView({
           {/* 3 Main Category Tabs (Walk in, Online, Event) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { key: 'all' as const, label: 'ລູກຄ້າທັງໝົດ', count: categoryCounts.all, icon: Users },
-              { key: 'walk_in' as const, label: 'Walk in', count: categoryCounts.walk_in, icon: Store },
-              { key: 'online' as const, label: 'Online', count: categoryCounts.online, icon: Globe },
-              { key: 'event' as const, label: 'Event', count: categoryCounts.event, icon: CalendarCheck },
+              { key: 'all' as const, label: t.statusAll, count: categoryCounts.all, icon: Users },
+              { key: 'walk_in' as const, label: t.catWalkIn.replace('ລູກຄ້າ ', '').replace('ลูกค้า ', '').replace('Leads', '').trim(), count: categoryCounts.walk_in, icon: Store },
+              { key: 'online' as const, label: t.catOnline.replace('ລູກຄ້າ ', '').replace('ลูกค้า ', '').replace('Leads', '').trim(), count: categoryCounts.online, icon: Globe },
+              { key: 'event' as const, label: t.catEvent.replace('ລູກຄ້າ ', '').replace('ลูกค้า ', '').replace('Leads', '').trim(), count: categoryCounts.event, icon: CalendarCheck },
             ].map((tab) => {
               const Icon = tab.icon;
               const isSelected = selectedCategory === tab.key;
@@ -359,7 +359,7 @@ export default function CustomerView({
               <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="ຄົ້ນຫາຊື່, ເບີໂທ, ໝາຍເຫດ..."
+                placeholder={t.searchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white"
@@ -367,18 +367,18 @@ export default function CustomerView({
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500">ສະຖານະ:</span>
+              <span className="text-zinc-500">{t.filterByStatus}</span>
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
                 className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
               >
-                <option value="all">ທຸກຂັ້ນຕອນ</option>
-                <option value="new">ສອບຖາມໃໝ່</option>
-                <option value="contacted">ຕິດຕໍ່ແລ້ວ</option>
-                <option value="test_drive">ນັດທົດລອງຂັບ</option>
-                <option value="negotiation">ເຈລະຈາ/ສະເໜີລາຄາ</option>
-                <option value="delivered">ສົ່ງມອບລົດແລ້ວ</option>
+                <option value="all">{t.statusAll}</option>
+                <option value="new">{t.statusNew}</option>
+                <option value="contacted">{t.statusContacted}</option>
+                <option value="test_drive">{t.statusTestDrive}</option>
+                <option value="negotiation">{t.statusNegotiation}</option>
+                <option value="delivered">{t.statusDelivered}</option>
               </select>
             </div>
           </div>
@@ -388,7 +388,7 @@ export default function CustomerView({
             {filteredLeads.length === 0 ? (
               <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-12 text-center text-zinc-500">
                 <Users className="w-10 h-10 mx-auto text-zinc-700 mb-2" />
-                <p className="text-xs">ບໍ່ມີລູກຄ້າໃນໝວດນີ້</p>
+                <p className="text-xs">{t.noCustomersFound}</p>
               </div>
             ) : (
               filteredLeads.map((lead) => {
@@ -431,7 +431,7 @@ export default function CustomerView({
                             <span>{lead.phone}</span>
                           </span>
                           <span>• {lead.interestedModel}</span>
-                          <span>• ງົບ: {lead.budget}</span>
+                          {lead.budget && <span>• {lead.budget}</span>}
                         </div>
                       </div>
 
@@ -441,11 +441,11 @@ export default function CustomerView({
                         onChange={(e) => handleUpdateStatus(lead.id, e.target.value as LeadStatus)}
                         className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none"
                       >
-                        <option value="new">ສອບຖາມໃໝ່</option>
-                        <option value="contacted">ຕິດຕໍ່ແລ້ວ</option>
-                        <option value="test_drive">ນັດທົດລອງຂັບ</option>
-                        <option value="negotiation">ເຈລະຈາ/ສະເໜີລາຄາ</option>
-                        <option value="delivered">ສົ່ງມອບລົດແລ້ວ</option>
+                        <option value="new">{t.statusNew}</option>
+                        <option value="contacted">{t.statusContacted}</option>
+                        <option value="test_drive">{t.statusTestDrive}</option>
+                        <option value="negotiation">{t.statusNegotiation}</option>
+                        <option value="delivered">{t.statusDelivered}</option>
                       </select>
                     </div>
 
@@ -455,7 +455,7 @@ export default function CustomerView({
 
                     <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
                       <span className="text-zinc-500 font-mono text-[11px]">
-                        ແຫຼ່ງທີ່ມາ: {lead.source || lead.category} | {lead.createdAt.slice(0, 10)}
+                        {lead.source || lead.category} | {lead.createdAt.slice(0, 10)}
                       </span>
 
                       <div className="flex items-center gap-2">
@@ -464,11 +464,11 @@ export default function CustomerView({
                           className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg border border-zinc-700 font-medium flex items-center gap-1"
                         >
                           <Phone className="w-3 h-3 text-zinc-400" />
-                          <span>ໂທ</span>
+                          <span>{t.callNow}</span>
                         </a>
 
                         <a
-                          href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`ສະບາຍດີ ${lead.customerName}, ຈາກທີມງານ AVATR Laos ຂໍອະນຸຍາດຕິດຕໍ່ເລື່ອງ ${lead.interestedModel}`)}`}
+                          href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hello ${lead.customerName}, AVATR Laos representative contacting regarding ${lead.interestedModel}`)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="px-3 py-1.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 rounded-lg border border-emerald-800 font-medium flex items-center gap-1"
@@ -481,7 +481,7 @@ export default function CustomerView({
                           onClick={() => onOpenQuote(vehicle, lead.customerName)}
                           className="px-3 py-1.5 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-colors"
                         >
-                          ໃບສະເໜີລາຄາ
+                          {t.createQuoteAction}
                         </button>
                       </div>
                     </div>

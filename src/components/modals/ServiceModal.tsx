@@ -1,21 +1,24 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { X, Wrench } from 'lucide-react';
 import { ServiceAppointment, Language } from '../../types';
-import { X, Wrench, BatteryCharging, Shield, CheckCircle } from 'lucide-react';
+import { translations } from '../../data/translations';
 
 interface ServiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddService: (service: Omit<ServiceAppointment, 'id'>) => void;
-  lang: Language;
+  lang?: Language;
 }
 
-export default function ServiceModal({ isOpen, onClose, onAddService, lang }: ServiceModalProps) {
+export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo' }: ServiceModalProps) {
+  const t = translations[lang] || translations.lo;
+
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
-  const [model, setModel] = useState('AVATR 12');
   const [plateNumber, setPlateNumber] = useState('');
-  const [serviceType, setServiceType] = useState<ServiceAppointment['serviceType']>('battery_check');
-  const [scheduledDate, setScheduledDate] = useState('2026-10-06');
+  const [model, setModel] = useState('AVATR 12');
+  const [serviceType, setServiceType] = useState<ServiceAppointment['serviceType']>('periodic_maintenance');
+  const [scheduledDate, setScheduledDate] = useState(new Date().toISOString().split('T')[0]);
   const [scheduledTime, setScheduledTime] = useState('10:00');
   const [notes, setNotes] = useState('');
 
@@ -28,16 +31,15 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
     onAddService({
       customerName,
       phone,
+      plateNumber: plateNumber || 'ບໍ່ມີປ້າຍ / None',
       model,
-      plateNumber: plateNumber || 'ກມ ປ້າຍແດງ',
       serviceType,
       scheduledDate,
       scheduledTime,
       status: 'pending',
-      technician: 'ຊ່າງເຕັກນິກ CATL Master',
-      estimatedCostUSD: serviceType === 'software_ota' ? 0 : 45,
-      batteryHealthPercent: 99.8,
-      notes: notes || 'ກວດເຊັກສະພາບທົ່ວໄປ',
+      technician: 'ທີມຊ່າງເຕັກນິກ AVATR',
+      estimatedCostUSD: 150,
+      notes,
     });
 
     onClose();
@@ -53,10 +55,10 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
             </div>
             <div>
               <h3 className="font-semibold text-base text-white">
-                {lang === 'lo' ? 'ນັດໝາຍສ້ອມບຳລຸງ avatrAutoService' : lang === 'zh' ? '预约售后维保' : 'Schedule Auto Service'}
+                {lang === 'lo' ? 'ນັດໝາຍສ້ອມບຳລຸງ avatrAutoService' : lang === 'th' ? 'นัดหมายซ่อมบำรุง avatrAutoService' : 'Schedule Auto Service'}
               </h3>
               <p className="text-xs text-zinc-400">
-                {lang === 'lo' ? 'ສູນບໍລິການແບັດເຕີຣີ CATL & ລະບົບໄຟຟ້າວຽງຈັນ' : 'Authorized EV Service Center'}
+                {lang === 'lo' ? 'ສູນບໍລິການແບັດເຕີຣີ CATL & ລະບົບໄຟຟ້າວຽງຈັນ' : lang === 'th' ? 'ศูนย์บริการแบตเตอรี่ CATL & ระบบไฟฟ้าเวียงจันทน์' : 'Authorized EV Service Center'}
               </p>
             </div>
           </div>
@@ -71,14 +73,14 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
         <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-xs">
           <div>
             <label className="block text-zinc-400 mb-1 font-medium">
-              {lang === 'lo' ? 'ຊື່ເຈົ້າຂອງລົດ *' : lang === 'zh' ? '车主姓名 *' : 'Vehicle Owner *'}
+              {lang === 'lo' ? 'ຊື່ເຈົ້າຂອງລົດ *' : lang === 'th' ? 'ชื่อเจ้าของรถ *' : 'Vehicle Owner *'}
             </label>
             <input
               type="text"
               required
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="e.g. ທ່ານ ບຸນມີ"
+              placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: ທ່ານ ບຸນມີ' : lang === 'th' ? 'ตัวอย่าง: คุณ สมชาย' : 'e.g. John Doe'}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
             />
           </div>
@@ -86,7 +88,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ເບີໂທລະສັບ *' : lang === 'zh' ? '电话号码 *' : 'Phone *'}
+                {lang === 'lo' ? 'ເບີໂທລະສັບ *' : lang === 'th' ? 'เบอร์โทรศัพท์ *' : 'Phone *'}
               </label>
               <input
                 type="text"
@@ -100,13 +102,13 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
 
             <div>
               <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ທະບຽນລົດ (Plate No.)' : lang === 'zh' ? '车牌号码' : 'License Plate'}
+                {lang === 'lo' ? 'ທະບຽນລົດ (Plate No.)' : lang === 'th' ? 'ทะเบียนรถ (Plate No.)' : 'License Plate'}
               </label>
               <input
                 type="text"
                 value={plateNumber}
                 onChange={(e) => setPlateNumber(e.target.value)}
-                placeholder="ກພ 8888 ກຳແພງນະຄອນ"
+                placeholder={lang === 'lo' ? 'ກພ 8888 ກຳແພງນະຄອນ' : lang === 'th' ? 'กก 8888 กำแพงนคร / กรุงเทพฯ' : 'Plate No.'}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-mono"
               />
             </div>
@@ -115,7 +117,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ລຸ້ນລົດ AVATR' : lang === 'zh' ? '车型' : 'Model'}
+                {lang === 'lo' ? 'ລຸ້ນລົດ AVATR' : lang === 'th' ? 'รุ่นรถ AVATR' : 'Model'}
               </label>
               <select
                 value={model}
@@ -130,18 +132,18 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
 
             <div>
               <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ປະເພດການບໍລິການ' : lang === 'zh' ? '维保项目' : 'Service Type'}
+                {lang === 'lo' ? 'ປະເພດການບໍລິການ' : lang === 'th' ? 'ประเภทการบริการ' : 'Service Type'}
               </label>
               <select
                 value={serviceType}
                 onChange={(e) => setServiceType(e.target.value as any)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-white"
               >
-                <option value="battery_check">ກວດວັດສຸຂະພາບແບັດເຕີຣີ CATL (SOH Diagnostic)</option>
-                <option value="software_ota">ອັບເກຣດຊອບແວ HarmonyOS & Huawei ADS</option>
-                <option value="periodic_maintenance">ບຳລຸງຮັກສາຕາມໄລຍະ (Periodic Service)</option>
-                <option value="brake_suspension">ລະບົບຊ່ວງລ່າງຖົງລົມ & ເບຣກ (Suspension & Brakes)</option>
-                <option value="emergency_repair">ກວດເຊັກດ່ວນສຸກເສີນ (Fast Diagnostic)</option>
+                <option value="battery_check">{lang === 'lo' ? 'ກວດວັດສຸຂະພາບແບັດເຕີຣີ CATL (SOH Diagnostic)' : lang === 'th' ? 'ตรวจสุขภาพแบตเตอรี่ CATL (SOH Diagnostic)' : 'CATL Battery Health Diagnostic'}</option>
+                <option value="software_ota">{lang === 'lo' ? 'ອັບເກຣດຊອບແວ HarmonyOS & Huawei ADS' : lang === 'th' ? 'อัปเกรดซอฟต์แวร์ HarmonyOS & Huawei ADS' : 'HarmonyOS & Huawei ADS OTA Update'}</option>
+                <option value="periodic_maintenance">{lang === 'lo' ? 'ບຳລຸງຮັກສາຕາມໄລຍະ (Periodic Service)' : lang === 'th' ? 'บำรุงรักษาตามระยะทาง (Periodic Service)' : 'Periodic Maintenance Service'}</option>
+                <option value="brake_suspension">{lang === 'lo' ? 'ລະບົບຊ່ວງລ່າງຖົງລົມ & ເບຣກ (Suspension & Brakes)' : lang === 'th' ? 'ระบบช่วงล่างถุงลม & เบรก (Suspension & Brakes)' : 'Suspension & Brakes Service'}</option>
+                <option value="emergency_repair">{lang === 'lo' ? 'ກວດເຊັກດ່ວນສຸກເສີນ (Fast Diagnostic)' : lang === 'th' ? 'ตรวจเช็กด่วนฉุกเฉิน (Fast Diagnostic)' : 'Emergency Diagnostic Service'}</option>
               </select>
             </div>
           </div>
@@ -149,7 +151,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ວັນທີນັດໝາຍ' : lang === 'zh' ? '预约日期' : 'Date'}
+                {lang === 'lo' ? 'ວັນທີນັດໝາຍ' : lang === 'th' ? 'วันที่นัดหมาย' : 'Date'}
               </label>
               <input
                 type="date"
@@ -161,7 +163,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
 
             <div>
               <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ເວລາ' : lang === 'zh' ? '预约时间' : 'Time'}
+                {lang === 'lo' ? 'ເວລາ' : lang === 'th' ? 'เวลา' : 'Time'}
               </label>
               <input
                 type="time"
@@ -174,13 +176,13 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
 
           <div>
             <label className="block text-zinc-400 mb-1 font-medium">
-              {lang === 'lo' ? 'ອາການ ຫຼື ລາຍລະອຽດເພີ່ມເຕີມ' : lang === 'zh' ? '故障描述/维保备注' : 'Symptoms or Notes'}
+              {lang === 'lo' ? 'ອາການ ຫຼື ລາຍລະອຽດເພີ່ມເຕີມ' : lang === 'th' ? 'อาการ หรือรายละเอียดเพิ่มเติม' : 'Symptoms or Notes'}
             </label>
             <textarea
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="ອາການ ຫຼື ຄວາມຕ້ອງການ..."
+              placeholder={lang === 'lo' ? 'ອາການ ຫຼື ຄວາມຕ້ອງການ...' : lang === 'th' ? 'อาการ หรือความต้องการ...' : 'Notes / Symptoms...'}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white resize-none"
             />
           </div>
@@ -191,13 +193,13 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
               onClick={onClose}
               className="px-4 py-2 border border-zinc-800 hover:bg-zinc-900 text-zinc-300 rounded-lg"
             >
-              {lang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+              {lang === 'lo' ? 'ຍົກເລີກ' : lang === 'th' ? 'ยกเลิก' : 'Cancel'}
             </button>
             <button
               type="submit"
               className="px-5 py-2 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-colors"
             >
-              {lang === 'lo' ? 'ຢືນຢັນການນັດໝາຍ' : 'Confirm Service'}
+              {lang === 'lo' ? 'ຢືນຢັນການນັດໝາຍ' : lang === 'th' ? 'ยืนยันการนัดหมาย' : 'Confirm Service'}
             </button>
           </div>
         </form>

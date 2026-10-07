@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { SystemUser, Language, UserRole } from '../../types';
+import { translations } from '../../data/translations';
 import {
   auth,
   db,
@@ -43,7 +44,8 @@ import {
   Gauge,
   Flame,
   Check,
-  X
+  X,
+  Lightbulb
 } from 'lucide-react';
 
 interface LoginViewProps {
@@ -51,6 +53,7 @@ interface LoginViewProps {
   onLoginSuccess: (user: SystemUser, rememberMe: boolean) => void;
   onRegisterUser?: (newUser: SystemUser) => void;
   lang: Language;
+  setLang?: (lang: Language) => void;
 }
 
 type MainTab = 'signin' | 'signup';
@@ -107,7 +110,9 @@ const VEHICLES: VehicleShowcase[] = [
   },
 ];
 
-export default function LoginView({ users, onLoginSuccess, onRegisterUser }: LoginViewProps) {
+export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang, setLang }: LoginViewProps) {
+  const t = translations[lang] || translations.lo;
+
   // Main Tab State: Sign In vs Sign Up vs NFC vs Face ID
   const [mainTab, setMainTab] = useState<MainTab>('signin');
 
@@ -486,8 +491,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
     playSound('success');
     setSuccessMessage(
       isFirstUser 
-        ? `🎉 ສ້າງບັນຊີທຳອິດສຳເລັດ! ທ່ານໄດ້ຮັບສິດ Admin ໃຫຍ່ (Super Admin)` 
-        : `ສ້າງບັນຊີໃໝ່ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${newUser.name}`
+        ? (lang === 'lo' ? 'ສ້າງບັນຊີທຳອິດສຳເລັດ! ທ່ານໄດ້ຮັບສິດ Admin ໃຫຍ່ (Super Admin)' : lang === 'th' ? 'สร้างบัญชีแรกสำเร็จ! คุณได้รับสิทธิ์ Admin ใหญ่ (Super Admin)' : 'First account created! Super Admin privileges granted.') 
+        : (lang === 'lo' ? `ສ້າງບັນຊີໃໝ່ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${newUser.name}` : lang === 'th' ? `สร้างบัญชีใหม่สำเร็จ! ยินดีต้อนรับ ${newUser.name}` : `Account created! Welcome ${newUser.name}`)
     );
 
     if (onRegisterUser) {
@@ -675,12 +680,13 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                         setIsHeadlightOn(!isHeadlightOn);
                         playSound('tab_click');
                       }}
-                      className={`px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold backdrop-blur-md border transition-all ${isHeadlightOn
+                      className={`px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold backdrop-blur-md border transition-all flex items-center gap-1.5 ${isHeadlightOn
                         ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-md'
                         : 'bg-black/80 border-zinc-700 text-zinc-400'
                         }`}
                     >
-                      {isHeadlightOn ? '💡 ໄຟໜ້າ Matrix ON' : '💡 ໄຟໜ້າ OFF'}
+                      <Lightbulb className={`w-3.5 h-3.5 ${isHeadlightOn ? 'text-amber-400' : 'text-zinc-500'}`} />
+                      <span>{isHeadlightOn ? t.authMatrixLightsOn : t.authMatrixLightsOff}</span>
                     </button>
                   </div>
 
@@ -778,29 +784,56 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
         {/* RIGHT COLUMN: HIGH-TECH COCKPIT ACCESS CONSOLE (7 cols on lg) */}
         <div className="lg:col-span-7 p-6 sm:p-8 flex flex-col justify-between space-y-5">
 
-          {/* Header Title & Access Mode Segmented Switcher */}
+          {/* Header Title & Access Mode Segmented Switcher & Language Switcher */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h1 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
-                  <span>ລະບົບຈັດການ AVATR AUTO</span>
+                  <span>{t.authSystemTitle}</span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    ONLINE
+                    {t.authOnline}
                   </span>
                 </h1>
                 <p className="text-xs text-zinc-400 mt-0.5">
                   {mainTab === 'signup'
-                    ? 'ສ້າງບັນຊີຜູ້ໃຊ້ໃໝ່ ເພື່ອເຂົ້າຮ່ວມທີມງານ AVATR'
-                    : 'ເຂົ້າສູ່ລະບົບຈັດການ AVATR AUTO SERVICE'}
+                    ? t.authSignUpDesc
+                    : t.authSignInDesc}
                 </p>
               </div>
 
-              {/* Security Shield Badge */}
-              <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400 bg-zinc-900/90 px-2.5 py-1 rounded-xl border border-zinc-800 shadow-sm">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>256-Bit TLS</span>
-              </div>
+              {/* Language Switcher in Login Header */}
+              {setLang && (
+                <div className="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-xl p-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setLang('lo')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                      lang === 'lo' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    ລາວ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLang('en')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                      lang === 'en' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    EN
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLang('th')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                      lang === 'th' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    ไทย
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* 2 ACCESS TABS: Sign In & Sign Up */}
@@ -817,7 +850,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   }`}
               >
                 <LogIn className="w-4 h-4 text-emerald-500" />
-                <span>ເຂົ້າສູ່ລະບົບ (Sign In)</span>
+                <span>{t.authSignInTitle}</span>
               </button>
 
               <button
@@ -832,7 +865,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   }`}
               >
                 <UserPlus className="w-4 h-4 text-amber-500" />
-                <span>ສ້າງບັນຊີໃໝ່ (Sign Up)</span>
+                <span>{t.authSignUpTitle}</span>
               </button>
             </div>
           </div>
@@ -852,15 +885,15 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
             </div>
           )}
 
-          {/* TAB 1: SIGN IN (ເຂົ້າສູ່ລະບົບ) */}
+          {/* TAB 1: SIGN IN */}
           {mainTab === 'signin' && (
             <form onSubmit={handleLogin} className="space-y-4 text-xs">
               <div>
                 <label className="block text-zinc-300 font-semibold mb-1.5 flex items-center justify-between">
-                  <span>ອີເມວ ຫຼື ເບີໂທລະສັບ (Email / Phone)</span>
+                  <span>{t.authEmailOrPhone}</span>
                   {identifier.includes('@') && (
                     <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> ອີເມວຖືກຕ້ອງ
+                      <Check className="w-3 h-3" /> {t.authValidEmail}
                     </span>
                   )}
                 </label>
@@ -879,12 +912,12 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-zinc-300 font-semibold">
-                    ລະຫັດຜ່ານ (Password)
+                    {t.authPassword}
                   </label>
                   {/* Dynamic CATL Shenxing Battery Gauge Meter */}
                   {password && (
                     <div className="flex items-center gap-1.5 font-mono text-[10px]">
-                      <span className="text-zinc-500">ຄວາມປອດໄພ:</span>
+                      <span className="text-zinc-500">{t.authSecurityStrength}</span>
                       <span className={`font-bold ${currentStrength >= 80 ? 'text-emerald-400' : currentStrength >= 50 ? 'text-amber-400' : 'text-red-400'
                         }`}>
                         {currentStrength}%
@@ -931,7 +964,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="rounded border-zinc-700 bg-zinc-900 text-white focus:ring-0"
                   />
-                  <span>ຈົດຈຳການເຂົ້າສູ່ລະບົບ (Remember Me)</span>
+                  <span>{t.authRememberMe}</span>
                 </label>
 
                 <button
@@ -942,7 +975,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   }}
                   className="text-emerald-400 hover:text-emerald-300 font-medium"
                 >
-                  ຍັງບໍ່ມີບັນຊີ? ສ້າງບັນຊີໃໝ່
+                  {t.authNoAccount}
                 </button>
               </div>
 
@@ -951,19 +984,19 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                 className="w-full py-3 bg-white hover:bg-zinc-200 text-black font-extrabold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-sm mt-2 cursor-pointer group"
               >
                 <LogIn className="w-4 h-4" />
-                <span>ເຂົ້າສູ່ລະບົບ (Sign In)</span>
+                <span>{t.authSignInBtn}</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </button>
             </form>
           )}
 
-          {/* TAB 2: SIGN UP / REGISTER (ສ້າງບັນຊີໃໝ່) */}
+          {/* TAB 2: SIGN UP / REGISTER */}
           {mainTab === 'signup' && (
             <form onSubmit={handleRegister} className="space-y-3.5 text-xs">
               {/* Full Name */}
               <div>
                 <label className="block text-zinc-300 font-semibold mb-1">
-                  ຊື່ ແລະ ນາມສະກຸນ (Full Name) *
+                  {t.authFullName}
                 </label>
                 <div className="relative group">
                   <User className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
@@ -972,25 +1005,24 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                     required
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
-                    placeholder="ຊື່ ແລະ ນາມສະກຸນ"
+                    placeholder="Full Name"
                     className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
                   />
                 </div>
               </div>
 
-              {/* Contact Information (Phone OR Email - either is fine) */}
+              {/* Contact Information */}
               <div className="p-3 bg-zinc-900/60 border border-zinc-800/90 rounded-2xl space-y-2.5">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-zinc-300 font-semibold flex items-center gap-1.5">
-                    <span>ຂໍ້ມູນຕິດຕໍ່ສໍາລັບເຂົ້າລະບົບ</span>
-                    <span className="text-[10px] text-amber-400 font-mono font-normal">(ເລືອກໃສ່ຢ່າງໃດຢ່າງໜຶ່ງ)</span>
+                    <span>{t.authEmailOrPhone}</span>
                   </span>
                   {(regPhone.trim() || regEmail.trim()) ? (
                     <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
-                      <Check className="w-3 h-3" /> ພ້ອມໃຊ້ງານ
+                      <Check className="w-3 h-3" /> Ready
                     </span>
                   ) : (
-                    <span className="text-[10px] text-zinc-500 font-mono">ເລືອກໃສ່ 1 ຢ່າງ</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">1 required</span>
                   )}
                 </div>
 
@@ -998,8 +1030,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   {/* Phone */}
                   <div>
                     <label className="block text-zinc-400 font-medium mb-1 flex items-center justify-between">
-                      <span>ເບີໂທລະສັບ (Phone)</span>
-                      {regPhone.trim() && <span className="text-emerald-400 text-[10px]">✓</span>}
+                      <span>Phone</span>
+                      {regPhone.trim() && <Check className="w-3 h-3 text-emerald-400" />}
                     </label>
                     <div className="relative group">
                       <Phone className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1016,8 +1048,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   {/* Email */}
                   <div>
                     <label className="block text-zinc-400 font-medium mb-1 flex items-center justify-between">
-                      <span>ອີເມວ (Email)</span>
-                      {regEmail.trim() && <span className="text-emerald-400 text-[10px]">✓</span>}
+                      <span>Email</span>
+                      {regEmail.trim() && <Check className="w-3 h-3 text-emerald-400" />}
                     </label>
                     <div className="relative group">
                       <Mail className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1037,7 +1069,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-zinc-300 font-semibold mb-1">
-                    ລະຫັດຜ່ານ (Password) *
+                    {t.authPassword} *
                   </label>
                   <div className="relative group">
                     <Lock className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1061,15 +1093,15 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
 
                 <div>
                   <label className="block text-zinc-300 font-semibold mb-1 flex items-center justify-between">
-                    <span>ຢືນຢັນລະຫັດຜ່ານ *</span>
+                    <span>{t.authConfirmPassword} *</span>
                     {regConfirmPassword && (
                       regPassword === regConfirmPassword ? (
                         <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
-                          <Check className="w-3 h-3" /> ຕົງກັນ
+                          <Check className="w-3 h-3" /> {t.authPasswordMatch}
                         </span>
                       ) : (
                         <span className="text-[10px] text-red-400 flex items-center gap-0.5">
-                          <X className="w-3 h-3" /> ບໍ່ຕົງກັນ
+                          <X className="w-3 h-3" /> {t.authPasswordMismatch}
                         </span>
                       )
                     )}
@@ -1097,7 +1129,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   }}
                   className="text-zinc-400 hover:text-white"
                 >
-                  ມີບັນຊີແລ້ວ? <span className="text-emerald-400 underline font-semibold">ເຂົ້າສູ່ລະບົບ</span>
+                  {t.authHaveAccount}
                 </button>
               </div>
 
@@ -1106,7 +1138,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                 className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-black font-extrabold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-sm mt-1 cursor-pointer group"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>ສ້າງບັນຊີ ແລະ ເຂົ້າສູ່ລະບົບ (Register & Enter)</span>
+                <span>{t.authSignUpBtn}</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </button>
             </form>

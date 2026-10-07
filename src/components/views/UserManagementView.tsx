@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SystemUser, UserRole, Language } from '../../types';
+import { translations } from '../../data/translations';
 import { saveUserToFirestore, deleteUserFromFirestore } from '../../firebase';
 import { 
   ShieldCheck, 
@@ -39,6 +40,7 @@ export default function UserManagementView({
   lang,
   onSwitchUser,
 }: UserManagementViewProps) {
+  const t = translations[lang] || translations.lo;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all');
   
@@ -87,14 +89,14 @@ export default function UserManagementView({
     e.preventDefault();
     if (!editingUser) return;
 
-    // Get default role title in Lao
+    // Get default role title
     const getRoleTitle = (role: UserRole) => {
       switch (role) {
-        case 'super_admin': return 'Admin ໃຫຍ່ (Super Admin)';
-        case 'admin': return 'Admin ສາຂາ (Branch Admin)';
-        case 'sales': return 'ທີ່ປຶກສາການຂາຍ (Sales Staff)';
-        case 'technician': return 'ຊ່າງກວດ PDI & CATL';
-        case 'general_user': return 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)';
+        case 'super_admin': return t.roleSuperAdmin;
+        case 'admin': return t.roleBranchAdmin;
+        case 'sales': return t.roleSales;
+        case 'technician': return t.roleTechnician;
+        case 'general_user': return t.roleGeneralUser;
       }
     };
 
@@ -110,7 +112,7 @@ export default function UserManagementView({
     }
 
     setUsers(prev => prev.map(u => (u.id === updatedUser.id ? updatedUser : u)));
-    triggerFeedback(`ອັບເດດສິດ ແລະ ບົດບາດຂອງ "${updatedUser.name}" ສຳເລັດແລ້ວ!`);
+    triggerFeedback(`${t.success}: ${updatedUser.name}`);
     setEditingUser(null);
   };
 
@@ -122,11 +124,11 @@ export default function UserManagementView({
     const initials = newName.trim().slice(0, 2);
     const getRoleTitle = (role: UserRole) => {
       switch (role) {
-        case 'super_admin': return 'Admin ໃຫຍ່ (Super Admin)';
-        case 'admin': return 'Admin ສາຂາ (Branch Admin)';
-        case 'sales': return 'ທີ່ປຶກສາການຂາຍ (Sales Staff)';
-        case 'technician': return 'ຊ່າງກວດ PDI & CATL';
-        case 'general_user': return 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)';
+        case 'super_admin': return t.roleSuperAdmin;
+        case 'admin': return t.roleBranchAdmin;
+        case 'sales': return t.roleSales;
+        case 'technician': return t.roleTechnician;
+        case 'general_user': return t.roleGeneralUser;
       }
     };
 
@@ -162,7 +164,7 @@ export default function UserManagementView({
 
     setUsers(prev => [newUser, ...prev]);
     setIsAddUserOpen(false);
-    triggerFeedback(`ເພີ່ມຜູ້ໃຊ້ໃໝ່ "${newUser.name}" ເຂົ້າສູ່ລະບົບແລ້ວ!`);
+    triggerFeedback(`${t.success}: ${newUser.name}`);
 
     setNewName('');
     setNewEmail('');
@@ -176,33 +178,33 @@ export default function UserManagementView({
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1.5 w-fit">
             <Crown className="w-3.5 h-3.5 fill-amber-400" />
-            Admin ໃຫຍ່ (Super Admin)
+            {t.roleSuperAdmin}
           </span>
         );
       case 'admin':
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-950 text-purple-300 border border-purple-800 flex items-center gap-1.5 w-fit">
             <ShieldCheck className="w-3.5 h-3.5" />
-            Admin ສາຂາ
+            {t.roleBranchAdmin}
           </span>
         );
       case 'sales':
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-800 flex items-center gap-1.5 w-fit">
-            ທີ່ປຶກສາການຂາຍ
+            {t.roleSales}
           </span>
         );
       case 'technician':
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1.5 w-fit">
-            ຊ່າງ PDI & CATL
+            {t.roleTechnician}
           </span>
         );
       case 'general_user':
       default:
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-900 text-zinc-300 border border-zinc-700 flex items-center gap-1.5 w-fit">
-            ຜູ້ໃຊ້ທົ່ວໄປ (General User)
+            {t.roleGeneralUser}
           </span>
         );
     }
@@ -338,24 +340,24 @@ export default function UserManagementView({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-zinc-500">ກັ່ນຕອງບົດບາດ:</span>
+            <span className="text-zinc-500">{t.memberRole}:</span>
             <select
               value={selectedRoleFilter}
               onChange={(e) => setSelectedRoleFilter(e.target.value)}
               className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
             >
-              <option value="all">ຜູ້ໃຊ້ທັງໝົດ ({users.length})</option>
-              <option value="super_admin">Admin ໃຫຍ່ (Super Admin)</option>
-              <option value="admin">Admin ສາຂາ (Branch Admin)</option>
-              <option value="sales">ທີ່ປຶກສາການຂາຍ (Sales)</option>
-              <option value="technician">ຊ່າງ PDI / CATL</option>
-              <option value="general_user">ຜູ້ໃຊ້ທົ່ວໄປ (General User)</option>
+              <option value="all">{t.filterAll} ({users.length})</option>
+              <option value="super_admin">{t.roleSuperAdmin}</option>
+              <option value="admin">{t.roleBranchAdmin}</option>
+              <option value="sales">{t.roleSales}</option>
+              <option value="technician">{t.roleTechnician}</option>
+              <option value="general_user">{t.roleGeneralUser}</option>
             </select>
           </div>
         </div>
 
         <span className="text-zinc-400 font-mono text-xs">
-          ລາຍຊື່ທັງໝົດ: <strong className="text-white">{filteredUsers.length}</strong> ຄົນ
+          {t.usersTitle}: <strong className="text-white">{filteredUsers.length}</strong> {t.unitPeople}
         </span>
       </div>
 
