@@ -232,97 +232,134 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
 
     // Try Firebase Authentication if configured
     if (isFirebaseConfigured() && auth && password) {
-      const authEmail = cleanId.includes('@')
-        ? cleanId
-        : `${cleanId.replace(/\D/g, '') || cleanId.replace(/\s+/g, '')}@avatr.phone.la`;
+      const emailAttempts: string[] = [];
+      if (cleanId.includes('@')) {
+        emailAttempts.push(cleanId);
+      } else {
+        const rawDigits = cleanId.replace(/\D/g, '') || cleanId.replace(/\s+/g, '');
+        emailAttempts.push(`${rawDigits}@avatr.phone.la`);
+        emailAttempts.push(`${rawDigits}@avatr-member.la`);
+        emailAttempts.push(`${rawDigits}@laos-ev.la`);
+        emailAttempts.push(`${cleanId}@avatr.phone.la`);
+      }
 
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
-        const fbUid = userCredential.user.uid;
+      let userCredential = null;
+      for (const attemptEmail of emailAttempts) {
+        try {
+          userCredential = await signInWithEmailAndPassword(auth, attemptEmail, password);
+          if (userCredential) break;
+        } catch (e) {}
+      }
 
-        // 1. Search in current memory state
-        let matchedFb = users.find(
-          u => u.id === fbUid ||
-            (u.email && u.email.toLowerCase() === cleanId) ||
-            (u.phone && u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, ''))
-        );
+      if (userCredential) {
+        try {
+          const fbUid = userCredential.user.uid;
 
-        // 2. If not found in memory, try fetching directly from Firestore
-        if (!matchedFb && db) {
-          try {
-            const docSnap = await getDoc(doc(db, 'users', fbUid));
-            if (docSnap.exists()) {
-              const data = docSnap.data();
-              matchedFb = {
-                id: docSnap.id,
-                name: data.name || cleanId,
-                email: data.email || (cleanId.includes('@') ? cleanId : ''),
-                phone: data.phone || (cleanId.includes('@') ? '' : cleanId),
-                role: data.role || 'super_admin',
-                roleTitleLo: data.roleTitleLo || 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)',
-                department: data.department || 'Executive Management & Direction',
-                status: data.status || 'active',
-                avatarInitials: data.avatarInitials || (data.name ? data.name.slice(0, 2) : 'AD'),
-                permissions: data.permissions || {
-                  canManageUsers: true,
-                  canDeleteUsers: true,
-                  canGrantRoles: true,
-                  canEditInventory: true,
-                  canUploadQR: true,
-                  canAddModels: true,
-                  canDeductPOS: true,
-                  canViewFinancials: true,
-                },
-                createdAt: data.createdAt || new Date().toISOString().slice(0, 10),
-              };
+          // 1. Search in current memory state
+          let matchedFb = users.find(
+            u => u.id === fbUid ||
+              (u.email && u.email.toLowerCase() === cleanId) ||
+              (u.phone && u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, ''))
+          );
+
+          // 2. If not found in memory, try fetching directly from Firestore
+          if (!matchedFb && db) {
+            try {
+              const docSnap = await getDoc(doc(db, 'users', fbUid));
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                matchedFb = {
+                  id: docSnap.id,
+                  name: data.name || cleanId,
+                  email: data.email || (cleanId.includes('@') ? cleanId : ''),
+                  phone: data.phone || (cleanId.includes('@') ? '' : cleanId),
+                  role: data.role || 'super_admin',
+                  roleTitleLo: data.roleTitleLo || 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)',
+                  department: data.department || 'Executive Management & Direction',
+                  status: data.status || 'active',
+                  avatarInitials: data.avatarInitials || (data.name ? data.name.slice(0, 2) : 'AD'),
+                  permissions: data.permissions || {
+                    canManageUsers: true,
+                    canDeleteUsers: true,
+                    canGrantRoles: true,
+                    canEditInventory: true,
+                    canUploadQR: true,
+                    canAddModels: true,
+                    canDeductPOS: true,
+                    canViewFinancials: true,
+                  },
+                  createdAt: data.createdAt || new Date().toISOString().slice(0, 10),
+                };
+              }
+            } catch (fetchErr) {
+              console.warn('Firestore user fetch notice:', fetchErr);
             }
-          } catch (fetchErr) {
-            console.warn('Firestore user fetch notice:', fetchErr);
           }
-        }
 
-        // 3. If authenticated in Firebase but no Firestore profile exists yet, auto-create as Super Admin
-        if (!matchedFb) {
-          const isSuperAdmin = !users || users.length === 0 || !users.some(u => u.role === 'super_admin');
-          matchedFb = {
-            id: fbUid,
-            name: cleanId.includes('@') ? cleanId.split('@')[0] : `User-${cleanId.slice(-4)}`,
-            email: cleanId.includes('@') ? cleanId : `${cleanId.replace(/\s+/g, '')}@avatr.phone.la`,
-            phone: cleanId.includes('@') ? '' : cleanId,
-            role: isSuperAdmin ? 'super_admin' : 'general_user',
-            roleTitleLo: isSuperAdmin ? 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)' : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
-            department: isSuperAdmin ? 'Executive Management & Direction' : 'General Staff',
-            status: 'active',
-            avatarInitials: 'AD',
-            permissions: {
-              canManageUsers: isSuperAdmin,
-              canDeleteUsers: isSuperAdmin,
-              canGrantRoles: isSuperAdmin,
-              canEditInventory: isSuperAdmin,
-              canUploadQR: isSuperAdmin,
-              canAddModels: isSuperAdmin,
-              canDeductPOS: isSuperAdmin,
-              canViewFinancials: isSuperAdmin,
-            },
-            createdAt: new Date().toISOString().slice(0, 10),
-            lastLogin: new Date().toISOString().slice(0, 16).replace('T', ' '),
-          };
-          try {
-            await saveUserToFirestore(matchedFb);
-          } catch {}
-        }
+          // 3. If authenticated in Firebase but no Firestore profile exists yet, auto-create as Super Admin
+          if (!matchedFb) {
+            const isSuperAdmin = !users || users.length === 0 || !users.some(u => u.role === 'super_admin');
+            matchedFb = {
+              id: fbUid,
+              name: cleanId.includes('@') ? cleanId.split('@')[0] : `User-${cleanId.slice(-4)}`,
+              email: cleanId.includes('@') ? cleanId : `${cleanId.replace(/\s+/g, '')}@avatr.phone.la`,
+              phone: cleanId.includes('@') ? '' : cleanId,
+              role: isSuperAdmin ? 'super_admin' : 'general_user',
+              roleTitleLo: isSuperAdmin ? 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)' : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
+              department: isSuperAdmin ? 'Executive Management & Direction' : 'General Staff',
+              status: 'active',
+              avatarInitials: 'AD',
+              permissions: {
+                canManageUsers: isSuperAdmin,
+                canDeleteUsers: isSuperAdmin,
+                canGrantRoles: isSuperAdmin,
+                canEditInventory: isSuperAdmin,
+                canUploadQR: isSuperAdmin,
+                canAddModels: isSuperAdmin,
+                canDeductPOS: isSuperAdmin,
+                canViewFinancials: isSuperAdmin,
+              },
+              createdAt: new Date().toISOString().slice(0, 10),
+              lastLogin: new Date().toISOString().slice(0, 16).replace('T', ' '),
+            };
+            try {
+              await saveUserToFirestore(matchedFb);
+            } catch {}
+          } else {
+            // If no super admin exists yet in system, ensure this user gets Super Admin
+            const hasAnySuperAdmin = users.some(u => u.role === 'super_admin' && u.id !== matchedFb!.id);
+            if (!hasAnySuperAdmin) {
+              matchedFb.role = 'super_admin';
+              matchedFb.roleTitleLo = 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)';
+              matchedFb.department = 'Executive Management & Direction';
+              matchedFb.permissions = {
+                canManageUsers: true,
+                canDeleteUsers: true,
+                canGrantRoles: true,
+                canEditInventory: true,
+                canUploadQR: true,
+                canAddModels: true,
+                canDeductPOS: true,
+                canViewFinancials: true,
+              };
+              try {
+                await saveUserToFirestore(matchedFb);
+              } catch {}
+            }
+          }
 
-        if (matchedFb) {
-          if (onRegisterUser) onRegisterUser(matchedFb);
-          playSound('success');
-          setSuccessMessage(`ເຂົ້າສູ່ລະບົບ Cloud Firebase ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${matchedFb.name}`);
-          setTimeout(() => {
-            onLoginSuccess(matchedFb, rememberMe);
-          }, 400);
-          return;
+          if (matchedFb) {
+            if (onRegisterUser) onRegisterUser(matchedFb);
+            playSound('success');
+            setSuccessMessage(`ເຂົ້າສູ່ລະບົບ Cloud Firebase ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${matchedFb.name}`);
+            setTimeout(() => {
+              onLoginSuccess(matchedFb, rememberMe);
+            }, 400);
+            return;
+          }
+        } catch (fbErr: any) {
+          console.warn('Firebase auth attempt:', fbErr.message);
         }
-      } catch (fbErr: any) {
-        console.warn('Firebase auth attempt:', fbErr.message);
       }
     }
 
