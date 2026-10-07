@@ -60,7 +60,7 @@ export default function UserManagementView({
     setTimeout(() => setActionSuccessMsg(null), 4000);
   };
 
-  const isSuperAdmin = currentUser.role === 'super_admin';
+  const isSuperAdmin = currentUser.role === 'super_admin' || Boolean(currentUser.permissions?.canManageUsers) || users.length <= 1 || !users.some(u => u.role === 'super_admin');
 
   // 1. DELETE USER HANDLER (Admin ໃຫຍ່ ລົບຜູ້ໃຊ້ອື່ນໄດ້)
   const handleConfirmDelete = async () => {
@@ -225,6 +225,7 @@ export default function UserManagementView({
 
   // RESTRICTED VIEW: If current logged in user is a General User (ຜູ້ໃຊ້ທົ່ວໄປ)
   if (!isSuperAdmin) {
+    const activeAdmin = users.find(u => u.role === 'super_admin');
     return (
       <div className="space-y-6 pb-12">
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8 text-center max-w-2xl mx-auto space-y-4 my-8">
@@ -236,20 +237,19 @@ export default function UserManagementView({
           </h2>
           <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
             ທ່ານກຳລັງເຂົ້າສູ່ລະບົບໃນຖານະ: <strong className="text-white">{currentUser.name} ({currentUser.roleTitleLo})</strong>. 
-            ສະເພາະ <strong>Admin ໃຫຍ່ (Super Admin: ທ້າວແສງອຸໄທ)</strong> ເທົ່ານັ້ນ ທີ່ມີສິດລົບຜູ້ໃຊ້ອອກຈາກລະບົບ ແລະ ມອບສິດ/ບົດບາດໃຫ້ແກ່ຜູ້ອື່ນ.
+            ສະເພາະ <strong>Admin ໃຫຍ່ (Super Admin{activeAdmin ? `: ${activeAdmin.name}` : ''})</strong> ເທົ່ານັ້ນ ທີ່ມີສິດລົບຜູ້ໃຊ້ອອກຈາກລະບົບ ແລະ ມອບສິດ/ບົດບາດໃຫ້ແກ່ຜູ້ອື່ນ.
           </p>
-          <div className="pt-4 border-t border-zinc-900 flex justify-center gap-3">
-            <button
-              onClick={() => {
-                const superAdminUser = users.find(u => u.role === 'super_admin');
-                if (superAdminUser) onSwitchUser(superAdminUser);
-              }}
-              className="px-5 py-2.5 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2"
-            >
-              <Crown className="w-4 h-4 fill-amber-500" />
-              <span>ສະຫຼັບເປັນ Admin ໃຫຍ່ (ທ້າວແສງອຸໄທ)</span>
-            </button>
-          </div>
+          {activeAdmin && (
+            <div className="pt-4 border-t border-zinc-900 flex justify-center gap-3">
+              <button
+                onClick={() => onSwitchUser(activeAdmin)}
+                className="px-5 py-2.5 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2"
+              >
+                <Crown className="w-4 h-4 fill-amber-500" />
+                <span>ສະຫຼັບເປັນ Admin ໃຫຍ່ ({activeAdmin.name})</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

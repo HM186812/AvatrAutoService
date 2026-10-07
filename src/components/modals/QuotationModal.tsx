@@ -91,7 +91,7 @@ export default function QuotationModal({
             <div className="text-right text-xs">
               <p className="text-zinc-400">ເລກທີ: <span className="font-mono text-white">{quotationNumber}</span></p>
               <p className="text-zinc-400">ວັນທີ: <span className="text-white">{dateStr}</span></p>
-              <p className="text-zinc-400">ທີ່ປຶກສາການຂາຍ: <strong className="text-white">ທ້າວແສງອຸໄທ</strong></p>
+              <p className="text-zinc-400">ທີ່ປຶກສາການຂາຍ: <strong className="text-white">ທີ່ປຶກສາການຂາຍ AVATR</strong></p>
               <p className="text-emerald-400 font-mono font-medium">Hotline: +856 21 213555</p>
             </div>
           </div>
@@ -263,7 +263,7 @@ export default function QuotationModal({
             <div className="text-right flex flex-col items-end">
               <p className="text-zinc-500 mb-8">ຜູ້ຈັດການຝ່າຍຂາຍ ແລະ ທີ່ປຶກສາອາວຸໂສ</p>
               <div className="border-b border-zinc-700 w-44 text-center pb-0.5">
-                <span className="font-medium text-white">ທ້າວແສງອຸໄທ</span>
+                <span className="font-medium text-white">AVATR Executive</span>
               </div>
               <p className="text-zinc-400 mt-1">avatrAutoService Laos</p>
             </div>

@@ -3,8 +3,8 @@ export const translations = {
     brandName: 'AVATR AUTO SERVICE',
     subBrand: 'ລະບົບຈັດການລູກຄ້າ ແລະ ໂຊຣູມລົດໄຟຟ້າຊັ້ນສູງ',
     tagline: 'Emotional Luxury & Smart EV Mobility',
-    directorTitle: 'ທີ່ປຶກສາອາວຸໂສ & ຜູ້ຈັດການຝ່າຍຂາຍ',
-    directorName: 'ທ້າວແສງອຸໄທ',
+    directorTitle: 'ຝ່າຍບໍລິຫານ & ທີ່ປຶກສາການຂາຍ',
+    directorName: 'AVATR Executive Team',
     contactDirect: '020 55575537',
     
     // View Switcher
@@ -59,7 +59,7 @@ export const translations = {
     // Showroom Copy
     heroTitle: 'ອະນາຄົດແຫ່ງຍົນລະກຳໄຟຟ້າຊັ້ນສູງ',
     heroSubtitle: 'ປະສົບການຂັບຂີ່ລົດໄຟຟ້າ Minimal Luxury ລະດັບ Flagship ພ້ອມລະບົບອັດສະລິຍະ Huawei ADS 3.0 ແລະ ແບັດເຕີຣີ CATL',
-    bookDriveCTA: 'ນັດໝາຍທົດລອງຂັບກັບ ທ້າວແສງອຸໄທ',
+    bookDriveCTA: 'ນັດໝາຍທົດລອງຂັບ (Book Test Drive)',
     exploreInventory: 'ເລືອກຊົມລົດພ້ອມສົ່ງມອບ',
     
     // Service highlights
@@ -74,8 +74,8 @@ export const translations = {
     brandName: 'AVATR AUTO SERVICE',
     subBrand: 'Luxury EV Client Management & Showroom Platform',
     tagline: 'Emotional Luxury & Smart EV Mobility',
-    directorTitle: 'Senior EV Consultant & Sales Director',
-    directorName: 'Mr. Thao Sengouthai',
+    directorTitle: 'Senior EV Executive & Management',
+    directorName: 'AVATR Management Team',
     contactDirect: '020 55575537',
     
     switchDashboard: 'Executive CRM Dashboard',

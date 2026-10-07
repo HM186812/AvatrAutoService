@@ -169,7 +169,7 @@ export default function POSSalesView({
           ...companyBankInfo,
           qrCodeUrl: downloadUrl,
           updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-          updatedBy: currentUser?.name || 'ທ້າວແສງອຸໄທ (Admin ໃຫຍ່)',
+          updatedBy: currentUser?.name || 'Admin ໃຫຍ່',
         };
         setCompanyBankInfo(updated);
         saveStoredCompanyBankInfo(updated);
@@ -184,7 +184,7 @@ export default function POSSalesView({
             ...companyBankInfo,
             qrCodeUrl: qrData,
             updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-            updatedBy: currentUser?.name || 'ທ້າວແສງອຸໄທ (Admin ໃຫຍ່)',
+            updatedBy: currentUser?.name || 'Admin ໃຫຍ່',
           };
           setCompanyBankInfo(updated);
           saveStoredCompanyBankInfo(updated);
@@ -203,7 +203,7 @@ export default function POSSalesView({
       ...companyBankInfo,
       qrCodeUrl: null,
       updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      updatedBy: currentUser?.name || 'ທ້າວແສງອຸໄທ (Admin ໃຫຍ່)',
+      updatedBy: currentUser?.name || 'Admin ໃຫຍ່',
     };
     try {
       await saveDealershipConfigToFirestore({ companyQrImageUrl: null });

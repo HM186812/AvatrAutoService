@@ -34,7 +34,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang }: Se
       scheduledDate,
       scheduledTime,
       status: 'pending',
-      technician: 'ຊ່າງ ສົມສັກ (CATL Certified Master)',
+      technician: 'ຊ່າງເຕັກນິກ CATL Master',
       estimatedCostUSD: serviceType === 'software_ota' ? 0 : 45,
       batteryHealthPercent: 99.8,
       notes: notes || 'ກວດເຊັກສະພາບທົ່ວໄປ',

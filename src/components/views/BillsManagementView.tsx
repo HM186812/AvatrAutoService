@@ -354,7 +354,7 @@ export default function BillsManagementView({
 
                   {/* Recorder */}
                   <td className="py-3.5 px-4 font-sans text-zinc-300 text-[11px]">
-                    {bill.recordedBy || 'ທ້າວແສງອຸໄທ'}
+                    {bill.recordedBy || 'Admin ໃຫຍ່'}
                   </td>
 
                   {/* Action Button */}
@@ -509,7 +509,7 @@ export default function BillsManagementView({
                     <div className="space-y-1 sm:text-right">
                       <span className="text-[10px] font-mono text-zinc-500 uppercase block">ສາງເກັບຮັກສາ (Destination Warehouse):</span>
                       <div className="font-bold text-white text-xs">{selectedBillForPrint.destinationWarehouse}</div>
-                      <div className="text-zinc-400">ຜູ້ກວດຮັບ PDI: {selectedBillForPrint.inspectorName || 'ຊ່າງ ສົມສັກ (CATL Master)'}</div>
+                      <div className="text-zinc-400">ຜູ້ກວດຮັບ PDI: {selectedBillForPrint.inspectorName || 'ຊ່າງເຕັກນິກ CATL Master'}</div>
                       <div className="text-emerald-400 font-mono">ມາດຕະຖານ: ຜ່ານການກວດເຊັກ 100%</div>
                     </div>
                   </>
@@ -646,7 +646,7 @@ export default function BillsManagementView({
                     ຜູ້ມີອຳນາດລົງນາມ / ຕາປະທັບບໍລິສັດ (Authorized Director)
                   </span>
                   <div className="border-t border-dashed border-zinc-700 w-44 mx-auto pt-1 text-white font-bold">
-                    {selectedBillForPrint.recordedBy || 'ທ້າວແສງອຸໄທ'}
+                    {selectedBillForPrint.recordedBy || 'Admin ໃຫຍ່'}
                   </div>
                 </div>
               </div>

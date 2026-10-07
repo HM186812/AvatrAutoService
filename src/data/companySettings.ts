@@ -23,7 +23,7 @@ export const DEFAULT_COMPANY_BANK_INFO: CompanyBankInfo = {
   branch: 'ສາຂາ ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ, ນະຄອນຫຼວງວຽງຈັນ',
   qrCodeUrl: null,
   updatedAt: '2026-10-01 09:00',
-  updatedBy: 'ທ້າວແສງອຸໄທ (Admin ໃຫຍ່)',
+  updatedBy: 'Admin ໃຫຍ່ (Super Admin)',
 };
 
 export const getStoredCompanyBankInfo = (): CompanyBankInfo => {

@@ -37,7 +37,7 @@ export default function TestDriveModal({
       date,
       timeSlot,
       location,
-      salesRep: 'ທ້າວແສງອຸໄທ',
+      salesRep: 'ທີມງານບໍລິການ AVATR',
       status: 'confirmed',
     });
 
@@ -57,7 +57,7 @@ export default function TestDriveModal({
                 {lang === 'lo' ? 'ນັດໝາຍທົດລອງຂັບ AVATR' : lang === 'zh' ? '预约阿维塔试驾体验' : 'Book AVATR Test Drive'}
               </h3>
               <p className="text-xs text-zinc-400">
-                {lang === 'lo' ? 'ທີ່ປຶກສາການຂາຍ: ທ້າວແສງອຸໄທ' : 'Sales Rep: Thao Sengouthai'}
+                {lang === 'lo' ? 'ສູນບໍລິການ AVATR ຫຼັກ 3 ທ່າເດື່ອ' : 'AVATR Center Lak 3 Thadeua'}
               </p>
             </div>
           </div>

@@ -41,6 +41,7 @@ interface InventoryViewProps {
   setStockLogs: React.Dispatch<React.SetStateAction<StockLogRecord[]>>;
   vehicles: VehicleModel[];
   setVehicles?: React.Dispatch<React.SetStateAction<VehicleModel[]>>;
+  currentUser?: SystemUser;
   isSuperAdmin?: boolean;
   lang: Language;
   onOpenQuote: (vehicle: VehicleModel, customerName?: string) => void;
@@ -55,6 +56,7 @@ export default function InventoryView({
   setStockLogs,
   vehicles,
   setVehicles,
+  currentUser,
   isSuperAdmin = false,
   lang,
   onOpenQuote,
@@ -157,7 +159,7 @@ export default function InventoryView({
       priceUSD: finalPriceUSD,
       priceLAK: finalPriceUSD * 22000,
       timestamp: now,
-      recordedBy: 'ທ້າວແສງອຸໄທ',
+      recordedBy: currentUser?.name || 'Admin ໃຫຍ່',
       customerName: buyerName.trim(),
       customerPhone: buyerPhone.trim(),
       paymentMethod,

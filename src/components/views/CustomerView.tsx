@@ -24,6 +24,7 @@ interface CustomerViewProps {
   leads: Lead[];
   setLeads: React.Dispatch<React.SetStateAction<Lead[]>>;
   vehicles: VehicleModel[];
+  currentUser?: SystemUser;
   lang: Language;
   onOpenNewLead: () => void;
   onOpenQuote: (vehicle: VehicleModel, customerName?: string) => void;
@@ -33,6 +34,7 @@ export default function CustomerView({
   leads,
   setLeads,
   vehicles,
+  currentUser,
   lang,
   onOpenNewLead,
   onOpenQuote,
@@ -79,7 +81,7 @@ export default function CustomerView({
       priority: formPriority,
       notes: formNotes || '',
       budget: formBudget,
-      assignedTo: 'ທ້າວແສງອຸໄທ',
+      assignedTo: currentUser?.name || 'Admin ໃຫຍ່',
       createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
     };
 
@@ -139,8 +141,8 @@ export default function CustomerView({
         </div>
 
         <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl text-xs">
-          <span className="text-zinc-400">ຜູ້ຈັດການຮັບຜິດຊອບ:</span>
-          <span className="text-white font-semibold">ທ້າວແສງອຸໄທ</span>
+          <span className="text-zinc-400">ຜູ້ຮັບຜິດຊອບ:</span>
+          <span className="text-white font-semibold">{currentUser?.name || 'Admin ໃຫຍ່'}</span>
         </div>
       </div>
 

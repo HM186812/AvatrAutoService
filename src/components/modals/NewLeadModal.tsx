@@ -36,7 +36,7 @@ export default function NewLeadModal({ isOpen, onClose, onAddLead, lang }: NewLe
       priority,
       budget,
       notes: notes || '',
-      assignedTo: 'ທ້າວແສງອຸໄທ',
+      assignedTo: 'ທີ່ປຶກສາການຂາຍ AVATR',
     });
 
     onClose();
@@ -55,7 +55,7 @@ export default function NewLeadModal({ isOpen, onClose, onAddLead, lang }: NewLe
                 {lang === 'lo' ? 'ເພີ່ມລູກຄ້າໃໝ່ເຂົ້າລະບົບ CRM' : lang === 'zh' ? '添加新线索客户' : 'Add New CRM Lead'}
               </h3>
               <p className="text-xs text-zinc-400">
-                {lang === 'lo' ? 'ມອບໝາຍໃຫ້: ທ້າວແສງອຸໄທ' : lang === 'zh' ? '负责人: Thao Sengouthai' : 'Assigned to: Thao Sengouthai'}
+                {lang === 'lo' ? 'ມອບໝາຍໃຫ້: ທີມງານຂາຍ AVATR' : lang === 'zh' ? '负责人: AVATR Sales Team' : 'Assigned to: AVATR Sales Team'}
               </p>
             </div>
           </div>

@@ -438,6 +438,21 @@ export const subscribeToUsers = (
       });
     });
     if (userList.length > 0) {
+      const hasSuperAdmin = userList.some(u => u.role === 'super_admin');
+      if (!hasSuperAdmin && userList[0]) {
+        userList[0].role = 'super_admin';
+        userList[0].roleTitleLo = 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)';
+        userList[0].permissions = {
+          canManageUsers: true,
+          canDeleteUsers: true,
+          canGrantRoles: true,
+          canEditInventory: true,
+          canUploadQR: true,
+          canAddModels: true,
+          canDeductPOS: true,
+          canViewFinancials: true,
+        };
+      }
       onData(userList);
     }
   }, (err) => {

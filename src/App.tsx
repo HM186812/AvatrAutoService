@@ -412,7 +412,7 @@ export default function App() {
         priority: 'high',
         source: 'ໂຊຣູມ',
         budget: '$45,000',
-        assignedTo: 'ທ້າວແສງອຸໄທ',
+        assignedTo: currentUser?.name || 'Admin ໃຫຍ່',
         notes: `ຈອງທົດລອງຂັບ ${tdData.model} ວັນທີ ${tdData.date} @ ${tdData.timeSlot} ທີ່ ${tdData.location}`,
         testDriveDate: `${tdData.date} ${tdData.timeSlot}`,
       });
@@ -447,7 +447,7 @@ export default function App() {
       priority: 'high',
       source: 'web',
       notes: message || 'ສອບຖາມຜ່ານແບບຟອມໜ້າເວັບໄຊທ໌',
-      assignedTo: 'ທ້າວແສງອຸໄທ',
+      assignedTo: currentUser?.name || 'Admin ໃຫຍ່',
     });
   };
 
@@ -604,11 +604,33 @@ export default function App() {
             {/* Quick Role Switcher Pill (ທົດສອບສະຫຼັບສິດ Admin ໃຫຍ່ vs User ທຳມະດາ) */}
             <button
               onClick={() => {
-                const superAdminUser = users.find(u => u.role === 'super_admin') || users[0];
-                const generalUser = users.find(u => u.role === 'general_user') || users[users.length - 1];
-                const nextUser = currentUser.role === 'super_admin' ? generalUser : superAdminUser;
-                setCurrentUser(nextUser);
-                triggerToast(`ສະຫຼັບສິດເປັນ: ${nextUser.role === 'super_admin' ? '👑 Admin ໃຫຍ່ (Super Admin)' : '👤 User ທຳມະດາ (General User)'} - ${nextUser.name}`);
+                const nextRole = currentUser.role === 'super_admin' ? 'general_user' : 'super_admin';
+                const isSuper = nextRole === 'super_admin';
+                const updated: SystemUser = {
+                  ...currentUser,
+                  role: nextRole,
+                  roleTitleLo: isSuper ? 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)' : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
+                  department: isSuper ? 'Executive Management & Direction' : 'General Staff',
+                  permissions: {
+                    canManageUsers: isSuper,
+                    canDeleteUsers: isSuper,
+                    canGrantRoles: isSuper,
+                    canEditInventory: true,
+                    canUploadQR: isSuper,
+                    canAddModels: isSuper,
+                    canDeductPOS: true,
+                    canViewFinancials: isSuper,
+                  }
+                };
+                setCurrentUser(updated);
+                setUsers(prev => {
+                  const exists = prev.some(u => u.id === updated.id);
+                  if (exists) {
+                    return prev.map(u => u.id === updated.id ? updated : u);
+                  }
+                  return [updated, ...prev];
+                });
+                triggerToast(`ສະຫຼັບສິດເປັນ: ${isSuper ? '👑 Admin ໃຫຍ່ (Super Admin)' : '👤 User ທຳມະດາ (General User)'}`);
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border shadow-sm ${
                 currentUser.role === 'super_admin'
@@ -669,6 +691,7 @@ export default function App() {
               leads={leads}
               setLeads={setLeads}
               vehicles={vehicles}
+              currentUser={currentUser}
               lang={lang}
               onOpenNewLead={() => setIsNewLeadOpen(true)}
               onOpenQuote={handleOpenQuoteForVehicle}
@@ -683,6 +706,7 @@ export default function App() {
               setStockLogs={setStockLogs}
               vehicles={vehicles}
               setVehicles={setVehicles}
+              currentUser={currentUser}
               isSuperAdmin={currentUser.role === 'super_admin'}
               lang={lang}
               onOpenQuote={handleOpenQuoteForVehicle}
