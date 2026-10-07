@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SaleLogRecord } from '../../types';
+import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SaleLogRecord, SystemUser } from '../../types';
 import { translations } from '../../data/translations';
 import { 
   saveInventoryItemToFirestore, 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lead, VehicleModel, Language, LeadStatus, LeadPriority, CustomerCategory } from '../../types';
+import { Lead, VehicleModel, Language, LeadStatus, LeadPriority, CustomerCategory, SystemUser } from '../../types';
 import { translations } from '../../data/translations';
 import { 
   Users, 

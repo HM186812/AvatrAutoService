@@ -1,10 +1,67 @@
 @import "tailwindcss";
 
+/* Phetsarath OT Font Declarations */
+@font-face {
+  font-family: 'Phetsarath OT';
+  src: local('Phetsarath OT'), local('PhetsarathOT'), local('Phetsarath-OT'), local('Phetsarath'),
+       url('/fonts/Phetsarath-Regular.ttf') format('truetype');
+  font-weight: 300 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Phetsarath OT';
+  src: local('Phetsarath OT Bold'), local('PhetsarathOT-Bold'), local('Phetsarath-Bold'), local('Phetsarath Bold'),
+       url('/fonts/Phetsarath-Bold.ttf') format('truetype');
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Phetsarath';
+  src: local('Phetsarath'), local('Phetsarath OT'), local('PhetsarathOT'),
+       url('/fonts/Phetsarath-Regular.ttf') format('truetype');
+  font-weight: 300 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Phetsarath';
+  src: local('Phetsarath Bold'), local('Phetsarath OT Bold'), local('PhetsarathOT-Bold'),
+       url('/fonts/Phetsarath-Bold.ttf') format('truetype');
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
+  --font-body: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
+  --font-mono: 'Phetsarath OT', 'Phetsarath', ui-monospace, monospace;
+}
+
 @layer base {
+  *, ::before, ::after {
+    font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
+  }
+
+  html {
+    font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
-    font-family: 'Plus Jakarta Sans', 'Noto Sans Lao', sans-serif;
+    font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
     background-color: #050507;
     color: #f4f4f5;
+  }
+
+  input, button, select, textarea, optgroup, option {
+    font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
   }
 }
 
