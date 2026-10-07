@@ -238,15 +238,11 @@ export default function App() {
       seedFirestoreIfEmpty();
 
       const unsubInventory = subscribeToInventory((items) => {
-        if (items && items.length > 0) {
-          setInventory(items);
-        }
+        setInventory(items || []);
       });
 
       const unsubBills = subscribeToBills((bList) => {
-        if (bList && bList.length > 0) {
-          setBills(bList);
-        }
+        setBills(bList || []);
       });
 
       const unsubVehicles = subscribeToVehicleModels((models) => {
@@ -256,7 +252,7 @@ export default function App() {
       });
 
       const unsubConfig = subscribeToDealershipConfig((cfg) => {
-        if (cfg.currencies && cfg.currencies.length > 0) {
+        if (cfg && cfg.currencies && cfg.currencies.length > 0) {
           setCurrencies(cfg.currencies);
         }
       });
