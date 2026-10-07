@@ -228,12 +228,20 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
       return;
     }
 
-    // Try Firebase Authentication if configured and email/password provided
-    if (isFirebaseConfigured() && auth && cleanId.includes('@') && password) {
+    // Try Firebase Authentication if configured
+    if (isFirebaseConfigured() && auth && password) {
+      const authEmail = cleanId.includes('@')
+        ? cleanId
+        : `${cleanId.replace(/\D/g, '') || cleanId.replace(/\s+/g, '')}@avatr.phone.la`;
+
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, cleanId, password);
+        const userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
         const fbUid = userCredential.user.uid;
-        const matchedFb = users.find(u => u.id === fbUid || u.email.toLowerCase() === cleanId);
+        const matchedFb = users.find(
+          u => u.id === fbUid ||
+            (u.email && u.email.toLowerCase() === cleanId) ||
+            (u.phone && u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, ''))
+        );
         if (matchedFb) {
           playSound('success');
           setSuccessMessage(`ເຂົ້າສູ່ລະບົບ Cloud Firebase ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${matchedFb.name}`);
@@ -248,9 +256,9 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
     }
 
     const matched = users.find(
-      u => u.email.toLowerCase() === cleanId ||
-        u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, '') ||
-        u.name.toLowerCase().includes(cleanId)
+      u => (u.email && u.email.toLowerCase() === cleanId) ||
+        (u.phone && u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, '')) ||
+        (u.name && u.name.toLowerCase().includes(cleanId))
     );
 
     if (matched) {
@@ -276,18 +284,23 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (!regName.trim()) {
+    const cleanName = regName.trim();
+    const cleanEmail = regEmail.trim().toLowerCase();
+    const cleanPhone = regPhone.trim();
+
+    if (!cleanName) {
       setErrorMessage('ກະລຸນາປ້ອນ ຊື່ ແລະ ນາມສະກຸນ');
       return;
     }
 
-    if (!regEmail.trim() || !regEmail.includes('@')) {
-      setErrorMessage('ກະລຸນາປ້ອນອີເມວໃຫ້ຖືກຕ້ອງ');
+    // Check if at least one contact method (email or phone) is provided
+    if (!cleanEmail && !cleanPhone) {
+      setErrorMessage('ກະລຸນາປ້ອນ ອີເມວ ຫຼື ເບີໂທລະສັບ (ເລືອກໃສ່ຢ່າງໜ້ອຍ 1 ຢ່າງ)');
       return;
     }
 
-    if (!regPhone.trim()) {
-      setErrorMessage('ກະລຸນາປ້ອນເບີໂທລະສັບ');
+    if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
+      setErrorMessage('ກະລຸນາປ້ອນອີເມວໃຫ້ຖືກຕ້ອງຕາມຮູບແບບ (ຕົວຢ່າງ: user@email.com)');
       return;
     }
 
@@ -302,21 +315,33 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
     }
 
     // Check if email or phone already exists locally
-    const emailExists = users.some(u => u.email.toLowerCase() === regEmail.trim().toLowerCase());
-    if (emailExists) {
-      setErrorMessage('ອີເມວນີ້ມີໃນລະບົບແລ້ວ ກະລຸນາເຂົ້າສູ່ລະບົບ');
-      return;
+    if (cleanEmail) {
+      const emailExists = users.some(u => u.email && u.email.toLowerCase() === cleanEmail);
+      if (emailExists) {
+        setErrorMessage('ອີເມວນີ້ມີໃນລະບົບແລ້ວ ກະລຸນາເຂົ້າສູ່ລະບົບ');
+        return;
+      }
+    }
+
+    if (cleanPhone) {
+      const phoneExists = users.some(u => u.phone && u.phone.replace(/\s+/g, '') === cleanPhone.replace(/\s+/g, ''));
+      if (phoneExists) {
+        setErrorMessage('ເບີໂທລະສັບນີ້ມີໃນລະບົບແລ້ວ ກະລຸນາເຂົ້າສູ່ລະບົບ');
+        return;
+      }
     }
 
     // Create New User Object (Always default to General User / Staff)
-    const initials = regName.trim().slice(0, 2);
+    const initials = cleanName.slice(0, 2);
     let newUserId = `USR-${Math.floor(100 + Math.random() * 900)}`;
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
+    const authEmail = cleanEmail || `${cleanPhone.replace(/\D/g, '') || cleanPhone.replace(/\s+/g, '')}@avatr.phone.la`;
 
     // Attempt Firebase Auth user creation
     if (isFirebaseConfigured() && auth) {
       try {
-        const userCred = await createUserWithEmailAndPassword(auth, regEmail.trim().toLowerCase(), regPassword);
+        const userCred = await createUserWithEmailAndPassword(auth, authEmail, regPassword);
         newUserId = userCred.user.uid;
       } catch (err: any) {
         console.warn('Firebase Auth user creation notice:', err.message);
@@ -325,9 +350,9 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
 
     const newUser: SystemUser = {
       id: newUserId,
-      name: regName.trim(),
-      email: regEmail.trim().toLowerCase(),
-      phone: regPhone.trim(),
+      name: cleanName,
+      email: cleanEmail || `${cleanPhone.replace(/\s+/g, '')}@avatr.phone.la`,
+      phone: cleanPhone,
       role: 'general_user',
       roleTitleLo: 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
       department: 'General Staff',
@@ -828,59 +853,76 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
           {/* TAB 2: SIGN UP / REGISTER (ສ້າງບັນຊີໃໝ່) */}
           {mainTab === 'signup' && (
             <form onSubmit={handleRegister} className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Full Name */}
-                <div>
-                  <label className="block text-zinc-300 font-semibold mb-1">
-                    ຊື່ ແລະ ນາມສະກຸນ (Full Name) *
-                  </label>
-                  <div className="relative group">
-                    <User className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      required
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      placeholder="ຊື່ ແລະ ນາມສະກຸນ"
-                      className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
-                    />
-                  </div>
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label className="block text-zinc-300 font-semibold mb-1">
-                    ເບີໂທລະສັບ (Phone) *
-                  </label>
-                  <div className="relative group">
-                    <Phone className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="tel"
-                      required
-                      value={regPhone}
-                      onChange={(e) => setRegPhone(e.target.value)}
-                      placeholder="020 00000000"
-                      className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
-                    />
-                  </div>
+              {/* Full Name */}
+              <div>
+                <label className="block text-zinc-300 font-semibold mb-1">
+                  ຊື່ ແລະ ນາມສະກຸນ (Full Name) *
+                </label>
+                <div className="relative group">
+                  <User className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="ຊື່ ແລະ ນາມສະກຸນ"
+                    className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
+                  />
                 </div>
               </div>
 
-              {/* Email */}
-              <div>
-                <label className="block text-zinc-300 font-semibold mb-1">
-                  ອີເມວ (Email) *
-                </label>
-                <div className="relative group">
-                  <Mail className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    required
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="User@email.com"
-                    className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
-                  />
+              {/* Contact Information (Phone OR Email - either is fine) */}
+              <div className="p-3 bg-zinc-900/60 border border-zinc-800/90 rounded-2xl space-y-2.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-300 font-semibold flex items-center gap-1.5">
+                    <span>ຂໍ້ມູນຕິດຕໍ່ສໍາລັບເຂົ້າລະບົບ</span>
+                    <span className="text-[10px] text-amber-400 font-mono font-normal">(ເລືອກໃສ່ຢ່າງໃດຢ່າງໜຶ່ງ)</span>
+                  </span>
+                  {(regPhone.trim() || regEmail.trim()) ? (
+                    <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                      <Check className="w-3 h-3" /> ພ້ອມໃຊ້ງານ
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-zinc-500 font-mono">ເລືອກໃສ່ 1 ຢ່າງ</span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Phone */}
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1 flex items-center justify-between">
+                      <span>ເບີໂທລະສັບ (Phone)</span>
+                      {regPhone.trim() && <span className="text-emerald-400 text-[10px]">✓</span>}
+                    </label>
+                    <div className="relative group">
+                      <Phone className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="tel"
+                        value={regPhone}
+                        onChange={(e) => setRegPhone(e.target.value)}
+                        placeholder="020 00000000"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Email */}
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1 flex items-center justify-between">
+                      <span>ອີເມວ (Email)</span>
+                      {regEmail.trim() && <span className="text-emerald-400 text-[10px]">✓</span>}
+                    </label>
+                    <div className="relative group">
+                      <Mail className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        placeholder="user@email.com"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
