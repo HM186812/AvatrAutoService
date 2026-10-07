@@ -56,16 +56,16 @@ export default function StockAlertsView({
   const [restockNotes, setRestockNotes] = useState<string>('');
 
   // Event & Promotion Timeframe State
-  const [restockEventCampaign, setRestockEventCampaign] = useState<string>('ງານ Vientiane Motor Expo 2026');
+  const [restockEventCampaign, setRestockEventCampaign] = useState<string>('');
   const [restockEventStartDate, setRestockEventStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [restockEventEndDate, setRestockEventEndDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 14);
     return d.toISOString().slice(0, 10);
   });
-  const [restockEventLocation, setRestockEventLocation] = useState<string>('ສູນການຄ້າ ITECC Mall');
-  const [restockPromoDiscountUSD, setRestockPromoDiscountUSD] = useState<number>(2000);
-  const [restockPromoNotes, setRestockPromoNotes] = useState<string>('ແຖມປະກັນໄພຊັ້ນ 1 + Home Charger 7kW');
+  const [restockEventLocation, setRestockEventLocation] = useState<string>('');
+  const [restockPromoDiscountUSD, setRestockPromoDiscountUSD] = useState<number>(0);
+  const [restockPromoNotes, setRestockPromoNotes] = useState<string>('');
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);

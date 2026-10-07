@@ -76,7 +76,7 @@ export default function StockInView({
   const [priceCurrency, setPriceCurrency] = useState<string>('USD');
   const [status, setStatus] = useState<StockStatus>('ready');
   const [customImage, setCustomImage] = useState<string>('');
-  const [eventCampaign, setEventCampaign] = useState<string>('ໂຊຣູມທົ່ວໄປ (Standard Showroom)');
+  const [eventCampaign, setEventCampaign] = useState<string>('');
   // Schedule and Campaign fields for Event & Promotion
   const [eventStartDate, setEventStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [eventEndDate, setEventEndDate] = useState<string>(() => {
@@ -84,9 +84,9 @@ export default function StockInView({
     d.setDate(d.getDate() + 30);
     return d.toISOString().slice(0, 10);
   });
-  const [eventLocation, setEventLocation] = useState<string>('ສູນການຄ້າ ITECC Mall ບູດ A-04');
-  const [promotionDiscountUSD, setPromotionDiscountUSD] = useState<number>(1500);
-  const [promotionNotes, setPromotionNotes] = useState<string>('ດອກເບ້ຍ 0% ນານ 12 ເດືອນ + ຟຣີ Wallbox Charger 22kW + ປະກັນໄພຊັ້ນ 1 VIP');
+  const [eventLocation, setEventLocation] = useState<string>('');
+  const [promotionDiscountUSD, setPromotionDiscountUSD] = useState<number>(0);
+  const [promotionNotes, setPromotionNotes] = useState<string>('');
 
   // Quick preset days for event & promotion timeframe
   const handleSetQuickPresetDays = (days: number) => {
