@@ -561,26 +561,14 @@ export const seedFirestoreIfEmpty = async () => {
   if (!db || !isFirebaseConfigured()) return;
 
   try {
-    // 1. Check Inventory
-    const invSnap = await getDocs(collection(db, 'inventory'));
-    if (invSnap.empty) {
-      console.log('🌱 [Firebase Seeder] Initializing inventory collection in Firestore...');
-      for (const item of INITIAL_INVENTORY) {
-        await setDoc(doc(db, 'inventory', item.vin), {
-          ...item,
-          imageUrl: item.imageUrl || item.image || '',
-          updatedAt: serverTimestamp(),
-        });
-      }
-    }
-
-    // 2. Check Vehicle Models
+    // 1. Check Vehicle Models (Base Catalog with 0 stock)
     const modelSnap = await getDocs(collection(db, 'vehicle_models'));
     if (modelSnap.empty) {
-      console.log('🌱 [Firebase Seeder] Initializing vehicle_models collection in Firestore...');
+      console.log('🌱 [Firebase Seeder] Initializing base vehicle_models catalog in Firestore...');
       for (const model of AVATR_VEHICLES) {
         await setDoc(doc(db, 'vehicle_models', model.id), {
           ...model,
+          stockCount: 0,
           isCustom: false,
           createdBy: 'system_default',
           updatedAt: serverTimestamp(),
@@ -588,10 +576,10 @@ export const seedFirestoreIfEmpty = async () => {
       }
     }
 
-    // 3. Check Users
+    // 2. Check Users (Ensure Super Admin exists)
     const userSnap = await getDocs(collection(db, 'users'));
     if (userSnap.empty) {
-      console.log('🌱 [Firebase Seeder] Initializing users collection in Firestore...');
+      console.log('🌱 [Firebase Seeder] Initializing master Super Admin user in Firestore...');
       for (const user of INITIAL_USERS) {
         await setDoc(doc(db, 'users', user.id), {
           ...user,
@@ -601,10 +589,10 @@ export const seedFirestoreIfEmpty = async () => {
       }
     }
 
-    // 4. Check Dealership Config
+    // 3. Check Dealership Config
     const configSnap = await getDoc(doc(db, 'settings', 'dealership_config'));
     if (!configSnap.exists()) {
-      console.log('🌱 [Firebase Seeder] Initializing dealership_config in Firestore...');
+      console.log('🌱 [Firebase Seeder] Initializing clean dealership_config in Firestore...');
       await setDoc(doc(db, 'settings', 'dealership_config'), {
         companyQrImageUrl: null,
         uploadedBy: 'USR-001',
@@ -632,18 +620,6 @@ export const seedFirestoreIfEmpty = async () => {
         branch: DEFAULT_COMPANY_BANK_INFO.branch,
         updatedAt: serverTimestamp(),
       });
-    }
-
-    // 5. Check Bills
-    const billsSnap = await getDocs(collection(db, 'bills'));
-    if (billsSnap.empty && INITIAL_BILLS && INITIAL_BILLS.length > 0) {
-      console.log('🌱 [Firebase Seeder] Initializing bills collection in Firestore...');
-      for (const bill of INITIAL_BILLS) {
-        await setDoc(doc(db, 'bills', bill.id), {
-          ...bill,
-          timestamp: serverTimestamp(),
-        });
-      }
     }
   } catch (err) {
     console.warn('⚠️ [Firebase Seeder] Seeding notice:', err);

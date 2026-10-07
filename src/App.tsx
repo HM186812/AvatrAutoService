@@ -84,20 +84,40 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('home');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
+  // Automatic clean-up of old mock data from previous versions
+  useEffect(() => {
+    try {
+      const isCleaned = localStorage.getItem('avatr_db_clean_init_v1');
+      if (!isCleaned) {
+        localStorage.removeItem('avatr_inventory_v3');
+        localStorage.removeItem('avatr_inventory_v2');
+        localStorage.removeItem('avatr_leads_v2');
+        localStorage.removeItem('avatr_services_v2');
+        localStorage.removeItem('avatr_testdrives_v2');
+        localStorage.removeItem('avatr_stock_logs_v2');
+        localStorage.removeItem('avatr_invoice_bills_v2');
+        localStorage.removeItem('avatr_system_users_v2');
+        localStorage.setItem('avatr_db_clean_init_v1', 'true');
+      }
+    } catch (e) {
+      console.warn('Storage cleanup notice:', e);
+    }
+  }, []);
+
   // Users State (with LocalStorage persistence)
   const [users, setUsers] = useState<SystemUser[]>(() => {
     try {
-      const saved = localStorage.getItem('avatr_system_users_v2');
+      const saved = localStorage.getItem('avatr_system_users_prod_v1');
       return saved ? JSON.parse(saved) : INITIAL_USERS;
     } catch {
       return INITIAL_USERS;
     }
   });
 
-  // Current logged in user (default: ທ້າວແສງອຸໄທ - Super Admin / Admin ໃຫຍ່)
+  // Current logged in user (default: Super Admin)
   const [currentUser, setCurrentUser] = useState<SystemUser>(() => {
     try {
-      const savedId = localStorage.getItem('avatr_active_user_id');
+      const savedId = localStorage.getItem('avatr_active_user_id_v1');
       const found = users.find(u => u.id === savedId);
       return found || users[0] || INITIAL_USERS[0];
     } catch {
@@ -108,7 +128,7 @@ export default function App() {
   // Leads state with localStorage persistence
   const [leads, setLeads] = useState<Lead[]>(() => {
     try {
-      const saved = localStorage.getItem('avatr_leads_v2');
+      const saved = localStorage.getItem('avatr_leads_prod_v1');
       return saved ? JSON.parse(saved) : INITIAL_LEADS;
     } catch {
       return INITIAL_LEADS;
@@ -118,19 +138,8 @@ export default function App() {
   // Inventory state with localStorage persistence
   const [inventory, setInventory] = useState<InventoryItem[]>(() => {
     try {
-      const saved = localStorage.getItem('avatr_inventory_v3');
-      if (saved) return JSON.parse(saved);
-      const oldSaved = localStorage.getItem('avatr_inventory_v2');
-      if (oldSaved) {
-        const parsed: InventoryItem[] = JSON.parse(oldSaved);
-        const hasEvent = parsed.some(i => i.status === 'event' || i.status === 'promotion');
-        if (!hasEvent) {
-          const newEventItems = INITIAL_INVENTORY.filter(i => i.status === 'event' || i.status === 'promotion');
-          return [...parsed, ...newEventItems];
-        }
-        return parsed;
-      }
-      return INITIAL_INVENTORY;
+      const saved = localStorage.getItem('avatr_inventory_prod_v1');
+      return saved ? JSON.parse(saved) : INITIAL_INVENTORY;
     } catch {
       return INITIAL_INVENTORY;
     }
@@ -139,7 +148,7 @@ export default function App() {
   // Services state with localStorage persistence
   const [services, setServices] = useState<ServiceAppointment[]>(() => {
     try {
-      const saved = localStorage.getItem('avatr_services_v2');
+      const saved = localStorage.getItem('avatr_services_prod_v1');
       return saved ? JSON.parse(saved) : INITIAL_SERVICES;
     } catch {
       return INITIAL_SERVICES;
@@ -149,7 +158,7 @@ export default function App() {
   // Test Drives state with localStorage persistence
   const [testDrives, setTestDrives] = useState<TestDriveBooking[]>(() => {
     try {
-      const saved = localStorage.getItem('avatr_testdrives_v2');
+      const saved = localStorage.getItem('avatr_testdrives_prod_v1');
       return saved ? JSON.parse(saved) : INITIAL_TEST_DRIVES;
     } catch {
       return INITIAL_TEST_DRIVES;
@@ -159,7 +168,7 @@ export default function App() {
   // Stock Movement & Sales Logs state with localStorage persistence
   const [stockLogs, setStockLogs] = useState<StockLogRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('avatr_stock_logs_v2');
+      const saved = localStorage.getItem('avatr_stock_logs_prod_v1');
       return saved ? JSON.parse(saved) : INITIAL_STOCK_LOGS;
     } catch {
       return INITIAL_STOCK_LOGS;
@@ -169,7 +178,7 @@ export default function App() {
   // Official Bills & Invoices state with localStorage persistence
   const [bills, setBills] = useState<InvoiceBillRecord[]>(() => {
     try {
-      const saved = localStorage.getItem('avatr_invoice_bills_v2');
+      const saved = localStorage.getItem('avatr_invoice_bills_prod_v1');
       return saved ? JSON.parse(saved) : INITIAL_BILLS;
     } catch {
       return INITIAL_BILLS;
@@ -179,7 +188,7 @@ export default function App() {
   // Vehicle Models State (Admin ໃຫຍ່ ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້)
   const [vehicles, setVehicles] = useState<VehicleModel[]>(() => {
     try {
-      const saved = localStorage.getItem('avatr_vehicle_models_v1');
+      const saved = localStorage.getItem('avatr_vehicle_models_prod_v1');
       return saved ? JSON.parse(saved) : AVATR_VEHICLES;
     } catch {
       return AVATR_VEHICLES;
@@ -187,40 +196,40 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem('avatr_vehicle_models_v1', JSON.stringify(vehicles));
+    localStorage.setItem('avatr_vehicle_models_prod_v1', JSON.stringify(vehicles));
   }, [vehicles]);
 
   // Sync to local storage
   useEffect(() => {
-    localStorage.setItem('avatr_system_users_v2', JSON.stringify(users));
+    localStorage.setItem('avatr_system_users_prod_v1', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('avatr_active_user_id', currentUser.id);
+    localStorage.setItem('avatr_active_user_id_v1', currentUser.id);
   }, [currentUser]);
 
   useEffect(() => {
-    localStorage.setItem('avatr_leads_v2', JSON.stringify(leads));
+    localStorage.setItem('avatr_leads_prod_v1', JSON.stringify(leads));
   }, [leads]);
 
   useEffect(() => {
-    localStorage.setItem('avatr_inventory_v3', JSON.stringify(inventory));
+    localStorage.setItem('avatr_inventory_prod_v1', JSON.stringify(inventory));
   }, [inventory]);
 
   useEffect(() => {
-    localStorage.setItem('avatr_stock_logs_v2', JSON.stringify(stockLogs));
+    localStorage.setItem('avatr_stock_logs_prod_v1', JSON.stringify(stockLogs));
   }, [stockLogs]);
 
   useEffect(() => {
-    localStorage.setItem('avatr_invoice_bills_v2', JSON.stringify(bills));
+    localStorage.setItem('avatr_invoice_bills_prod_v1', JSON.stringify(bills));
   }, [bills]);
 
   useEffect(() => {
-    localStorage.setItem('avatr_services_v2', JSON.stringify(services));
+    localStorage.setItem('avatr_services_prod_v1', JSON.stringify(services));
   }, [services]);
 
   useEffect(() => {
-    localStorage.setItem('avatr_testdrives_v2', JSON.stringify(testDrives));
+    localStorage.setItem('avatr_testdrives_prod_v1', JSON.stringify(testDrives));
   }, [testDrives]);
 
   // Real-time Firestore Cloud Synchronization (100% Spark Free Plan)
