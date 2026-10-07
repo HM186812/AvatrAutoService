@@ -342,7 +342,7 @@ export default function BillsManagementView({
                             ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                             : 'bg-zinc-900 text-zinc-300 border border-zinc-700'
                         }`}>
-                          {bill.paymentMethod === 'finance' ? 'ໄຟແນນສ໌' : bill.paymentMethod === 'transfer' ? 'ໂອນ BCEL' : 'ເງິນສົດ'}
+                          {bill.paymentMethod === 'finance' ? 'ໄຟແນນສ໌' : bill.paymentMethod === 'transfer' ? 'ຊຳລະເງິນຜ່ານ QR' : 'ເງິນສົດ'}
                         </span>
                       </div>
                     ) : (
@@ -480,7 +480,7 @@ export default function BillsManagementView({
                     <div className="space-y-1 sm:text-right">
                       <span className="text-[10px] font-mono text-zinc-500 uppercase block">ການຊຳລະເງິນ (Payment):</span>
                       <div className="font-bold text-white uppercase text-xs">
-                        {selectedBillForPrint.paymentMethod === 'cash' ? 'ເງິນສົດ (Cash)' : selectedBillForPrint.paymentMethod === 'transfer' ? 'ໂອນທະນາຄານ (Bank Transfer)' : 'ໄຟແນນສ໌ (Automotive Loan)'}
+                        {selectedBillForPrint.paymentMethod === 'cash' ? 'ເງິນສົດ (Cash)' : selectedBillForPrint.paymentMethod === 'transfer' ? 'ຊຳລະເງິນຜ່ານ QR (QR Payment)' : 'ໄຟແນນສ໌ (Automotive Loan)'}
                       </div>
                       {selectedBillForPrint.bankName && (
                         <div className="text-zinc-400">{selectedBillForPrint.bankName}</div>
@@ -582,7 +582,7 @@ export default function BillsManagementView({
                   <div className="space-y-1">
                     <span className="text-[10px] font-mono text-zinc-500 uppercase block">ຮູບແບບການຊຳລະເງິນ (Payment Method):</span>
                     <strong className="text-white text-xs block uppercase">
-                      {selectedBillForPrint.paymentMethod === 'transfer' ? 'ໂອນຜ່ານບັນຊີທະນາຄານ (BCEL)' : selectedBillForPrint.paymentMethod === 'finance' ? 'ໄຟແນນສ໌ / ຜ່ອນລົດ' : 'ເງິນສົດ (Cash)'}
+                      {selectedBillForPrint.paymentMethod === 'transfer' ? 'ຊຳລະເງິນຜ່ານ QR (QR Payment)' : selectedBillForPrint.paymentMethod === 'finance' ? 'ໄຟແນນສ໌ / ຜ່ອນລົດ' : 'ເງິນສົດ (Cash)'}
                     </strong>
                     {selectedBillForPrint.bankName && (
                       <p className="text-[10px] text-zinc-400">{selectedBillForPrint.bankName}</p>

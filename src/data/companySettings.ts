@@ -14,7 +14,7 @@ export interface CompanyBankInfo {
 
 export const DEFAULT_COMPANY_BANK_INFO: CompanyBankInfo = {
   accountName: 'AVATR AUTO SERVICE SOLE CO., LTD',
-  bankName: 'BCEL (ທະນາຄານການຄ້າຕ່າງປະເທດລາວ ມະຫາຊົນ)',
+  bankName: 'ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ',
   usdAccount: '010-12-00-01458923-001',
   lakAccount: '010-12-00-01458923-002',
   cnyAccount: '010-12-00-01458923-003',

@@ -115,7 +115,7 @@ export default function POSSalesView({
 
   // Payment Options - Zero pre-filled values
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'finance'>('transfer');
-  const [bankName, setBankName] = useState('BCEL One (ບັນຊີບໍລິສັດ AVATR AUTO SERVICE)');
+  const [bankName, setBankName] = useState('ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ');
   const [transferRef, setTransferRef] = useState('');
   const [slipImage, setSlipImage] = useState<string | null>(null);
   
@@ -368,9 +368,9 @@ export default function POSSalesView({
       customerAddress: customerAddress.trim(),
       customerProvince,
       paymentMethod,
-      qrUsed: 'bcel_official_qr',
+      qrUsed: 'company_official_qr',
       bankName: paymentMethod === 'transfer' ? bankName : undefined,
-      transferRef: paymentMethod === 'transfer' ? transferRef || 'BCEL-CONFIRMED' : undefined,
+      transferRef: paymentMethod === 'transfer' ? transferRef || 'QR-CONFIRMED' : undefined,
       financeCompany: paymentMethod === 'finance' ? financeCompany : undefined,
       downPaymentPercent: paymentMethod === 'finance' ? downPaymentPercent : undefined,
       downPaymentUSD: paymentMethod === 'finance' ? downPaymentUSD : undefined,
@@ -663,8 +663,8 @@ export default function POSSalesView({
                       : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
                 >
-                  <Smartphone className="w-5 h-5 mb-1 text-blue-400" />
-                  <span>ໂອນທະນາຄານ (BCEL)</span>
+                  <QrCode className="w-5 h-5 mb-1 text-emerald-400" />
+                  <span>ຊຳລະເງິນຜ່ານ QR</span>
                 </button>
 
                 <button
@@ -703,8 +703,8 @@ export default function POSSalesView({
                         <QrCode className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-white text-xs">QR Code ບັນຊີທາງການຂອງບໍລິສັດ AVATR LAOS</h4>
-                        <p className="text-[10px] text-zinc-400 font-mono">{companyBankInfo.bankName} • ສະແກນຊຳລະຜ່ານທຸກທະນາຄານ (LAO QR)</p>
+                        <h4 className="font-bold text-white text-xs">QR Code ຊຳລະເງິນທາງການຂອງບໍລິສັດ AVATR LAOS</h4>
+                        <p className="text-[10px] text-zinc-400 font-mono">ສະແກນຊຳລະເງິນຜ່ານ QR Code (Official Payment QR)</p>
                       </div>
                     </div>
 
@@ -715,7 +715,7 @@ export default function POSSalesView({
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                          <ShieldCheck className="w-3 h-3 text-emerald-400" /> OFFICIAL LAO QR
+                          <ShieldCheck className="w-3 h-3 text-emerald-400" /> OFFICIAL QR PAYMENT
                         </span>
                       )}
                     </div>
@@ -903,8 +903,8 @@ export default function POSSalesView({
                             <span className="text-zinc-300 font-bold">{companyBankInfo.lakAccount}</span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-zinc-400">ທະນາຄານ:</span>
-                            <span className="text-zinc-300 truncate max-w-[180px]">{companyBankInfo.bankName}</span>
+                            <span className="text-zinc-400">ຊ່ອງທາງ:</span>
+                            <span className="text-zinc-300 truncate max-w-[180px]">ຊຳລະເງິນຜ່ານ QR</span>
                           </div>
                           <div className="flex justify-between items-center text-[10px]">
                             <span className="text-zinc-500">Hotline:</span>
@@ -1256,8 +1256,8 @@ export default function POSSalesView({
                 <span className="text-xs font-black tracking-wider text-black block truncate">
                   AVATR AUTO SERVICE LAOS
                 </span>
-                <span className="text-[10px] font-bold text-red-600 block">
-                  BCEL OnePay LAO QR • ທຸກທະນາຄານ
+                <span className="text-[10px] font-bold text-emerald-600 block">
+                  ຊຳລະເງິນຜ່ານ QR Code • ທາງການບໍລິສັດ
                 </span>
               </div>
 

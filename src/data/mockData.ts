@@ -752,7 +752,7 @@ export const INITIAL_STOCK_LOGS: StockLogRecord[] = [
     customerPhone: '020 5544 3322',
     paymentMethod: 'transfer',
     remainingStock: 1,
-    notes: 'ລູກຄ້າຊຳລະເຕັມຈຳນວນຜ່ານ BCEL One ພ້ອມມອບປ້າຍລົດ VIP',
+    notes: 'ລູກຄ້າຊຳລະເຕັມຈຳນວນຜ່ານ QR ພ້ອມມອບປ້າຍລົດ VIP',
   },
   {
     id: 'LOG-IN-1003',
@@ -816,8 +816,8 @@ export const INITIAL_BILLS: InvoiceBillRecord[] = [
     customerAddress: 'ບ້ານ ໂພນສີນວນ, ເມືອງ ສີສັດຕະນາກ',
     customerProvince: 'ນະຄອນຫຼວງວຽງຈັນ',
     paymentMethod: 'transfer',
-    bankName: 'BCEL One (ທະນາຄານການຄ້າຕ່າງປະເທດລາວ)',
-    transferRef: 'BCEL-TX-998823104',
+    bankName: 'ຊຳລະເງິນຜ່ານ QR',
+    transferRef: 'QR-TX-998823104',
     freeGifts: [
       'ຕູ້ສາກໄວ Home Charger 7kW ພ້ອມຕິດຕັ້ງມາດຕະຖານ CATL',
       'ປະກັນໄພຊັ້ນ 1 (First Class Insurance) 1 ປີເຕັມ',

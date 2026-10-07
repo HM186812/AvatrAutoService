@@ -639,7 +639,7 @@ export default function UserManagementView({
                   />
                   <div>
                     <span className="text-cyan-300 font-medium block">ອັບໂຫລດ QR ບໍລິສັດ (Upload Company QR)</span>
-                    <span className="text-zinc-500 text-[11px]">ສິດອັບໂຫລດ ແລະ ປ່ຽນຮູບ QR BCEL OnePay ທາງການ</span>
+                    <span className="text-zinc-500 text-[11px]">ສິດອັບໂຫລດ ແລະ ປ່ຽນຮູບ QR ບໍລິສັດທາງການ</span>
                   </div>
                 </label>
 

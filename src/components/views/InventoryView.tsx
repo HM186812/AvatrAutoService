@@ -897,7 +897,7 @@ export default function InventoryView({
                     onChange={(e) => setPaymentMethod(e.target.value as any)}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none"
                   >
-                    <option value="transfer">ໂອນເງິນຜ່ານທະນາຄານ</option>
+                    <option value="transfer">ຊຳລະເງິນຜ່ານ QR</option>
                     <option value="cash">ເງິນສົດ (Cash)</option>
                     <option value="finance">ຜ່ອນໄຟແນນ / ສິນເຊື່ອ</option>
                   </select>

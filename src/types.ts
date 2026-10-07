@@ -143,7 +143,7 @@ export interface InvoiceBillRecord {
   discountLAK: number;
   quantity: number;
   paymentMethod?: 'transfer' | 'cash' | 'finance';
-  qrUsed?: string; // 'bcel_official_qr'
+  qrUsed?: string; // 'official_qr'
   salesRep?: string;
   timestamp?: any;
   date: string;

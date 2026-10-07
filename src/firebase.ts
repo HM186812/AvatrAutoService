@@ -292,7 +292,7 @@ export const subscribeToBills = (
         discountUSD: Number(data.discountUSD) || 0,
         discountLAK: Number(data.discountLAK) || 0,
         paymentMethod: data.paymentMethod || 'transfer',
-        qrUsed: data.qrUsed || 'bcel_official_qr',
+        qrUsed: data.qrUsed || 'official_qr',
         salesRep: data.salesRep || data.recordedBy || '',
         recordedBy: data.recordedBy || data.salesRep || '',
         notes: data.notes || '',
@@ -328,7 +328,7 @@ export const saveBillToFirestore = async (bill: InvoiceBillRecord) => {
     type: bill.billType || bill.type || 'sale',
     amountUSD: bill.netTotalUSD ?? bill.amountUSD ?? 0,
     amountLAK: bill.netTotalLAK ?? bill.amountLAK ?? 0,
-    qrUsed: bill.qrUsed || 'bcel_official_qr',
+    qrUsed: bill.qrUsed || 'official_qr',
     timestamp: serverTimestamp(),
   };
   await setDoc(docRef, dataToSave, { merge: true });
