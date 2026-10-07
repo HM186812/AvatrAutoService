@@ -1,41 +1,40 @@
 import { useState, useRef } from 'react';
 import { SystemUser, Language, UserRole } from '../../types';
-import { 
-  auth, 
-  isFirebaseConfigured, 
-  saveUserToFirestore 
+import {
+  auth,
+  isFirebaseConfigured,
+  saveUserToFirestore
 } from '../../firebase';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword
 } from 'firebase/auth';
 import AvatrLogo from '../layout/AvatrLogo';
-import { 
-  Lock, 
-  Mail, 
-  Eye, 
-  EyeOff, 
-  ArrowRight, 
-  ShieldCheck, 
-  Crown, 
+import {
+  Lock,
+  Mail,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  ShieldCheck,
+  Crown,
   Sparkles,
-  AlertCircle, 
-  Key, 
-  Scan, 
-  Zap, 
-  Volume2, 
-  VolumeX, 
-  Smartphone, 
-  CheckCircle2, 
-  Cpu, 
-  Car, 
-  Radio, 
+  AlertCircle,
+  Key,
+  Scan,
+  Zap,
+  Volume2,
+  VolumeX,
+  Smartphone,
+  CheckCircle2,
+  Cpu,
+  Car,
+  Radio,
   Fingerprint,
   UserPlus,
   LogIn,
   User,
   Phone,
-  Briefcase,
   Shield,
   Activity,
   BatteryCharging,
@@ -122,7 +121,6 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
-  const [regRole, setRegRole] = useState<UserRole>('general_user');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
@@ -251,8 +249,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
 
     const matched = users.find(
       u => u.email.toLowerCase() === cleanId ||
-           u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, '') ||
-           u.name.toLowerCase().includes(cleanId)
+        u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, '') ||
+        u.name.toLowerCase().includes(cleanId)
     );
 
     if (matched) {
@@ -310,23 +308,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
       return;
     }
 
-    // Create New User Object
+    // Create New User Object (Default: General User / Staff)
     const initials = regName.trim().slice(0, 2);
     let newUserId = `USR-${Math.floor(100 + Math.random() * 900)}`;
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
-
-    let roleTitleLo = 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)';
-    let department = 'General Staff';
-    if (regRole === 'sales') {
-      roleTitleLo = 'ທີ່ປຶກສາການຂາຍ (Sales Consultant)';
-      department = 'Showroom Sales';
-    } else if (regRole === 'technician') {
-      roleTitleLo = 'ຊ່າງເຕັກນິກ & PDI (Technician)';
-      department = 'Workshop & PDI';
-    } else if (regRole === 'admin') {
-      roleTitleLo = 'Admin ສາຂາ (Branch Manager)';
-      department = 'Operations';
-    }
 
     // Attempt Firebase Auth user creation
     if (isFirebaseConfigured() && auth) {
@@ -343,20 +328,20 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
       name: regName.trim(),
       email: regEmail.trim().toLowerCase(),
       phone: regPhone.trim(),
-      role: regRole,
-      roleTitleLo: roleTitleLo,
-      department: department,
+      role: 'general_user',
+      roleTitleLo: 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
+      department: 'General Staff',
       status: 'active',
       avatarInitials: initials,
       permissions: {
-        canManageUsers: regRole === 'super_admin',
-        canDeleteUsers: regRole === 'super_admin',
-        canGrantRoles: regRole === 'super_admin',
-        canEditInventory: regRole === 'super_admin' || regRole === 'admin' || regRole === 'technician',
-        canUploadQR: regRole === 'super_admin',
-        canAddModels: regRole === 'super_admin',
-        canDeductPOS: regRole === 'super_admin' || regRole === 'admin' || regRole === 'sales',
-        canViewFinancials: regRole === 'super_admin' || regRole === 'admin',
+        canManageUsers: false,
+        canDeleteUsers: false,
+        canGrantRoles: false,
+        canEditInventory: false,
+        canUploadQR: false,
+        canAddModels: false,
+        canDeductPOS: false,
+        canViewFinancials: false,
       },
       createdAt: now,
       lastLogin: now,
@@ -398,9 +383,9 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
 
   return (
     <div className="min-h-screen bg-[#050507] text-white flex items-center justify-center p-3 sm:p-6 lg:p-10 relative overflow-hidden font-sans selection:bg-white selection:text-black">
-      
+
       {/* Dynamic Animated Ambient Background Aura synchronized with active vehicle color */}
-      <div 
+      <div
         className="absolute top-1/4 left-1/6 w-[650px] h-[650px] rounded-full blur-[150px] pointer-events-none transition-all duration-700 opacity-25 animate-pulse-glow"
         style={{ backgroundColor: activeCar.themeColor }}
       />
@@ -430,10 +415,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
 
       {/* Main Split Showcase Card */}
       <div className="relative w-full max-w-5xl bg-zinc-950/90 border border-zinc-800/80 rounded-3xl shadow-2xl overflow-hidden backdrop-blur-2xl grid grid-cols-1 lg:grid-cols-12 min-h-[660px]">
-        
+
         {/* LEFT COLUMN: INTERACTIVE VEHICLE SHOWCASE & COCKPIT HUD GADGETS (5 cols on lg) */}
         <div className="lg:col-span-5 p-6 sm:p-8 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-zinc-800/80 bg-gradient-to-b from-zinc-900/80 via-black/70 to-zinc-950 relative">
-          
+
           {/* Top Brand & Sound/LiDAR/Turbo Toggles */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 group cursor-pointer" onClick={() => playSound('ev_start')}>
@@ -460,9 +445,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   setIsSoundEnabled(next);
                   if (next) playSound('ev_start');
                 }}
-                className={`p-1.5 rounded-lg transition-all ${
-                  isSoundEnabled ? 'bg-zinc-800 text-emerald-400 shadow' : 'text-zinc-500 hover:text-white'
-                }`}
+                className={`p-1.5 rounded-lg transition-all ${isSoundEnabled ? 'bg-zinc-800 text-emerald-400 shadow' : 'text-zinc-500 hover:text-white'
+                  }`}
                 title={isSoundEnabled ? 'ສຽງ Cockpit: ເປີດ' : 'ສຽງ Cockpit: ປິດ'}
               >
                 {isSoundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
@@ -475,9 +459,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   setIsLidarActive(!isLidarActive);
                   playSound('scan_beep');
                 }}
-                className={`p-1.5 rounded-lg transition-all ${
-                  isLidarActive ? 'bg-zinc-800 text-blue-400 shadow' : 'text-zinc-500 hover:text-white'
-                }`}
+                className={`p-1.5 rounded-lg transition-all ${isLidarActive ? 'bg-zinc-800 text-blue-400 shadow' : 'text-zinc-500 hover:text-white'
+                  }`}
                 title={isLidarActive ? 'LiDAR ADS 3.0: ເປີດ' : 'LiDAR ADS 3.0: ປິດ'}
               >
                 <Radio className={`w-3.5 h-3.5 ${isLidarActive ? 'animate-pulse' : ''}`} />
@@ -490,9 +473,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   setBoostModeActive(!boostModeActive);
                   playSound('boost');
                 }}
-                className={`p-1.5 rounded-lg transition-all ${
-                  boostModeActive ? 'bg-amber-950 text-amber-300 border border-amber-500 shadow' : 'text-zinc-500 hover:text-white'
-                }`}
+                className={`p-1.5 rounded-lg transition-all ${boostModeActive ? 'bg-amber-950 text-amber-300 border border-amber-500 shadow' : 'text-zinc-500 hover:text-white'
+                  }`}
                 title="Turbo Boost Mode"
               >
                 <Flame className={`w-3.5 h-3.5 ${boostModeActive ? 'animate-bounce text-amber-400' : ''}`} />
@@ -512,11 +494,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                     setActiveCarIdx(idx);
                     playSound('ev_start');
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    activeCarIdx === idx
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeCarIdx === idx
                       ? 'bg-white text-black shadow-lg scale-102'
                       : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                  }`}
+                    }`}
                 >
                   {car.name}
                 </button>
@@ -525,7 +506,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
 
             {/* Vehicle Card Preview with Interactive Headlight & Ambient Beam */}
             <div className="relative group">
-              <div 
+              <div
                 className="w-full h-44 sm:h-52 rounded-2xl overflow-hidden border border-zinc-800 relative bg-zinc-900 transition-all duration-500"
                 style={{
                   boxShadow: isHeadlightOn ? `0 0 50px ${activeCar.glowColor}` : 'none'
@@ -547,7 +528,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                 {/* Ambient dynamic vehicle HUD overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent p-3.5 flex flex-col justify-between">
                   <div className="flex justify-between items-start">
-                    <span 
+                    <span
                       className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/85 border text-white backdrop-blur-md flex items-center gap-1.5"
                       style={{ borderColor: activeCar.themeColor }}
                     >
@@ -562,11 +543,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                         setIsHeadlightOn(!isHeadlightOn);
                         playSound('tab_click');
                       }}
-                      className={`px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold backdrop-blur-md border transition-all ${
-                        isHeadlightOn 
-                          ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-md' 
+                      className={`px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold backdrop-blur-md border transition-all ${isHeadlightOn
+                          ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-md'
                           : 'bg-black/80 border-zinc-700 text-zinc-400'
-                      }`}
+                        }`}
                     >
                       {isHeadlightOn ? '💡 ໄຟໜ້າ Matrix ON' : '💡 ໄຟໜ້າ OFF'}
                     </button>
@@ -593,11 +573,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   setActiveHudWidget('battery');
                   playSound('tab_click');
                 }}
-                className={`p-2 rounded-xl border text-center transition-all ${
-                  activeHudWidget === 'battery'
+                className={`p-2 rounded-xl border text-center transition-all ${activeHudWidget === 'battery'
                     ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow'
                     : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
-                }`}
+                  }`}
               >
                 <BatteryCharging className="w-3.5 h-3.5 mx-auto mb-1 text-emerald-400" />
                 <span className="text-[9px] font-mono block uppercase">ແບັດເຕີຣີ</span>
@@ -610,11 +589,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   setActiveHudWidget('motor');
                   playSound('tab_click');
                 }}
-                className={`p-2 rounded-xl border text-center transition-all ${
-                  activeHudWidget === 'motor'
+                className={`p-2 rounded-xl border text-center transition-all ${activeHudWidget === 'motor'
                     ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow'
                     : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
-                }`}
+                  }`}
               >
                 <Gauge className="w-3.5 h-3.5 mx-auto mb-1 text-amber-400" />
                 <span className="text-[9px] font-mono block uppercase">ອັດຕາເລັ່ງ</span>
@@ -627,11 +605,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   setActiveHudWidget('lidar');
                   playSound('tab_click');
                 }}
-                className={`p-2 rounded-xl border text-center transition-all ${
-                  activeHudWidget === 'lidar'
+                className={`p-2 rounded-xl border text-center transition-all ${activeHudWidget === 'lidar'
                     ? 'bg-blue-950/80 border-blue-500 text-blue-300 shadow'
                     : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
-                }`}
+                  }`}
               >
                 <Activity className="w-3.5 h-3.5 mx-auto mb-1 text-blue-400" />
                 <span className="text-[9px] font-mono block uppercase">ພະລັງຂັບ</span>
@@ -644,11 +621,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   setActiveHudWidget('security');
                   playSound('tab_click');
                 }}
-                className={`p-2 rounded-xl border text-center transition-all ${
-                  activeHudWidget === 'security'
+                className={`p-2 rounded-xl border text-center transition-all ${activeHudWidget === 'security'
                     ? 'bg-purple-950/80 border-purple-500 text-purple-300 shadow'
                     : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
-                }`}
+                  }`}
               >
                 <Shield className="w-3.5 h-3.5 mx-auto mb-1 text-purple-400" />
                 <span className="text-[9px] font-mono block uppercase">ລະບົບຄວາມປອດໄພ</span>
@@ -669,7 +645,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
 
         {/* RIGHT COLUMN: HIGH-TECH COCKPIT ACCESS CONSOLE (7 cols on lg) */}
         <div className="lg:col-span-7 p-6 sm:p-8 flex flex-col justify-between space-y-5">
-          
+
           {/* Header Title & Access Mode Segmented Switcher */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -682,7 +658,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   </span>
                 </h1>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  {mainTab === 'signup' 
+                  {mainTab === 'signup'
                     ? 'ສ້າງບັນຊີຜູ້ໃຊ້ໃໝ່ ເພື່ອເຂົ້າຮ່ວມທີມງານ AVATR'
                     : 'ເຂົ້າສູ່ລະບົບຈັດການ AVATR AUTO SERVICE'}
                 </p>
@@ -703,11 +679,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   setMainTab('signin');
                   playSound('tab_click');
                 }}
-                className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition-all ${
-                  mainTab === 'signin'
+                className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition-all ${mainTab === 'signin'
                     ? 'bg-white text-black font-bold shadow-md'
                     : 'text-zinc-400 hover:text-white'
-                }`}
+                  }`}
               >
                 <LogIn className="w-4 h-4 text-emerald-500" />
                 <span>ເຂົ້າສູ່ລະບົບ (Sign In)</span>
@@ -719,11 +694,10 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   setMainTab('signup');
                   playSound('tab_click');
                 }}
-                className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition-all ${
-                  mainTab === 'signup'
+                className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition-all ${mainTab === 'signup'
                     ? 'bg-white text-black font-bold shadow-md'
                     : 'text-zinc-400 hover:text-white'
-                }`}
+                  }`}
               >
                 <UserPlus className="w-4 h-4 text-amber-500" />
                 <span>ສ້າງບັນຊີໃໝ່ (Sign Up)</span>
@@ -764,7 +738,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                     type="text"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="sengouthai.avatr@laos-ev.la ຫຼື 020 55575537"
+                    placeholder="User1234@email.com"
                     className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-10 pr-3.5 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white focus:ring-1 focus:ring-white transition-all"
                   />
                 </div>
@@ -779,9 +753,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                   {password && (
                     <div className="flex items-center gap-1.5 font-mono text-[10px]">
                       <span className="text-zinc-500">ຄວາມປອດໄພ:</span>
-                      <span className={`font-bold ${
-                        currentStrength >= 80 ? 'text-emerald-400' : currentStrength >= 50 ? 'text-amber-400' : 'text-red-400'
-                      }`}>
+                      <span className={`font-bold ${currentStrength >= 80 ? 'text-emerald-400' : currentStrength >= 50 ? 'text-amber-400' : 'text-red-400'
+                        }`}>
                         {currentStrength}%
                       </span>
                     </div>
@@ -809,10 +782,9 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                 {/* Animated Power Gauge Bar */}
                 {password && (
                   <div className="mt-1.5 w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden border border-zinc-800/80">
-                    <div 
-                      className={`h-full transition-all duration-300 ${
-                        currentStrength >= 80 ? 'bg-emerald-400' : currentStrength >= 50 ? 'bg-amber-400' : 'bg-red-400'
-                      }`}
+                    <div
+                      className={`h-full transition-all duration-300 ${currentStrength >= 80 ? 'bg-emerald-400' : currentStrength >= 50 ? 'bg-amber-400' : 'bg-red-400'
+                        }`}
                       style={{ width: `${currentStrength}%` }}
                     />
                   </div>
@@ -909,63 +881,6 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
                     placeholder="somsack.staff@laos-ev.la"
                     className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
                   />
-                </div>
-              </div>
-
-              {/* Role Selection */}
-              <div>
-                <label className="block text-zinc-300 font-semibold mb-1 flex items-center gap-1.5">
-                  <Briefcase className="w-3.5 h-3.5 text-zinc-400" />
-                  <span>ເລືອກຕຳແໜ່ງ / ພະແນກ (Role & Department)</span>
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRegRole('general_user');
-                      playSound('tab_click');
-                    }}
-                    className={`p-2 rounded-xl border text-left transition-all ${
-                      regRole === 'general_user'
-                        ? 'bg-white text-black font-bold border-white shadow-sm'
-                        : 'bg-zinc-900/90 border-zinc-800 text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    <span className="block font-bold text-[11px] truncate">👤 ຜູ້ໃຊ້ທົ່ວໄປ</span>
-                    <span className="text-[9px] opacity-75 block truncate">Staff / Support</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRegRole('sales');
-                      playSound('tab_click');
-                    }}
-                    className={`p-2 rounded-xl border text-left transition-all ${
-                      regRole === 'sales'
-                        ? 'bg-white text-black font-bold border-white shadow-sm'
-                        : 'bg-zinc-900/90 border-zinc-800 text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    <span className="block font-bold text-[11px] truncate">💼 ທີ່ປຶກສາການຂາຍ</span>
-                    <span className="text-[9px] opacity-75 block truncate">Showroom Sales</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRegRole('technician');
-                      playSound('tab_click');
-                    }}
-                    className={`p-2 rounded-xl border text-left transition-all ${
-                      regRole === 'technician'
-                        ? 'bg-white text-black font-bold border-white shadow-sm'
-                        : 'bg-zinc-900/90 border-zinc-800 text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    <span className="block font-bold text-[11px] truncate">🔧 ຊ່າງເຕັກນິກ & PDI</span>
-                    <span className="text-[9px] opacity-75 block truncate">Workshop Bay</span>
-                  </button>
                 </div>
               </div>
 
