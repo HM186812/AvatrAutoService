@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { SystemUser, Language, UserRole } from '../../types';
 import {
   auth,
+  db,
   isFirebaseConfigured,
   saveUserToFirestore
 } from '../../firebase';
@@ -9,6 +10,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword
 } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import AvatrLogo from '../layout/AvatrLogo';
 import {
   Lock,
@@ -237,12 +239,81 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
       try {
         const userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
         const fbUid = userCredential.user.uid;
-        const matchedFb = users.find(
+
+        // 1. Search in current memory state
+        let matchedFb = users.find(
           u => u.id === fbUid ||
             (u.email && u.email.toLowerCase() === cleanId) ||
             (u.phone && u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, ''))
         );
+
+        // 2. If not found in memory, try fetching directly from Firestore
+        if (!matchedFb && db) {
+          try {
+            const docSnap = await getDoc(doc(db, 'users', fbUid));
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              matchedFb = {
+                id: docSnap.id,
+                name: data.name || cleanId,
+                email: data.email || (cleanId.includes('@') ? cleanId : ''),
+                phone: data.phone || (cleanId.includes('@') ? '' : cleanId),
+                role: data.role || 'super_admin',
+                roleTitleLo: data.roleTitleLo || 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)',
+                department: data.department || 'Executive Management & Direction',
+                status: data.status || 'active',
+                avatarInitials: data.avatarInitials || (data.name ? data.name.slice(0, 2) : 'AD'),
+                permissions: data.permissions || {
+                  canManageUsers: true,
+                  canDeleteUsers: true,
+                  canGrantRoles: true,
+                  canEditInventory: true,
+                  canUploadQR: true,
+                  canAddModels: true,
+                  canDeductPOS: true,
+                  canViewFinancials: true,
+                },
+                createdAt: data.createdAt || new Date().toISOString().slice(0, 10),
+              };
+            }
+          } catch (fetchErr) {
+            console.warn('Firestore user fetch notice:', fetchErr);
+          }
+        }
+
+        // 3. If authenticated in Firebase but no Firestore profile exists yet, auto-create as Super Admin
+        if (!matchedFb) {
+          const isSuperAdmin = !users || users.length === 0 || !users.some(u => u.role === 'super_admin');
+          matchedFb = {
+            id: fbUid,
+            name: cleanId.includes('@') ? cleanId.split('@')[0] : `User-${cleanId.slice(-4)}`,
+            email: cleanId.includes('@') ? cleanId : `${cleanId.replace(/\s+/g, '')}@avatr.phone.la`,
+            phone: cleanId.includes('@') ? '' : cleanId,
+            role: isSuperAdmin ? 'super_admin' : 'general_user',
+            roleTitleLo: isSuperAdmin ? 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)' : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
+            department: isSuperAdmin ? 'Executive Management & Direction' : 'General Staff',
+            status: 'active',
+            avatarInitials: 'AD',
+            permissions: {
+              canManageUsers: isSuperAdmin,
+              canDeleteUsers: isSuperAdmin,
+              canGrantRoles: isSuperAdmin,
+              canEditInventory: isSuperAdmin,
+              canUploadQR: isSuperAdmin,
+              canAddModels: isSuperAdmin,
+              canDeductPOS: isSuperAdmin,
+              canViewFinancials: isSuperAdmin,
+            },
+            createdAt: new Date().toISOString().slice(0, 10),
+            lastLogin: new Date().toISOString().slice(0, 16).replace('T', ' '),
+          };
+          try {
+            await saveUserToFirestore(matchedFb);
+          } catch {}
+        }
+
         if (matchedFb) {
+          if (onRegisterUser) onRegisterUser(matchedFb);
           playSound('success');
           setSuccessMessage(`ເຂົ້າສູ່ລະບົບ Cloud Firebase ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${matchedFb.name}`);
           setTimeout(() => {
@@ -268,13 +339,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
         onLoginSuccess(matched, rememberMe);
       }, 400);
     } else {
-      if (cleanId === 'admin' || cleanId === 'super_admin') {
-        const adminUser = users.find(u => u.role === 'super_admin') || users[0];
-        playSound('success');
-        onLoginSuccess(adminUser, rememberMe);
-        return;
-      }
-      setErrorMessage('ບໍ່ພົບບັນຊີນີ້ໃນລະບົບ. ຫາກຍັງບໍ່ມີບັນຊີ ທ່ານສາມາດກົດ "ສ້າງບັນຊີໃໝ່" ໄດ້.');
+      setErrorMessage('ບໍ່ພົບບັນຊີນີ້ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ. ຫາກຍັງບໍ່ມີບັນຊີ ທ່ານສາມາດກົດ "ສ້າງບັນຊີໃໝ່" ໄດ້.');
     }
   };
 
@@ -314,23 +379,6 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
       return;
     }
 
-    // Check if email or phone already exists locally
-    if (cleanEmail) {
-      const emailExists = users.some(u => u.email && u.email.toLowerCase() === cleanEmail);
-      if (emailExists) {
-        setErrorMessage('ອີເມວນີ້ມີໃນລະບົບແລ້ວ ກະລຸນາເຂົ້າສູ່ລະບົບ');
-        return;
-      }
-    }
-
-    if (cleanPhone) {
-      const phoneExists = users.some(u => u.phone && u.phone.replace(/\s+/g, '') === cleanPhone.replace(/\s+/g, ''));
-      if (phoneExists) {
-        setErrorMessage('ເບີໂທລະສັບນີ້ມີໃນລະບົບແລ້ວ ກະລຸນາເຂົ້າສູ່ລະບົບ');
-        return;
-      }
-    }
-
     // Check if this is the very first user or no super_admin exists in the system
     const isFirstUser = !users || users.length === 0 || !users.some(u => u.role === 'super_admin');
 
@@ -355,6 +403,14 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser }: Log
         newUserId = userCred.user.uid;
       } catch (err: any) {
         console.warn('Firebase Auth user creation notice:', err.message);
+        if (err.code === 'auth/email-already-in-use' || err.message?.includes('already in use')) {
+          try {
+            const loginCred = await signInWithEmailAndPassword(auth, authEmail, regPassword);
+            newUserId = loginCred.user.uid;
+          } catch (loginErr) {
+            console.warn('Existing account signin notice:', loginErr);
+          }
+        }
       }
     }
 
