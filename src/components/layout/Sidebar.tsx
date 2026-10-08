@@ -411,6 +411,13 @@ export default function Sidebar({
               <span>{t.navLogout}</span>
             </button>
           )}
+
+          {/* Version Info */}
+          <div className="pt-0.5 text-center select-none">
+            <span className="text-[9px] font-mono text-zinc-600 tracking-wider">
+              v1.2.0 · USD Edition
+            </span>
+          </div>
         </div>
       </aside>
     </>

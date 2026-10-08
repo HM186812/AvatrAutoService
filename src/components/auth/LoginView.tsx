@@ -1088,7 +1088,7 @@ export default function LoginView({
             isDark ? 'border-zinc-800 text-zinc-400' : 'border-slate-200 text-slate-500'
           }`}
         >
-          <span>AVATR Auto Service</span>
+          <span>AVATR Auto Service v1.2.0</span>
           <span>Vientiane, Lao PDR</span>
         </div>
       </div>
