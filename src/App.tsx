@@ -544,6 +544,8 @@ export default function App() {
         }}
         lang={lang}
         setLang={handleSetLang}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
     );
   }
