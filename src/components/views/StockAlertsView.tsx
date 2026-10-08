@@ -182,8 +182,8 @@ export default function StockAlertsView({
     <div className="space-y-6 pb-12">
       {/* Toast Alert */}
       {toastMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-emerald-950 border border-emerald-600 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+        <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-zinc-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0" />
           <span>{toastMsg}</span>
         </div>
       )}
@@ -192,10 +192,10 @@ export default function StockAlertsView({
       <div className="bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 bg-amber-400 text-black rounded-lg">
-              <AlertTriangle className="w-5 h-5 fill-black" />
+            <span className="p-1.5 bg-white text-black rounded-lg font-bold">
+              <AlertTriangle className="w-5 h-5 text-black" />
             </span>
-            <span className="text-xs font-mono uppercase tracking-widest text-amber-400 font-bold">
+            <span className="text-xs font-mono uppercase tracking-widest text-zinc-400 font-bold">
               DEDICATED STOCK DEPLETION MONITOR
             </span>
           </div>
@@ -224,14 +224,14 @@ export default function StockAlertsView({
           onClick={() => setFilterType(filterType === 'out_of_stock' ? 'all' : 'out_of_stock')}
           className={`p-6 rounded-3xl border transition-all cursor-pointer ${
             filterType === 'out_of_stock'
-              ? 'bg-red-950/40 border-red-600 shadow-xl'
-              : 'bg-zinc-950 border-zinc-800 hover:border-red-900/60'
+              ? 'bg-zinc-900 border-white shadow-xl text-white'
+              : 'bg-zinc-950 border-zinc-800 hover:border-zinc-600'
           }`}
         >
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5 text-red-400 font-bold text-sm">
-              <div className="p-2 bg-red-950/80 rounded-xl border border-red-800">
-                <ShieldAlert className="w-5 h-5" />
+            <div className="flex items-center gap-2.5 text-white font-bold text-sm">
+              <div className="p-2 bg-zinc-900 rounded-xl border border-zinc-700">
+                <ShieldAlert className="w-5 h-5 text-zinc-200" />
               </div>
               <div>
                 <span className="block text-base">
@@ -242,21 +242,21 @@ export default function StockAlertsView({
                 </span>
               </div>
             </div>
-            <span className="text-3xl font-black font-mono text-red-400">
+            <span className="text-3xl font-black font-mono text-white">
               {outOfStockItems.length}
             </span>
           </div>
 
-          <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
+          <div className="pt-3 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
             <span className="flex items-center gap-1">
-              {filterType === 'out_of_stock' && <Check className="w-3.5 h-3.5 text-red-400" />}
+              {filterType === 'out_of_stock' && <Check className="w-3.5 h-3.5 text-white" />}
               <span>
                 {filterType === 'out_of_stock' 
                   ? (lang === 'lo' ? 'ກຳລັງສະແດງ' : lang === 'th' ? 'กำลังแสดง' : 'Showing')
                   : (lang === 'lo' ? 'ຄລິກເພື່ອກັ່ນຕອງເບິ່ງສະເພາະສິນຄ້າໝົດ' : lang === 'th' ? 'คลิกเพื่อกรองดูเฉพาะสินค้าหมด' : 'Filter out of stock')}
               </span>
             </span>
-            <span className="font-mono text-red-400 font-bold">CRITICAL</span>
+            <span className="font-mono text-white font-bold px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700">CRITICAL</span>
           </div>
         </div>
 
@@ -265,14 +265,14 @@ export default function StockAlertsView({
           onClick={() => setFilterType(filterType === 'low_stock' ? 'all' : 'low_stock')}
           className={`p-6 rounded-3xl border transition-all cursor-pointer ${
             filterType === 'low_stock'
-              ? 'bg-amber-950/40 border-amber-600 shadow-xl'
-              : 'bg-zinc-950 border-zinc-800 hover:border-amber-900/60'
+              ? 'bg-zinc-900 border-white shadow-xl text-white'
+              : 'bg-zinc-950 border-zinc-800 hover:border-zinc-600'
           }`}
         >
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5 text-amber-400 font-bold text-sm">
-              <div className="p-2 bg-amber-950/80 rounded-xl border border-amber-800">
-                <AlertTriangle className="w-5 h-5" />
+            <div className="flex items-center gap-2.5 text-white font-bold text-sm">
+              <div className="p-2 bg-zinc-900 rounded-xl border border-zinc-700">
+                <AlertTriangle className="w-5 h-5 text-zinc-200" />
               </div>
               <div>
                 <span className="block text-base">
@@ -283,21 +283,21 @@ export default function StockAlertsView({
                 </span>
               </div>
             </div>
-            <span className="text-3xl font-black font-mono text-amber-400">
+            <span className="text-3xl font-black font-mono text-white">
               {lowStockItems.length}
             </span>
           </div>
 
-          <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
+          <div className="pt-3 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
             <span className="flex items-center gap-1">
-              {filterType === 'low_stock' && <Check className="w-3.5 h-3.5 text-amber-400" />}
+              {filterType === 'low_stock' && <Check className="w-3.5 h-3.5 text-white" />}
               <span>
                 {filterType === 'low_stock'
                   ? (lang === 'lo' ? 'ກຳລັງສະແດງ' : lang === 'th' ? 'กำลังแสดง' : 'Showing')
                   : (lang === 'lo' ? 'ຄລິກເພື່ອກັ່ນຕອງເບິ່ງສະເພາະສິນຄ້າໃກ້ໝົດ' : lang === 'th' ? 'คลิกเพื่อกรองดูเฉพาะสินค้าใกล้หมด' : 'Filter low stock')}
               </span>
             </span>
-            <span className="font-mono text-amber-400 font-bold">WARNING</span>
+            <span className="font-mono text-white font-bold px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700">WARNING</span>
           </div>
         </div>
       </div>
@@ -307,30 +307,30 @@ export default function StockAlertsView({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setFilterType('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
               filterType === 'all'
-                ? 'bg-white text-black'
-                : 'text-zinc-400 hover:text-white bg-zinc-900'
+                ? 'bg-white text-black shadow-md font-bold'
+                : 'text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800'
             }`}
           >
             {lang === 'lo' ? 'ທັງໝົດ' : lang === 'th' ? 'ทั้งหมด' : 'All'} ({totalAlertItems.length})
           </button>
           <button
             onClick={() => setFilterType('out_of_stock')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
               filterType === 'out_of_stock'
-                ? 'bg-red-500 text-white'
-                : 'text-red-400 hover:text-white bg-zinc-900'
+                ? 'bg-white text-black shadow-md font-bold'
+                : 'text-zinc-300 hover:text-white bg-zinc-900 border border-zinc-800'
             }`}
           >
             {lang === 'lo' ? 'ໝົດສະຕ໋ອກ' : lang === 'th' ? 'หมดสต็อก' : 'Out of Stock'} ({outOfStockItems.length})
           </button>
           <button
             onClick={() => setFilterType('low_stock')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
               filterType === 'low_stock'
-                ? 'bg-amber-400 text-black'
-                : 'text-amber-400 hover:text-white bg-zinc-900'
+                ? 'bg-white text-black shadow-md font-bold'
+                : 'text-zinc-300 hover:text-white bg-zinc-900 border border-zinc-800'
             }`}
           >
             {lang === 'lo' ? 'ໃກ້ຈະໝົດ' : lang === 'th' ? 'ใกล้หมด' : 'Low Stock'} ({lowStockItems.length})
@@ -344,7 +344,7 @@ export default function StockAlertsView({
             placeholder={lang === 'lo' ? 'ຄົ້ນຫາລຸ້ນ, VIN, ທະບຽນ, ສີ...' : lang === 'th' ? 'ค้นหารุ่น, VIN, ทะเบียน, สี...' : 'Search model, VIN, plate...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white"
           />
         </div>
       </div>
@@ -352,7 +352,7 @@ export default function StockAlertsView({
       {/* Grid of Alert Cars */}
       {displayedItems.length === 0 ? (
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-12 text-center space-y-3">
-          <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
+          <CheckCircle2 className="w-12 h-12 text-zinc-400 mx-auto" />
           <h3 className="text-lg font-bold text-white">
             {lang === 'lo' ? 'ບໍ່ມີລາຍການແຈ້ງເຕືອນໃນໝວດນີ້' : lang === 'th' ? 'ไม่มีรายการแจ้งเตือนในหมวดนี้' : 'No alert items found'}
           </h3>
@@ -365,28 +365,24 @@ export default function StockAlertsView({
           {displayedItems.map((item) => (
             <div
               key={item.vin}
-              className={`p-5 rounded-3xl border flex flex-col justify-between transition-all ${
-                item.stockQuantity === 0
-                  ? 'bg-zinc-950 border-red-900/80 hover:border-red-600'
-                  : 'bg-zinc-950 border-amber-900/80 hover:border-amber-500'
-              }`}
+              className="p-5 rounded-3xl border border-zinc-800 hover:border-zinc-600 bg-zinc-950 flex flex-col justify-between transition-all"
             >
               {/* Header: Status badge & Stock count */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   {item.stockQuantity === 0 ? (
-                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-950 text-red-300 border border-red-800 flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-zinc-900 text-white border border-zinc-700 flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 text-zinc-300" />
                       {lang === 'lo' ? 'ໝົດສະຕ໋ອກ (0 ຄັນ)' : lang === 'th' ? 'หมดสต็อก (0 คัน)' : 'Out of Stock (0)'}
                     </span>
                   ) : (
-                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1.5 animate-pulse">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-zinc-300" />
                       {lang === 'lo' ? 'ໃກ້ຈະໝົດ (ເຫຼືອ 1 ຄັນ)' : lang === 'th' ? 'ใกล้หมด (เหลือ 1 คัน)' : 'Low Stock (1 left)'}
                     </span>
                   )}
 
-                  <span className="font-mono text-zinc-400 text-xs">
+                  <span className="font-mono text-white font-bold text-xs">
                     ${item.priceUSD.toLocaleString()}
                   </span>
                 </div>
@@ -409,7 +405,7 @@ export default function StockAlertsView({
                   </div>
                 </div>
 
-                <div className="bg-zinc-900/80 p-3 rounded-2xl border border-zinc-800/80 text-xs space-y-1.5 font-mono">
+                <div className="bg-zinc-900/80 p-3 rounded-2xl border border-zinc-800 text-xs space-y-1.5 font-mono">
                   <div className="flex justify-between text-zinc-400">
                     <span>{lang === 'lo' ? 'ເລກຖັງ (VIN):' : lang === 'th' ? 'เลขตัวถัง (VIN):' : 'VIN:'}</span>
                     <strong className="text-white">{item.vin}</strong>
@@ -426,15 +422,15 @@ export default function StockAlertsView({
                 <button
                   type="button"
                   onClick={() => handleOpenRestockModal(item, 1)}
-                  className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 bg-white hover:bg-zinc-200 text-black font-extrabold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
                 >
-                  <PackagePlus className="w-4 h-4 fill-black" />
+                  <PackagePlus className="w-4 h-4 text-black" />
                   <span>{lang === 'lo' ? 'ຟອມເພີ່ມສະຕ໋ອກລົດ (Restock)' : lang === 'th' ? 'ฟอร์มเพิ่มสต็อกรถยนต์ (Restock)' : 'Restock Vehicle'}</span>
                 </button>
 
                 <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono px-1">
                   <span>{lang === 'lo' ? 'ປ້ອນຈຳນວນ & ຂໍ້ມູນສາງຢ່າງລະອຽດ' : lang === 'th' ? 'ระบุจำนวน & ข้อมูลคลังอย่างละเอียด' : 'Verified Inbound Entry'}</span>
-                  <span className="text-emerald-400 font-semibold">Verified Entry</span>
+                  <span className="text-zinc-300 font-semibold">Verified Entry</span>
                 </div>
               </div>
             </div>
@@ -449,7 +445,7 @@ export default function StockAlertsView({
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                <div className="p-2 bg-zinc-900 text-white rounded-xl border border-zinc-700">
                   <PackagePlus className="w-5 h-5" />
                 </div>
                 <div>
@@ -476,15 +472,13 @@ export default function StockAlertsView({
                 <img
                   src={selectedRestockItem.image}
                   alt={selectedRestockItem.model}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover filter grayscale"
                 />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-sm text-white">{selectedRestockItem.model}</h4>
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
-                    selectedRestockItem.stockQuantity === 0 ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-amber-950 text-amber-300 border border-amber-800'
-                  }`}>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-zinc-800 text-zinc-200 border border-zinc-700">
                     {lang === 'lo' ? `ສະຕ໋ອກປັດຈຸບັນ: ${selectedRestockItem.stockQuantity} ຄັນ` : lang === 'th' ? `สต็อกปัจจุบัน: ${selectedRestockItem.stockQuantity} คัน` : `Current Stock: ${selectedRestockItem.stockQuantity} units`}
                   </span>
                 </div>
@@ -520,7 +514,7 @@ export default function StockAlertsView({
                         onClick={() => setRestockQty(n)}
                         className={`px-3 py-2 rounded-xl font-mono text-xs border transition-colors ${
                           restockQty === n
-                            ? 'bg-emerald-500 text-black border-emerald-400 font-bold'
+                            ? 'bg-white text-black border-white font-bold'
                             : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                         }`}
                       >
@@ -540,7 +534,7 @@ export default function StockAlertsView({
                   <select
                     value={restockWarehouse}
                     onChange={(e) => setRestockWarehouse(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   >
                     <option value="ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ (Main Showroom)">
                       {lang === 'lo' ? 'ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ (Main Showroom)' : lang === 'th' ? 'โชว์รูมใหญ่ หลัก 3 ท่าเดื่อ (Main Showroom)' : 'Main Showroom (Lak 3)'}
@@ -566,7 +560,7 @@ export default function StockAlertsView({
                     required
                     value={restockDocNo}
                     onChange={(e) => setRestockDocNo(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-zinc-600"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
                   />
                 </div>
               </div>
@@ -581,7 +575,7 @@ export default function StockAlertsView({
                     type="text"
                     value={restockSupplier}
                     onChange={(e) => setRestockSupplier(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   />
                 </div>
 
@@ -592,7 +586,7 @@ export default function StockAlertsView({
                   <select
                     value={restockPdiStatus}
                     onChange={(e) => setRestockPdiStatus(e.target.value as PDIStatus)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   >
                     <option value="passed">{lang === 'lo' ? 'ຜ່ານການກວດ PDI 100% ພ້ອມຂາຍທັນທີ (Ready)' : lang === 'th' ? 'ผ่านการตรวจ PDI 100% พร้อมจำหน่ายทันที (Ready)' : 'PDI Passed 100% (Ready to Sell)'}</option>
                     <option value="in_progress">{lang === 'lo' ? 'ກຳລັງກວດສອບ PDI 68 ຈຸດ (In Progress PDI)' : lang === 'th' ? 'กำลังตรวจสอบ PDI 68 จุด (In Progress PDI)' : 'In Progress PDI 68 Points'}</option>
@@ -605,11 +599,11 @@ export default function StockAlertsView({
               <div>
                 <label className="block text-zinc-300 font-semibold mb-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-blue-400" />
+                    <Tag className="w-3.5 h-3.5 text-zinc-400" />
                     <span>{lang === 'lo' ? 'ສະຖານະສະຕ໋ອກລົດ (Stock Status) *' : lang === 'th' ? 'สถานะสต็อกรถยนต์ (Stock Status) *' : 'Stock Status *'}</span>
                   </span>
                   {(restockStatus === 'event' || restockStatus === 'promotion') && (
-                    <span className="text-[10px] text-amber-400 font-mono font-bold bg-amber-950/70 border border-amber-800/80 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] text-zinc-300 font-mono font-bold bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-full">
                       {lang === 'lo' ? 'ຕ້ອງກຳນົດເວລາ' : lang === 'th' ? 'ต้องกำหนดระยะเวลา' : 'Timeframe Required'}
                     </span>
                   )}
@@ -620,7 +614,7 @@ export default function StockAlertsView({
                     onClick={() => setRestockStatus('ready')}
                     className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
                       restockStatus === 'ready'
-                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-sm'
+                        ? 'bg-white text-black border-white shadow-md font-bold'
                         : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
                     }`}
                   >
@@ -632,7 +626,7 @@ export default function StockAlertsView({
                     onClick={() => setRestockStatus('pdi')}
                     className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
                       restockStatus === 'pdi'
-                        ? 'bg-blue-950/80 border-blue-500 text-blue-300 shadow-sm'
+                        ? 'bg-white text-black border-white shadow-md font-bold'
                         : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
                     }`}
                   >
@@ -644,12 +638,12 @@ export default function StockAlertsView({
                     onClick={() => setRestockStatus('event')}
                     className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
                       restockStatus === 'event'
-                        ? 'bg-amber-950/90 border-amber-400 text-amber-300 ring-2 ring-amber-500/30 font-bold shadow-lg'
-                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-amber-300'
+                        ? 'bg-white text-black border-white shadow-md font-bold'
+                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
                     }`}
                   >
                     <span className="block font-bold flex items-center justify-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <Sparkles className="w-3.5 h-3.5" />
                       <span>{lang === 'lo' ? 'ງານ Event' : lang === 'th' ? 'งาน Event' : 'Event'}</span>
                     </span>
                     <span className="text-[10px] opacity-75">Motor Show/Expo</span>
@@ -659,12 +653,12 @@ export default function StockAlertsView({
                     onClick={() => setRestockStatus('promotion')}
                     className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
                       restockStatus === 'promotion'
-                        ? 'bg-purple-950/90 border-purple-400 text-purple-300 ring-2 ring-purple-500/30 font-bold shadow-lg'
-                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-purple-300'
+                        ? 'bg-white text-black border-white shadow-md font-bold'
+                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
                     }`}
                   >
                     <span className="block font-bold flex items-center justify-center gap-1">
-                      <Gift className="w-3.5 h-3.5 text-purple-400" />
+                      <Gift className="w-3.5 h-3.5" />
                       <span>{lang === 'lo' ? 'ໂປຣໂມຊັນ' : lang === 'th' ? 'โปรโมชั่น' : 'Promotion'}</span>
                     </span>
                     <span className="text-[10px] opacity-75">Special Promo</span>
@@ -674,10 +668,10 @@ export default function StockAlertsView({
 
               {/* TIMEFRAME & SCHEDULE */}
               {(restockStatus === 'event' || restockStatus === 'promotion') && (
-                <div className="bg-gradient-to-b from-amber-950/40 via-zinc-950 to-zinc-950 border-2 border-amber-500/70 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-amber-500/30">
+                <div className="bg-zinc-900/90 border border-zinc-700 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-zinc-800">
                     <div className="flex items-center gap-2">
-                      <span className="p-1.5 bg-amber-400 text-black rounded-lg">
+                      <span className="p-1.5 bg-white text-black rounded-lg">
                         <Calendar className="w-4 h-4" />
                       </span>
                       <div>
@@ -688,12 +682,12 @@ export default function StockAlertsView({
                             ? `กำหนดระยะเวลาสินค้า ${restockStatus === 'event' ? 'งาน Event' : 'โปรโมชั่น'} (Schedule & Timeframe)`
                             : `Schedule & Timeframe for ${restockStatus === 'event' ? 'Event' : 'Promotion'}`}
                         </h4>
-                        <p className="text-[11px] text-amber-300/80">
+                        <p className="text-[11px] text-zinc-400">
                           {lang === 'lo' ? 'ກຳນົດໄລຍະເວລາຈັດງານ ຫຼື ຊ່ວງແຄມເປນໂປຣໂມຊັນໃຫ້ຊັດເຈນ' : lang === 'th' ? 'กำหนดระยะเวลาจัดงาน หรือช่วงแคมเปญโปรโมชั่นให้ชัดเจน' : 'Define campaign period clearly'}
                         </p>
                       </div>
                     </div>
-                    <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-amber-400 text-black font-bold uppercase">
+                    <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white text-black font-bold uppercase">
                       {lang === 'lo' ? 'ບັງຄັບກຳນົດເວລາ' : lang === 'th' ? 'ระบุระยะเวลา' : 'Required'}
                     </span>
                   </div>
@@ -701,7 +695,7 @@ export default function StockAlertsView({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* Campaign Title */}
                     <div className="sm:col-span-2">
-                      <label className="block text-amber-200 mb-1 font-bold">
+                      <label className="block text-zinc-300 mb-1 font-bold">
                         {lang === 'lo' ? 'ຊື່ງານ Event / ຊື່ແຄມເປນໂປຣໂມຊັນ (Campaign Title) *' : lang === 'th' ? 'ชื่องาน Event / ชื่อแคมเปญโปรโมชั่น (Campaign Title) *' : 'Campaign Title *'}
                       </label>
                       <input
@@ -710,14 +704,14 @@ export default function StockAlertsView({
                         value={restockEventCampaign}
                         onChange={(e) => setRestockEventCampaign(e.target.value)}
                         placeholder={restockStatus === 'event' ? 'e.g. Vientiane Motor Expo 2026' : 'e.g. Mid-Year EV Special'}
-                        className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-amber-400"
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none focus:border-white"
                       />
                     </div>
 
                     {/* Start Date */}
                     <div>
-                      <label className="block text-amber-200 mb-1 font-bold flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                      <label className="block text-zinc-300 mb-1 font-bold flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                         <span>{lang === 'lo' ? 'ວັນທີເລີ່ມຕົ້ນ (Start Date) *' : lang === 'th' ? 'วันที่เริ่มต้น (Start Date) *' : 'Start Date *'}</span>
                       </label>
                       <input
@@ -725,15 +719,15 @@ export default function StockAlertsView({
                         required
                         value={restockEventStartDate}
                         onChange={(e) => setRestockEventStartDate(e.target.value)}
-                        className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-400"
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
                       />
                     </div>
 
                     {/* End Date */}
                     <div>
-                      <label className="block text-amber-200 mb-1 font-bold flex items-center justify-between">
+                      <label className="block text-zinc-300 mb-1 font-bold flex items-center justify-between">
                         <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-amber-400" />
+                          <Clock className="w-3.5 h-3.5 text-zinc-400" />
                           <span>{lang === 'lo' ? 'ວັນທີສິ້ນສຸດ (End Date) *' : lang === 'th' ? 'วันที่สิ้นสุด (End Date) *' : 'End Date *'}</span>
                         </span>
                         <div className="flex items-center gap-1">
@@ -742,7 +736,7 @@ export default function StockAlertsView({
                               key={days}
                               type="button"
                               onClick={() => handleSetQuickPresetDays(days)}
-                              className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-amber-400 hover:text-black text-zinc-300 transition-colors"
+                              className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-white hover:text-black text-zinc-300 transition-colors"
                             >
                               +{days}{lang === 'lo' ? 'ວັນ' : lang === 'th' ? 'วัน' : 'd'}
                             </button>
@@ -754,7 +748,7 @@ export default function StockAlertsView({
                         required
                         value={restockEventEndDate}
                         onChange={(e) => setRestockEventEndDate(e.target.value)}
-                        className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-400"
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
                       />
                     </div>
 
@@ -769,7 +763,7 @@ export default function StockAlertsView({
                         value={restockEventLocation}
                         onChange={(e) => setRestockEventLocation(e.target.value)}
                         placeholder="e.g. ITECC Mall A-04"
-                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                       />
                     </div>
 
@@ -785,7 +779,7 @@ export default function StockAlertsView({
                         value={restockPromoDiscountUSD}
                         onChange={(e) => setRestockPromoDiscountUSD(Number(e.target.value) || 0)}
                         placeholder="e.g. 2000"
-                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
                       />
                     </div>
 
@@ -799,7 +793,7 @@ export default function StockAlertsView({
                         value={restockPromoNotes}
                         onChange={(e) => setRestockPromoNotes(e.target.value)}
                         placeholder={lang === 'lo' ? 'e.g. ແຖມປະກັນໄພຊັ້ນ 1 + Home Charger 7kW' : lang === 'th' ? 'e.g. แถมประกันภัยชั้น 1 + Home Charger 7kW' : 'Free Insurance + Home Charger'}
-                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                       />
                     </div>
                   </div>
@@ -816,7 +810,7 @@ export default function StockAlertsView({
                     type="text"
                     value={restockOfficer}
                     onChange={(e) => setRestockOfficer(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   />
                 </div>
 
@@ -829,13 +823,13 @@ export default function StockAlertsView({
                     value={restockNotes}
                     onChange={(e) => setRestockNotes(e.target.value)}
                     placeholder={lang === 'lo' ? 'e.g. ລົດນຳເຂົ້າເພີ່ມເຕີມ...' : lang === 'th' ? 'e.g. รถนำเข้าเพิ่มเติม...' : 'Notes...'}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   />
                 </div>
               </div>
 
               {/* Result Preview Notice */}
-              <div className="p-3 bg-emerald-950/40 border border-emerald-900/60 rounded-xl text-emerald-300 text-[11px] flex items-center justify-between">
+              <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-xl text-zinc-300 text-[11px] flex items-center justify-between">
                 <span>
                   {lang === 'lo' ? `ສະຕ໋ອກລົດຈະເພີ່ມຈາກ ${selectedRestockItem.stockQuantity} ຄັນ ເປັນ:` : lang === 'th' ? `สต็อกรถยนต์จะเพิ่มจาก ${selectedRestockItem.stockQuantity} คัน เป็น:` : `Stock will increase from ${selectedRestockItem.stockQuantity} to:`}
                 </span>
@@ -855,7 +849,7 @@ export default function StockAlertsView({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-all shadow-md flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-extrabold transition-all shadow-md flex items-center gap-2"
                 >
                   <Check className="w-4 h-4" />
                   <span>

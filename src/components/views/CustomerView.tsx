@@ -39,7 +39,7 @@ export default function CustomerView({
   onOpenNewLead,
   onOpenQuote,
 }: CustomerViewProps) {
-  const t = translations[lang];
+  const t = translations[lang] || translations.lo;
 
   // Selected Category Tab (All, Walk in, Online, Event)
   const [selectedCategory, setSelectedCategory] = useState<'all' | CustomerCategory>('all');
@@ -125,7 +125,7 @@ export default function CustomerView({
       <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-3xl flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 bg-white text-black rounded-lg">
+            <span className="p-1.5 bg-white text-black rounded-lg font-bold">
               <Users className="w-5 h-5" />
             </span>
             <span className="text-xs font-mono uppercase tracking-widest text-zinc-400">
@@ -161,8 +161,8 @@ export default function CustomerView({
           </div>
 
           {formSuccess && (
-            <div className="p-3 bg-emerald-950/80 border border-emerald-800 rounded-xl text-xs text-emerald-300 flex items-center gap-2 animate-fadeIn">
-              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-white flex items-center gap-2 animate-fadeIn">
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-white" />
               <span>{t.savedCustomerSuccess}</span>
             </div>
           )}
@@ -179,7 +179,7 @@ export default function CustomerView({
                   onClick={() => setFormCategory('walk_in')}
                   className={`py-2 px-1 rounded-xl text-center font-medium border transition-all flex flex-col items-center gap-1 ${
                     formCategory === 'walk_in'
-                      ? 'bg-blue-600 text-white border-blue-500 font-bold shadow-md'
+                      ? 'bg-white text-black border-white font-bold shadow-md'
                       : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                   }`}
                 >
@@ -192,7 +192,7 @@ export default function CustomerView({
                   onClick={() => setFormCategory('online')}
                   className={`py-2 px-1 rounded-xl text-center font-medium border transition-all flex flex-col items-center gap-1 ${
                     formCategory === 'online'
-                      ? 'bg-emerald-600 text-white border-emerald-500 font-bold shadow-md'
+                      ? 'bg-white text-black border-white font-bold shadow-md'
                       : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                   }`}
                 >
@@ -205,7 +205,7 @@ export default function CustomerView({
                   onClick={() => setFormCategory('event')}
                   className={`py-2 px-1 rounded-xl text-center font-medium border transition-all flex flex-col items-center gap-1 ${
                     formCategory === 'event'
-                      ? 'bg-amber-600 text-white border-amber-500 font-bold shadow-md'
+                      ? 'bg-white text-black border-white font-bold shadow-md'
                       : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                   }`}
                 >
@@ -254,7 +254,7 @@ export default function CustomerView({
                 <select
                   value={formModel}
                   onChange={(e) => setFormModel(e.target.value as any)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none focus:border-white"
                 >
                   <option value="AVATR 12">AVATR 12</option>
                   <option value="AVATR 11">AVATR 11</option>
@@ -269,7 +269,7 @@ export default function CustomerView({
                 <select
                   value={formPriority}
                   onChange={(e) => setFormPriority(e.target.value as any)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none focus:border-white"
                 >
                   <option value="vip">VIP</option>
                   <option value="high">{t.priorityHigh}</option>
@@ -371,7 +371,7 @@ export default function CustomerView({
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+                className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
               >
                 <option value="all">{t.statusAll}</option>
                 <option value="new">{t.statusNew}</option>
@@ -387,7 +387,7 @@ export default function CustomerView({
           <div className="space-y-3.5">
             {filteredLeads.length === 0 ? (
               <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-12 text-center text-zinc-500">
-                <Users className="w-10 h-10 mx-auto text-zinc-700 mb-2" />
+                <Users className="w-10 h-10 mx-auto text-zinc-600 mb-2" />
                 <p className="text-xs">{t.noCustomersFound}</p>
               </div>
             ) : (
@@ -404,23 +404,23 @@ export default function CustomerView({
                         <div className="flex items-center gap-2">
                           <h3 className="font-bold text-base text-white">{lead.customerName}</h3>
                           {lead.category === 'walk_in' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-blue-950 text-blue-300 border border-blue-800 rounded-full font-semibold">
+                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-700 rounded-full font-semibold">
                               Walk-in
                             </span>
                           )}
                           {lead.category === 'online' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-full font-semibold">
+                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-700 rounded-full font-semibold">
                               Online
                             </span>
                           )}
                           {lead.category === 'event' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-950 text-amber-300 border border-amber-800 rounded-full font-semibold">
+                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-700 rounded-full font-semibold">
                               Event
                             </span>
                           )}
                           {lead.priority === 'vip' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-900/60 text-amber-200 border border-amber-700 rounded-full font-bold flex items-center gap-1">
-                              <Star className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
+                            <span className="text-[10px] font-mono px-2 py-0.5 bg-white text-black border border-zinc-300 rounded-full font-bold flex items-center gap-1 shadow-sm">
+                              <Star className="w-2.5 h-2.5 fill-black text-black" />
                               <span>VIP</span>
                             </span>
                           )}
@@ -439,7 +439,7 @@ export default function CustomerView({
                       <select
                         value={lead.status}
                         onChange={(e) => handleUpdateStatus(lead.id, e.target.value as LeadStatus)}
-                        className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none"
+                        className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-white"
                       >
                         <option value="new">{t.statusNew}</option>
                         <option value="contacted">{t.statusContacted}</option>
@@ -449,11 +449,11 @@ export default function CustomerView({
                       </select>
                     </div>
 
-                    <p className="text-xs text-zinc-300 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/80 leading-relaxed">
+                    <p className="text-xs text-zinc-300 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800 leading-relaxed">
                       {lead.notes}
                     </p>
 
-                    <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="pt-2 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-xs">
                       <span className="text-zinc-500 font-mono text-[11px]">
                         {lead.source || lead.category} | {lead.createdAt.slice(0, 10)}
                       </span>
@@ -461,7 +461,7 @@ export default function CustomerView({
                       <div className="flex items-center gap-2">
                         <a
                           href={`tel:${lead.phone.replace(/\s+/g, '')}`}
-                          className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg border border-zinc-700 font-medium flex items-center gap-1"
+                          className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white rounded-lg border border-zinc-700 font-medium flex items-center gap-1 transition-colors"
                         >
                           <Phone className="w-3 h-3 text-zinc-400" />
                           <span>{t.callNow}</span>
@@ -471,7 +471,7 @@ export default function CustomerView({
                           href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hello ${lead.customerName}, AVATR Laos representative contacting regarding ${lead.interestedModel}`)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 rounded-lg border border-emerald-800 font-medium flex items-center gap-1"
+                          className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white rounded-lg border border-zinc-700 font-medium flex items-center gap-1 transition-colors"
                         >
                           <MessageSquare className="w-3 h-3" />
                           <span>WhatsApp</span>
@@ -479,7 +479,7 @@ export default function CustomerView({
 
                         <button
                           onClick={() => onOpenQuote(vehicle, lead.customerName)}
-                          className="px-3 py-1.5 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-colors"
+                          className="px-3 py-1.5 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-colors shadow-sm"
                         >
                           {t.createQuoteAction}
                         </button>

@@ -8,7 +8,7 @@ import {
   Car, 
   AlertTriangle, 
   ChevronRight, 
-  Crown, 
+  ShieldCheck, 
   PackagePlus, 
   ShoppingBag, 
   FileText, 
@@ -106,7 +106,7 @@ export default function Sidebar({
           subLo: 'ອອກບິນ & ຕັດສະຕ໋ອກ',
           icon: ShoppingBag,
           badge: 'ຂາຍ',
-          badgeColor: 'text-emerald-300 bg-emerald-950/80 border-emerald-700/80 font-bold',
+          badgeColor: 'text-zinc-200 bg-zinc-800 border-zinc-700 font-bold',
           adminOnly: false,
         },
         {
@@ -142,7 +142,7 @@ export default function Sidebar({
           subLo: 'ຮັບລົດ & ອອກໃບຮັບ',
           icon: PackagePlus,
           badge: 'ນຳເຂົ້າ',
-          badgeColor: 'text-blue-300 bg-blue-950/80 border-blue-700/80 font-bold',
+          badgeColor: 'text-zinc-200 bg-zinc-800 border-zinc-700 font-bold',
           adminOnly: false,
         },
         {
@@ -152,7 +152,7 @@ export default function Sidebar({
           labelTh: 'แจ้งเตือนสต็อก',
           icon: AlertTriangle,
           badge: (lowStockCount + outOfStockCount) > 0 ? `${lowStockCount + outOfStockCount}` : null,
-          badgeColor: 'text-amber-300 bg-amber-950/90 border-amber-700 font-bold',
+          badgeColor: 'text-white bg-zinc-800 border-zinc-600 font-bold',
           adminOnly: false,
         },
       ],
@@ -263,8 +263,6 @@ export default function Sidebar({
                           <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${
                             isActive 
                               ? 'text-black' 
-                              : item.adminOnly 
-                              ? 'text-amber-400' 
                               : 'text-zinc-400 group-hover:text-white'
                           }`} />
                           <span className="truncate">{label}</span>
@@ -292,15 +290,15 @@ export default function Sidebar({
                 setCurrentMenu('alerts');
                 setIsMobileOpen(false);
               }}
-              className="mt-2 p-2.5 bg-amber-950/30 border border-amber-900/70 rounded-xl cursor-pointer hover:bg-amber-950/50 transition-colors"
+              className="mt-2 p-2.5 bg-zinc-900/90 border border-zinc-700/80 rounded-xl cursor-pointer hover:bg-zinc-800 transition-colors"
             >
-              <div className="flex items-center gap-1.5 text-amber-300 font-semibold text-xs mb-1">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              <div className="flex items-center gap-1.5 text-white font-semibold text-xs mb-1">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-zinc-300" />
                 <span className="truncate">{t.navAlerts}</span>
               </div>
               <div className="text-[11px] text-zinc-400 space-y-0.5">
-                {outOfStockCount > 0 && <span className="text-red-400 block truncate">• {t.criticalStockAlert}: {outOfStockCount}</span>}
-                {lowStockCount > 0 && <span className="text-amber-300 block truncate">• {t.warningStockAlert}: {lowStockCount}</span>}
+                {outOfStockCount > 0 && <span className="text-zinc-200 block truncate font-medium">• {t.criticalStockAlert}: {outOfStockCount}</span>}
+                {lowStockCount > 0 && <span className="text-zinc-300 block truncate">• {t.warningStockAlert}: {lowStockCount}</span>}
               </div>
             </div>
           )}
@@ -317,10 +315,10 @@ export default function Sidebar({
               title={t.currencyTooltip}
             >
               <div className="flex items-center gap-2">
-                <Coins className="w-3.5 h-3.5 text-emerald-400" />
+                <Coins className="w-3.5 h-3.5 text-zinc-300" />
                 <span className="text-[11px] font-medium">{t.navCurrencies}</span>
               </div>
-              <span className="font-mono text-[10px] text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-1.5 py-0.5 rounded">
+              <span className="font-mono text-[10px] text-zinc-300 bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded">
                 USD · LAK · THB
               </span>
             </button>
@@ -343,7 +341,7 @@ export default function Sidebar({
               <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 ${
                 currentMenu === 'profile'
                   ? 'bg-black text-white'
-                  : isSuperAdmin ? 'bg-amber-400 text-black' : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
+                  : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
               }`}>
                 {currentUser.avatarInitials || currentUser.name.slice(0, 2)}
               </div>
@@ -351,7 +349,7 @@ export default function Sidebar({
                 <div className="flex items-center gap-1">
                   <span className="text-xs font-bold truncate">{currentUser.name.split(' ')[0]}</span>
                   {isSuperAdmin && (
-                    <Crown className={`w-3 h-3 flex-shrink-0 ${currentMenu === 'profile' ? 'text-amber-600 fill-amber-600' : 'text-amber-400 fill-amber-400'}`} />
+                    <ShieldCheck className={`w-3 h-3 flex-shrink-0 ${currentMenu === 'profile' ? 'text-black' : 'text-zinc-200'}`} />
                   )}
                 </div>
                 <p className={`text-[10px] truncate ${currentMenu === 'profile' ? 'text-zinc-600' : 'text-zinc-400'}`}>
@@ -377,12 +375,12 @@ export default function Sidebar({
               >
                 {theme === 'dark' ? (
                   <>
-                    <Sun className="w-3.5 h-3.5 text-amber-400" />
+                    <Sun className="w-3.5 h-3.5 text-zinc-200" />
                     <span className="text-[11px] font-medium">{t.lightMode}</span>
                   </>
                 ) : (
                   <>
-                    <Moon className="w-3.5 h-3.5 text-blue-400" />
+                    <Moon className="w-3.5 h-3.5 text-zinc-800" />
                     <span className="text-[11px] font-medium">{t.darkMode}</span>
                   </>
                 )}
@@ -426,7 +424,7 @@ export default function Sidebar({
             <button
               type="button"
               onClick={onLogout}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-red-950/30 hover:bg-red-950/60 text-red-300 hover:text-red-200 border border-red-900/50 text-xs font-semibold transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-800 text-xs font-semibold transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>{t.navLogout}</span>

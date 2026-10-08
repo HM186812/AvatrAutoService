@@ -29,7 +29,6 @@ import {
   Gift,
   BadgePercent,
   Flame,
-  Crown,
   Plus,
   Lock
 } from 'lucide-react';
@@ -384,8 +383,8 @@ export default function StockInView({
     <div className="space-y-6 pb-16">
       {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-emerald-950 border border-emerald-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+        <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-zinc-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0" />
           <span>{toastMsg}</span>
         </div>
       )}
@@ -394,10 +393,10 @@ export default function StockInView({
       <div className="bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="p-1.5 bg-blue-500 text-white rounded-lg">
+            <span className="p-1.5 bg-white text-black rounded-lg">
               <PackagePlus className="w-5 h-5" />
             </span>
-            <span className="text-xs font-mono uppercase tracking-widest text-blue-400 font-bold">
+            <span className="text-xs font-mono uppercase tracking-widest text-zinc-300 font-bold">
               VEHICLE IMPORT & STOCK-IN ENTRY
             </span>
           </div>
@@ -433,7 +432,7 @@ export default function StockInView({
         {/* Step 1: Vehicle Model & Identifiers */}
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5">
           <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
-            <Car className="w-4 h-4 text-blue-400" />
+            <Car className="w-4 h-4 text-white" />
             <span>1. {t.basicInfoSection}</span>
           </div>
 
@@ -452,9 +451,9 @@ export default function StockInView({
                 <button
                   type="button"
                   onClick={() => setIsAddModelOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold shadow-md transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold shadow-md transition-all cursor-pointer border border-zinc-300"
                 >
-                  <Crown className="w-3.5 h-3.5" />
+                  <ShieldCheck className="w-3.5 h-3.5" />
                   <span>+ ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນ (Admin ໃຫຍ່)</span>
                 </button>
               ) : (
@@ -483,7 +482,7 @@ export default function StockInView({
                     <div className="flex items-center justify-between gap-2">
                       <strong className="block text-sm font-bold text-white">{v.name}</strong>
                       {isCustom && (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/40 font-bold">
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold">
                           Admin Custom
                         </span>
                       )}
@@ -492,7 +491,7 @@ export default function StockInView({
                       {v.subTitle || v.category} {v.rangeCLTC ? `(${v.rangeCLTC})` : ''}
                     </span>
                     <div className="flex items-center justify-between mt-1 text-[10px] font-mono">
-                      <span className="text-emerald-400 font-semibold">
+                      <span className="text-zinc-200 font-semibold">
                         ເລີ່ມຕົ້ນ ${v.priceStartingUSD?.toLocaleString()}
                       </span>
                       {v.powertrain && (
@@ -512,14 +511,14 @@ export default function StockInView({
             <div className="sm:col-span-2 lg:col-span-3 p-4 bg-zinc-900/60 rounded-2xl border border-zinc-800 space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-zinc-300 font-semibold text-xs flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-emerald-400" />
+                  <ImageIcon className="w-4 h-4 text-white" />
                   <span>{t.uploadCarImage}</span>
                 </label>
                 {customImage && (
                   <button
                     type="button"
                     onClick={() => setCustomImage('')}
-                    className="text-[10px] text-red-400 hover:underline flex items-center gap-1"
+                    className="text-[10px] text-zinc-400 hover:text-white hover:underline flex items-center gap-1"
                   >
                     <X className="w-3 h-3" /> {lang === 'lo' ? 'ລ້າງຮູບທີ່ອັບໂຫຼດ' : lang === 'th' ? 'ลบรูปภาพที่อัปโหลด' : 'Clear Uploaded Image'}
                   </button>
@@ -534,7 +533,7 @@ export default function StockInView({
                     className="w-full h-full object-cover"
                   />
                   {customImage && (
-                    <span className="absolute bottom-1 right-1 px-1 py-0.2 bg-emerald-500 text-black text-[8px] font-bold rounded">
+                    <span className="absolute bottom-1 right-1 px-1 py-0.2 bg-white text-black text-[8px] font-bold rounded">
                       Device File
                     </span>
                   )}
@@ -542,7 +541,7 @@ export default function StockInView({
 
                 <div className="space-y-1.5">
                   <label className="cursor-pointer inline-flex items-center gap-2 px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl border border-zinc-700 font-semibold text-xs transition-colors shadow-sm">
-                    <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                    <Upload className="w-3.5 h-3.5 text-white" />
                     <span>{t.uploadCarImage}</span>
                     <input
                       type="file"
@@ -565,7 +564,7 @@ export default function StockInView({
                 <button
                   type="button"
                   onClick={generateRandomVin}
-                  className="text-[10px] text-blue-400 hover:underline font-mono"
+                  className="text-[10px] text-zinc-300 hover:text-white hover:underline font-mono"
                 >
                   + {t.generateRandomVinBtn}
                 </button>
@@ -666,7 +665,7 @@ export default function StockInView({
         {/* Step 2: Logistics, Customs & Warehouse */}
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5">
           <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
-            <Truck className="w-4 h-4 text-blue-400" />
+            <Truck className="w-4 h-4 text-white" />
             <span>2. {t.customsSection}</span>
           </div>
 
@@ -726,7 +725,7 @@ export default function StockInView({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as any)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
               >
                 <option value="ready">{t.stage3Ready}</option>
                 <option value="pdi">{t.stage2PDI}</option>
@@ -751,20 +750,20 @@ export default function StockInView({
 
         {/* Dynamic Schedule & Campaign Details (ສະເພາະສິນຄ້າປະເພດ Event & ໂປຣໂມຊັນ) */}
         {(status === 'event' || status === 'promotion') && (
-          <div className="bg-gradient-to-b from-amber-950/40 via-zinc-950 to-zinc-950 border-2 border-amber-500/70 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl transition-all">
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-amber-500/30">
+          <div className="bg-zinc-900/60 border border-zinc-700 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl transition-all">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2.5">
-                <span className="p-2 bg-amber-400 text-black rounded-xl">
+                <span className="p-2 bg-white text-black rounded-xl">
                   <Calendar className="w-5 h-5" />
                 </span>
                 <div>
                   <h3 className="text-white font-extrabold text-base flex items-center gap-2">
                     <span>ຂໍ້ມູນກຳນົດເວລາ {status === 'event' ? 'ງານ Event' : 'ແຄມເປນໂປຣໂມຊັນ'} (Schedule & Campaign Details)</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-400 text-black font-bold uppercase">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white text-black font-bold uppercase">
                       ບັງຄັບປ້ອນກຳນົດເວລາ
                     </span>
                   </h3>
-                  <p className="text-xs text-amber-300/80 mt-0.5">
+                  <p className="text-xs text-zinc-400 mt-0.5">
                     ກຳນົດວັນທີເລີ່ມຕົ້ນ, ວັນທີສິ້ນສຸດ ແລະ ລາຍລະອຽດງານເພື່ອຕິດຕາມໄລຍະເວລາຈັດສະແດງ
                   </p>
                 </div>
@@ -774,7 +773,7 @@ export default function StockInView({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
               {/* Campaign Title */}
               <div className="sm:col-span-2">
-                <label className="block text-amber-200 mb-1.5 font-bold">
+                <label className="block text-zinc-300 mb-1.5 font-bold">
                   ຊື່ງານ Event / ຊື່ໂປຣໂມຊັນ (Campaign Title) *
                 </label>
                 <input
@@ -783,14 +782,14 @@ export default function StockInView({
                   value={eventCampaign}
                   onChange={(e) => setEventCampaign(e.target.value)}
                   placeholder={status === 'event' ? 'e.g. ງານ Vientiane Motor Expo 2026' : 'e.g. ໂປຣໂມຊັນເປີດຕົວລົດໄຟຟ້າ Flagship'}
-                  className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3.5 py-2.5 text-white font-semibold focus:outline-none focus:border-amber-400"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-white font-semibold focus:outline-none focus:border-white"
                 />
               </div>
 
               {/* Start Date */}
               <div>
-                <label className="block text-amber-200 mb-1.5 font-bold flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                <label className="block text-zinc-300 mb-1.5 font-bold flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-zinc-300" />
                   <span>ວັນທີເລີ່ມຕົ້ນ (Start Date) *</span>
                 </label>
                 <input
@@ -798,15 +797,15 @@ export default function StockInView({
                   required
                   value={eventStartDate}
                   onChange={(e) => setEventStartDate(e.target.value)}
-                  className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-white"
                 />
               </div>
 
               {/* End Date */}
               <div>
-                <label className="block text-amber-200 mb-1.5 font-bold flex items-center justify-between">
+                <label className="block text-zinc-300 mb-1.5 font-bold flex items-center justify-between">
                   <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <Clock className="w-3.5 h-3.5 text-zinc-300" />
                     <span>ວັນທີສິ້ນສຸດ (End Date) *</span>
                   </span>
                   <div className="flex items-center gap-1">
@@ -815,7 +814,7 @@ export default function StockInView({
                         key={days}
                         type="button"
                         onClick={() => handleSetQuickPresetDays(days)}
-                        className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-amber-400 hover:text-black text-zinc-300 transition-colors"
+                        className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-white hover:text-black text-zinc-300 transition-colors"
                       >
                         +{days}ວັນ
                       </button>
@@ -827,7 +826,7 @@ export default function StockInView({
                   required
                   value={eventEndDate}
                   onChange={(e) => setEventEndDate(e.target.value)}
-                  className="w-full bg-zinc-900 border border-amber-500/50 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-white"
                 />
               </div>
             </div>
@@ -885,7 +884,7 @@ export default function StockInView({
         {/* Step 3: Valuation, Quantity & PDI */}
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5">
           <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
-            <DollarSign className="w-4 h-4 text-emerald-400" />
+            <DollarSign className="w-4 h-4 text-white" />
             <span>3. {t.pdiSection}</span>
           </div>
 
@@ -901,7 +900,7 @@ export default function StockInView({
                       onClick={() => setPriceCurrency(curr.code)}
                       className={`px-2 py-0.5 rounded transition-colors ${
                         priceCurrency === curr.code
-                          ? 'bg-emerald-500 text-black font-black shadow-sm'
+                          ? 'bg-white text-black font-black shadow-sm'
                           : 'text-zinc-400 hover:text-white'
                       }`}
                     >
@@ -1008,15 +1007,15 @@ export default function StockInView({
           const totalInTHB = Math.round(totalInUSD * thbRate);
 
           return (
-            <div className="bg-zinc-950 border border-blue-900/60 rounded-3xl p-6 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
               <div>
                 <div className="text-sm font-bold text-white flex items-center gap-2">
                   <span>{lang === 'lo' ? 'ມູນຄ່ານຳເຂົ້າລວມ (Total Inbound Valuation):' : lang === 'th' ? 'มูลค่าการนำเข้ารวม (Total Inbound Valuation):' : 'Total Inbound Valuation:'}</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
                     {priceCurrency}
                   </span>
                 </div>
-                <div className="text-2xl font-black font-mono text-blue-400 mt-1">
+                <div className="text-2xl font-black font-mono text-white mt-1">
                   {selectedCurrObj.symbol} {totalInSelectedCurrency.toLocaleString()} {priceCurrency} <span className="text-xs text-zinc-400 font-sans">({qty} {t.unitCars})</span>
                 </div>
                 <div className="text-[11px] text-zinc-400 font-mono mt-0.5 flex flex-wrap items-center gap-2">
@@ -1028,7 +1027,7 @@ export default function StockInView({
 
               <button
                 type="submit"
-                className="px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm rounded-2xl transition-all shadow-xl flex items-center gap-2 hover:scale-[1.01]"
+                className="px-8 py-3.5 bg-white hover:bg-zinc-200 text-black font-extrabold text-sm rounded-2xl transition-all shadow-xl flex items-center gap-2 hover:scale-[1.01]"
               >
                 <PackagePlus className="w-5 h-5" />
                 <span>{t.saveStockInBtn}</span>
@@ -1043,8 +1042,8 @@ export default function StockInView({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
           <div className="relative w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 text-white space-y-4 max-h-[92vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <div className="flex items-center gap-2 text-blue-400">
-                <CheckCircle2 className="w-5 h-5" />
+              <div className="flex items-center gap-2 text-white">
+                <CheckCircle2 className="w-5 h-5 text-white" />
                 <h3 className="font-bold text-base text-white">
                   {lang === 'lo' ? 'ນຳເຂົ້າສຳເລັດ • ອອກໃບຮັບເຂົ້າສິນຄ້າແລ້ວ' : lang === 'th' ? 'นำเข้าสำเร็จ • ออกใบรับสินค้าเรียบร้อย' : 'Stock-In Success • Receipt Issued'}
                 </h3>
@@ -1064,7 +1063,7 @@ export default function StockInView({
                   <span className="text-[10px] text-zinc-400">{t.printStockInReceipt || 'GOODS RECEIPT NOTE'}</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-blue-400 font-bold block">{createdBill.billNumber}</span>
+                  <span className="text-white font-bold block">{createdBill.billNumber}</span>
                   <span className="text-zinc-500 text-[10px]">{createdBill.date}</span>
                 </div>
               </div>
@@ -1077,7 +1076,7 @@ export default function StockInView({
                 <div><span className="text-zinc-500 font-sans">{t.warehouseDest}:</span> {createdBill.destinationWarehouse}</div>
                 <div className="pt-2 flex justify-between text-sm font-bold text-white border-t border-zinc-900">
                   <span>{lang === 'lo' ? 'ມູນຄ່ານຳເຂົ້າ:' : lang === 'th' ? 'มูลค่านำเข้า:' : 'Valuation:'}</span>
-                  <span className="text-blue-400">${createdBill.netTotalUSD.toLocaleString()}</span>
+                  <span className="text-white font-bold">${createdBill.netTotalUSD.toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -1113,13 +1112,13 @@ export default function StockInView({
             {/* Header */}
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2.5">
-                <span className="p-2.5 rounded-2xl bg-amber-400 text-black shadow-lg shadow-amber-400/20">
-                  <Crown className="w-5 h-5" />
+                <span className="p-2.5 rounded-2xl bg-white text-black shadow-lg">
+                  <ShieldCheck className="w-5 h-5" />
                 </span>
                 <div>
                   <h3 className="font-extrabold text-base text-white flex items-center gap-2">
                     <span>ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໃໝ່</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 font-bold">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold">
                       Admin ໃຫຍ່ (Super Admin)
                     </span>
                   </h3>
@@ -1159,7 +1158,7 @@ export default function StockInView({
                       setNewModelBattery(preset.bat);
                       setNewModelPowertrain(preset.pwr);
                     }}
-                    className="text-[11px] px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-amber-400 hover:text-black text-zinc-300 border border-zinc-800 transition-all font-medium"
+                    className="text-[11px] px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-white hover:text-black text-zinc-300 border border-zinc-800 transition-all font-medium"
                   >
                     + {preset.name}
                   </button>
@@ -1181,7 +1180,7 @@ export default function StockInView({
                     value={newModelName}
                     onChange={(e) => setNewModelName(e.target.value)}
                     placeholder="e.g. AVATR 011 MMW Edition ຫຼື AVATR 06"
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-amber-400"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-white"
                   />
                 </div>
 
@@ -1281,7 +1280,7 @@ export default function StockInView({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold transition-all shadow-lg flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition-all shadow-lg flex items-center gap-2 border border-zinc-300"
                 >
                   <Plus className="w-4 h-4" />
                   <span>ບັນທຶກ ແລະ ເພີ່ມລຸ້ນເຂົ້າລະບົບຕົວເລືອກ</span>

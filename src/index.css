@@ -38,28 +38,30 @@
 }
 
 @theme {
-  --font-sans: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
+  --font-sans: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-body: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
-  --font-mono: 'Phetsarath OT', 'Phetsarath', ui-monospace, monospace;
+  --font-mono: 'Phetsarath OT', 'Phetsarath', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 @layer base {
   *, ::before, ::after {
     font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
+    box-sizing: border-box;
   }
 
   html {
     font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 
   body {
     font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
-    background-color: #050507;
-    color: #f4f4f5;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    background-color: #f8fafc;
+    color: #09090b;
+    transition: background-color 0.25s ease, color 0.25s ease;
+    min-height: 100vh;
   }
 
   input, button, select, textarea, optgroup, option {
@@ -67,7 +69,7 @@
   }
 }
 
-/* Custom minimal scrollbar */
+/* Custom Minimalist Monochrome Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -77,19 +79,33 @@
 }
 ::-webkit-scrollbar-thumb {
   background: #27272a;
-  border-radius: 3px;
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
 }
 
+/* Dark Mode Explicit Overrides */
+html.dark,
+html.dark body {
+  background-color: #09090b !important;
+  color: #f4f4f5 !important;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #09090b;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #27272a;
+}
+
 /* ========================================================
-   LUXURY LIGHT MODE STYLES & OVERRIDES (.light)
+   ULTRA-LUXURY MONOCHROME LIGHT MODE ENGINE (.light)
    ======================================================== */
 html.light, 
 html.light body {
   background-color: #f8fafc !important;
-  color: #0f172a !important;
+  color: #09090b !important;
 }
 
 html.light ::-webkit-scrollbar-track {
@@ -102,71 +118,101 @@ html.light ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
 
-/* Layout containers */
+/* Layout containers in Light Mode */
 html.light aside {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
-  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.03) !important;
+  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.04) !important;
 }
 
 html.light header {
-  background-color: rgba(255, 255, 255, 0.94) !important;
+  background-color: rgba(255, 255, 255, 0.95) !important;
   border-color: #e2e8f0 !important;
-  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.03) !important;
+  box-shadow: 0 1px 12px rgba(0, 0, 0, 0.03) !important;
 }
 
+/* Surface backgrounds in Light Mode */
 html.light .bg-black {
   background-color: #f8fafc !important;
-  color: #0f172a !important;
+  color: #09090b !important;
 }
 
 html.light .bg-zinc-950 {
   background-color: #ffffff !important;
-  color: #0f172a !important;
+  color: #09090b !important;
   border-color: #e2e8f0 !important;
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04) !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.03) !important;
 }
 
-html.light .bg-zinc-900 {
-  background-color: #f1f5f9 !important;
-  color: #0f172a !important;
-  border-color: #e2e8f0 !important;
-}
-
+html.light .bg-zinc-900,
 html.light .bg-zinc-900\/90,
 html.light .bg-zinc-900\/80,
 html.light .bg-zinc-900\/70,
 html.light .bg-zinc-900\/60,
+html.light .bg-zinc-900\/50,
 html.light .bg-zinc-900\/40,
-html.light .bg-zinc-900\/30 {
-  background-color: #f8fafc !important;
+html.light .bg-zinc-900\/30,
+html.light .bg-zinc-900\/20 {
+  background-color: #f1f5f9 !important;
+  color: #09090b !important;
   border-color: #e2e8f0 !important;
 }
 
-html.light .bg-zinc-800 {
+html.light .bg-zinc-800,
+html.light .bg-zinc-800\/80,
+html.light .bg-zinc-800\/60 {
   background-color: #e2e8f0 !important;
-  color: #0f172a !important;
+  color: #09090b !important;
+  border-color: #cbd5e1 !important;
 }
 
+html.light .bg-zinc-700 {
+  background-color: #cbd5e1 !important;
+  color: #09090b !important;
+}
+
+/* Hover background states in Light Mode */
 html.light .hover\:bg-zinc-900:hover,
-html.light .hover\:bg-zinc-900\/90:hover {
-  background-color: #f1f5f9 !important;
-}
-
-html.light .hover\:bg-zinc-800:hover {
+html.light .hover\:bg-zinc-900\/90:hover,
+html.light .hover\:bg-zinc-900\/80:hover {
   background-color: #e2e8f0 !important;
+  color: #09090b !important;
 }
 
+html.light .hover\:bg-zinc-800:hover,
+html.light .hover\:bg-zinc-750:hover {
+  background-color: #e2e8f0 !important;
+  color: #09090b !important;
+}
+
+html.light .hover\:bg-zinc-700:hover {
+  background-color: #cbd5e1 !important;
+  color: #09090b !important;
+}
+
+/* Border overrides in Light Mode */
+html.light .border-zinc-950,
+html.light .border-zinc-900,
+html.light .border-zinc-850,
 html.light .border-zinc-800,
 html.light .border-zinc-800\/80,
-html.light .border-zinc-900,
-html.light .border-zinc-700 {
+html.light .border-zinc-700,
+html.light .border-zinc-600 {
   border-color: #e2e8f0 !important;
 }
 
-/* Typography Overrides for Light Mode */
+/* Crisp Typography in Light Mode */
 html.light .text-white {
-  color: #0f172a !important;
+  color: #09090b !important;
+}
+
+html.light .text-zinc-100,
+html.light .text-zinc-200 {
+  color: #18181b !important;
+}
+
+html.light .text-zinc-300 {
+  color: #334155 !important;
 }
 
 html.light .text-zinc-400 {
@@ -177,31 +223,24 @@ html.light .text-zinc-500 {
   color: #94a3b8 !important;
 }
 
-html.light .text-zinc-300 {
-  color: #334155 !important;
+html.light .text-zinc-600 {
+  color: #64748b !important;
 }
 
-html.light .text-zinc-200 {
-  color: #1e293b !important;
-}
-
-html.light .text-zinc-100 {
-  color: #0f172a !important;
-}
-
-/* Form Inputs in Light Mode */
+/* Forms, Inputs, Dropdowns in Light Mode */
 html.light input,
 html.light select,
 html.light textarea {
   background-color: #ffffff !important;
-  color: #0f172a !important;
+  color: #09090b !important;
   border-color: #cbd5e1 !important;
 }
 
 html.light input:focus,
 html.light select:focus,
 html.light textarea:focus {
-  border-color: #0f172a !important;
+  border-color: #09090b !important;
+  box-shadow: 0 0 0 1px #09090b !important;
 }
 
 html.light input::placeholder,
@@ -209,81 +248,111 @@ html.light textarea::placeholder {
   color: #94a3b8 !important;
 }
 
-/* Active buttons & Pill badges */
-html.light .bg-white.text-black {
-  background-color: #0f172a !important;
+/* Solid Active Buttons & Tabs Inversion in Light Mode (Deep Obsidian in Light Mode) */
+html.light .bg-white.text-black,
+html.light .bg-white.text-zinc-950 {
+  background-color: #09090b !important;
   color: #ffffff !important;
 }
 
-html.light .bg-white.text-black svg {
+html.light .bg-white.text-black svg,
+html.light .bg-white.text-zinc-950 svg {
   color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 html.light .hover\:bg-zinc-200:hover {
-  background-color: #1e293b !important;
+  background-color: #18181b !important;
 }
 
-/* Modal Backdrops in Light Mode */
+/* Tables in Light Mode */
+html.light table thead {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+}
+
+html.light table tbody tr {
+  border-color: #e2e8f0 !important;
+}
+
+html.light table tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+
+/* Modal Backdrops & Dialogs in Light Mode */
 html.light .fixed.inset-0.bg-black\/85,
-html.light .fixed.inset-0.bg-black\/80 {
-  background-color: rgba(15, 23, 42, 0.65) !important;
+html.light .fixed.inset-0.bg-black\/80,
+html.light .fixed.inset-0.bg-black\/70 {
+  background-color: rgba(15, 23, 42, 0.55) !important;
 }
 
-/* Subtle highlights in light mode */
-html.light .ring-white\/30 {
-  --tw-ring-color: rgba(15, 23, 42, 0.2) !important;
+/* Monochrome Normalization for Rainbow Utilities */
+html.light .bg-emerald-950,
+html.light .bg-emerald-950\/80,
+html.light .bg-emerald-950\/70,
+html.light .bg-emerald-950\/40,
+html.light .bg-blue-950,
+html.light .bg-blue-950\/80,
+html.light .bg-blue-950\/40,
+html.light .bg-amber-950,
+html.light .bg-amber-950\/90,
+html.light .bg-amber-950\/80,
+html.light .bg-amber-950\/40,
+html.light .bg-amber-950\/30,
+html.light .bg-purple-950,
+html.light .bg-purple-950\/90,
+html.light .bg-purple-950\/80,
+html.light .bg-purple-950\/20,
+html.light .bg-rose-950,
+html.light .bg-rose-950\/90 {
+  background-color: #f1f5f9 !important;
+  color: #09090b !important;
+  border-color: #cbd5e1 !important;
 }
 
-/* Modern Keyframe Animations for Futuristic AVATR Cockpit */
+html.light .text-emerald-400,
+html.light .text-emerald-300,
+html.light .text-blue-400,
+html.light .text-blue-300,
+html.light .text-amber-400,
+html.light .text-amber-300,
+html.light .text-purple-400,
+html.light .text-purple-300,
+html.light .text-cyan-400,
+html.light .text-cyan-300,
+html.light .text-rose-400,
+html.light .text-rose-300 {
+  color: #09090b !important;
+}
+
+html.light .bg-emerald-500,
+html.light .bg-emerald-400,
+html.light .bg-blue-600,
+html.light .bg-blue-500,
+html.light .bg-amber-400,
+html.light .bg-amber-300 {
+  background-color: #09090b !important;
+  color: #ffffff !important;
+}
+
+/* Animations */
 @keyframes float-slow {
   0%, 100% {
     transform: translateY(0px) rotate(0deg);
   }
   50% {
-    transform: translateY(-8px) rotate(2deg);
-  }
-}
-
-@keyframes float-reverse {
-  0%, 100% {
-    transform: translateY(0px) rotate(0deg);
-  }
-  50% {
-    transform: translateY(8px) rotate(-2deg);
+    transform: translateY(-6px) rotate(1deg);
   }
 }
 
 @keyframes pulse-glow {
   0%, 100% {
-    opacity: 0.4;
+    opacity: 0.3;
     transform: scale(1);
   }
   50% {
-    opacity: 0.8;
-    transform: scale(1.05);
-  }
-}
-
-@keyframes laser-sweep {
-  0% {
-    top: 0%;
-    opacity: 0.2;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    top: 100%;
-    opacity: 0.2;
-  }
-}
-
-@keyframes spin-slow {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
+    opacity: 0.7;
+    transform: scale(1.03);
   }
 }
 
@@ -291,18 +360,24 @@ html.light .ring-white\/30 {
   animation: float-slow 6s ease-in-out infinite;
 }
 
-.animate-float-reverse {
-  animation: float-reverse 7s ease-in-out infinite;
-}
-
 .animate-pulse-glow {
   animation: pulse-glow 3s ease-in-out infinite;
 }
 
-.animate-laser-sweep {
-  animation: laser-sweep 2.2s ease-in-out infinite;
-}
-
-.animate-spin-slow {
-  animation: spin-slow 20s linear infinite;
+/* Print Optimization for Thermal & A4 Monochrome Receipts */
+@media print {
+  body, html {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+  aside, header, button, .no-print {
+    display: none !important;
+  }
+  .print-area {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
 }

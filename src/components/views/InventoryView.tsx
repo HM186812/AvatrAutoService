@@ -256,8 +256,8 @@ export default function InventoryView({
     <div className="space-y-6 pb-12">
       {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-emerald-950 border border-emerald-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+        <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-zinc-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0" />
           <span>{toastMsg}</span>
         </div>
       )}
@@ -315,7 +315,7 @@ export default function InventoryView({
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4 shadow-xl">
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
-                <Car className="w-4 h-4 text-emerald-400" />
+                <Car className="w-4 h-4 text-white" />
                 <span>{t.inventoryViewTitle}</span>
               </div>
               <p className="text-zinc-400 text-xs">
@@ -328,7 +328,7 @@ export default function InventoryView({
                 <button
                   type="button"
                   onClick={onNavigateToStockIn}
-                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                  className="px-4 py-2.5 bg-white hover:bg-zinc-200 text-black rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 border border-zinc-300"
                 >
                   <Plus className="w-4 h-4" />
                   <span>{t.quickStockInBtn}</span>
@@ -339,7 +339,7 @@ export default function InventoryView({
                 <button
                   type="button"
                   onClick={onNavigateToPOS}
-                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-extrabold transition-all shadow-md flex items-center gap-1.5"
+                  className="px-4 py-2.5 bg-white hover:bg-zinc-200 text-black rounded-xl text-xs font-extrabold transition-all shadow-md flex items-center gap-1.5 border border-zinc-300"
                 >
                   <ShoppingBag className="w-4 h-4 fill-black" />
                   <span>{t.quickPOSBtn}</span>
@@ -428,50 +428,50 @@ export default function InventoryView({
                     <img
                       src={item.image || vehicle.heroImage}
                       alt={item.model}
-                      className="w-full h-full object-cover filter grayscale contrast-125 group-hover:grayscale-0 transition-transform duration-500"
+                      className="w-full h-full object-cover filter contrast-125 transition-transform duration-500"
                     />
 
                     {/* Status Pill */}
                     <div className="absolute top-3 left-3">
                       {item.status === 'ready' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-700 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-100 border border-zinc-700 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
                           <span>ພ້ອມຂາຍ</span>
                         </span>
                       )}
                       {item.status === 'pdi' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-950/90 text-amber-300 border border-amber-700 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
                           <span>ກຳລັງ PDI</span>
                         </span>
                       )}
                       {item.status === 'imported' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-950/90 text-blue-300 border border-blue-700 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
                           <span>ນຳເຂົ້າ / ລໍຖ້າກຽມ</span>
                         </span>
                       )}
                       {item.status === 'reserved' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-950/90 text-purple-300 border border-purple-700 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
                           <span>ຈອງແລ້ວ</span>
                         </span>
                       )}
                       {item.status === 'event' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-950/90 text-amber-300 border border-amber-600 flex items-center gap-1.5 shadow-md">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-200 border border-zinc-600 flex items-center gap-1.5 shadow-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
                           <span>ລົດງານ Event</span>
                         </span>
                       )}
                       {item.status === 'promotion' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-950/90 text-rose-300 border border-rose-600 flex items-center gap-1.5 shadow-md">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse"></span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-200 border border-zinc-600 flex items-center gap-1.5 shadow-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
                           <span>ໂປຣໂມຊັນພິເສດ</span>
                         </span>
                       )}
                       {item.status === 'sold' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-900 text-zinc-400 border border-zinc-800 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
                           <span>ຂາຍແລ້ວ (0)</span>
                         </span>
                       )}
@@ -491,7 +491,7 @@ export default function InventoryView({
 
                     {/* Event & Promotion Badge */}
                     {item.eventCampaign && (
-                      <div className="absolute bottom-3 left-3 bg-amber-400 text-black px-2.5 py-1 rounded-xl text-[10px] font-bold shadow-lg flex items-center gap-1 backdrop-blur-md">
+                      <div className="absolute bottom-3 left-3 bg-white text-black px-2.5 py-1 rounded-xl text-[10px] font-bold shadow-lg flex items-center gap-1 backdrop-blur-md border border-zinc-300">
                         <Sparkles className="w-3 h-3 fill-black" />
                         <span className="truncate max-w-[150px]">{item.eventCampaign}</span>
                       </div>
@@ -517,7 +517,7 @@ export default function InventoryView({
                       </div>
                       <div className="flex justify-between text-zinc-400">
                         <span>PDI:</span>
-                        <span className="text-emerald-400 font-bold">
+                        <span className="text-zinc-200 font-bold">
                           {item.pdiStatus === 'passed' ? 'ຜ່ານ 100%' : 'ກຳລັງກວດ'}
                         </span>
                       </div>
@@ -529,20 +529,20 @@ export default function InventoryView({
                       {(item.eventStartDate || item.eventEndDate || item.eventCampaign) && (
                         <div className="pt-1.5 border-t border-zinc-800/80 space-y-1">
                           {item.eventCampaign && (
-                            <div className="flex items-center gap-1 text-[11px] font-sans font-bold text-amber-300">
-                              <Sparkles className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                            <div className="flex items-center gap-1 text-[11px] font-sans font-bold text-zinc-200">
+                              <Sparkles className="w-3.5 h-3.5 text-zinc-300 flex-shrink-0" />
                               <span className="truncate">{item.eventCampaign}</span>
                             </div>
                           )}
                           {(item.eventStartDate || item.eventEndDate) && (
                             <div className="flex items-center gap-1 text-[10px] text-zinc-300 font-mono">
-                              <Calendar className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                              <Calendar className="w-3.5 h-3.5 text-zinc-300 flex-shrink-0" />
                               <span>ກຳນົດເວລາ: {item.eventStartDate || 'ເລີ່ມຕົ້ນ'} ຫາ {item.eventEndDate || 'ສິ້ນສຸດ'}</span>
                             </div>
                           )}
                           {item.eventLocation && (
                             <div className="flex items-center gap-1 text-[10px] text-zinc-400 font-sans truncate">
-                              <MapPin className="w-3 h-3 text-zinc-500 flex-shrink-0" />
+                              <MapPin className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
                               <span className="truncate">{item.eventLocation}</span>
                             </div>
                           )}
@@ -563,7 +563,7 @@ export default function InventoryView({
                           className={`py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                             item.stockQuantity <= 0
                               ? 'bg-zinc-900 text-zinc-600 border border-zinc-800 cursor-not-allowed'
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md'
+                              : 'bg-white hover:bg-zinc-200 text-black shadow-md border border-zinc-300'
                           }`}
                         >
                           <ShoppingBag className="w-3.5 h-3.5" />
@@ -595,7 +595,7 @@ export default function InventoryView({
                         <button
                           type="button"
                           onClick={() => handleDeleteItem(item.vin, item.model)}
-                          className="p-1.5 text-zinc-500 hover:text-red-400 bg-zinc-900/60 hover:bg-red-950/40 rounded-xl border border-zinc-800 hover:border-red-800 transition-colors"
+                          className="p-1.5 text-zinc-500 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors"
                           title={t.btnDeleteCar}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -616,11 +616,11 @@ export default function InventoryView({
             {/* Stock In Summary */}
             <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-2xl">
               <div className="flex items-center justify-between text-zinc-400 mb-2">
-                <span className="font-semibold text-xs text-emerald-400 flex items-center gap-1.5">
+                <span className="font-semibold text-xs text-zinc-300 flex items-center gap-1.5">
                   <ArrowDownLeft className="w-3.5 h-3.5" />
                   <span>{t.historyStockIn}</span>
                 </span>
-                <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[10px] border border-emerald-800">
+                <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
                   INBOUND
                 </span>
               </div>
@@ -635,18 +635,18 @@ export default function InventoryView({
             {/* Stock Out Summary */}
             <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-2xl">
               <div className="flex items-center justify-between text-zinc-400 mb-2">
-                <span className="font-semibold text-xs text-amber-300 flex items-center gap-1.5">
-                  <ArrowUpRight className="w-4 h-4 text-amber-400" />
+                <span className="font-semibold text-xs text-zinc-300 flex items-center gap-1.5">
+                  <ArrowUpRight className="w-4 h-4 text-zinc-300" />
                   <span>{t.historyStockOut}</span>
                 </span>
-                <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 font-mono text-[10px] border border-amber-800">
+                <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
                   OUTBOUND
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
                 {stockLogs.filter(l => l.type === 'stock_out').length} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
-              <div className="text-[11px] text-emerald-400 font-mono font-bold mt-1">
+              <div className="text-[11px] text-white font-mono font-bold mt-1">
                 ${stockLogs.filter(l => l.type === 'stock_out').reduce((acc, curr) => acc + curr.priceUSD, 0).toLocaleString()}
               </div>
             </div>
@@ -654,11 +654,11 @@ export default function InventoryView({
             {/* In-Stock Balance Summary */}
             <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-2xl">
               <div className="flex items-center justify-between text-zinc-400 mb-2">
-                <span className="font-semibold text-xs text-blue-400 flex items-center gap-1.5">
-                  <Car className="w-4 h-4 text-blue-400" />
+                <span className="font-semibold text-xs text-zinc-300 flex items-center gap-1.5">
+                  <Car className="w-4 h-4 text-zinc-300" />
                   <span>{t.stockAvailable}</span>
                 </span>
-                <span className="px-2 py-0.5 rounded bg-blue-950 text-blue-300 font-mono text-[10px] border border-blue-800">
+                <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
                   BALANCE
                 </span>
               </div>
@@ -676,7 +676,7 @@ export default function InventoryView({
             <div className="p-5 sm:p-6 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 className="font-bold text-base text-white flex items-center gap-2">
-                  <History className="w-5 h-5 text-emerald-400" />
+                  <History className="w-5 h-5 text-white" />
                   <span>{t.tabStockHistory}</span>
                 </h2>
                 <p className="text-zinc-400 text-xs mt-0.5">
@@ -700,7 +700,7 @@ export default function InventoryView({
                   onClick={() => setHistoryFilter('stock_in')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     historyFilter === 'stock_in'
-                      ? 'bg-emerald-600 text-white font-bold shadow-sm'
+                      ? 'bg-white text-black font-bold shadow-sm'
                       : 'text-zinc-400 hover:text-white'
                   }`}
                 >
@@ -712,7 +712,7 @@ export default function InventoryView({
                   onClick={() => setHistoryFilter('stock_out')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     historyFilter === 'stock_out'
-                      ? 'bg-amber-600 text-black font-bold shadow-sm'
+                      ? 'bg-white text-black font-bold shadow-sm'
                       : 'text-zinc-400 hover:text-white'
                   }`}
                 >
@@ -747,13 +747,13 @@ export default function InventoryView({
                       <tr key={log.id} className="hover:bg-zinc-900/50 transition-colors">
                         <td className="py-3 px-4">
                           {log.type === 'stock_in' ? (
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1 w-max">
-                              <ArrowDownLeft className="w-3 h-3 text-emerald-400" />
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1 w-max">
+                              <ArrowDownLeft className="w-3 h-3 text-zinc-300" />
                               <span>{t.historyStockIn}</span>
                             </span>
                           ) : (
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-700 flex items-center gap-1 w-max">
-                              <ArrowUpRight className="w-3 h-3 text-amber-400" />
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1 w-max">
+                              <ArrowUpRight className="w-3 h-3 text-zinc-300" />
                               <span>{t.historyStockOut}</span>
                             </span>
                           )}
@@ -780,7 +780,7 @@ export default function InventoryView({
                                 </span>
                               )}
                               {log.paymentMethod && (
-                                <span className="text-[10px] text-amber-300 uppercase block font-mono">
+                                <span className="text-[10px] text-zinc-300 uppercase block font-mono">
                                   {log.paymentMethod}
                                 </span>
                               )}
@@ -788,12 +788,12 @@ export default function InventoryView({
                           ) : (
                             <div>
                               <span className="text-zinc-300 text-xs block">{log.notes || t.stockInSubtitle}</span>
-                              <span className="text-[10px] text-emerald-400 font-mono">OK</span>
+                              <span className="text-[10px] text-zinc-300 font-mono">OK</span>
                             </div>
                           )}
                         </td>
                         <td className="py-3 px-4">
-                          <span className={`font-bold ${log.type === 'stock_out' ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          <span className="font-bold text-white">
                             ${log.priceUSD.toLocaleString()}
                           </span>
                           <span className="text-[10px] text-zinc-500 block">
@@ -802,13 +802,13 @@ export default function InventoryView({
                         </td>
                         <td className="py-3 px-4">
                           {log.type === 'stock_in' ? (
-                            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[11px] font-bold border border-emerald-800">
+                            <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[11px] font-bold border border-zinc-700">
                               +{log.quantity} {t.unitCars}
                             </span>
                           ) : (
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                               log.remainingStock === 0
-                                ? 'bg-red-950 text-red-300 border border-red-800'
+                                ? 'bg-zinc-900 text-zinc-500 border border-zinc-800'
                                 : 'bg-zinc-900 text-zinc-300 border border-zinc-700'
                             }`}>
                               {log.remainingStock ?? 0} {t.unitCars}
@@ -832,7 +832,7 @@ export default function InventoryView({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <div className="flex items-center gap-2 text-emerald-400">
+              <div className="flex items-center gap-2 text-white">
                 <ShoppingBag className="w-5 h-5" />
                 <h3 className="font-bold text-base text-white">{t.sellModalTitle}</h3>
               </div>
@@ -849,7 +849,7 @@ export default function InventoryView({
               <div className="p-3.5 bg-zinc-900/90 rounded-2xl border border-zinc-800 space-y-1.5">
                 <div className="flex justify-between items-center">
                   <span className="font-extrabold text-white text-sm">{sellingItem.model}</span>
-                  <span className="font-mono text-emerald-400 font-bold">${sellingItem.priceUSD.toLocaleString()}</span>
+                  <span className="font-mono text-white font-bold">${sellingItem.priceUSD.toLocaleString()}</span>
                 </div>
                 <div className="text-[11px] text-zinc-400 font-mono">
                   <span>VIN: {sellingItem.vin} | {sellingItem.plateNumber} | {t.tableStock}: {sellingItem.stockQuantity} {t.unitCars}</span>
@@ -927,7 +927,7 @@ export default function InventoryView({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition-colors flex items-center gap-1.5"
+                  className="px-5 py-2 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl shadow-lg transition-colors flex items-center gap-1.5 border border-zinc-300"
                 >
                   <Check className="w-4 h-4" />
                   <span>{t.confirmSaleAndDeduct}</span>
@@ -944,7 +944,7 @@ export default function InventoryView({
           <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-amber-400" />
+                <Edit3 className="w-5 h-5 text-white" />
                 <span>{t.editModalTitle}: {editingItem.model}</span>
               </h3>
               <button
@@ -977,7 +977,7 @@ export default function InventoryView({
                           type="button"
                           onClick={() => handleEditCurrencyChange(c)}
                           className={`px-1.5 py-0.5 rounded transition-colors ${
-                            editPriceCurrency === c ? 'bg-emerald-500 text-black font-bold' : 'text-zinc-400 hover:text-white'
+                            editPriceCurrency === c ? 'bg-white text-black font-bold' : 'text-zinc-400 hover:text-white'
                           }`}
                         >
                           {c}
@@ -1034,29 +1034,29 @@ export default function InventoryView({
 
               {/* Event / Promotion Schedule Editing */}
               {(editingItem.status === 'event' || editingItem.status === 'promotion') && (
-                <div className="p-3.5 bg-amber-950/30 border border-amber-500/50 rounded-2xl space-y-3">
-                  <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
-                    <Calendar className="w-4 h-4 text-amber-400" />
+                <div className="p-3.5 bg-zinc-900/60 border border-zinc-700 rounded-2xl space-y-3">
+                  <div className="flex items-center gap-2 text-zinc-300 font-bold text-xs">
+                    <Calendar className="w-4 h-4 text-zinc-300" />
                     <span>{t.eventsAndPromotionsTitle}</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <label className="block text-amber-200 mb-1 font-medium">{t.eventStartDateLabel} *</label>
+                      <label className="block text-zinc-300 mb-1 font-medium">{t.eventStartDateLabel} *</label>
                       <input
                         type="date"
                         value={editingItem.eventStartDate || ''}
                         onChange={(e) => setEditingItem({ ...editingItem, eventStartDate: e.target.value })}
-                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
                       />
                     </div>
                     <div>
-                      <label className="block text-amber-200 mb-1 font-medium">{t.eventEndDateLabel} *</label>
+                      <label className="block text-zinc-300 mb-1 font-medium">{t.eventEndDateLabel} *</label>
                       <input
                         type="date"
                         value={editingItem.eventEndDate || ''}
                         onChange={(e) => setEditingItem({ ...editingItem, eventEndDate: e.target.value })}
-                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
                       />
                     </div>
                   </div>
@@ -1089,7 +1089,7 @@ export default function InventoryView({
               {/* Vehicle Image Upload from Device */}
               <div className="p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800 space-y-2.5">
                 <label className="block text-zinc-300 font-semibold text-xs flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-emerald-400" />
+                  <ImageIcon className="w-4 h-4 text-white" />
                   <span>{t.uploadCarImage}</span>
                 </label>
                 <div className="flex items-center gap-3">
@@ -1102,7 +1102,7 @@ export default function InventoryView({
                   </div>
                   <div className="space-y-1">
                     <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl border border-zinc-700 font-semibold text-xs transition-colors">
-                      <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                      <Upload className="w-3.5 h-3.5 text-white" />
                       <span>{t.uploadCarImage}</span>
                       <input
                         type="file"
@@ -1132,7 +1132,7 @@ export default function InventoryView({
                 <button
                   type="button"
                   onClick={() => handleDeleteItem(editingItem.vin, editingItem.model)}
-                  className="px-3.5 py-2 bg-red-950/60 hover:bg-red-900 text-red-300 rounded-xl border border-red-800 flex items-center gap-1.5 transition-colors font-medium text-xs"
+                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-xl border border-zinc-700 flex items-center gap-1.5 transition-colors font-medium text-xs"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>{t.btnDeleteCar}</span>
@@ -1148,7 +1148,7 @@ export default function InventoryView({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors"
+                    className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors border border-zinc-300"
                   >
                     {t.saveChanges}
                   </button>

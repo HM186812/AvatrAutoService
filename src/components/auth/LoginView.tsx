@@ -20,7 +20,6 @@ import {
   EyeOff,
   ArrowRight,
   ShieldCheck,
-  Crown,
   Sparkles,
   AlertCircle,
   Key,
@@ -81,8 +80,8 @@ const VEHICLES: VehicleShowcase[] = [
     accel: '3.9s (0-100)',
     power: '578 hp Dual-Motor',
     colorName: 'Liquid Titanium',
-    themeColor: '#10b981',
-    glowColor: 'rgba(16, 185, 129, 0.22)',
+    themeColor: '#ffffff',
+    glowColor: 'rgba(255, 255, 255, 0.15)',
   },
   {
     name: 'AVATR 11',
@@ -93,8 +92,8 @@ const VEHICLES: VehicleShowcase[] = [
     accel: '3.98s (0-100)',
     power: '578 ps AWD',
     colorName: 'Obsidian Black',
-    themeColor: '#f59e0b',
-    glowColor: 'rgba(245, 158, 11, 0.22)',
+    themeColor: '#ffffff',
+    glowColor: 'rgba(255, 255, 255, 0.15)',
   },
   {
     name: 'AVATR 07',
@@ -105,8 +104,8 @@ const VEHICLES: VehicleShowcase[] = [
     accel: '4.9s (0-100)',
     power: '492 hp Smart Hybrid',
     colorName: 'Nebula White',
-    themeColor: '#3b82f6',
-    glowColor: 'rgba(59, 130, 246, 0.22)',
+    themeColor: '#ffffff',
+    glowColor: 'rgba(255, 255, 255, 0.15)',
   },
 ];
 
@@ -521,13 +520,13 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
   return (
     <div className="min-h-screen bg-[#050507] text-white flex items-center justify-center p-3 sm:p-6 lg:p-10 relative overflow-hidden font-sans selection:bg-white selection:text-black">
 
-      {/* Dynamic Animated Ambient Background Aura synchronized with active vehicle color */}
+      {/* Dynamic Animated Ambient Background Aura */}
       <div
-        className="absolute top-1/4 left-1/6 w-[650px] h-[650px] rounded-full blur-[150px] pointer-events-none transition-all duration-700 opacity-25 animate-pulse-glow"
-        style={{ backgroundColor: activeCar.themeColor }}
+        className="absolute top-1/4 left-1/6 w-[650px] h-[650px] rounded-full blur-[150px] pointer-events-none transition-all duration-700 opacity-20 animate-pulse-glow"
+        style={{ backgroundColor: '#ffffff' }}
       />
-      <div className="absolute -bottom-24 -right-24 w-[550px] h-[550px] bg-blue-900/20 rounded-full blur-[140px] pointer-events-none animate-float-reverse" />
-      <div className="absolute top-10 right-1/4 w-[400px] h-[400px] bg-purple-900/15 rounded-full blur-[130px] pointer-events-none" />
+      <div className="absolute -bottom-24 -right-24 w-[550px] h-[550px] bg-zinc-800/20 rounded-full blur-[140px] pointer-events-none animate-float-reverse" />
+      <div className="absolute top-10 right-1/4 w-[400px] h-[400px] bg-zinc-700/15 rounded-full blur-[130px] pointer-events-none" />
 
       {/* LiDAR Laser Point Grid Overlay Simulation */}
       {isLidarActive && (
@@ -535,18 +534,18 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
       )}
 
       {/* Floating Cyber Particle Icons (Interactive Aesthetic Backdrop) */}
-      <div className="absolute top-12 left-12 p-2.5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-emerald-400/80 hidden xl:flex items-center gap-2 animate-float-slow backdrop-blur-md">
-        <Zap className="w-4 h-4 text-emerald-400 animate-pulse" />
+      <div className="absolute top-12 left-12 p-2.5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-zinc-300 hidden xl:flex items-center gap-2 animate-float-slow backdrop-blur-md">
+        <Zap className="w-4 h-4 text-white animate-pulse" />
         <span className="text-[11px] font-mono">800V SiC High-Voltage Ready</span>
       </div>
 
-      <div className="absolute bottom-12 left-20 p-2.5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-blue-400/80 hidden xl:flex items-center gap-2 animate-float-reverse backdrop-blur-md">
-        <Cpu className="w-4 h-4 text-blue-400 animate-spin-slow" />
+      <div className="absolute bottom-12 left-20 p-2.5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-zinc-300 hidden xl:flex items-center gap-2 animate-float-reverse backdrop-blur-md">
+        <Cpu className="w-4 h-4 text-white animate-spin-slow" />
         <span className="text-[11px] font-mono">HarmonyOS 4.0 Dual-Chip Cockpit</span>
       </div>
 
-      <div className="absolute top-16 right-16 p-2.5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-amber-400/80 hidden xl:flex items-center gap-2 animate-float-slow backdrop-blur-md">
-        <ShieldCheck className="w-4 h-4 text-amber-400" />
+      <div className="absolute top-16 right-16 p-2.5 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 text-zinc-300 hidden xl:flex items-center gap-2 animate-float-slow backdrop-blur-md">
+        <ShieldCheck className="w-4 h-4 text-white" />
         <span className="text-[11px] font-mono">CATL Shenxing Supercharge Battery</span>
       </div>
 
@@ -582,7 +581,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   setIsSoundEnabled(next);
                   if (next) playSound('ev_start');
                 }}
-                className={`p-1.5 rounded-lg transition-all ${isSoundEnabled ? 'bg-zinc-800 text-emerald-400 shadow' : 'text-zinc-500 hover:text-white'
+                className={`p-1.5 rounded-lg transition-all ${isSoundEnabled ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-white'
                   }`}
                 title={isSoundEnabled ? 'ສຽງ Cockpit: ເປີດ' : 'ສຽງ Cockpit: ປິດ'}
               >
@@ -596,7 +595,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   setIsLidarActive(!isLidarActive);
                   playSound('scan_beep');
                 }}
-                className={`p-1.5 rounded-lg transition-all ${isLidarActive ? 'bg-zinc-800 text-blue-400 shadow' : 'text-zinc-500 hover:text-white'
+                className={`p-1.5 rounded-lg transition-all ${isLidarActive ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-white'
                   }`}
                 title={isLidarActive ? 'LiDAR ADS 3.0: ເປີດ' : 'LiDAR ADS 3.0: ປິດ'}
               >
@@ -610,11 +609,11 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   setBoostModeActive(!boostModeActive);
                   playSound('boost');
                 }}
-                className={`p-1.5 rounded-lg transition-all ${boostModeActive ? 'bg-amber-950 text-amber-300 border border-amber-500 shadow' : 'text-zinc-500 hover:text-white'
+                className={`p-1.5 rounded-lg transition-all ${boostModeActive ? 'bg-zinc-800 text-white border border-zinc-600 shadow' : 'text-zinc-500 hover:text-white'
                   }`}
                 title="Turbo Boost Mode"
               >
-                <Flame className={`w-3.5 h-3.5 ${boostModeActive ? 'animate-bounce text-amber-400' : ''}`} />
+                <Flame className={`w-3.5 h-3.5 ${boostModeActive ? 'animate-bounce text-white' : ''}`} />
               </button>
             </div>
           </div>
@@ -658,7 +657,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                 {/* Laser scan line overlay when LiDAR is active */}
                 {isLidarActive && (
                   <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-blue-400/80 to-transparent animate-laser-sweep" />
+                    <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-white to-transparent animate-laser-sweep" />
                   </div>
                 )}
 
@@ -666,10 +665,9 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent p-3.5 flex flex-col justify-between">
                   <div className="flex justify-between items-start">
                     <span
-                      className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/85 border text-white backdrop-blur-md flex items-center gap-1.5"
-                      style={{ borderColor: activeCar.themeColor }}
+                      className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/85 border border-zinc-600 text-white backdrop-blur-md flex items-center gap-1.5"
                     >
-                      <Car className="w-3 h-3 text-emerald-400" />
+                      <Car className="w-3 h-3 text-zinc-300" />
                       <span>{activeCar.subTitle}</span>
                     </span>
 
@@ -681,11 +679,11 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                         playSound('tab_click');
                       }}
                       className={`px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold backdrop-blur-md border transition-all flex items-center gap-1.5 ${isHeadlightOn
-                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-md'
+                        ? 'bg-zinc-800 border-white text-white shadow-md'
                         : 'bg-black/80 border-zinc-700 text-zinc-400'
                         }`}
                     >
-                      <Lightbulb className={`w-3.5 h-3.5 ${isHeadlightOn ? 'text-amber-400' : 'text-zinc-500'}`} />
+                      <Lightbulb className={`w-3.5 h-3.5 ${isHeadlightOn ? 'text-white' : 'text-zinc-500'}`} />
                       <span>{isHeadlightOn ? t.authMatrixLightsOn : t.authMatrixLightsOff}</span>
                     </button>
                   </div>
@@ -712,11 +710,11 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   playSound('tab_click');
                 }}
                 className={`p-2 rounded-xl border text-center transition-all ${activeHudWidget === 'battery'
-                  ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow'
+                  ? 'bg-zinc-800 border-zinc-600 text-white shadow'
                   : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
               >
-                <BatteryCharging className="w-3.5 h-3.5 mx-auto mb-1 text-emerald-400" />
+                <BatteryCharging className="w-3.5 h-3.5 mx-auto mb-1 text-zinc-300" />
                 <span className="text-[9px] font-mono block uppercase">ແບັດເຕີຣີ</span>
                 <span className="text-[10px] font-bold text-white block">{activeCar.range.split(' ')[0]}</span>
               </button>
@@ -728,11 +726,11 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   playSound('tab_click');
                 }}
                 className={`p-2 rounded-xl border text-center transition-all ${activeHudWidget === 'motor'
-                  ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow'
+                  ? 'bg-zinc-800 border-zinc-600 text-white shadow'
                   : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
               >
-                <Gauge className="w-3.5 h-3.5 mx-auto mb-1 text-amber-400" />
+                <Gauge className="w-3.5 h-3.5 mx-auto mb-1 text-zinc-300" />
                 <span className="text-[9px] font-mono block uppercase">ອັດຕາເລັ່ງ</span>
                 <span className="text-[10px] font-bold text-white block">{activeCar.accel.split(' ')[0]}</span>
               </button>
@@ -744,11 +742,11 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   playSound('tab_click');
                 }}
                 className={`p-2 rounded-xl border text-center transition-all ${activeHudWidget === 'lidar'
-                  ? 'bg-blue-950/80 border-blue-500 text-blue-300 shadow'
+                  ? 'bg-zinc-800 border-zinc-600 text-white shadow'
                   : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
               >
-                <Activity className="w-3.5 h-3.5 mx-auto mb-1 text-blue-400" />
+                <Activity className="w-3.5 h-3.5 mx-auto mb-1 text-zinc-300" />
                 <span className="text-[9px] font-mono block uppercase">ພະລັງຂັບ</span>
                 <span className="text-[10px] font-bold text-white block">{activeCar.power.split(' ')[0]}</span>
               </button>
@@ -760,11 +758,11 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   playSound('tab_click');
                 }}
                 className={`p-2 rounded-xl border text-center transition-all ${activeHudWidget === 'security'
-                  ? 'bg-purple-950/80 border-purple-500 text-purple-300 shadow'
+                  ? 'bg-zinc-800 border-zinc-600 text-white shadow'
                   : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
               >
-                <Shield className="w-3.5 h-3.5 mx-auto mb-1 text-purple-400" />
+                <Shield className="w-3.5 h-3.5 mx-auto mb-1 text-zinc-300" />
                 <span className="text-[9px] font-mono block uppercase">ລະບົບຄວາມປອດໄພ</span>
                 <span className="text-[10px] font-bold text-white block">IP69K</span>
               </button>
@@ -774,7 +772,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
           {/* Bottom Factory Collaboration Note */}
           <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-[10px] font-mono text-zinc-500">
             <span className="flex items-center gap-1.5">
-              <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+              <Cpu className="w-3.5 h-3.5 text-zinc-300" />
               <span>HarmonyOS 4.0 Cockpit</span>
             </span>
             <span className="text-zinc-400">CATL 800V Supercharge</span>
@@ -790,8 +788,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
               <div>
                 <h1 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
                   <span>{t.authSystemTitle}</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-300 border border-zinc-700 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
                     {t.authOnline}
                   </span>
                 </h1>
@@ -849,7 +847,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   : 'text-zinc-400 hover:text-white'
                   }`}
               >
-                <LogIn className="w-4 h-4 text-emerald-500" />
+                <LogIn className="w-4 h-4 text-zinc-300" />
                 <span>{t.authSignInTitle}</span>
               </button>
 
@@ -864,7 +862,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   : 'text-zinc-400 hover:text-white'
                   }`}
               >
-                <UserPlus className="w-4 h-4 text-amber-500" />
+                <UserPlus className="w-4 h-4 text-zinc-300" />
                 <span>{t.authSignUpTitle}</span>
               </button>
             </div>
@@ -872,15 +870,15 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
 
           {/* Feedback Alerts */}
           {errorMessage && (
-            <div className="p-3 bg-red-950/70 border border-red-800 rounded-xl text-xs text-red-200 flex items-center gap-2 animate-fadeIn">
-              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-zinc-200 flex items-center gap-2 animate-fadeIn">
+              <AlertCircle className="w-4 h-4 text-zinc-300 flex-shrink-0" />
               <span>{errorMessage}</span>
             </div>
           )}
 
           {successMessage && (
-            <div className="p-3 bg-emerald-950/70 border border-emerald-800 rounded-xl text-xs text-emerald-200 flex items-center gap-2 animate-fadeIn">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-white flex items-center gap-2 animate-fadeIn">
+              <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0" />
               <span>{successMessage}</span>
             </div>
           )}
@@ -892,7 +890,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                 <label className="block text-zinc-300 font-semibold mb-1.5 flex items-center justify-between">
                   <span>{t.authEmailOrPhone}</span>
                   {identifier.includes('@') && (
-                    <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
+                    <span className="text-[10px] font-mono text-zinc-300 flex items-center gap-1">
                       <Check className="w-3 h-3" /> {t.authValidEmail}
                     </span>
                   )}
@@ -918,8 +916,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   {password && (
                     <div className="flex items-center gap-1.5 font-mono text-[10px]">
                       <span className="text-zinc-500">{t.authSecurityStrength}</span>
-                      <span className={`font-bold ${currentStrength >= 80 ? 'text-emerald-400' : currentStrength >= 50 ? 'text-amber-400' : 'text-red-400'
-                        }`}>
+                      <span className="font-bold text-white">
                         {currentStrength}%
                       </span>
                     </div>
@@ -948,8 +945,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                 {password && (
                   <div className="mt-1.5 w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden border border-zinc-800/80">
                     <div
-                      className={`h-full transition-all duration-300 ${currentStrength >= 80 ? 'bg-emerald-400' : currentStrength >= 50 ? 'bg-amber-400' : 'bg-red-400'
-                        }`}
+                      className="h-full transition-all duration-300 bg-white"
                       style={{ width: `${currentStrength}%` }}
                     />
                   </div>
@@ -973,7 +969,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                     setMainTab('signup');
                     playSound('tab_click');
                   }}
-                  className="text-emerald-400 hover:text-emerald-300 font-medium"
+                  className="text-zinc-300 hover:text-white font-medium underline"
                 >
                   {t.authNoAccount}
                 </button>
@@ -1018,8 +1014,8 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                     <span>{t.authEmailOrPhone}</span>
                   </span>
                   {(regPhone.trim() || regEmail.trim()) ? (
-                    <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
-                      <Check className="w-3 h-3" /> Ready
+                    <span className="text-[10px] text-zinc-300 flex items-center gap-1 font-mono">
+                      <Check className="w-3 h-3 text-white" /> Ready
                     </span>
                   ) : (
                     <span className="text-[10px] text-zinc-500 font-mono">1 required</span>
@@ -1031,7 +1027,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   <div>
                     <label className="block text-zinc-400 font-medium mb-1 flex items-center justify-between">
                       <span>Phone</span>
-                      {regPhone.trim() && <Check className="w-3 h-3 text-emerald-400" />}
+                      {regPhone.trim() && <Check className="w-3 h-3 text-white" />}
                     </label>
                     <div className="relative group">
                       <Phone className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1049,7 +1045,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   <div>
                     <label className="block text-zinc-400 font-medium mb-1 flex items-center justify-between">
                       <span>Email</span>
-                      {regEmail.trim() && <Check className="w-3 h-3 text-emerald-400" />}
+                      {regEmail.trim() && <Check className="w-3 h-3 text-white" />}
                     </label>
                     <div className="relative group">
                       <Mail className="w-4 h-4 text-zinc-500 group-focus-within:text-white absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1096,11 +1092,11 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                     <span>{t.authConfirmPassword} *</span>
                     {regConfirmPassword && (
                       regPassword === regConfirmPassword ? (
-                        <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
+                        <span className="text-[10px] text-white flex items-center gap-0.5">
                           <Check className="w-3 h-3" /> {t.authPasswordMatch}
                         </span>
                       ) : (
-                        <span className="text-[10px] text-red-400 flex items-center gap-0.5">
+                        <span className="text-[10px] text-zinc-400 flex items-center gap-0.5">
                           <X className="w-3 h-3" /> {t.authPasswordMismatch}
                         </span>
                       )
@@ -1135,7 +1131,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-black font-extrabold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-sm mt-1 cursor-pointer group"
+                className="w-full py-2.5 bg-white hover:bg-zinc-200 text-black font-extrabold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-sm mt-1 cursor-pointer group"
               >
                 <UserPlus className="w-4 h-4" />
                 <span>{t.authSignUpBtn}</span>
@@ -1149,7 +1145,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
           {/* Footer note with ecosystem branding */}
           <div className="pt-2 border-t border-zinc-900 flex items-center justify-between text-[10px] text-zinc-500 font-mono">
             <span className="flex items-center gap-1">
-              <Zap className="w-3 h-3 text-emerald-400" />
+              <Zap className="w-3 h-3 text-zinc-400" />
               <span>AVATR Intelligent EV Ecosystem</span>
             </span>
             <span>Vientiane, Lao PDR</span>

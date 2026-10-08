@@ -47,10 +47,10 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-6 text-white max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl p-6 text-white max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-zinc-900 border border-zinc-700 rounded-lg">
+            <div className="p-2 bg-zinc-900 border border-zinc-700 rounded-xl">
               <Wrench className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -64,7 +64,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 transition-colors"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -81,7 +81,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: ທ່ານ ບຸນມີ' : lang === 'th' ? 'ตัวอย่าง: คุณ สมชาย' : 'e.g. John Doe'}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
             />
           </div>
 
@@ -96,7 +96,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="020 5xxxxxxx"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-mono"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-mono"
               />
             </div>
 
@@ -109,7 +109,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
                 value={plateNumber}
                 onChange={(e) => setPlateNumber(e.target.value)}
                 placeholder={lang === 'lo' ? 'ກພ 8888 ກຳແພງນະຄອນ' : lang === 'th' ? 'กก 8888 กำแพงนคร / กรุงเทพฯ' : 'Plate No.'}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-mono"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-mono"
               />
             </div>
           </div>
@@ -122,7 +122,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-white"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white"
               >
                 <option value="AVATR 12">AVATR 12</option>
                 <option value="AVATR 11">AVATR 11</option>
@@ -137,7 +137,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
               <select
                 value={serviceType}
                 onChange={(e) => setServiceType(e.target.value as any)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-white"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white"
               >
                 <option value="battery_check">{lang === 'lo' ? 'ກວດວັດສຸຂະພາບແບັດເຕີຣີ CATL (SOH Diagnostic)' : lang === 'th' ? 'ตรวจสุขภาพแบตเตอรี่ CATL (SOH Diagnostic)' : 'CATL Battery Health Diagnostic'}</option>
                 <option value="software_ota">{lang === 'lo' ? 'ອັບເກຣດຊອບແວ HarmonyOS & Huawei ADS' : lang === 'th' ? 'อัปเกรดซอฟต์แวร์ HarmonyOS & Huawei ADS' : 'HarmonyOS & Huawei ADS OTA Update'}</option>
@@ -157,7 +157,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
                 type="date"
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-white"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
               />
             </div>
 
@@ -169,7 +169,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
                 type="time"
                 value={scheduledTime}
                 onChange={(e) => setScheduledTime(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-white"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
               />
             </div>
           </div>
@@ -183,7 +183,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={lang === 'lo' ? 'ອາການ ຫຼື ຄວາມຕ້ອງການ...' : lang === 'th' ? 'อาการ หรือความต้องการ...' : 'Notes / Symptoms...'}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white resize-none"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white resize-none"
             />
           </div>
 
@@ -191,13 +191,13 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-zinc-800 hover:bg-zinc-900 text-zinc-300 rounded-lg"
+              className="px-4 py-2 border border-zinc-800 hover:bg-zinc-900 text-zinc-300 rounded-xl"
             >
               {lang === 'lo' ? 'ຍົກເລີກ' : lang === 'th' ? 'ยกเลิก' : 'Cancel'}
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-colors"
+              className="px-5 py-2 bg-white text-black font-semibold rounded-xl hover:bg-zinc-200 transition-colors shadow-md"
             >
               {lang === 'lo' ? 'ຢືນຢັນການນັດໝາຍ' : lang === 'th' ? 'ยืนยันการนัดหมาย' : 'Confirm Service'}
             </button>

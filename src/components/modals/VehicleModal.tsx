@@ -25,7 +25,7 @@ export default function VehicleModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl text-white max-h-[92vh] overflow-y-auto">
+      <div className="relative w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl text-white max-h-[92vh] overflow-y-auto">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -35,7 +35,7 @@ export default function VehicleModal({
         </button>
 
         {/* Hero Visual */}
-        <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-t-2xl bg-zinc-900">
+        <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-t-3xl bg-zinc-900">
           <img
             src={vehicle.heroImage}
             alt={vehicle.name}
@@ -45,7 +45,7 @@ export default function VehicleModal({
           
           <div className="absolute bottom-4 left-6 right-6 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <span className="text-xs font-mono uppercase tracking-widest px-2.5 py-1 bg-black/70 border border-zinc-700 rounded text-zinc-300">
+              <span className="text-xs font-mono uppercase tracking-widest px-2.5 py-1 bg-black/70 border border-zinc-700 rounded-lg text-zinc-300">
                 {vehicle.category}
               </span>
               <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1">
@@ -74,28 +74,28 @@ export default function VehicleModal({
         <div className="p-6 sm:p-8 space-y-6">
           {/* Key Metric Highlights */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-3.5 text-center">
               <Zap className="w-4 h-4 mx-auto text-zinc-400 mb-1" />
               <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
                 {lang === 'lo' ? 'ອັດຕາເລັ່ງ 0-100' : lang === 'th' ? 'อัตราเร่ง 0-100' : '0-100 km/h'}
               </span>
               <span className="text-sm sm:text-base font-bold text-white font-mono">{vehicle.acceleration}</span>
             </div>
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-3.5 text-center">
               <BatteryCharging className="w-4 h-4 mx-auto text-zinc-400 mb-1" />
               <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
                 {lang === 'lo' ? 'ໄລຍະທາງ (CLTC)' : lang === 'th' ? 'ระยะทาง (CLTC)' : 'Range (CLTC)'}
               </span>
               <span className="text-sm sm:text-base font-bold text-white font-mono">{vehicle.rangeCLTC}</span>
             </div>
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-3.5 text-center">
               <Cpu className="w-4 h-4 mx-auto text-zinc-400 mb-1" />
               <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
                 {lang === 'lo' ? 'ລະບົບຂັບຂີ່ອັດສະລິຍະ' : lang === 'th' ? 'ระบบขับขี่อัจฉริยะ' : 'Smart Driving'}
               </span>
               <span className="text-xs sm:text-sm font-semibold text-white">Huawei ADS 3.0</span>
             </div>
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-3.5 text-center">
               <ShieldCheck className="w-4 h-4 mx-auto text-zinc-400 mb-1" />
               <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
                 {lang === 'lo' ? 'ແບັດເຕີຣີ' : lang === 'th' ? 'แบตเตอรี่' : 'Battery'}
@@ -105,7 +105,7 @@ export default function VehicleModal({
           </div>
 
           {/* Colorway Selection */}
-          <div className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
             <div>
               <span className="text-xs text-zinc-400 font-medium block">
                 {lang === 'lo' ? 'ເລືອກສີພາຍນອກ (Exterior Colorways):' : lang === 'th' ? 'เลือกสีภายนอก (Exterior Colors):' : 'Exterior Colors:'}
@@ -143,7 +143,7 @@ export default function VehicleModal({
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {vehicle.features.map((feat, idx) => (
-                <div key={idx} className="flex items-start gap-2 bg-zinc-900/60 border border-zinc-800/80 rounded-lg p-3 text-xs text-zinc-300">
+                <div key={idx} className="flex items-start gap-2 bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-300">
                   <Check className="w-4 h-4 text-white flex-shrink-0 mt-0.5" />
                   <span>{feat}</span>
                 </div>
@@ -152,7 +152,7 @@ export default function VehicleModal({
           </div>
 
           {/* Detailed Battery & Powertrain Specs */}
-          <div className="bg-black/60 border border-zinc-800 rounded-xl p-4 text-xs font-mono">
+          <div className="bg-black/60 border border-zinc-800 rounded-2xl p-4 text-xs font-mono">
             <h4 className="font-sans text-xs uppercase tracking-wider text-zinc-400 font-semibold mb-3">
               {lang === 'lo' ? 'ຂໍ້ມູນຈຳເພາະລະບົບໄຟຟ້າ & ການສາກ (Charging & Technical)' : lang === 'th' ? 'ข้อมูลสเปกระบบไฟฟ้า & การชาร์จ (Charging & Technical)' : 'Charging & Technical'}
             </h4>
@@ -171,7 +171,7 @@ export default function VehicleModal({
               </div>
               <div className="flex justify-between border-b border-zinc-900 pb-1">
                 <span className="text-zinc-500">{lang === 'lo' ? 'ຈຳນວນລົດພ້ອມສົ່ງ:' : lang === 'th' ? 'จำนวนรถพร้อมส่งมอบ:' : 'In Stock:'}</span>
-                <span className="text-emerald-400 font-medium">
+                <span className="text-white font-mono font-bold">
                   {vehicle.stockCount} {lang === 'lo' ? 'ຄັນ (In Stock Vientiane)' : lang === 'th' ? 'คัน (พร้อมส่งมอบ)' : 'Units'}
                 </span>
               </div>
@@ -183,7 +183,7 @@ export default function VehicleModal({
             <div className="flex items-center gap-2">
               <a
                 href="tel:021213555"
-                className="flex items-center gap-1.5 px-3 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-lg text-xs text-zinc-300 hover:text-white transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl text-xs text-zinc-300 hover:text-white transition-colors"
               >
                 <Phone className="w-3.5 h-3.5" />
                 <span>{lang === 'lo' ? 'ໂທສູນບໍລິການ: +856 21 213555' : lang === 'th' ? 'โทรศูนย์บริการ: +856 21 213555' : 'Hotline: +856 21 213555'}</span>
@@ -196,7 +196,7 @@ export default function VehicleModal({
                   onClose();
                   onOpenQuote(vehicle);
                 }}
-                className="px-4 py-2 border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg text-xs font-medium transition-colors"
+                className="px-4 py-2 border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-medium transition-colors"
               >
                 {lang === 'lo' ? 'ອອກໃບສະເໜີລາຄາ / ຕາຕະລາງຜ່ອນ' : lang === 'th' ? 'ออกใบเสนอราคา / ตารางผ่อน' : 'Quotation & Finance'}
               </button>
@@ -205,7 +205,7 @@ export default function VehicleModal({
                   onClose();
                   onOpenTestDrive(vehicle.name);
                 }}
-                className="px-5 py-2 bg-white text-black hover:bg-zinc-200 rounded-lg text-xs font-semibold transition-colors"
+                className="px-5 py-2 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-semibold transition-colors shadow-md"
               >
                 {lang === 'lo' ? 'ນັດໝາຍທົດລອງຂັບ' : lang === 'th' ? 'นัดหมายทดลองขับ' : 'Book Test Drive'}
               </button>

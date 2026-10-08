@@ -3,7 +3,7 @@ import { CustomCurrencyConfig, Language } from '../../types';
 import { translations } from '../../data/translations';
 import { saveStoredCurrencies } from '../../data/currencies';
 import { saveDealershipConfigToFirestore } from '../../firebase';
-import { DollarSign, Plus, Trash2, Check, X, RefreshCw, Crown, Lock } from 'lucide-react';
+import { DollarSign, Plus, Trash2, Check, X, RefreshCw, ShieldCheck, Lock } from 'lucide-react';
 
 interface CurrencyModalProps {
   isOpen: boolean;
@@ -128,7 +128,7 @@ export default function CurrencyModal({
       <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white space-y-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+            <div className="p-2 bg-zinc-900 text-white rounded-xl border border-zinc-700">
               <DollarSign className="w-5 h-5" />
             </div>
             <div>
@@ -156,7 +156,7 @@ export default function CurrencyModal({
                 key={c.code}
                 className={`p-3.5 rounded-2xl border transition-all flex flex-wrap items-center justify-between gap-3 ${
                   isSelected
-                    ? 'bg-zinc-900/90 border-emerald-500'
+                    ? 'bg-zinc-900/90 border-white shadow-md'
                     : 'bg-zinc-900/40 border-zinc-800/80 hover:border-zinc-700'
                 }`}
               >
@@ -166,7 +166,7 @@ export default function CurrencyModal({
                     onClick={() => onSelectActiveCurrency(c.code)}
                     className={`w-9 h-9 rounded-xl font-bold font-mono text-sm flex items-center justify-center transition-all ${
                       isSelected
-                        ? 'bg-emerald-400 text-black shadow-md'
+                        ? 'bg-white text-black font-bold shadow-md'
                         : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                     }`}
                     title="ເລືອກເປັນສະກຸນເງິນສະແດງຫຼັກ"
@@ -179,7 +179,7 @@ export default function CurrencyModal({
                       <span className="font-bold text-white text-sm">{c.code}</span>
                       <span className="text-zinc-400 text-[11px]">({c.nameLo})</span>
                       {isSelected && (
-                        <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                        <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700">
                           Active
                         </span>
                       )}
@@ -214,7 +214,7 @@ export default function CurrencyModal({
                         <button
                           type="button"
                           onClick={() => handleSaveEdit(c.code)}
-                          className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-lg text-xs flex items-center gap-1"
+                          className="px-2.5 py-1 bg-white hover:bg-zinc-200 text-black font-bold rounded-lg text-xs flex items-center gap-1 shadow-sm"
                         >
                           <Check className="w-3.5 h-3.5" /> ບັນທຶກ
                         </button>
@@ -222,7 +222,7 @@ export default function CurrencyModal({
                         <button
                           type="button"
                           onClick={() => handleStartEdit(c)}
-                          className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-lg text-xs"
+                          className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-lg text-xs border border-zinc-700"
                         >
                           ປັບອັດຕາ
                         </button>
@@ -231,7 +231,7 @@ export default function CurrencyModal({
                       <button
                         type="button"
                         onClick={() => handleDelete(c.code)}
-                        className="p-1.5 text-zinc-500 hover:text-red-400 rounded-lg hover:bg-zinc-800"
+                        className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800"
                         title="ລົບສະກຸນເງິນ (Admin ໃຫຍ່)"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -247,9 +247,9 @@ export default function CurrencyModal({
         {/* Super Admin Currency Creation Form */}
         {isSuperAdmin ? (
           isAddingNew ? (
-            <form onSubmit={handleAddNew} className="p-4 bg-zinc-900 border border-amber-500/30 rounded-2xl space-y-3 text-xs">
-              <div className="font-bold text-white text-xs flex items-center gap-1.5 text-amber-300">
-                <Crown className="w-4 h-4" />
+            <form onSubmit={handleAddNew} className="p-4 bg-zinc-900 border border-zinc-700 rounded-2xl space-y-3 text-xs">
+              <div className="font-bold text-white text-xs flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4" />
                 <span>ເພີ່ມສະກຸນເງິນແບບ Custom ໃໝ່ (Admin ໃຫຍ່)</span>
               </div>
 
@@ -262,7 +262,7 @@ export default function CurrencyModal({
                     placeholder="e.g. JPY, GBP, KRW"
                     value={newCode}
                     onChange={(e) => setNewCode(e.target.value)}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white uppercase font-mono focus:outline-none focus:border-amber-400"
+                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white uppercase font-mono focus:outline-none focus:border-white"
                   />
                 </div>
 
@@ -274,7 +274,7 @@ export default function CurrencyModal({
                     placeholder="e.g. ¥, £, ₩"
                     value={newSymbol}
                     onChange={(e) => setNewSymbol(e.target.value)}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
                   />
                 </div>
               </div>
@@ -287,7 +287,7 @@ export default function CurrencyModal({
                     placeholder="e.g. ເຢນຍີ່ປຸ່ນ"
                     value={newNameLo}
                     onChange={(e) => setNewNameLo(e.target.value)}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none"
+                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-white"
                   />
                 </div>
 
@@ -300,7 +300,7 @@ export default function CurrencyModal({
                     min="0.000001"
                     value={newRate}
                     onChange={(e) => setNewRate(Number(e.target.value))}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-amber-400"
+                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
                   />
                 </div>
               </div>
@@ -315,7 +315,7 @@ export default function CurrencyModal({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-bold rounded-xl"
+                  className="px-4 py-1.5 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl shadow-md"
                 >
                   ບັນທຶກສະກຸນເງິນ
                 </button>
@@ -326,9 +326,9 @@ export default function CurrencyModal({
               <button
                 type="button"
                 onClick={() => setIsAddingNew(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black rounded-xl text-xs font-bold shadow-md"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-zinc-200 text-black rounded-xl text-xs font-bold shadow-md"
               >
-                <Crown className="w-3.5 h-3.5" />
+                <ShieldCheck className="w-3.5 h-3.5" />
                 <span>+ ເພີ່ມສະກຸນເງິນໃໝ່ (Admin ໃຫຍ່)</span>
               </button>
 
@@ -356,7 +356,7 @@ export default function CurrencyModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors text-xs"
+            className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors text-xs shadow-md"
           >
             ສຳເລັດ
           </button>

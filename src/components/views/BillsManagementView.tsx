@@ -124,11 +124,11 @@ export default function BillsManagementView({
         {/* Sales Invoices Metric */}
         <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-2xl">
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-              <Receipt className="w-4 h-4" />
+            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
+              <Receipt className="w-4 h-4 text-zinc-400" />
               <span>{t.billTotalSalesRevenue}</span>
             </span>
-            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono text-[10px] border border-emerald-800">
+            <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
               REVENUE
             </span>
           </div>
@@ -144,11 +144,11 @@ export default function BillsManagementView({
         {/* Import Bills Metric */}
         <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-2xl">
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-blue-400 flex items-center gap-1.5">
-              <PackagePlus className="w-4 h-4" />
+            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
+              <PackagePlus className="w-4 h-4 text-zinc-400" />
               <span>{t.billTotalImportValuation}</span>
             </span>
-            <span className="px-2 py-0.5 rounded bg-blue-950 text-blue-300 font-mono text-[10px] border border-blue-800">
+            <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
               VALUATION
             </span>
           </div>
@@ -164,11 +164,11 @@ export default function BillsManagementView({
         {/* Total Documents Metric */}
         <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-2xl">
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-amber-300 flex items-center gap-1.5">
-              <FileText className="w-4 h-4" />
+            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
+              <FileText className="w-4 h-4 text-zinc-400" />
               <span>{lang === 'lo' ? 'ເອກະສານບິນທັງໝົດ' : lang === 'th' ? 'เอกสารบิลทั้งหมด' : 'Total Documents'}</span>
             </span>
-            <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300 font-mono text-[10px] border border-amber-800">
+            <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
               TOTAL
             </span>
           </div>
@@ -177,7 +177,7 @@ export default function BillsManagementView({
           </div>
           <div className="mt-2 pt-2 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400 font-mono">
             <span>{t.tableStatus}:</span>
-            <span className="text-emerald-400 font-bold">{t.firestoreLiveSync}</span>
+            <span className="text-zinc-200 font-bold">{t.firestoreLiveSync}</span>
           </div>
         </div>
       </div>
@@ -212,7 +212,7 @@ export default function BillsManagementView({
               onClick={() => setFilterType('sale')}
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                 filterType === 'sale'
-                  ? 'bg-emerald-600 text-white font-bold shadow-sm'
+                  ? 'bg-white text-black font-bold shadow-sm'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -225,7 +225,7 @@ export default function BillsManagementView({
               onClick={() => setFilterType('import')}
               className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                 filterType === 'import'
-                  ? 'bg-blue-600 text-white font-bold shadow-sm'
+                  ? 'bg-white text-black font-bold shadow-sm'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -263,13 +263,13 @@ export default function BillsManagementView({
                   {/* Bill Type Badge */}
                   <td className="py-3.5 px-4">
                     {bill.billType === 'sale' ? (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700 flex items-center gap-1.5 w-max">
-                        <Receipt className="w-3 h-3 text-emerald-400" />
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5 w-max">
+                        <Receipt className="w-3 h-3 text-zinc-300" />
                         <span>{t.filterSaleBills}</span>
                       </span>
                     ) : (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-700 flex items-center gap-1.5 w-max">
-                        <PackagePlus className="w-3 h-3 text-blue-400" />
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5 w-max">
+                        <PackagePlus className="w-3 h-3 text-zinc-300" />
                         <span>{t.filterImportBills}</span>
                       </span>
                     )}
@@ -315,7 +315,7 @@ export default function BillsManagementView({
                           <span className="text-zinc-400 text-[10px] block">{bill.importEntryPort}</span>
                         )}
                         {bill.customsDocNumber && (
-                          <span className="text-[10px] text-blue-400 font-mono block">B01: {bill.customsDocNumber}</span>
+                          <span className="text-[10px] text-zinc-300 font-mono block">B01: {bill.customsDocNumber}</span>
                         )}
                       </div>
                     )}
@@ -323,9 +323,7 @@ export default function BillsManagementView({
 
                   {/* Net Amount */}
                   <td className="py-3.5 px-4">
-                    <span className={`text-sm font-bold block ${
-                      bill.billType === 'sale' ? 'text-emerald-400' : 'text-blue-300'
-                    }`}>
+                    <span className="text-sm font-bold block text-white">
                       ${bill.netTotalUSD.toLocaleString()}
                     </span>
                     <span className="text-[10px] text-zinc-500 block">
@@ -337,13 +335,7 @@ export default function BillsManagementView({
                   <td className="py-3.5 px-4 uppercase text-zinc-300 text-[11px]">
                     {bill.billType === 'sale' ? (
                       <div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          bill.paymentMethod === 'finance'
-                            ? 'bg-purple-950 text-purple-300 border border-purple-800'
-                            : bill.paymentMethod === 'transfer'
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                            : 'bg-zinc-900 text-zinc-300 border border-zinc-700'
-                        }`}>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700">
                           {bill.paymentMethod === 'finance' ? t.paymentInstallments : bill.paymentMethod === 'transfer' ? t.paymentTransfer : t.paymentCash}
                         </span>
                       </div>
@@ -377,7 +369,7 @@ export default function BillsManagementView({
                               onDeleteBill(bill.id);
                             }
                           }}
-                          className="p-1.5 bg-red-950/40 hover:bg-red-900 text-red-400 hover:text-white border border-red-800 rounded-xl transition-colors"
+                          className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 rounded-xl transition-colors"
                           title="Delete Bill"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -444,11 +436,7 @@ export default function BillsManagementView({
                 </div>
 
                 <div className="text-right space-y-1">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold border inline-block ${
-                    selectedBillForPrint.billType === 'sale'
-                      ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
-                      : 'bg-blue-950 text-blue-300 border-blue-700'
-                  }`}>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold border inline-block bg-zinc-800 text-zinc-200 border-zinc-700">
                     {selectedBillForPrint.billType === 'sale' ? 'ໃບບິນຂາຍລົດ (SALES INVOICE)' : 'ໃບຮັບເຂົ້າສິນຄ້າ (GOODS RECEIPT)'}
                   </span>
                   <div className="font-mono text-sm font-black text-white pt-1">
@@ -488,10 +476,10 @@ export default function BillsManagementView({
                         <div className="text-zinc-400">{selectedBillForPrint.bankName}</div>
                       )}
                       {selectedBillForPrint.transferRef && (
-                        <div className="text-emerald-400 font-mono text-[11px]">Ref: {selectedBillForPrint.transferRef}</div>
+                        <div className="text-zinc-300 font-mono text-[11px]">Ref: {selectedBillForPrint.transferRef}</div>
                       )}
                       {selectedBillForPrint.financeCompany && (
-                        <div className="text-purple-300 font-mono">
+                        <div className="text-zinc-300 font-mono">
                           {selectedBillForPrint.financeCompany} (ດາວ {selectedBillForPrint.downPaymentPercent}%, ຜ່ອນ {selectedBillForPrint.tenureMonths} ເດືອນ)
                         </div>
                       )}
@@ -504,7 +492,7 @@ export default function BillsManagementView({
                       <strong className="text-white text-sm block">{selectedBillForPrint.supplierName}</strong>
                       <div className="text-zinc-400">ດ່ານນຳເຂົ້າ: {selectedBillForPrint.importEntryPort}</div>
                       {selectedBillForPrint.customsDocNumber && (
-                        <div className="text-blue-400 font-mono">ໃບແຈ້ງພາສີ B01: {selectedBillForPrint.customsDocNumber}</div>
+                        <div className="text-zinc-300 font-mono">ໃບແຈ້ງພາສີ B01: {selectedBillForPrint.customsDocNumber}</div>
                       )}
                     </div>
 
@@ -512,7 +500,7 @@ export default function BillsManagementView({
                       <span className="text-[10px] font-mono text-zinc-500 uppercase block">ສາງເກັບຮັກສາ (Destination Warehouse):</span>
                       <div className="font-bold text-white text-xs">{selectedBillForPrint.destinationWarehouse}</div>
                       <div className="text-zinc-400">ຜູ້ກວດຮັບ PDI: {selectedBillForPrint.inspectorName || 'ຊ່າງເຕັກນິກ CATL Master'}</div>
-                      <div className="text-emerald-400 font-mono">ມາດຕະຖານ: ຜ່ານການກວດເຊັກ 100%</div>
+                      <div className="text-zinc-300 font-mono">ມາດຕະຖານ: ຜ່ານການກວດເຊັກ 100%</div>
                     </div>
                   </>
                 )}
@@ -560,8 +548,8 @@ export default function BillsManagementView({
               {/* Free Gifts & Warranty Terms for Sales */}
               {selectedBillForPrint.billType === 'sale' && selectedBillForPrint.freeGifts && selectedBillForPrint.freeGifts.length > 0 && (
                 <div className="p-3.5 bg-zinc-950 rounded-xl border border-zinc-900 space-y-1.5 text-[11px]">
-                  <span className="font-bold text-amber-300 font-mono uppercase block flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
+                  <span className="font-bold text-zinc-200 font-mono uppercase block flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-zinc-300" />
                     <span>ຊຸດຂອງແຖມ & ສິດທິພິເສດ (Dealership Privileges):</span>
                   </span>
                   <ul className="list-disc list-inside space-y-0.5 text-zinc-300">
@@ -570,8 +558,8 @@ export default function BillsManagementView({
                     ))}
                   </ul>
                   {selectedBillForPrint.warrantyTerms && (
-                    <div className="pt-1.5 border-t border-zinc-900 text-emerald-400 font-mono text-[10px] flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <div className="pt-1.5 border-t border-zinc-900 text-zinc-300 font-mono text-[10px] flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-white" />
                       <span>{selectedBillForPrint.warrantyTerms}</span>
                     </div>
                   )}
@@ -590,14 +578,14 @@ export default function BillsManagementView({
                       <p className="text-[10px] text-zinc-400">{selectedBillForPrint.bankName}</p>
                     )}
                     {selectedBillForPrint.transferRef && (
-                      <p className="text-[10px] text-emerald-400 font-mono">Ref: {selectedBillForPrint.transferRef}</p>
+                      <p className="text-[10px] text-zinc-300 font-mono">Ref: {selectedBillForPrint.transferRef}</p>
                     )}
                   </div>
 
                   <div className="flex items-center gap-3">
                     <div className="text-right text-[10px] font-mono">
                       <span className="text-zinc-400 block">ບັນຊີທາງການບໍລິສັດ</span>
-                      <strong className="text-emerald-400 block">{getStoredCompanyBankInfo().usdAccount} (USD)</strong>
+                      <strong className="text-white block">{getStoredCompanyBankInfo().usdAccount} (USD)</strong>
                       <span className="text-zinc-300 block">{getStoredCompanyBankInfo().lakAccount} (LAK)</span>
                     </div>
                     <div className="w-14 h-14 bg-white p-1 rounded-lg border border-black flex items-center justify-center">
@@ -618,14 +606,14 @@ export default function BillsManagementView({
                   <span>${(selectedBillForPrint.unitPriceUSD * selectedBillForPrint.quantity).toLocaleString()}</span>
                 </div>
                 {selectedBillForPrint.discountUSD > 0 && (
-                  <div className="flex justify-between w-64 text-red-400">
+                  <div className="flex justify-between w-64 text-zinc-400">
                     <span>ສ່ວນຫຼຸດພິເສດ:</span>
                     <span>-${selectedBillForPrint.discountUSD.toLocaleString()}</span>
                   </div>
                 )}
                 <div className="flex justify-between w-64 pt-2 border-t border-zinc-800 text-white font-bold text-sm">
                   <span>ຍອດສຸທິ (Net Total):</span>
-                  <span className="text-emerald-400">${selectedBillForPrint.netTotalUSD.toLocaleString()}</span>
+                  <span className="text-white font-black">${selectedBillForPrint.netTotalUSD.toLocaleString()}</span>
                 </div>
                 <div className="text-[11px] text-zinc-400">
                   ≈ ₭ {(selectedBillForPrint.netTotalUSD * 22000).toLocaleString()} LAK

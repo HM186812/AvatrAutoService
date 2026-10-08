@@ -17,7 +17,6 @@ import {
   Mail, 
   Building2, 
   X,
-  Crown,
   ShieldAlert,
   UserX,
   Check,
@@ -176,34 +175,34 @@ export default function UserManagementView({
     switch (role) {
       case 'super_admin':
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1.5 w-fit">
-            <Crown className="w-3.5 h-3.5 fill-amber-400" />
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-white text-black border border-zinc-300 flex items-center gap-1.5 w-fit shadow-sm">
+            <ShieldCheck className="w-3.5 h-3.5 text-black" />
             {t.roleSuperAdmin}
           </span>
         );
       case 'admin':
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-950 text-purple-300 border border-purple-800 flex items-center gap-1.5 w-fit">
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5 w-fit">
             <ShieldCheck className="w-3.5 h-3.5" />
             {t.roleBranchAdmin}
           </span>
         );
       case 'sales':
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-800 flex items-center gap-1.5 w-fit">
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-900 text-zinc-300 border border-zinc-700 flex items-center gap-1.5 w-fit">
             {t.roleSales}
           </span>
         );
       case 'technician':
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1.5 w-fit">
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-900 text-zinc-300 border border-zinc-700 flex items-center gap-1.5 w-fit">
             {t.roleTechnician}
           </span>
         );
       case 'general_user':
       default:
         return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-900 text-zinc-300 border border-zinc-700 flex items-center gap-1.5 w-fit">
+          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-900 text-zinc-400 border border-zinc-800 flex items-center gap-1.5 w-fit">
             {t.roleGeneralUser}
           </span>
         );
@@ -225,13 +224,13 @@ export default function UserManagementView({
     return true;
   });
 
-  // RESTRICTED VIEW: If current logged in user is a General User (ຜູ້ໃຊ້ທົ່ວໄປ)
+  // RESTRICTED VIEW: If current logged in user is a General User
   if (!isSuperAdmin) {
     const activeAdmin = users.find(u => u.role === 'super_admin');
     return (
       <div className="space-y-6 pb-12">
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8 text-center max-w-2xl mx-auto space-y-4 my-8">
-          <div className="p-4 bg-red-950/40 border border-red-800 rounded-full w-fit mx-auto text-red-400">
+          <div className="p-4 bg-zinc-900 border border-zinc-700 rounded-full w-fit mx-auto text-zinc-300">
             <Lock className="w-10 h-10" />
           </div>
           <h2 className="text-2xl font-bold text-white">
@@ -245,9 +244,9 @@ export default function UserManagementView({
             <div className="pt-4 border-t border-zinc-900 flex justify-center gap-3">
               <button
                 onClick={() => onSwitchUser(activeAdmin)}
-                className="px-5 py-2.5 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2"
+                className="px-5 py-2.5 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2 shadow-md"
               >
-                <Crown className="w-4 h-4 fill-amber-500" />
+                <ShieldCheck className="w-4 h-4 text-black" />
                 <span>ສະຫຼັບເປັນ Admin ໃຫຍ່ ({activeAdmin.name})</span>
               </button>
             </div>
@@ -262,8 +261,8 @@ export default function UserManagementView({
     <div className="space-y-6 pb-12">
       {/* Toast Alert */}
       {actionSuccessMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-emerald-950 border border-emerald-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+        <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-zinc-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0" />
           <span>{actionSuccessMsg}</span>
         </div>
       )}
@@ -272,10 +271,10 @@ export default function UserManagementView({
       <div className="bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 bg-amber-400 text-black rounded-lg">
-              <Crown className="w-5 h-5 fill-black" />
+            <span className="p-1.5 bg-white text-black rounded-lg font-bold">
+              <ShieldCheck className="w-5 h-5 text-black" />
             </span>
-            <span className="text-xs font-mono uppercase tracking-widest text-amber-400 font-bold">
+            <span className="text-xs font-mono uppercase tracking-widest text-zinc-400 font-bold">
               SUPER ADMIN CONSOLE • ລະບົບຄວບຄຸມສິດຜູ້ໃຊ້
             </span>
           </div>
@@ -315,7 +314,7 @@ export default function UserManagementView({
               }`}
             >
               {u.role === 'super_admin' ? (
-                <Crown className="w-3 h-3 fill-amber-400 text-amber-500" />
+                <ShieldCheck className="w-3 h-3 text-black" />
               ) : (
                 <span className="w-2 h-2 rounded-full bg-zinc-500"></span>
               )}
@@ -344,7 +343,7 @@ export default function UserManagementView({
             <select
               value={selectedRoleFilter}
               onChange={(e) => setSelectedRoleFilter(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
             >
               <option value="all">{t.filterAll} ({users.length})</option>
               <option value="super_admin">{t.roleSuperAdmin}</option>
@@ -383,7 +382,7 @@ export default function UserManagementView({
                 <div className="flex items-center gap-3.5 min-w-[260px]">
                   <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-sm ${
                     user.role === 'super_admin'
-                      ? 'bg-amber-400 text-black shadow-md'
+                      ? 'bg-white text-black font-bold shadow-md'
                       : 'bg-zinc-800 text-white border border-zinc-700'
                   }`}>
                     {user.avatarInitials}
@@ -392,7 +391,7 @@ export default function UserManagementView({
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-sm text-white">{user.name}</h3>
                       {isCurrentUser && (
-                        <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-zinc-800 text-emerald-400 border border-zinc-700">
+                        <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
                           (ທ່ານເອງ)
                         </span>
                       )}
@@ -424,19 +423,19 @@ export default function UserManagementView({
                   <span className="text-zinc-500 uppercase font-mono text-[10px] block">ສິດການໃຊ້ງານ:</span>
                   <div className="flex flex-wrap gap-1 max-w-xs">
                     {user.permissions.canManageUsers && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-amber-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ຈັດການຜູ້ໃຊ້</span>
                       </span>
                     )}
                     {user.permissions.canDeleteUsers && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-red-400 border border-zinc-800 flex items-center gap-1">
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ລົບຜູ້ໃຊ້ໄດ້</span>
                       </span>
                     )}
                     {user.permissions.canGrantRoles && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-purple-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ມອບສິດໄດ້</span>
                       </span>
@@ -448,19 +447,19 @@ export default function UserManagementView({
                       </span>
                     )}
                     {user.permissions.canUploadQR && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-cyan-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ອັບໂຫລດ QR</span>
                       </span>
                     )}
                     {user.permissions.canAddModels && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-pink-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ເພີ່ມລຸ້ນລົດ</span>
                       </span>
                     )}
                     {user.permissions.canDeductPOS && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-emerald-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ຕັດສະຕ໋ອກ POS</span>
                       </span>
@@ -476,7 +475,7 @@ export default function UserManagementView({
                     className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl border border-zinc-700 font-semibold flex items-center gap-1.5 transition-colors"
                     title="ມອບສິດ ແລະ ປ່ຽນບົດບາດ"
                   >
-                    <Key className="w-3.5 h-3.5 text-amber-400" />
+                    <Key className="w-3.5 h-3.5 text-zinc-300" />
                     <span>ມອບສິດ (Grant)</span>
                   </button>
 
@@ -487,7 +486,7 @@ export default function UserManagementView({
                     className={`px-3 py-2 rounded-xl border font-semibold flex items-center gap-1.5 transition-colors ${
                       isCurrentUser
                         ? 'bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed'
-                        : 'bg-red-950/60 hover:bg-red-900 text-red-300 border-red-800 hover:border-red-600'
+                        : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700'
                     }`}
                     title={isCurrentUser ? 'ບໍ່ສາມາດລົບຕົນເອງໄດ້' : 'ລົບຜູ້ໃຊ້ນີ້ອອກຈາກລະບົບ'}
                   >
@@ -501,13 +500,13 @@ export default function UserManagementView({
         </div>
       </div>
 
-      {/* MODAL 1: GRANT ROLE & PERMISSIONS (ມອບສິດໃຫ້ແກ່ຜູ້ອື່ນ) */}
+      {/* MODAL 1: GRANT ROLE & PERMISSIONS */}
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white max-h-[92vh] overflow-y-auto space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-amber-950 border border-amber-800 rounded-xl text-amber-400">
+                <div className="p-2 bg-zinc-900 border border-zinc-700 rounded-xl text-white">
                   <Key className="w-5 h-5" />
                 </div>
                 <div>
@@ -592,7 +591,7 @@ export default function UserManagementView({
                     className="accent-white w-4 h-4 rounded"
                   />
                   <div>
-                    <span className="text-red-400 font-medium block">ລົບຜູ້ໃຊ້ອື່ນອອກຈາກລະບົບ (Delete Users)</span>
+                    <span className="text-white font-medium block">ລົບຜູ້ໃຊ້ອື່ນອອກຈາກລະບົບ (Delete Users)</span>
                     <span className="text-zinc-500 text-[11px]">ອະນຸຍາດໃຫ້ລົບ ແລະ ຍົກເລີກສິດຜູ້ໃຊ້ອື່ນ</span>
                   </div>
                 </label>
@@ -608,7 +607,7 @@ export default function UserManagementView({
                     className="accent-white w-4 h-4 rounded"
                   />
                   <div>
-                    <span className="text-purple-300 font-medium block">ມອບສິດ & ປ່ຽນບົດບາດ (Grant Roles)</span>
+                    <span className="text-white font-medium block">ມອບສິດ & ປ່ຽນບົດບາດ (Grant Roles)</span>
                     <span className="text-zinc-500 text-[11px]">ສາມາດແຕ່ງຕັ້ງ ຫຼື ປ່ຽນ Role ໃຫ້ພະນັກງານຄົນອື່ນ</span>
                   </div>
                 </label>
@@ -640,7 +639,7 @@ export default function UserManagementView({
                     className="accent-white w-4 h-4 rounded"
                   />
                   <div>
-                    <span className="text-cyan-300 font-medium block">ອັບໂຫລດ QR ບໍລິສັດ (Upload Company QR)</span>
+                    <span className="text-white font-medium block">ອັບໂຫລດ QR ບໍລິສັດ (Upload Company QR)</span>
                     <span className="text-zinc-500 text-[11px]">ສິດອັບໂຫລດ ແລະ ປ່ຽນຮູບ QR ບໍລິສັດທາງການ</span>
                   </div>
                 </label>
@@ -656,7 +655,7 @@ export default function UserManagementView({
                     className="accent-white w-4 h-4 rounded"
                   />
                   <div>
-                    <span className="text-pink-300 font-medium block">ເພີ່ມລຸ້ນຍານຍົນ (Add Vehicle Models)</span>
+                    <span className="text-white font-medium block">ເພີ່ມລຸ້ນຍານຍົນ (Add Vehicle Models)</span>
                     <span className="text-zinc-500 text-[11px]">ສິດເພີ່ມຕົວເລືອກລຸ້ນລົດ AVATR ໃໝ່ເຂົ້າລະບົບ</span>
                   </div>
                 </label>
@@ -672,7 +671,7 @@ export default function UserManagementView({
                     className="accent-white w-4 h-4 rounded"
                   />
                   <div>
-                    <span className="text-emerald-400 font-medium block">ຕັດສະຕ໋ອກ & ອອກໃບຮັບເງິນ POS (POS Deduction)</span>
+                    <span className="text-white font-medium block">ຕັດສະຕ໋ອກ & ອອກໃບຮັບເງິນ POS (POS Deduction)</span>
                     <span className="text-zinc-500 text-[11px]">ສາມາດຕັດຍອດລົດອອກຈາກສາງເມື່ອມີການຂາຍ</span>
                   </div>
                 </label>
@@ -688,7 +687,7 @@ export default function UserManagementView({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors"
+                  className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors shadow-md"
                 >
                   ຢືນຢັນການມອບສິດ
                 </button>
@@ -698,11 +697,11 @@ export default function UserManagementView({
         </div>
       )}
 
-      {/* MODAL 2: CONFIRM DELETE USER (Admin ໃຫຍ່ ລົບຜູ້ໃຊ້ອື່ນອອກຈາກລະບົບ) */}
+      {/* MODAL 2: CONFIRM DELETE USER */}
       {deletingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-md bg-zinc-950 border border-red-900/80 rounded-3xl p-6 text-white space-y-4 shadow-2xl">
-            <div className="p-3 bg-red-950/60 border border-red-800 rounded-2xl w-fit text-red-400 mx-auto">
+          <div className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white space-y-4 shadow-2xl">
+            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-2xl w-fit text-zinc-300 mx-auto">
               <UserX className="w-8 h-8" />
             </div>
 
@@ -727,7 +726,7 @@ export default function UserManagementView({
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold shadow-lg transition-colors flex items-center gap-1.5"
+                className="px-5 py-2.5 bg-zinc-900 hover:bg-black text-white rounded-xl text-xs font-bold shadow-lg border border-zinc-700 transition-colors flex items-center gap-1.5"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>ຢືນຢັນການລົບຜູ້ໃຊ້</span>
@@ -737,7 +736,7 @@ export default function UserManagementView({
         </div>
       )}
 
-      {/* MODAL 3: ADD NEW USER (ເພີ່ມຜູ້ໃຊ້ໃໝ່) */}
+      {/* MODAL 3: ADD NEW USER */}
       {isAddUserOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white max-h-[90vh] overflow-y-auto space-y-4">
@@ -776,7 +775,7 @@ export default function UserManagementView({
                     value={newPhone}
                     onChange={(e) => setNewPhone(e.target.value)}
                     placeholder="020 5xxxxxxx"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
                   />
                 </div>
 
@@ -787,7 +786,7 @@ export default function UserManagementView({
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     placeholder="name@laos-ev.la"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   />
                 </div>
               </div>
@@ -798,7 +797,7 @@ export default function UserManagementView({
                   <select
                     value={newRole}
                     onChange={(e) => setNewRole(e.target.value as UserRole)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   >
                     <option value="general_user">ຜູ້ໃຊ້ທົ່ວໄປ (General User)</option>
                     <option value="sales">ທີ່ປຶກສາການຂາຍ (Sales Staff)</option>
@@ -814,7 +813,7 @@ export default function UserManagementView({
                     type="text"
                     value={newDepartment}
                     onChange={(e) => setNewDepartment(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   />
                 </div>
               </div>
@@ -829,7 +828,7 @@ export default function UserManagementView({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors"
+                  className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors shadow-md"
                 >
                   ສ້າງຜູ້ໃຊ້ໃໝ່
                 </button>

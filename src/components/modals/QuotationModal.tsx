@@ -46,11 +46,11 @@ export default function QuotationModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-6 sm:p-8 text-white max-h-[92vh] overflow-y-auto">
+      <div className="relative w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl p-6 sm:p-8 text-white max-h-[92vh] overflow-y-auto">
         {/* Modal Controls */}
         <div className="flex items-center justify-between pb-4 border-b border-zinc-800 print:hidden">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono px-2 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-300 rounded">
+            <span className="text-xs font-mono px-2.5 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-lg">
               OFFICIAL LUXURY QUOTATION
             </span>
             <span className="text-xs text-zinc-400 font-mono">#{quotationNumber}</span>
@@ -58,14 +58,14 @@ export default function QuotationModal({
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded text-xs transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl border border-zinc-700 text-xs transition-colors"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>{lang === 'lo' ? 'ສັ່ງພິມ' : lang === 'th' ? 'พิมพ์ใบเสนอราคา' : 'Print Quote'}</span>
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 transition-colors"
+              className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -73,7 +73,7 @@ export default function QuotationModal({
         </div>
 
         {/* Printable Quotation Content */}
-        <div className="mt-4 p-4 sm:p-6 bg-zinc-900/60 rounded-xl border border-zinc-800/80">
+        <div className="mt-4 p-4 sm:p-6 bg-zinc-900/60 rounded-2xl border border-zinc-800">
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800 pb-5">
             <div className="flex items-center gap-3">
@@ -92,12 +92,12 @@ export default function QuotationModal({
               <p className="text-zinc-400">ເລກທີ: <span className="font-mono text-white">{quotationNumber}</span></p>
               <p className="text-zinc-400">ວັນທີ: <span className="text-white">{dateStr}</span></p>
               <p className="text-zinc-400">ທີ່ປຶກສາການຂາຍ: <strong className="text-white">ທີ່ປຶກສາການຂາຍ AVATR</strong></p>
-              <p className="text-emerald-400 font-mono font-medium">Hotline: +856 21 213555</p>
+              <p className="text-white font-mono font-bold mt-0.5">Hotline: +856 21 213555</p>
             </div>
           </div>
 
           {/* Client & Car Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4 p-3 bg-zinc-950/80 border border-zinc-800 rounded-lg text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4 p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs">
             <div>
               <span className="text-zinc-500 uppercase tracking-wider block text-[10px]">ຂໍ້ມູນລູກຄ້າ / Customer</span>
               <p className="text-sm font-semibold text-white mt-0.5">{customerName}</p>
@@ -111,10 +111,10 @@ export default function QuotationModal({
           </div>
 
           {/* Interactive Calculator Adjusters (Hidden in Print) */}
-          <div className="print:hidden my-4 p-4 bg-black/60 border border-zinc-800 rounded-lg space-y-4 text-xs">
+          <div className="print:hidden my-4 p-4 bg-black/60 border border-zinc-800 rounded-xl space-y-4 text-xs">
             <h4 className="font-semibold text-zinc-300 text-xs flex items-center justify-between">
               <span>ປັບແຕ່ງແຜນການເງິນ (Loan & Down Payment Settings)</span>
-              <span className="text-[11px] text-zinc-500">ອັດຕາແລກປ່ຽນ: 1 USD = {exchangeRate.toLocaleString()} LAK</span>
+              <span className="text-[11px] text-zinc-400 font-mono">1 USD = {exchangeRate.toLocaleString()} LAK</span>
             </h4>
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -142,8 +142,8 @@ export default function QuotationModal({
                     <button
                       key={m}
                       onClick={() => setLoanMonths(m)}
-                      className={`flex-1 py-1 text-center rounded border transition-colors ${
-                        loanMonths === m ? 'bg-white text-black font-semibold border-white' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                      className={`flex-1 py-1 text-center rounded-lg border transition-colors ${
+                        loanMonths === m ? 'bg-white text-black font-semibold border-white shadow-sm' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                       }`}
                     >
                       {m}
@@ -163,14 +163,14 @@ export default function QuotationModal({
                   max="12"
                   value={interestRateYearly}
                   onChange={(e) => setInterestRateYearly(Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-white font-mono"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-white font-mono focus:outline-none focus:border-white"
                 />
               </div>
             </div>
           </div>
 
           {/* Pricing Breakdown Table */}
-          <div className="border border-zinc-800 rounded-lg overflow-hidden my-4 text-xs">
+          <div className="border border-zinc-800 rounded-xl overflow-hidden my-4 text-xs">
             <table className="w-full text-left">
               <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800 font-medium">
                 <tr>
@@ -184,7 +184,7 @@ export default function QuotationModal({
                   <td className="py-2.5 px-4 font-sans text-zinc-200">
                     ລາຄາລົດ AVATR (Standard Luxury Trim)
                   </td>
-                  <td className="py-2.5 px-4 text-right text-white">
+                  <td className="py-2.5 px-4 text-right text-white font-bold">
                     ${totalPriceUSD.toLocaleString()}
                   </td>
                   <td className="py-2.5 px-4 text-right text-zinc-300">
@@ -217,10 +217,10 @@ export default function QuotationModal({
                   <td className="py-3 px-4 font-sans text-white">
                     ຄ່າງວດລາຍເດືອນ ({loanMonths} ເດືອນ / ດອກເບ້ຍ {interestRateYearly}%)
                   </td>
-                  <td className="py-3 px-4 text-right text-emerald-400 text-sm">
+                  <td className="py-3 px-4 text-right text-white text-sm font-mono font-black">
                     ${monthlyPaymentUSD.toLocaleString()} / ເດືອນ
                   </td>
-                  <td className="py-3 px-4 text-right text-emerald-400 text-sm">
+                  <td className="py-3 px-4 text-right text-white text-sm font-mono font-black">
                     ₭ {monthlyPaymentLAK.toLocaleString()} / ເດືອນ
                   </td>
                 </tr>
@@ -229,7 +229,7 @@ export default function QuotationModal({
           </div>
 
           {/* Complimentary Perks & Inclusions */}
-          <div className="bg-zinc-950/60 border border-zinc-800 rounded-lg p-3 my-3 text-[11px] text-zinc-400 space-y-1.5">
+          <div className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-3.5 my-3 text-[11px] text-zinc-400 space-y-1.5">
             <span className="font-semibold text-white block text-xs">
               ສິດທິພິເສດ ແລະ ຂອງແຖມມາດຕະຖານ avatrAutoService:
             </span>

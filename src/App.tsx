@@ -72,7 +72,7 @@ import {
   Coins, 
   Plus, 
   ChevronRight, 
-  Crown, 
+  ShieldCheck, 
   Lock,
   Cloud,
   CloudCheck,
@@ -97,6 +97,12 @@ export default function App() {
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
+      const isDefaultLightSet = localStorage.getItem('avatr_theme_default_light_v1');
+      if (!isDefaultLightSet) {
+        localStorage.setItem('avatr_theme_default_light_v1', 'true');
+        localStorage.setItem('avatr_app_theme', 'light');
+        return 'light';
+      }
       const saved = localStorage.getItem('avatr_app_theme');
       if (saved === 'dark' || saved === 'light') {
         return saved;
@@ -104,7 +110,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return 'dark';
+    return 'light';
   });
 
   const toggleTheme = () => {
@@ -583,16 +589,16 @@ export default function App() {
 
             {/* Current Active Section Heading */}
             <div className="flex items-center gap-2 min-w-0">
-              <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 flex-shrink-0">
-                {currentMenu === 'dashboard' && <LayoutDashboard className="w-4 h-4 text-emerald-400" />}
-                {currentMenu === 'customers' && <Users className="w-4 h-4 text-blue-400" />}
-                {currentMenu === 'inventory' && <Car className="w-4 h-4 text-white" />}
-                {currentMenu === 'stock_in' && <PackagePlus className="w-4 h-4 text-blue-400" />}
-                {currentMenu === 'pos' && <ShoppingBag className="w-4 h-4 text-emerald-400" />}
-                {currentMenu === 'bills' && <FileText className="w-4 h-4 text-amber-400" />}
-                {currentMenu === 'alerts' && <AlertTriangle className="w-4 h-4 text-amber-400" />}
-                {currentMenu === 'users' && <Key className="w-4 h-4 text-purple-400" />}
-                {currentMenu === 'profile' && <UserIcon className="w-4 h-4 text-emerald-400" />}
+              <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-white flex-shrink-0">
+                {currentMenu === 'dashboard' && <LayoutDashboard className="w-4 h-4" />}
+                {currentMenu === 'customers' && <Users className="w-4 h-4" />}
+                {currentMenu === 'inventory' && <Car className="w-4 h-4" />}
+                {currentMenu === 'stock_in' && <PackagePlus className="w-4 h-4" />}
+                {currentMenu === 'pos' && <ShoppingBag className="w-4 h-4" />}
+                {currentMenu === 'bills' && <FileText className="w-4 h-4" />}
+                {currentMenu === 'alerts' && <AlertTriangle className="w-4 h-4" />}
+                {currentMenu === 'users' && <Key className="w-4 h-4" />}
+                {currentMenu === 'profile' && <UserIcon className="w-4 h-4" />}
               </span>
 
               <div className="min-w-0">
@@ -618,8 +624,8 @@ export default function App() {
               onClick={() => setCurrentMenu('pos')}
               className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
                 currentMenu === 'pos'
-                  ? 'bg-emerald-500 text-black border-emerald-400 shadow-md'
-                  : 'bg-emerald-950/40 hover:bg-emerald-950/80 text-emerald-300 border-emerald-800/60'
+                  ? 'bg-white text-black border-white shadow-md'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800'
               }`}
             >
               <ShoppingBag className="w-3.5 h-3.5" />
@@ -631,8 +637,8 @@ export default function App() {
               onClick={() => setCurrentMenu('stock_in')}
               className={`hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
                 currentMenu === 'stock_in'
-                  ? 'bg-blue-500 text-black border-blue-400 shadow-md'
-                  : 'bg-blue-950/40 hover:bg-blue-950/80 text-blue-300 border-blue-800/60'
+                  ? 'bg-white text-black border-white shadow-md'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800'
               }`}
             >
               <PackagePlus className="w-3.5 h-3.5" />
@@ -641,18 +647,14 @@ export default function App() {
 
             {/* Cloud Firestore Spark Plan Live Status Indicator */}
             <div 
-              className={`hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-mono border ${
-                isFirebaseConfigured()
-                  ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300'
-                  : 'bg-zinc-900/90 border-zinc-800 text-zinc-400'
-              }`}
+              className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-mono border bg-zinc-900/90 border-zinc-800 text-zinc-300"
               title={
                 isFirebaseConfigured()
                   ? 'Cloud Firestore & Firebase Auth Real-time'
                   : 'Offline IndexedDB Persistence'
               }
             >
-              <span className={`w-2 h-2 rounded-full ${isFirebaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
               <span>{isFirebaseConfigured() ? t.firestoreLiveSync : t.offlineSync}</span>
             </div>
 
@@ -662,7 +664,7 @@ export default function App() {
               className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors"
               title={t.currencyTooltip}
             >
-              <Coins className="w-3.5 h-3.5 text-emerald-400" />
+              <Coins className="w-3.5 h-3.5 text-zinc-300" />
               <span className="font-mono text-[11px] hidden xs:inline">USD · LAK · THB</span>
             </button>
 
@@ -674,12 +676,12 @@ export default function App() {
             >
               {theme === 'dark' ? (
                 <>
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <Sun className="w-3.5 h-3.5 text-zinc-200" />
                   <span className="text-[11px] font-medium hidden sm:inline">{t.lightMode}</span>
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-blue-400" />
+                  <Moon className="w-3.5 h-3.5 text-zinc-800" />
                   <span className="text-[11px] font-medium hidden sm:inline">{t.darkMode}</span>
                 </>
               )}
@@ -718,16 +720,16 @@ export default function App() {
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border shadow-sm ${
                 currentUser.role === 'super_admin'
-                  ? 'bg-amber-950/90 text-amber-300 border-amber-500 hover:bg-amber-900'
+                  ? 'bg-zinc-800 text-white border-zinc-600 hover:bg-zinc-700'
                   : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
               }`}
               title="Switch between Super Admin and General User"
             >
               {currentUser.role === 'super_admin' ? (
                 <>
-                  <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-white" />
                   <span className="hidden sm:inline">{t.roleSuperAdmin}</span>
-                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-200">{t.switchRoleBtn}</span>
+                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-white text-black font-extrabold">{t.switchRoleBtn}</span>
                 </>
               ) : (
                 <>
@@ -748,7 +750,7 @@ export default function App() {
               }`}
               title={t.profileTooltip}
             >
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentUser.role === 'super_admin' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentUser.role === 'super_admin' ? 'bg-white animate-pulse' : 'bg-zinc-400'}`}></span>
               <span className="font-medium truncate max-w-[90px] sm:max-w-none">{currentUser.name.split(' ')[0]}</span>
             </button>
           </div>

@@ -32,7 +32,6 @@ import {
   Banknote,
   Smartphone,
   Building2,
-  Crown,
   X,
   QrCode,
   Upload,
@@ -433,8 +432,8 @@ export default function POSSalesView({
     <div className="space-y-6 pb-16">
       {/* Toast Alert */}
       {toastMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-emerald-950 border border-emerald-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+        <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-zinc-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0" />
           <span>{toastMsg}</span>
         </div>
       )}
@@ -443,10 +442,10 @@ export default function POSSalesView({
       <div className="bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="p-1.5 bg-emerald-500 text-black rounded-lg">
+            <span className="p-1.5 bg-white text-black rounded-lg">
               <ShoppingBag className="w-5 h-5 fill-current" />
             </span>
-            <span className="text-xs font-mono uppercase tracking-widest text-emerald-400 font-bold">
+            <span className="text-xs font-mono uppercase tracking-widest text-zinc-300 font-bold">
               AUTOMOTIVE POINT OF SALE (POS)
             </span>
           </div>
@@ -470,7 +469,7 @@ export default function POSSalesView({
 
       {availableVehicles.length === 0 ? (
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-12 text-center text-zinc-400 space-y-4">
-          <AlertCircle className="w-12 h-12 text-amber-400 mx-auto" />
+          <AlertCircle className="w-12 h-12 text-zinc-400 mx-auto" />
           <h3 className="text-lg font-bold text-white">
             {lang === 'lo' ? 'ບໍ່ມີລົດວ່າງພ້ອມຂາຍໃນສະຕ໋ອກ!' : lang === 'th' ? 'ไม่มีรถว่างพร้อมจำหน่ายในสต็อก!' : 'No available vehicles in stock!'}
           </h3>
@@ -489,7 +488,7 @@ export default function POSSalesView({
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <span className="font-bold text-sm text-white flex items-center gap-2">
-                  <Car className="w-4 h-4 text-emerald-400" />
+                  <Car className="w-4 h-4 text-white" />
                   <span>1. {t.selectVehicleToSell} *</span>
                 </span>
                 <span className="text-[10px] font-mono text-zinc-400">
@@ -525,7 +524,7 @@ export default function POSSalesView({
                     >
                       <div className="flex items-center justify-between mb-1">
                         <strong className="text-white text-xs font-bold">{item.model}</strong>
-                        <span className="font-mono text-emerald-400 text-xs font-bold">
+                        <span className="font-mono text-white text-xs font-bold">
                           ${item.priceUSD.toLocaleString()}
                         </span>
                       </div>
@@ -583,7 +582,7 @@ export default function POSSalesView({
             {/* Step 2: Customer Details */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
-                <User className="w-4 h-4 text-emerald-400" />
+                <User className="w-4 h-4 text-white" />
                 <span>2. {t.buyerInfo}</span>
               </div>
 
@@ -656,22 +655,22 @@ export default function POSSalesView({
             {/* Step 3: Payment & Financial Terms */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
-                <CreditCard className="w-4 h-4 text-emerald-400" />
+                <CreditCard className="w-4 h-4 text-white" />
                 <span>3. {t.paymentType}</span>
               </div>
 
-              {/* Payment Method Selector with Clean Professional Lucide Icons */}
+              {/* Payment Method Selector */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('transfer')}
                   className={`p-3 rounded-2xl border flex flex-col items-center justify-center transition-all ${
                     paymentMethod === 'transfer'
-                      ? 'bg-emerald-950/70 border-emerald-500 text-white font-bold'
+                      ? 'bg-white text-black font-bold shadow-lg border-white'
                       : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
                 >
-                  <QrCode className="w-5 h-5 mb-1 text-emerald-400" />
+                  <QrCode className={`w-5 h-5 mb-1 ${paymentMethod === 'transfer' ? 'text-black' : 'text-zinc-400'}`} />
                   <span>{t.paymentTransfer}</span>
                 </button>
 
@@ -680,11 +679,11 @@ export default function POSSalesView({
                   onClick={() => setPaymentMethod('cash')}
                   className={`p-3 rounded-2xl border flex flex-col items-center justify-center transition-all ${
                     paymentMethod === 'cash'
-                      ? 'bg-emerald-950/70 border-emerald-500 text-white font-bold'
+                      ? 'bg-white text-black font-bold shadow-lg border-white'
                       : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
                 >
-                  <Banknote className="w-5 h-5 mb-1 text-emerald-400" />
+                  <Banknote className={`w-5 h-5 mb-1 ${paymentMethod === 'cash' ? 'text-black' : 'text-zinc-400'}`} />
                   <span>{t.paymentCash}</span>
                 </button>
 
@@ -693,11 +692,11 @@ export default function POSSalesView({
                   onClick={() => setPaymentMethod('finance')}
                   className={`p-3 rounded-2xl border flex flex-col items-center justify-center transition-all ${
                     paymentMethod === 'finance'
-                      ? 'bg-purple-950/70 border-purple-500 text-white font-bold'
+                      ? 'bg-white text-black font-bold shadow-lg border-white'
                       : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
                   }`}
                 >
-                  <Building2 className="w-5 h-5 mb-1 text-purple-400" />
+                  <Building2 className={`w-5 h-5 mb-1 ${paymentMethod === 'finance' ? 'text-black' : 'text-zinc-400'}`} />
                   <span>{t.paymentInstallments}</span>
                 </button>
               </div>
@@ -707,7 +706,7 @@ export default function POSSalesView({
                 <div className="p-5 bg-zinc-900/80 rounded-3xl border border-zinc-800 space-y-4 text-xs">
                   <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
+                      <div className="p-1.5 bg-zinc-800 text-zinc-200 rounded-lg border border-zinc-700">
                         <QrCode className="w-4 h-4" />
                       </div>
                       <div>
@@ -718,12 +717,12 @@ export default function POSSalesView({
 
                     <div className="flex items-center gap-2">
                       {isSuperAdmin ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1 shadow-sm">
-                          <Crown className="w-3 h-3 fill-amber-400" /> Admin ໃຫຍ່: ຈັດການ & ອັບໂຫລດ QR ບໍລິສັດໄດ້
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1 shadow-sm">
+                          <ShieldCheck className="w-3 h-3 text-zinc-200" /> Admin ໃຫຍ່: ຈັດການ & ອັບໂຫລດ QR ບໍລິສັດໄດ້
                         </span>
                       ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                          <ShieldCheck className="w-3 h-3 text-emerald-400" /> OFFICIAL QR PAYMENT
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-zinc-200" /> OFFICIAL QR PAYMENT
                         </span>
                       )}
                     </div>
@@ -731,10 +730,10 @@ export default function POSSalesView({
 
                   {/* Super Admin Management Controls Toolbar */}
                   {isSuperAdmin && (
-                    <div className="p-3.5 bg-zinc-950 border border-amber-500/40 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-inner">
+                    <div className="p-3.5 bg-zinc-950 border border-zinc-700 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-inner">
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="p-1.5 bg-amber-400/20 text-amber-300 rounded-lg border border-amber-400/30">
-                          <Crown className="w-4 h-4" />
+                        <span className="p-1.5 bg-zinc-800 text-zinc-200 rounded-lg border border-zinc-700">
+                          <ShieldCheck className="w-4 h-4" />
                         </span>
                         <div>
                           <span className="font-bold text-white text-xs block">ສິດ Admin ໃຫຍ່: ຈັດການຮູບ QR ບໍລິສັດ</span>
@@ -746,7 +745,7 @@ export default function POSSalesView({
 
                       <div className="flex flex-wrap items-center gap-2">
                         {/* Direct File Upload for Super Admin */}
-                        <label className="cursor-pointer px-3.5 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all">
+                        <label className="cursor-pointer px-3.5 py-2 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all border border-zinc-300">
                           <Upload className="w-3.5 h-3.5" />
                           <span>{companyBankInfo.qrCodeUrl ? 'ປ່ຽນຮູບ QR ບໍລິສັດ' : 'ອັບໂຫລດຮູບ QR ບໍລິສັດ'}</span>
                           <input
@@ -793,7 +792,7 @@ export default function POSSalesView({
                         <span className="text-[11px] font-black tracking-wider text-black block truncate">
                           {companyBankInfo.accountName}
                         </span>
-                        <span className="text-[9px] font-bold text-red-600 block truncate">
+                        <span className="text-[9px] font-bold text-zinc-700 block truncate">
                           {companyBankInfo.bankName} LAO QR
                         </span>
                       </div>
@@ -873,7 +872,7 @@ export default function POSSalesView({
                       </div>
 
                       <div className="w-full text-center pt-1 border-t border-zinc-200">
-                        <span className="text-[10px] font-mono font-black text-emerald-700 block">
+                        <span className="text-[10px] font-mono font-black text-black block">
                           ຍອດຊຳລະ: ${netPriceUSD.toLocaleString()} USD
                         </span>
                         <span className="text-[9px] font-mono text-zinc-600 block">
@@ -886,7 +885,7 @@ export default function POSSalesView({
                         onClick={() => setIsEnlargeQrOpen(true)}
                         className="w-full py-1.5 px-2.5 bg-zinc-900 hover:bg-black text-white rounded-xl text-[10px] font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
                       >
-                        <Maximize2 className="w-3 h-3 text-emerald-400" />
+                        <Maximize2 className="w-3 h-3 text-white" />
                         <span>ຂະຫຍາຍເບິ່ງ QR ເຕັມຈໍ</span>
                       </button>
                     </div>
@@ -897,14 +896,14 @@ export default function POSSalesView({
                         <div className="flex items-center justify-between">
                           <span className="text-zinc-500 text-[10px] uppercase block">ຊື່ບັນຊີບໍລິສັດ (Account Name):</span>
                           {isSuperAdmin && (
-                            <span className="text-[9px] text-amber-400 font-sans font-semibold">Admin ຄວບຄຸມ</span>
+                            <span className="text-[9px] text-zinc-300 font-sans font-semibold">Admin ຄວບຄຸມ</span>
                           )}
                         </div>
                         <strong className="text-white text-xs block truncate">{companyBankInfo.accountName}</strong>
                         <div className="pt-2 border-t border-zinc-800/80 space-y-1.5 text-[11px]">
                           <div className="flex justify-between items-center">
                             <span className="text-zinc-400">ເລກບັນຊີ USD:</span>
-                            <span className="text-emerald-400 font-bold">{companyBankInfo.usdAccount}</span>
+                            <span className="text-white font-bold">{companyBankInfo.usdAccount}</span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="text-zinc-400">ເລກບັນຊີ LAK:</span>
@@ -920,8 +919,6 @@ export default function POSSalesView({
                           </div>
                         </div>
                       </div>
-
-
 
                       <div>
                         <label className="block text-zinc-400 mb-1 font-medium">ແນບຮູບສະລິບໂອນເງິນ (Upload Payment Slip)</label>
@@ -949,13 +946,13 @@ export default function POSSalesView({
 
                           {slipImage && (
                             <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+                              <span className="text-[11px] text-zinc-200 font-mono flex items-center gap-1">
                                 <Check className="w-3.5 h-3.5" /> ແນບສະລິບແລ້ວ
                               </span>
                               <button
                                 type="button"
                                 onClick={() => setSlipImage(null)}
-                                className="text-zinc-500 hover:text-red-400 text-xs"
+                                className="text-zinc-500 hover:text-white text-xs"
                               >
                                 ລົບຮູບ
                               </button>
@@ -970,7 +967,7 @@ export default function POSSalesView({
 
               {/* Financing Details */}
               {paymentMethod === 'finance' && (
-                <div className="p-4 bg-purple-950/20 rounded-2xl border border-purple-900/60 space-y-3 text-xs">
+                <div className="p-4 bg-zinc-900/80 rounded-2xl border border-zinc-800 space-y-3 text-xs">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-zinc-400 mb-1 font-medium">ສະຖາບັນການເງິນ / ໄຟແນນສ໌</label>
@@ -1021,7 +1018,7 @@ export default function POSSalesView({
                   <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800 flex justify-between items-center text-xs font-mono">
                     <span className="text-zinc-400">ຄ່າງວດປະມານການຕໍ່ເດືອນ:</span>
                     <div className="text-right">
-                      <span className="text-purple-300 font-bold text-sm">≈ ₭ {monthlyPaymentLAK.toLocaleString()} / ເດືອນ</span>
+                      <span className="text-white font-bold text-sm">≈ ₭ {monthlyPaymentLAK.toLocaleString()} / ເດືອນ</span>
                       <span className="text-[10px] text-zinc-500 block">(${monthlyPaymentUSD.toLocaleString()} USD)</span>
                     </div>
                   </div>
@@ -1040,7 +1037,7 @@ export default function POSSalesView({
                           type="button"
                           onClick={() => handleDiscountCurrencyChange(c)}
                           className={`px-1.5 py-0.5 rounded transition-colors ${
-                            discountCurrency === c ? 'bg-emerald-500 text-black font-bold' : 'text-zinc-400 hover:text-white'
+                            discountCurrency === c ? 'bg-white text-black font-bold' : 'text-zinc-400 hover:text-white'
                           }`}
                         >
                           {c}
@@ -1085,12 +1082,12 @@ export default function POSSalesView({
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
                 <div className="flex items-center gap-2 text-white font-bold text-sm">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <Sparkles className="w-4 h-4 text-zinc-300" />
                   <span>4. {lang === 'lo' ? 'ເລືອກຊຸດຂອງແຖມ & ບໍລິການຫຼັງການຂາຍ' : lang === 'th' ? 'เลือกชุดของแถม & บริการหลังการขาย' : 'Dealership Packages & Privileges'}</span>
                 </div>
                 {isSuperAdmin ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1 font-mono">
-                    <Crown className="w-3 h-3 fill-amber-400" /> {lang === 'lo' ? 'Admin ໃຫຍ່: ຈັດການ & ເພີ່ມໝວດໄດ້' : lang === 'th' ? 'Admin ใหญ่: จัดการ & เพิ่มหมวดได้' : 'Super Admin Mode'}
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1 font-mono">
+                    <ShieldCheck className="w-3 h-3 text-zinc-200" /> {lang === 'lo' ? 'Admin ໃຫຍ່: ຈັດການ & ເພີ່ມໝວດໄດ້' : lang === 'th' ? 'Admin ใหญ่: จัดการ & เพิ่มหมวดได้' : 'Super Admin Mode'}
                   </span>
                 ) : (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-400 border border-zinc-800 flex items-center gap-1 font-mono">
@@ -1101,10 +1098,10 @@ export default function POSSalesView({
 
               {/* Admin ໃຫຍ່: Add New Package Category Form */}
               {isSuperAdmin && (
-                <div className="p-3.5 bg-zinc-900/80 rounded-2xl border border-amber-500/30 space-y-2">
+                <div className="p-3.5 bg-zinc-900/80 rounded-2xl border border-zinc-700 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono text-amber-300 uppercase flex items-center gap-1">
-                      <Crown className="w-3 h-3" />
+                    <span className="text-[11px] font-mono text-zinc-300 uppercase flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
                       <span>{lang === 'lo' ? 'ສິດ Admin ໃຫຍ່: ເພີ່ມໝວດ / ແພັກເກດຂອງແຖມໃໝ່' : lang === 'th' ? 'สิทธิ์ Admin ใหญ่: เพิ่มหมวด / แพ็กเกจของแถมใหม่' : 'Add New Dealership Package'}</span>
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono">{t.firestoreLiveSync}</span>
@@ -1115,7 +1112,7 @@ export default function POSSalesView({
                       value={newPackageInput}
                       onChange={(e) => setNewPackageInput(e.target.value)}
                       placeholder={lang === 'lo' ? 'ປ້ອນຊື່ໝວດຂອງແຖມ ຫຼື ບໍລິການໃໝ່...' : lang === 'th' ? 'กรอกชื่อหมวดของแถม หรือบริการใหม่...' : 'Enter package name...'}
-                      className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
+                      className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
@@ -1126,7 +1123,7 @@ export default function POSSalesView({
                     <button
                       type="button"
                       onClick={handleAddPackage}
-                      className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors flex-shrink-0 shadow-sm"
+                      className="px-3.5 py-2 bg-white hover:bg-zinc-200 text-black font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors flex-shrink-0 shadow-sm"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>{t.save}</span>
@@ -1163,7 +1160,7 @@ export default function POSSalesView({
                         <button
                           type="button"
                           onClick={(e) => handleDeletePackage(gift, e)}
-                          className="p-1 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0"
+                          className="p-1 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0"
                           title="Delete"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1174,21 +1171,21 @@ export default function POSSalesView({
                 })}
               </div>
 
-              <div className="pt-2 flex items-center gap-2 text-[11px] text-emerald-400 font-mono">
-                <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+              <div className="pt-2 flex items-center gap-2 text-[11px] text-zinc-300 font-mono">
+                <ShieldCheck className="w-4 h-4 flex-shrink-0 text-white" />
                 <span>{lang === 'lo' ? 'ມອບການຮັບປະກັນແບັດເຕີຣີ CATL 8 ປີ / 160,000 km ມາດຕະຖານໂຮງງານ AVATR' : lang === 'th' ? 'รับประกันแบตเตอรี่ CATL 8 ปี / 160,000 กม. มาตรฐานโรงงาน AVATR' : 'CATL Battery 8 Years / 160,000 km Warranty'}</span>
               </div>
             </div>
 
             {/* Step 5: Final Price Summary & Execute Sale Button */}
-            <div className="bg-zinc-950 border border-emerald-800/80 rounded-3xl p-6 space-y-4 shadow-2xl">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4 shadow-2xl">
               <div className="flex justify-between items-baseline pb-3 border-b border-zinc-800 font-mono">
                 <span className="text-zinc-400 text-xs">{t.sellingPrice}:</span>
                 <span className="text-white text-base">${basePriceUSD.toLocaleString()}</span>
               </div>
 
               {Number(discountUSD) > 0 && (
-                <div className="flex justify-between items-baseline text-red-400 font-mono text-xs">
+                <div className="flex justify-between items-baseline text-zinc-400 font-mono text-xs">
                   <span>{t.discountAmount}:</span>
                   <span>-${Number(discountUSD).toLocaleString()}</span>
                 </div>
@@ -1202,7 +1199,7 @@ export default function POSSalesView({
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="text-3xl font-black font-mono text-emerald-400">
+                  <span className="text-3xl font-black font-mono text-white">
                     ${netPriceUSD.toLocaleString()}
                   </span>
                 </div>
@@ -1211,7 +1208,7 @@ export default function POSSalesView({
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-sm rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 hover:scale-[1.01]"
+                  className="w-full py-3.5 bg-white hover:bg-zinc-200 text-black font-extrabold text-sm rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 hover:scale-[1.01]"
                 >
                   <ShoppingBag className="w-5 h-5 fill-black" />
                   <span>{t.confirmSaleAndDeduct}</span>
@@ -1228,7 +1225,7 @@ export default function POSSalesView({
           <div className="relative w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white text-center space-y-4 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2 text-left">
-                <span className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg">
+                <span className="p-1.5 bg-zinc-800 text-zinc-200 rounded-lg">
                   <QrCode className="w-4 h-4" />
                 </span>
                 <div>
@@ -1250,7 +1247,7 @@ export default function POSSalesView({
                 <span className="text-xs font-black tracking-wider text-black block truncate">
                   AVATR AUTO SERVICE LAOS
                 </span>
-                <span className="text-[10px] font-bold text-emerald-600 block">
+                <span className="text-[10px] font-bold text-zinc-700 block">
                   {t.scanQrToPay}
                 </span>
               </div>
@@ -1316,7 +1313,7 @@ export default function POSSalesView({
               </div>
 
               <div className="w-full text-center pt-2 border-t border-zinc-200">
-                <span className="text-xs font-mono font-black text-emerald-700 block">
+                <span className="text-xs font-mono font-black text-black block">
                   {t.netPaymentTotal}: ${netPriceUSD.toLocaleString()} USD
                 </span>
                 <span className="text-[10px] font-mono text-zinc-600 block">
@@ -1329,7 +1326,7 @@ export default function POSSalesView({
             <div className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 text-xs font-mono space-y-1 text-left">
               <div className="flex justify-between items-center">
                 <span className="text-zinc-400">USD:</span>
-                <span className="text-emerald-400 font-bold">{companyBankInfo.usdAccount}</span>
+                <span className="text-white font-bold">{companyBankInfo.usdAccount}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-400">LAK:</span>
@@ -1353,8 +1350,8 @@ export default function POSSalesView({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
           <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 text-white space-y-5 max-h-[95vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <div className="flex items-center gap-2 text-emerald-400">
-                <CheckCircle2 className="w-5 h-5" />
+              <div className="flex items-center gap-2 text-white">
+                <CheckCircle2 className="w-5 h-5 text-white" />
                 <h3 className="font-bold text-base text-white">{t.saleCompletedSuccess}</h3>
               </div>
               <div className="flex items-center gap-2">
@@ -1382,7 +1379,7 @@ export default function POSSalesView({
                   <p className="text-[10px] text-zinc-400 font-mono">{t.printInvoiceBtn || 'OFFICIAL SALES INVOICE'}</p>
                 </div>
                 <div className="text-right font-mono">
-                  <span className="text-emerald-400 font-bold block">{createdBill.billNumber}</span>
+                  <span className="text-white font-bold block">{createdBill.billNumber}</span>
                   <span className="text-zinc-500 text-[10px]">{createdBill.date}</span>
                 </div>
               </div>
@@ -1408,7 +1405,7 @@ export default function POSSalesView({
 
               <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 flex justify-between items-center font-mono">
                 <span>{t.netPaymentTotal}:</span>
-                <span className="text-xl font-black text-emerald-400">${createdBill.netTotalUSD.toLocaleString()}</span>
+                <span className="text-xl font-black text-white">${createdBill.netTotalUSD.toLocaleString()}</span>
               </div>
 
               <div className="text-[11px] text-zinc-400">
