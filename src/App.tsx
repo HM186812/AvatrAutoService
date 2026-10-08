@@ -97,7 +97,12 @@ export default function App() {
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
-      localStorage.removeItem('avatr_theme_default_light_v1');
+      const isDefaultLightSet = localStorage.getItem('avatr_theme_default_light_v1');
+      if (!isDefaultLightSet) {
+        localStorage.setItem('avatr_theme_default_light_v1', 'true');
+        localStorage.setItem('avatr_app_theme', 'light');
+        return 'light';
+      }
       const saved = localStorage.getItem('avatr_app_theme');
       if (saved === 'dark' || saved === 'light') {
         return saved;
@@ -105,7 +110,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return 'dark';
+    return 'light';
   });
 
   const toggleTheme = () => {
@@ -119,8 +124,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    document.documentElement.classList.remove('light');
-    document.documentElement.classList.add('dark');
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.remove('light');
+      document.documentElement.classList.add('dark');
+    }
   }, [theme]);
 
   const handleSetLang = (newLang: Language) => {
