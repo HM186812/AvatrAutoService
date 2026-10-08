@@ -275,6 +275,30 @@ html.light .bg-white.text-zinc-950 svg {
   stroke: #ffffff !important;
 }
 
+/* Ensure dark buttons in light mode keep crisp white text */
+html.light button.bg-black,
+html.light button.bg-slate-950,
+html.light button.bg-zinc-900,
+html.light button.bg-zinc-950,
+html.light .bg-black.text-white,
+html.light .bg-slate-950.text-white,
+html.light .bg-zinc-900.text-white,
+html.light .btn-dark-primary {
+  background-color: #09090b !important;
+  color: #ffffff !important;
+}
+
+html.light button.bg-black *,
+html.light button.bg-slate-950 *,
+html.light button.bg-zinc-900 *,
+html.light button.bg-zinc-950 *,
+html.light .bg-black.text-white *,
+html.light .bg-slate-950.text-white *,
+html.light .bg-zinc-900.text-white *,
+html.light .btn-dark-primary * {
+  color: #ffffff !important;
+}
+
 html.light .hover\:bg-zinc-200:hover {
   background-color: #18181b !important;
 }
