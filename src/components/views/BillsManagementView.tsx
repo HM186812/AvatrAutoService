@@ -324,10 +324,7 @@ export default function BillsManagementView({
                   {/* Net Amount */}
                   <td className="py-3.5 px-4">
                     <span className="text-sm font-bold block text-white">
-                      ${bill.netTotalUSD.toLocaleString()}
-                    </span>
-                    <span className="text-[10px] text-zinc-500 block">
-                      ≈ ₭ {(bill.netTotalUSD * 22000).toLocaleString()}
+                      ${bill.netTotalUSD.toLocaleString()} USD
                     </span>
                   </td>
 
@@ -613,10 +610,7 @@ export default function BillsManagementView({
                 )}
                 <div className="flex justify-between w-64 pt-2 border-t border-zinc-800 text-white font-bold text-sm">
                   <span>ຍອດສຸທິ (Net Total):</span>
-                  <span className="text-white font-black">${selectedBillForPrint.netTotalUSD.toLocaleString()}</span>
-                </div>
-                <div className="text-[11px] text-zinc-400">
-                  ≈ ₭ {(selectedBillForPrint.netTotalUSD * 22000).toLocaleString()} LAK
+                  <span className="text-white font-black">${selectedBillForPrint.netTotalUSD.toLocaleString()} USD</span>
                 </div>
               </div>
 

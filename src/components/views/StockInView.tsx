@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceBillRecord, StockLogRecord, CustomCurrencyConfig } from '../../types';
-import { getStoredCurrencies } from '../../data/currencies';
+import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceBillRecord, StockLogRecord } from '../../types';
 import { translations } from '../../data/translations';
 import { 
   saveInventoryItemToFirestore, 
@@ -46,8 +45,6 @@ interface StockInViewProps {
   lang: Language;
   onNavigateToStock: () => void;
   onNavigateToBills: () => void;
-  activeCurrency?: string;
-  currencies?: CustomCurrencyConfig[];
 }
 
 export default function StockInView({
@@ -63,11 +60,8 @@ export default function StockInView({
   lang,
   onNavigateToStock,
   onNavigateToBills,
-  activeCurrency = 'USD',
-  currencies: externalCurrencies,
 }: StockInViewProps) {
   const t = translations[lang] || translations.lo;
-  const currencies = externalCurrencies && externalCurrencies.length > 0 ? externalCurrencies : getStoredCurrencies();
   
   // Form State - Empty by default
   const [model, setModel] = useState<string>('AVATR 12');
@@ -79,7 +73,6 @@ export default function StockInView({
   const [battery, setBattery] = useState('');
   const [quantity, setQuantity] = useState<number | ''>('');
   const [priceValue, setPriceValue] = useState<number | ''>('');
-  const [priceCurrency, setPriceCurrency] = useState<string>(activeCurrency || 'USD');
   const [status, setStatus] = useState<StockStatus>('ready');
   const [customImage, setCustomImage] = useState<string>('');
   const [eventCampaign, setEventCampaign] = useState<string>('');
@@ -259,12 +252,8 @@ export default function StockInView({
     }
 
     const rawVal = Number(priceValue) || (model === 'AVATR 12' ? 45000 : model === 'AVATR 11' ? 42000 : 38000);
-    const currObj = currencies.find(c => c.code === priceCurrency) || { rateToUSD: 1, symbol: '$' };
-    let finalPriceUSD = rawVal;
-    if (currObj.rateToUSD && currObj.rateToUSD !== 1) {
-      finalPriceUSD = Math.round(rawVal / currObj.rateToUSD);
-    }
-    let finalPriceLAK = priceCurrency === 'LAK' ? rawVal : Math.round(finalPriceUSD * 22000);
+    const finalPriceUSD = rawVal;
+    const finalPriceLAK = Math.round(finalPriceUSD * 22000);
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const grnNumber = `GRN-AVATR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -890,57 +879,24 @@ export default function StockInView({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <div className="sm:col-span-2">
-              <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
-                <label className="text-zinc-400 font-medium">{t.importCostUSD} *</label>
-                <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded-lg border border-zinc-800 text-[10px] font-mono flex-wrap">
-                  {currencies.map((curr) => (
-                    <button
-                      key={curr.code}
-                      type="button"
-                      onClick={() => setPriceCurrency(curr.code)}
-                      className={`px-2 py-0.5 rounded transition-colors ${
-                        priceCurrency === curr.code
-                          ? 'bg-white text-black font-black shadow-sm'
-                          : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      {curr.code} ({curr.symbol})
-                    </button>
-                  ))}
-                </div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-zinc-400 font-medium">{t.importCostUSD} ($ USD) *</label>
               </div>
 
               <div className="relative">
                 <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 font-mono text-xs font-bold">
-                  {currencies.find(c => c.code === priceCurrency)?.symbol || '$'}
+                  $
                 </span>
                 <input
                   type="number"
                   required
                   min="1"
-                  placeholder={`(${priceCurrency})...`}
+                  placeholder="45,000"
                   value={priceValue}
                   onChange={(e) => setPriceValue(e.target.value === '' ? '' : Number(e.target.value))}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-white"
                 />
               </div>
-
-              {priceValue !== '' && Number(priceValue) > 0 && (
-                <div className="text-[11px] text-zinc-400 font-mono mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {currencies
-                    .filter(c => c.code !== priceCurrency && ['USD', 'LAK', 'THB'].includes(c.code))
-                    .map(c => {
-                      const selectedRate = currencies.find(sc => sc.code === priceCurrency)?.rateToUSD || 1;
-                      const valInUSD = Number(priceValue) / selectedRate;
-                      const converted = Math.round(valInUSD * c.rateToUSD);
-                      return (
-                        <span key={c.code} className="text-zinc-300">
-                          ≈ {c.symbol} {converted.toLocaleString()} {c.code}
-                        </span>
-                      );
-                    })}
-                </div>
-              )}
             </div>
 
             <div>
@@ -996,15 +952,9 @@ export default function StockInView({
 
         {/* Submit Action Card */}
         {(() => {
-          const selectedCurrObj = currencies.find(c => c.code === priceCurrency) || { code: 'USD', symbol: '$', rateToUSD: 1 };
           const qty = Number(quantity) || 0;
           const enteredUnitVal = Number(priceValue) || 0;
-          const totalInSelectedCurrency = enteredUnitVal * qty;
-          const totalInUSD = selectedCurrObj.rateToUSD ? Math.round(totalInSelectedCurrency / selectedCurrObj.rateToUSD) : totalInSelectedCurrency;
-          const lakRate = currencies.find(c => c.code === 'LAK')?.rateToUSD || 22000;
-          const totalInLAK = Math.round(totalInUSD * lakRate);
-          const thbRate = currencies.find(c => c.code === 'THB')?.rateToUSD || 35.5;
-          const totalInTHB = Math.round(totalInUSD * thbRate);
+          const totalInUSD = enteredUnitVal * qty;
 
           return (
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
@@ -1012,16 +962,11 @@ export default function StockInView({
                 <div className="text-sm font-bold text-white flex items-center gap-2">
                   <span>{lang === 'lo' ? 'ມູນຄ່ານຳເຂົ້າລວມ (Total Inbound Valuation):' : lang === 'th' ? 'มูลค่าการนำเข้ารวม (Total Inbound Valuation):' : 'Total Inbound Valuation:'}</span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
-                    {priceCurrency}
+                    USD ($)
                   </span>
                 </div>
                 <div className="text-2xl font-black font-mono text-white mt-1">
-                  {selectedCurrObj.symbol} {totalInSelectedCurrency.toLocaleString()} {priceCurrency} <span className="text-xs text-zinc-400 font-sans">({qty} {t.unitCars})</span>
-                </div>
-                <div className="text-[11px] text-zinc-400 font-mono mt-0.5 flex flex-wrap items-center gap-2">
-                  {priceCurrency !== 'USD' && <span>≈ $ {totalInUSD.toLocaleString()} USD</span>}
-                  {priceCurrency !== 'LAK' && <span>≈ ₭ {totalInLAK.toLocaleString()} LAK</span>}
-                  {priceCurrency !== 'THB' && <span>≈ ฿ {totalInTHB.toLocaleString()} THB</span>}
+                  ${totalInUSD.toLocaleString()} USD <span className="text-xs text-zinc-400 font-sans">({qty} {t.unitCars})</span>
                 </div>
               </div>
 

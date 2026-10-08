@@ -13,7 +13,6 @@ import {
   ShoppingBag, 
   FileText, 
   LogOut, 
-  Coins, 
   Sun, 
   Moon 
 } from 'lucide-react';
@@ -35,7 +34,6 @@ interface SidebarProps {
   isMobileOpen: boolean;
   setIsMobileOpen: (open: boolean) => void;
   onLogout?: () => void;
-  onOpenCurrencyModal?: () => void;
   theme?: 'dark' | 'light';
   onToggleTheme?: () => void;
 }
@@ -76,7 +74,6 @@ export default function Sidebar({
   isMobileOpen,
   setIsMobileOpen,
   onLogout,
-  onOpenCurrencyModal,
   theme = 'dark',
   onToggleTheme,
 }: SidebarProps) {
@@ -305,25 +302,8 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* Sidebar Footer: Currency Button, Profile, Theme, Language, Logout */}
+        {/* Sidebar Footer: Profile, Theme, Language, Logout */}
         <div className="p-3 border-t border-zinc-900 bg-zinc-950 space-y-2">
-          {/* Quick Currency Button */}
-          {onOpenCurrencyModal && (
-            <button
-              type="button"
-              onClick={onOpenCurrencyModal}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-900/70 hover:bg-zinc-800 border border-zinc-800/80 text-zinc-300 hover:text-white text-xs transition-colors"
-              title={t.currencyTooltip}
-            >
-              <div className="flex items-center gap-2">
-                <Coins className="w-3.5 h-3.5 text-zinc-300" />
-                <span className="text-[11px] font-medium">{t.navCurrencies}</span>
-              </div>
-              <span className="font-mono text-[10px] text-zinc-300 bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded">
-                USD · LAK · THB
-              </span>
-            </button>
-          )}
 
           {/* User Profile Card Button */}
           <button

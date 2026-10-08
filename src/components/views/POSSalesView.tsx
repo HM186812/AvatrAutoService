@@ -86,32 +86,15 @@ export default function POSSalesView({
   const [customerAddress, setCustomerAddress] = useState('');
   const [customerProvince, setCustomerProvince] = useState('');
 
-  // Pricing & Discounts
+  // Pricing & Discounts (USD Only)
   const [discountUSD, setDiscountUSD] = useState<number | ''>('');
-  const [discountCurrency, setDiscountCurrency] = useState<'USD' | 'LAK' | 'THB' | 'CNY'>('USD');
-  const [discountInputValue, setDiscountInputValue] = useState<number | ''>('');
 
-  const handleDiscountChange = (val: number | '', curr = discountCurrency) => {
-    setDiscountInputValue(val);
+  const handleDiscountChange = (val: number | '') => {
     if (val === '' || isNaN(val) || val <= 0) {
       setDiscountUSD('');
       return;
     }
-    let convertedUSD = val;
-    if (curr === 'LAK') convertedUSD = Math.round(val / 22000);
-    else if (curr === 'THB') convertedUSD = Math.round(val / 35.5);
-    else if (curr === 'CNY') convertedUSD = Math.round(val / 7.24);
-    setDiscountUSD(convertedUSD);
-  };
-
-  const handleDiscountCurrencyChange = (newCurr: 'USD' | 'LAK' | 'THB' | 'CNY') => {
-    setDiscountCurrency(newCurr);
-    if (discountUSD === '' || discountUSD <= 0) return;
-    let displayVal = discountUSD;
-    if (newCurr === 'LAK') displayVal = discountUSD * 22000;
-    else if (newCurr === 'THB') displayVal = Math.round(discountUSD * 35.5);
-    else if (newCurr === 'CNY') displayVal = Math.round(discountUSD * 7.24);
-    setDiscountInputValue(displayVal);
+    setDiscountUSD(val);
   };
 
   // Payment Options - Zero pre-filled values
@@ -875,9 +858,6 @@ export default function POSSalesView({
                         <span className="text-[10px] font-mono font-black text-black block">
                           ຍອດຊຳລະ: ${netPriceUSD.toLocaleString()} USD
                         </span>
-                        <span className="text-[9px] font-mono text-zinc-600 block">
-                          ≈ ₭ {netPriceLAK.toLocaleString()} LAK
-                        </span>
                       </div>
 
                       <button
@@ -1018,51 +998,31 @@ export default function POSSalesView({
                   <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800 flex justify-between items-center text-xs font-mono">
                     <span className="text-zinc-400">ຄ່າງວດປະມານການຕໍ່ເດືອນ:</span>
                     <div className="text-right">
-                      <span className="text-white font-bold text-sm">≈ ₭ {monthlyPaymentLAK.toLocaleString()} / ເດືອນ</span>
-                      <span className="text-[10px] text-zinc-500 block">(${monthlyPaymentUSD.toLocaleString()} USD)</span>
+                      <span className="text-white font-bold text-sm">${monthlyPaymentUSD.toLocaleString()} USD / ເດືອນ</span>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Discount Input with Currency Selection */}
+              {/* Discount Input (USD Only) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-zinc-400 font-medium">ສ່ວນຫຼຸດພິເສດ ({discountCurrency})</label>
-                    <div className="flex items-center gap-1 bg-zinc-900 px-1 py-0.5 rounded border border-zinc-800 text-[9px] font-mono">
-                      {(['USD', 'LAK', 'THB', 'CNY'] as const).map(c => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => handleDiscountCurrencyChange(c)}
-                          className={`px-1.5 py-0.5 rounded transition-colors ${
-                            discountCurrency === c ? 'bg-white text-black font-bold' : 'text-zinc-400 hover:text-white'
-                          }`}
-                        >
-                          {c}
-                        </button>
-                      ))}
-                    </div>
+                    <label className="block text-zinc-400 font-medium">ສ່ວນຫຼຸດພິເສດ ($ USD)</label>
                   </div>
                   <div className="relative">
                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 font-mono text-xs font-bold">
-                      {discountCurrency === 'USD' ? '$' : discountCurrency === 'LAK' ? '₭' : discountCurrency === 'THB' ? '฿' : '¥'}
+                      $
                     </span>
                     <input
                       type="number"
                       min="0"
                       placeholder="0"
-                      value={discountInputValue}
+                      value={discountUSD}
                       onChange={(e) => handleDiscountChange(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-7 pr-3 py-2 text-white font-mono focus:outline-none"
                     />
                   </div>
-                  {discountCurrency !== 'USD' && discountUSD !== '' && Number(discountUSD) > 0 && (
-                    <span className="text-[10px] text-zinc-400 font-mono mt-0.5 block">
-                      ≈ ${Number(discountUSD).toLocaleString()} USD
-                    </span>
-                  )}
                 </div>
 
                 <div>
@@ -1194,13 +1154,10 @@ export default function POSSalesView({
               <div className="flex justify-between items-baseline text-white">
                 <div>
                   <span className="text-sm font-bold block">{t.netPaymentTotal}:</span>
-                  <span className="text-xs text-zinc-400 font-mono">
-                    ≈ ₭ {netPriceLAK.toLocaleString()} LAK
-                  </span>
                 </div>
                 <div className="text-right">
                   <span className="text-3xl font-black font-mono text-white">
-                    ${netPriceUSD.toLocaleString()}
+                    ${netPriceUSD.toLocaleString()} USD
                   </span>
                 </div>
               </div>
@@ -1315,9 +1272,6 @@ export default function POSSalesView({
               <div className="w-full text-center pt-2 border-t border-zinc-200">
                 <span className="text-xs font-mono font-black text-black block">
                   {t.netPaymentTotal}: ${netPriceUSD.toLocaleString()} USD
-                </span>
-                <span className="text-[10px] font-mono text-zinc-600 block">
-                  ≈ ₭ {netPriceLAK.toLocaleString()} LAK
                 </span>
               </div>
             </div>

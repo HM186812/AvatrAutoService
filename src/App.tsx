@@ -9,8 +9,7 @@ import {
   StockLogRecord, 
   InvoiceBillRecord, 
   Language, 
-  ActiveMenu, 
-  CustomCurrencyConfig 
+  ActiveMenu 
 } from './types';
 import { 
   AVATR_VEHICLES, 
@@ -22,7 +21,6 @@ import {
   INITIAL_STOCK_LOGS, 
   INITIAL_BILLS 
 } from './data/mockData';
-import { getStoredCurrencies } from './data/currencies';
 import { translations } from './data/translations';
 import { 
   isFirebaseConfigured, 
@@ -30,7 +28,6 @@ import {
   subscribeToInventory, 
   subscribeToBills, 
   subscribeToVehicleModels, 
-  subscribeToDealershipConfig, 
   subscribeToUsers, 
   deleteBillFromFirestore 
 } from './firebase';
@@ -49,7 +46,6 @@ import {
   ProfileView,
 } from './components/views';
 import {
-  CurrencyModal,
   NewLeadModal,
   QuotationModal,
   ServiceModal,
@@ -343,11 +339,7 @@ export default function App() {
         }
       });
 
-      const unsubConfig = subscribeToDealershipConfig((cfg) => {
-        if (cfg && cfg.currencies && cfg.currencies.length > 0) {
-          setCurrencies(cfg.currencies);
-        }
-      });
+
 
       const unsubUsers = subscribeToUsers((uList) => {
         const list = uList || [];
@@ -365,7 +357,6 @@ export default function App() {
         unsubInventory();
         unsubBills();
         unsubVehicles();
-        unsubConfig();
         unsubUsers();
       };
     }
@@ -411,10 +402,7 @@ export default function App() {
     }
   });
 
-  // Custom Currencies State
-  const [currencies, setCurrencies] = useState<CustomCurrencyConfig[]>(() => getStoredCurrencies());
-  const [activeCurrency, setActiveCurrency] = useState<string>('USD');
-  const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
+
 
   const handleLogout = () => {
     setIsLoggedIn(false);
@@ -582,7 +570,6 @@ export default function App() {
         isMobileOpen={isMobileSidebarOpen}
         setIsMobileOpen={setIsMobileSidebarOpen}
         onLogout={handleLogout}
-        onOpenCurrencyModal={() => setIsCurrencyModalOpen(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
@@ -714,6 +701,7 @@ export default function App() {
               services={services}
               testDrives={testDrives}
               vehicles={vehicles}
+              bills={bills}
               lang={lang}
               isAdmin={isAdmin}
               onNavigateMenu={(menu) => setCurrentMenu(menu)}
@@ -765,8 +753,6 @@ export default function App() {
               lang={lang}
               onNavigateToStock={() => setCurrentMenu('inventory')}
               onNavigateToBills={() => setCurrentMenu('bills')}
-              activeCurrency={activeCurrency}
-              currencies={currencies}
             />
           )}
 
@@ -841,16 +827,7 @@ export default function App() {
         </main>
       </div>
 
-      {/* Currency Customizer Modal */}
-      <CurrencyModal
-        isOpen={isCurrencyModalOpen}
-        onClose={() => setIsCurrencyModalOpen(false)}
-        currencies={currencies}
-        onCurrenciesChange={setCurrencies}
-        activeCurrencyCode={activeCurrency}
-        onSelectActiveCurrency={setActiveCurrency}
-        isSuperAdmin={currentUser.role === 'super_admin'}
-      />
+
 
       {/* Modals */}
       <NewLeadModal

@@ -61,11 +61,8 @@ export default function VehicleModal({
                 {lang === 'lo' ? 'ລາຄາເລີ່ມຕົ້ນ (Starting Price)' : lang === 'th' ? 'ราคาเริ่มต้น (Starting Price)' : 'Starting Price'}
               </span>
               <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono">
-                ${vehicle.priceStartingUSD.toLocaleString()}
+                ${vehicle.priceStartingUSD.toLocaleString()} USD
               </span>
-              <p className="text-xs text-zinc-400 font-mono">
-                ≈ ₭ {(vehicle.priceStartingUSD * 22000).toLocaleString()}
-              </p>
             </div>
           </div>
         </div>

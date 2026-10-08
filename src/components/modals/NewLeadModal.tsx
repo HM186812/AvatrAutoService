@@ -167,33 +167,19 @@ export default function NewLeadModal({ isOpen, onClose, onAddLead, lang = 'lo' }
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-zinc-400 font-medium">
-                  {lang === 'lo' ? 'ງົບປະມານປະມານ' : lang === 'th' ? 'งบประมาณโดยประมาณ' : 'Estimated Budget'}
-                </label>
-                <div className="flex items-center gap-1 bg-zinc-900 px-1 py-0.5 rounded border border-zinc-800 text-[9px] font-mono">
-                  {['$', '₭', '฿', '¥'].map((sym) => (
-                    <button
-                      key={sym}
-                      type="button"
-                      onClick={() => {
-                        const clean = budget.replace(/^[\$₭฿¥\s]+/, '');
-                        setBudget(`${sym} ${clean}`);
-                      }}
-                      className="px-1.5 py-0.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-                    >
-                      {sym}
-                    </button>
-                  ))}
-                </div>
+              <label className="block text-zinc-400 mb-1 font-medium">
+                {lang === 'lo' ? 'ງົບປະມານປະມານ ($ USD)' : lang === 'th' ? 'งบประมาณโดยประมาณ ($ USD)' : 'Estimated Budget ($ USD)'}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 font-mono text-sm font-bold">$</span>
+                <input
+                  type="text"
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                  placeholder="45,000"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-7 pr-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-mono transition-colors"
+                />
               </div>
-              <input
-                type="text"
-                value={budget}
-                onChange={(e) => setBudget(e.target.value)}
-                placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: $45,000 ຫຼື ₭ 990,000,000' : lang === 'th' ? 'ตัวอย่าง: $45,000 หรือ ฿ 1,600,000' : 'e.g. $45,000'}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-mono transition-colors"
-              />
             </div>
           </div>
 

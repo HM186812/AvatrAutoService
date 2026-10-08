@@ -1,46 +1,47 @@
 import { useState } from 'react';
-import { 
-  Lead, 
-  ServiceAppointment, 
-  TestDriveBooking, 
-  VehicleModel, 
-  InventoryItem, 
-  Language, 
-  ActiveMenu, 
-  KPITimeframe 
+import {
+  Lead,
+  ServiceAppointment,
+  TestDriveBooking,
+  VehicleModel,
+  InventoryItem,
+  InvoiceBillRecord,
+  Language,
+  ActiveMenu,
+  KPITimeframe
 } from '../../types';
 import { translations } from '../../data/translations';
 import { ACTIVE_PROMOTIONS, PromotionCampaign } from '../../data/promotions';
-import { 
-  Users, 
-  Car, 
-  Calendar, 
-  Wrench, 
-  DollarSign, 
-  TrendingUp, 
-  Clock, 
-  ShieldCheck, 
-  Activity, 
-  CheckCircle2, 
-  AlertTriangle, 
-  ArrowRight, 
-  Filter, 
-  Layers, 
-  Truck, 
-  Sparkles, 
-  UserCheck, 
-  Globe, 
-  Store, 
-  CalendarCheck, 
-  Zap, 
-  Check, 
-  FileText, 
-  Tag, 
-  Gift, 
-  BadgePercent, 
-  MapPin, 
-  ExternalLink, 
-  Flame 
+import {
+  Users,
+  Car,
+  Calendar,
+  Wrench,
+  DollarSign,
+  TrendingUp,
+  Clock,
+  ShieldCheck,
+  Activity,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowRight,
+  Filter,
+  Layers,
+  Truck,
+  Sparkles,
+  UserCheck,
+  Globe,
+  Store,
+  CalendarCheck,
+  Zap,
+  Check,
+  FileText,
+  Tag,
+  Gift,
+  BadgePercent,
+  MapPin,
+  ExternalLink,
+  Flame
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -49,6 +50,7 @@ interface DashboardViewProps {
   services: ServiceAppointment[];
   testDrives: TestDriveBooking[];
   vehicles: VehicleModel[];
+  bills?: InvoiceBillRecord[];
   lang: Language;
   isAdmin?: boolean;
   onNavigateMenu: (menu: ActiveMenu) => void;
@@ -62,6 +64,7 @@ export default function DashboardView({
   services,
   testDrives,
   vehicles,
+  bills = [],
   lang,
   isAdmin = false,
   onNavigateMenu,
@@ -88,9 +91,12 @@ export default function DashboardView({
   // Calculate dynamic business metrics from real data
   const deliveredCount = leads.filter(l => l.status === 'delivered').length;
   const soldVehiclesCount = inventory.filter(i => i.status === 'sold').length;
-  const totalRevenueUSD = inventory
+  const saleBills = bills ? bills.filter(b => b.billType === 'sale') : [];
+  const billsRevenueUSD = saleBills.reduce((sum, b) => sum + (b.netTotalUSD || b.amountUSD || 0), 0);
+  const soldItemsRevenueUSD = inventory
     .filter(i => i.status === 'sold')
     .reduce((sum, item) => sum + (item.priceUSD || 0), 0);
+  const totalRevenueUSD = billsRevenueUSD > 0 ? billsRevenueUSD : soldItemsRevenueUSD;
 
   const kpiData = {
     day: {
@@ -154,11 +160,10 @@ export default function DashboardView({
             <button
               key={tf.key}
               onClick={() => setTimeframe(tf.key)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                timeframe === tf.key
-                  ? 'bg-white text-black shadow-md font-bold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-              }`}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${timeframe === tf.key
+                ? 'bg-white text-black shadow-md font-bold'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                }`}
             >
               {tf.label}
             </button>
@@ -169,7 +174,7 @@ export default function DashboardView({
       {/* 3 Core KPI Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* KPI 1: Leads */}
-        <div 
+        <div
           onClick={() => onNavigateMenu('customers')}
           className="bg-zinc-950 border border-zinc-800 hover:border-zinc-500 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl group"
         >
@@ -190,11 +195,10 @@ export default function DashboardView({
         </div>
 
         {/* KPI 2: Stock Units */}
-        <div 
+        <div
           onClick={isAdmin ? () => onNavigateMenu('inventory') : undefined}
-          className={`bg-zinc-950 border border-zinc-800 rounded-2xl p-5 transition-all ${
-            isAdmin ? 'hover:border-zinc-500 cursor-pointer hover:shadow-xl group' : ''
-          }`}
+          className={`bg-zinc-950 border border-zinc-800 rounded-2xl p-5 transition-all ${isAdmin ? 'hover:border-zinc-500 cursor-pointer hover:shadow-xl group' : ''
+            }`}
         >
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-3">
             <span className="font-medium">{t.kpiTotalCars}</span>
@@ -208,16 +212,15 @@ export default function DashboardView({
               {readyCars.length} {t.readyForSale}
             </span>
           </div>
-          <div className={`mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 ${
-            isAdmin ? 'group-hover:text-white' : ''
-          }`}>
-            <span>{isAdmin ? t.checkStockAction : t.totalVehiclesInStock}</span>
+          <div className={`mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 ${isAdmin ? 'group-hover:text-white' : ''
+            }`}>
+            <span>{isAdmin ? t.checkStockAction : t.kpiTotalCars}</span>
             {isAdmin && <ArrowRight className="w-3.5 h-3.5" />}
           </div>
         </div>
 
         {/* KPI 3: Revenue (Linked to Bills Management) */}
-        <div 
+        <div
           onClick={() => onNavigateMenu('bills')}
           className="bg-zinc-950 border border-zinc-800 hover:border-zinc-500 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl group"
           title="Bills & Invoices"
@@ -228,13 +231,14 @@ export default function DashboardView({
               <FileText className="w-4 h-4 text-zinc-300 group-hover:text-black" />
             </span>
           </div>
-          <div className="flex items-baseline gap-1">
+          <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black font-mono text-white">
-              ${(kpiData.revenueUSD / 1000).toFixed(1)}K
+              ${kpiData.revenueUSD.toLocaleString()}
             </span>
+            <span className="text-xs text-zinc-400 font-mono font-bold">USD</span>
           </div>
           <div className="mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 group-hover:text-white">
-            <span className="font-mono text-zinc-400">≈ ₭ {((kpiData.revenueUSD * 22000) / 1000000000).toFixed(2)} B LAK</span>
+            <span className="font-mono text-zinc-400 font-medium">${(kpiData.revenueUSD / 1000).toFixed(1)}K USD</span>
             <span className="flex items-center gap-1 text-white font-semibold group-hover:underline">
               <span>{t.viewBillsAction}</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -461,7 +465,7 @@ export default function DashboardView({
                 </span>
               </div>
               <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
-                <div 
+                <div
                   className="bg-white h-full rounded-full"
                   style={{ width: `${(walkInLeads.length / Math.max(1, leads.length)) * 100}%` }}
                 ></div>
@@ -502,7 +506,7 @@ export default function DashboardView({
                 </span>
               </div>
               <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
-                <div 
+                <div
                   className="bg-zinc-300 h-full rounded-full"
                   style={{ width: `${(onlineLeads.length / Math.max(1, leads.length)) * 100}%` }}
                 ></div>
@@ -543,7 +547,7 @@ export default function DashboardView({
                 </span>
               </div>
               <div className="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
-                <div 
+                <div
                   className="bg-zinc-400 h-full rounded-full"
                   style={{ width: `${(eventLeads.length / Math.max(1, leads.length)) * 100}%` }}
                 ></div>
@@ -625,7 +629,7 @@ export default function DashboardView({
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent"></div>
-                    
+
                     <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border backdrop-blur-md bg-zinc-900/90 text-white border-zinc-700">
                         {promo.badge}

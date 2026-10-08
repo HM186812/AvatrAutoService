@@ -20,22 +20,16 @@ export default function QuotationModal({
 }: QuotationModalProps) {
   const [downPaymentPercent, setDownPaymentPercent] = useState<number>(30);
   const [loanMonths, setLoanMonths] = useState<number>(36);
-  const [interestRateYearly, setInterestRateYearly] = useState<number>(4.2); // 4.2% per year typical EV loan in Laos
-  const [exchangeRate, setExchangeRate] = useState<number>(22000); // 1 USD = 22,000 LAK
+  const [interestRateYearly, setInterestRateYearly] = useState<number>(4.2); // 4.2% per year typical EV loan
 
   if (!isOpen) return null;
 
   const totalPriceUSD = vehicle.priceStartingUSD;
-  const totalPriceLAK = totalPriceUSD * exchangeRate;
-
   const downPaymentUSD = (totalPriceUSD * downPaymentPercent) / 100;
-  const downPaymentLAK = downPaymentUSD * exchangeRate;
-
   const loanPrincipalUSD = totalPriceUSD - downPaymentUSD;
   const totalInterestUSD = (loanPrincipalUSD * (interestRateYearly / 100) * (loanMonths / 12));
   const totalRepaymentUSD = loanPrincipalUSD + totalInterestUSD;
   const monthlyPaymentUSD = Math.round(totalRepaymentUSD / loanMonths);
-  const monthlyPaymentLAK = Math.round(monthlyPaymentUSD * exchangeRate);
 
   const quotationNumber = `AVATR-QT-${Math.floor(100000 + Math.random() * 900000)}`;
   const dateStr = new Date().toLocaleDateString('en-GB');
@@ -114,7 +108,7 @@ export default function QuotationModal({
           <div className="print:hidden my-4 p-4 bg-black/60 border border-zinc-800 rounded-xl space-y-4 text-xs">
             <h4 className="font-semibold text-zinc-300 text-xs flex items-center justify-between">
               <span>ປັບແຕ່ງແຜນການເງິນ (Loan & Down Payment Settings)</span>
-              <span className="text-[11px] text-zinc-400 font-mono">1 USD = {exchangeRate.toLocaleString()} LAK</span>
+              <span className="text-[11px] text-zinc-400 font-mono">Currency: USD ($)</span>
             </h4>
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -175,8 +169,7 @@ export default function QuotationModal({
               <thead className="bg-zinc-950 text-zinc-400 border-b border-zinc-800 font-medium">
                 <tr>
                   <th className="py-2.5 px-4">ລາຍການ (Description)</th>
-                  <th className="py-2.5 px-4 text-right">ມູນຄ່າ (USD)</th>
-                  <th className="py-2.5 px-4 text-right">ມູນຄ່າ (LAK - ກີບ)</th>
+                  <th className="py-2.5 px-4 text-right">ມູນຄ່າ ($ USD)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800 font-mono">
@@ -185,10 +178,7 @@ export default function QuotationModal({
                     ລາຄາລົດ AVATR (Standard Luxury Trim)
                   </td>
                   <td className="py-2.5 px-4 text-right text-white font-bold">
-                    ${totalPriceUSD.toLocaleString()}
-                  </td>
-                  <td className="py-2.5 px-4 text-right text-zinc-300">
-                    ₭ {totalPriceLAK.toLocaleString()}
+                    ${totalPriceUSD.toLocaleString()} USD
                   </td>
                 </tr>
                 <tr>
@@ -196,10 +186,7 @@ export default function QuotationModal({
                     ເງິນດາວน์ ({downPaymentPercent}%)
                   </td>
                   <td className="py-2.5 px-4 text-right text-zinc-300">
-                    ${downPaymentUSD.toLocaleString()}
-                  </td>
-                  <td className="py-2.5 px-4 text-right text-zinc-300">
-                    ₭ {downPaymentLAK.toLocaleString()}
+                    ${downPaymentUSD.toLocaleString()} USD
                   </td>
                 </tr>
                 <tr>
@@ -207,10 +194,7 @@ export default function QuotationModal({
                     ຍອດຂໍສິນເຊື່ອ / ຈັດໄຟແນນ (Loan Principal)
                   </td>
                   <td className="py-2.5 px-4 text-right text-zinc-300">
-                    ${loanPrincipalUSD.toLocaleString()}
-                  </td>
-                  <td className="py-2.5 px-4 text-right text-zinc-300">
-                    ₭ {(loanPrincipalUSD * exchangeRate).toLocaleString()}
+                    ${loanPrincipalUSD.toLocaleString()} USD
                   </td>
                 </tr>
                 <tr className="bg-zinc-950 font-bold">
@@ -218,10 +202,7 @@ export default function QuotationModal({
                     ຄ່າງວດລາຍເດືອນ ({loanMonths} ເດືອນ / ດອກເບ້ຍ {interestRateYearly}%)
                   </td>
                   <td className="py-3 px-4 text-right text-white text-sm font-mono font-black">
-                    ${monthlyPaymentUSD.toLocaleString()} / ເດືອນ
-                  </td>
-                  <td className="py-3 px-4 text-right text-white text-sm font-mono font-black">
-                    ₭ {monthlyPaymentLAK.toLocaleString()} / ເດືອນ
+                    ${monthlyPaymentUSD.toLocaleString()} USD / ເດືອນ
                   </td>
                 </tr>
               </tbody>

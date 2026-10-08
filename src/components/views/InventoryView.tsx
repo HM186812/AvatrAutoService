@@ -80,37 +80,18 @@ export default function InventoryView({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'finance'>('transfer');
   const [saleNotes, setSaleNotes] = useState('');
 
-  // EDIT VEHICLE MODAL STATE
+  // EDIT VEHICLE MODAL STATE (USD Only)
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [editPriceCurrency, setEditPriceCurrency] = useState<'USD' | 'LAK' | 'THB'>('USD');
   const [editPriceValue, setEditPriceValue] = useState<number>(0);
 
-  const handleEditPriceChange = (val: number, curr = editPriceCurrency) => {
+  const handleEditPriceChange = (val: number) => {
     setEditPriceValue(val);
     if (!editingItem) return;
-    let finalUSD = val;
-    let finalLAK = val * 22000;
-    if (curr === 'LAK') {
-      finalLAK = val;
-      finalUSD = Math.round(val / 22000);
-    } else if (curr === 'THB') {
-      finalUSD = Math.round(val / 35.5);
-      finalLAK = Math.round(val * 620);
-    }
     setEditingItem({
       ...editingItem,
-      priceUSD: finalUSD,
-      priceLAK: finalLAK,
+      priceUSD: val,
+      priceLAK: Math.round(val * 22000),
     });
-  };
-
-  const handleEditCurrencyChange = (newCurr: 'USD' | 'LAK' | 'THB') => {
-    setEditPriceCurrency(newCurr);
-    if (!editingItem) return;
-    let displayVal = editingItem.priceUSD;
-    if (newCurr === 'LAK') displayVal = editingItem.priceLAK || editingItem.priceUSD * 22000;
-    else if (newCurr === 'THB') displayVal = Math.round(editingItem.priceUSD * 35.5);
-    setEditPriceValue(displayVal);
   };
 
   // Toast message
@@ -574,7 +555,6 @@ export default function InventoryView({
                         <button
                           onClick={() => {
                             setEditingItem(item);
-                            setEditPriceCurrency('USD');
                             setEditPriceValue(item.priceUSD);
                           }}
                           className="py-2.5 px-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
@@ -794,10 +774,7 @@ export default function InventoryView({
                         </td>
                         <td className="py-3 px-4">
                           <span className="font-bold text-white">
-                            ${log.priceUSD.toLocaleString()}
-                          </span>
-                          <span className="text-[10px] text-zinc-500 block">
-                            ≈ ₭ {(log.priceUSD * 22000).toLocaleString()}
+                            ${log.priceUSD.toLocaleString()} USD
                           </span>
                         </td>
                         <td className="py-3 px-4">
@@ -969,25 +946,11 @@ export default function InventoryView({
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-zinc-400 font-medium">{t.tablePrice} ({editPriceCurrency})</label>
-                    <div className="flex items-center gap-1 bg-zinc-900 px-1 py-0.5 rounded border border-zinc-800 text-[9px] font-mono">
-                      {(['USD', 'LAK', 'THB'] as const).map(c => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => handleEditCurrencyChange(c)}
-                          className={`px-1.5 py-0.5 rounded transition-colors ${
-                            editPriceCurrency === c ? 'bg-white text-black font-bold' : 'text-zinc-400 hover:text-white'
-                          }`}
-                        >
-                          {c}
-                        </button>
-                      ))}
-                    </div>
+                    <label className="text-zinc-400 font-medium">{t.tablePrice} ($ USD)</label>
                   </div>
                   <div className="relative">
                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 font-mono text-xs font-bold">
-                      {editPriceCurrency === 'USD' ? '$' : editPriceCurrency === 'LAK' ? '₭' : '฿'}
+                      $
                     </span>
                     <input
                       type="number"
@@ -996,9 +959,6 @@ export default function InventoryView({
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-7 pr-3 py-2 text-white font-mono focus:outline-none"
                     />
                   </div>
-                  <span className="text-[10px] text-zinc-500 font-mono mt-0.5 block truncate">
-                    ≈ ${editingItem.priceUSD.toLocaleString()} USD | ₭ {(editingItem.priceLAK || editingItem.priceUSD * 22000).toLocaleString()} LAK
-                  </span>
                 </div>
               </div>
 

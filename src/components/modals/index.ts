@@ -1,4 +1,3 @@
-export { default as CurrencyModal } from './CurrencyModal';
 export { default as NewLeadModal } from './NewLeadModal';
 export { default as QuotationModal } from './QuotationModal';
 export { default as ServiceModal } from './ServiceModal';
