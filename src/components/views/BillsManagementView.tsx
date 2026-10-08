@@ -108,7 +108,7 @@ export default function BillsManagementView({
             </button>
           )}
 
-          {onOpenNewImport && (
+          {onOpenNewImport && isSuperAdmin && (
             <button
               onClick={onOpenNewImport}
               className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors flex items-center gap-1.5"
@@ -636,7 +636,7 @@ export default function BillsManagementView({
                     ຜູ້ມີອຳນາດລົງນາມ / ຕາປະທັບບໍລິສັດ (Authorized Director)
                   </span>
                   <div className="border-t border-dashed border-zinc-700 w-44 mx-auto pt-1 text-white font-bold">
-                    {selectedBillForPrint.recordedBy || 'Admin ໃຫຍ່'}
+                    {selectedBillForPrint.recordedBy || 'Admin'}
                   </div>
                 </div>
               </div>

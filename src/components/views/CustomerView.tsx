@@ -81,7 +81,7 @@ export default function CustomerView({
       priority: formPriority,
       notes: formNotes || '',
       budget: formBudget,
-      assignedTo: currentUser?.name || 'Admin ໃຫຍ່',
+      assignedTo: currentUser?.name || 'Admin',
       createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
     };
 

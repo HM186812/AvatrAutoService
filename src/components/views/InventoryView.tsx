@@ -159,7 +159,7 @@ export default function InventoryView({
       priceUSD: finalPriceUSD,
       priceLAK: finalPriceUSD * 22000,
       timestamp: now,
-      recordedBy: currentUser?.name || 'Admin ໃຫຍ່',
+      recordedBy: currentUser?.name || 'Admin',
       customerName: buyerName.trim(),
       customerPhone: buyerPhone.trim(),
       paymentMethod,
@@ -202,7 +202,7 @@ export default function InventoryView({
   // DELETE VEHICLE HANDLER (ລົບສິນຄ້າອອກຈາກຖານຂໍ້ມູນ - Super Admin only)
   const handleDeleteItem = async (vin: string, model: string) => {
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ໃຫຍ່ (Super Admin) ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!');
+      triggerToast('ສະເພາະ Admin (Super Admin) ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!');
       return;
     }
     if (window.confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບລົດ ${model} (VIN: ${vin}) ອອກຈາກຖານຂໍ້ມູນສະຕ໋ອກຢ່າງຖາວອນ?`)) {

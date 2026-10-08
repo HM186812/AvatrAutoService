@@ -278,7 +278,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
                   email: data.email || (cleanId.includes('@') ? cleanId : ''),
                   phone: data.phone || (cleanId.includes('@') ? '' : cleanId),
                   role: data.role || 'super_admin',
-                  roleTitleLo: data.roleTitleLo || 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)',
+                  roleTitleLo: data.roleTitleLo || 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)',
                   department: data.department || 'Executive Management & Direction',
                   status: data.status || 'active',
                   avatarInitials: data.avatarInitials || (data.name ? data.name.slice(0, 2) : 'AD'),
@@ -309,7 +309,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
               email: cleanId.includes('@') ? cleanId : `${cleanId.replace(/\s+/g, '')}@avatr.phone.la`,
               phone: cleanId.includes('@') ? '' : cleanId,
               role: isSuperAdmin ? 'super_admin' : 'general_user',
-              roleTitleLo: isSuperAdmin ? 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)' : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
+              roleTitleLo: isSuperAdmin ? 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)' : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
               department: isSuperAdmin ? 'Executive Management & Direction' : 'General Staff',
               status: 'active',
               avatarInitials: 'AD',
@@ -334,7 +334,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
             const hasAnySuperAdmin = users.some(u => u.role === 'super_admin' && u.id !== matchedFb!.id);
             if (!hasAnySuperAdmin) {
               matchedFb.role = 'super_admin';
-              matchedFb.roleTitleLo = 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)';
+              matchedFb.roleTitleLo = 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)';
               matchedFb.department = 'Executive Management & Direction';
               matchedFb.permissions = {
                 canManageUsers: true,
@@ -425,7 +425,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
 
     const assignedRole: UserRole = isFirstUser ? 'super_admin' : 'general_user';
     const roleTitleLo = isFirstUser 
-      ? 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)' 
+      ? 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)' 
       : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)';
     const department = isFirstUser 
       ? 'Executive Management & Direction' 
@@ -490,7 +490,7 @@ export default function LoginView({ users, onLoginSuccess, onRegisterUser, lang,
     playSound('success');
     setSuccessMessage(
       isFirstUser 
-        ? (lang === 'lo' ? 'ສ້າງບັນຊີທຳອິດສຳເລັດ! ທ່ານໄດ້ຮັບສິດ Admin ໃຫຍ່ (Super Admin)' : lang === 'th' ? 'สร้างบัญชีแรกสำเร็จ! คุณได้รับสิทธิ์ Admin ใหญ่ (Super Admin)' : 'First account created! Super Admin privileges granted.') 
+        ? (lang === 'lo' ? 'ສ້າງບັນຊີທຳອິດສຳເລັດ! ທ່ານໄດ້ຮັບສິດ Admin (Super Admin)' : lang === 'th' ? 'สร้างบัญชีแรกสำเร็จ! คุณได้รับสิทธิ์ Admin (Super Admin)' : 'First account created! Super Admin privileges granted.') 
         : (lang === 'lo' ? `ສ້າງບັນຊີໃໝ່ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${newUser.name}` : lang === 'th' ? `สร้างบัญชีใหม่สำเร็จ! ยินดีต้อนรับ ${newUser.name}` : `Account created! Welcome ${newUser.name}`)
     );
 

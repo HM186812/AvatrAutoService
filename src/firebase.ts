@@ -423,7 +423,7 @@ export const subscribeToUsers = (
         avatarInitials: data.avatarInitials || (data.name ? data.name.slice(0, 2) : 'US'),
         permissions: data.permissions || {
           canManageUsers: data.role === 'super_admin',
-          canEditInventory: data.role === 'super_admin' || data.role === 'admin' || data.role === 'technician',
+          canEditInventory: data.role === 'super_admin' || data.role === 'admin',
           canUploadQR: data.role === 'super_admin',
           canAddModels: data.role === 'super_admin',
           canDeleteUsers: data.role === 'super_admin',
@@ -441,7 +441,7 @@ export const subscribeToUsers = (
       const hasSuperAdmin = userList.some(u => u.role === 'super_admin');
       if (!hasSuperAdmin && userList[0]) {
         userList[0].role = 'super_admin';
-        userList[0].roleTitleLo = 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)';
+        userList[0].roleTitleLo = 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)';
         userList[0].permissions = {
           canManageUsers: true,
           canDeleteUsers: true,
@@ -534,7 +534,7 @@ export const uploadCompanyQrCodeToStorage = async (
   superAdminUser: SystemUser
 ): Promise<string> => {
   if (superAdminUser.role !== 'super_admin') {
-    throw new Error('ສິດບໍ່ພຽງພໍ: ສະເພາະ Admin ໃຫຍ່ (Super Admin) ເທົ່ານັ້ນທີ່ມີສິດອັບໂຫລດ QR ບໍລິສັດ');
+    throw new Error('ສິດບໍ່ພຽງພໍ: ສະເພາະ Admin (Super Admin) ເທົ່ານັ້ນທີ່ມີສິດອັບໂຫລດ QR ບໍລິສັດ');
   }
 
   let finalUrl = '';

@@ -90,7 +90,7 @@ export default function CurrencyModal({
 
   const handleDelete = (code: string) => {
     if (code === 'USD') {
-      alert('ບໍ່ສາມາດລົບ USD ໄດ້ ເນື່ອງຈາກເປັນສະກຸນເງິນອ້າງອີງຫຼັກ');
+      alert('ບໍ່ສາມາດລົບ USD ໄດ້ ເນື່ອງຈາກເປັນສະກຸນເງິນຫຼັກ');
       return;
     }
     const updated = list.filter(c => c.code !== code);
@@ -126,6 +126,7 @@ export default function CurrencyModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
       <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white space-y-5 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-zinc-900 text-white rounded-xl border border-zinc-700">
@@ -138,7 +139,7 @@ export default function CurrencyModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -169,7 +170,7 @@ export default function CurrencyModal({
                         ? 'bg-white text-black font-bold shadow-md'
                         : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                     }`}
-                    title="ເລືອກເປັນສະກຸນເງິນສະແດງຫຼັກ"
+                    title="ເລືອກສະກຸນເງິນນີ້"
                   >
                     {c.symbol}
                   </button>
@@ -179,18 +180,15 @@ export default function CurrencyModal({
                       <span className="font-bold text-white text-sm">{c.code}</span>
                       <span className="text-zinc-400 text-[11px]">({c.nameLo})</span>
                       {isSelected && (
-                        <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700">
                           Active
                         </span>
                       )}
                     </div>
 
-                    <div className="text-[11px] font-mono text-zinc-400 mt-0.5">
-                      {isBase ? (
-                        <span className="text-zinc-500">1 USD = 1 USD (ສະກຸນເງິນຫຼັກອ້າງອີງ)</span>
-                      ) : isEditing ? (
-                        <div className="flex items-center gap-2 mt-1">
-                          <span>1 USD =</span>
+                    <div className="text-[11px] font-mono text-zinc-400 mt-1">
+                      {isEditing ? (
+                        <div className="flex items-center gap-2">
                           <input
                             type="number"
                             step="any"
@@ -198,10 +196,11 @@ export default function CurrencyModal({
                             onChange={(e) => setTempRate(Number(e.target.value))}
                             className="w-28 bg-black border border-zinc-700 rounded-lg px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-white"
                           />
-                          <span>{c.code}</span>
                         </div>
                       ) : (
-                        <span>1 USD = <strong className="text-white font-bold">{c.rateToUSD.toLocaleString()}</strong> {c.code}</span>
+                        <span className="text-zinc-300">
+                          {c.rateToUSD.toLocaleString()}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -224,7 +223,7 @@ export default function CurrencyModal({
                           onClick={() => handleStartEdit(c)}
                           className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-lg text-xs border border-zinc-700"
                         >
-                          ປັບອັດຕາ
+                          ປັບຄ່າ
                         </button>
                       )}
 
@@ -232,7 +231,7 @@ export default function CurrencyModal({
                         type="button"
                         onClick={() => handleDelete(c.code)}
                         className="p-1.5 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800"
-                        title="ລົບສະກຸນເງິນ (Admin ໃຫຍ່)"
+                        title="ລົບສະກຸນເງິນ (Admin)"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -244,13 +243,13 @@ export default function CurrencyModal({
           })}
         </div>
 
-        {/* Super Admin Currency Creation Form */}
+        {/* Admin Currency Creation Form */}
         {isSuperAdmin ? (
           isAddingNew ? (
             <form onSubmit={handleAddNew} className="p-4 bg-zinc-900 border border-zinc-700 rounded-2xl space-y-3 text-xs">
               <div className="font-bold text-white text-xs flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4" />
-                <span>ເພີ່ມສະກຸນເງິນແບບ Custom ໃໝ່ (Admin ໃຫຍ່)</span>
+                <span>ເພີ່ມສະກຸນເງິນໃໝ່ (Admin)</span>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -259,7 +258,7 @@ export default function CurrencyModal({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. JPY, GBP, KRW"
+                    placeholder="e.g. CNY, EUR, JPY"
                     value={newCode}
                     onChange={(e) => setNewCode(e.target.value)}
                     className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white uppercase font-mono focus:outline-none focus:border-white"
@@ -271,7 +270,7 @@ export default function CurrencyModal({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. ¥, £, ₩"
+                    placeholder="e.g. ¥, €, £"
                     value={newSymbol}
                     onChange={(e) => setNewSymbol(e.target.value)}
                     className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
@@ -281,10 +280,10 @@ export default function CurrencyModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1">ຊື່ພາສາລາວ</label>
+                  <label className="block text-zinc-400 mb-1">ຊື່ສະກຸນເງິນ</label>
                   <input
                     type="text"
-                    placeholder="e.g. ເຢນຍີ່ປຸ່ນ"
+                    placeholder="e.g. ຢວນຈີນ (CNY)"
                     value={newNameLo}
                     onChange={(e) => setNewNameLo(e.target.value)}
                     className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-white"
@@ -292,7 +291,7 @@ export default function CurrencyModal({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1">ອັດຕາທຽບ 1 USD (Rate to 1 USD) *</label>
+                  <label className="block text-zinc-400 mb-1">ຄ່າອ້າງອີງທຽບ 1 USD *</label>
                   <input
                     type="number"
                     step="any"
@@ -328,29 +327,22 @@ export default function CurrencyModal({
                 onClick={() => setIsAddingNew(true)}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-zinc-200 text-black rounded-xl text-xs font-bold shadow-md"
               >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>+ ເພີ່ມສະກຸນເງິນໃໝ່ (Admin ໃຫຍ່)</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ ເພີ່ມສະກຸນເງິນ (Admin)</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleResetDefaults}
-                className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
-                title="ຄືນຄ່າເລີ່ມຕົ້ນ (USD, LAK, THB, CNY, EUR)"
+                className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                title="ຄືນຄ່າເລີ່ມຕົ້ນ (USD, LAK, THB)"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>ຄືນຄ່າເລີ່ມຕົ້ນ</span>
               </button>
             </div>
           )
-        ) : (
-          <div className="p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800 flex items-center justify-between text-[11px] text-zinc-400">
-            <div className="flex items-center gap-2">
-              <Lock className="w-3.5 h-3.5 text-zinc-500" />
-              <span>ຄລິກເລືອກສະກຸນເງິນເພື່ອສະແດງລາຄາ (ສະເພາະ Admin ໃຫຍ່ ປັບອັດຕາແລກປ່ຽນໄດ້)</span>
-            </div>
-          </div>
-        )}
+        ) : null}
 
         <div className="pt-3 border-t border-zinc-800 flex justify-end">
           <button
@@ -365,3 +357,4 @@ export default function CurrencyModal({
     </div>
   );
 }
+

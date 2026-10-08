@@ -63,11 +63,11 @@ export default function UserManagementView({
 
   const isSuperAdmin = currentUser.role === 'super_admin' || Boolean(currentUser.permissions?.canManageUsers) || users.length <= 1 || !users.some(u => u.role === 'super_admin');
 
-  // 1. DELETE USER HANDLER (Admin ໃຫຍ່ ລົບຜູ້ໃຊ້ອື່ນໄດ້)
+  // 1. DELETE USER HANDLER (Admin ລົບຜູ້ໃຊ້ອື່ນໄດ້)
   const handleConfirmDelete = async () => {
     if (!deletingUser) return;
     if (deletingUser.id === currentUser.id) {
-      alert('ບໍ່ສາມາດລົບຕົນເອງ (Admin ໃຫຍ່ ປະຈຸບັນ) ອອກຈາກລະບົບໄດ້!');
+      alert('ບໍ່ສາມາດລົບຕົນເອງ (Admin ປະຈຸບັນ) ອອກຈາກລະບົບໄດ້!');
       setDeletingUser(null);
       return;
     }
@@ -83,7 +83,7 @@ export default function UserManagementView({
     setDeletingUser(null);
   };
 
-  // 2. GRANT ROLE & PERMISSIONS HANDLER (Admin ໃຫຍ່ ມອບສິດໃຫ້ແກ່ຜູ້ອື່ນ)
+  // 2. GRANT ROLE & PERMISSIONS HANDLER (Admin ມອບສິດໃຫ້ແກ່ຜູ້ອື່ນ)
   const handleSaveRoleAndPermissions = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
@@ -145,7 +145,7 @@ export default function UserManagementView({
         canManageUsers: newRole === 'super_admin',
         canDeleteUsers: newRole === 'super_admin',
         canGrantRoles: newRole === 'super_admin',
-        canEditInventory: newRole === 'super_admin' || newRole === 'admin' || newRole === 'technician',
+        canEditInventory: newRole === 'super_admin' || newRole === 'admin',
         canUploadQR: newRole === 'super_admin',
         canAddModels: newRole === 'super_admin',
         canDeductPOS: newRole === 'super_admin' || newRole === 'admin' || newRole === 'sales',
@@ -234,11 +234,11 @@ export default function UserManagementView({
             <Lock className="w-10 h-10" />
           </div>
           <h2 className="text-2xl font-bold text-white">
-            ສະຫງວນສິດສຳລັບ Admin ໃຫຍ່ ເທົ່ານັ້ນ
+            ສະຫງວນສິດສຳລັບ Admin ເທົ່ານັ້ນ
           </h2>
           <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
             ທ່ານກຳລັງເຂົ້າສູ່ລະບົບໃນຖານະ: <strong className="text-white">{currentUser.name} ({currentUser.roleTitleLo})</strong>. 
-            ສະເພາະ <strong>Admin ໃຫຍ່ (Super Admin{activeAdmin ? `: ${activeAdmin.name}` : ''})</strong> ເທົ່ານັ້ນ ທີ່ມີສິດລົບຜູ້ໃຊ້ອອກຈາກລະບົບ ແລະ ມອບສິດ/ບົດບາດໃຫ້ແກ່ຜູ້ອື່ນ.
+            ສະເພາະ <strong>Admin (Super Admin{activeAdmin ? `: ${activeAdmin.name}` : ''})</strong> ເທົ່ານັ້ນ ທີ່ມີສິດລົບຜູ້ໃຊ້ອອກຈາກລະບົບ ແລະ ມອບສິດ/ບົດບາດໃຫ້ແກ່ຜູ້ອື່ນ.
           </p>
           {activeAdmin && (
             <div className="pt-4 border-t border-zinc-900 flex justify-center gap-3">
@@ -247,7 +247,7 @@ export default function UserManagementView({
                 className="px-5 py-2.5 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2 shadow-md"
               >
                 <ShieldCheck className="w-4 h-4 text-black" />
-                <span>ສະຫຼັບເປັນ Admin ໃຫຍ່ ({activeAdmin.name})</span>
+                <span>ສະຫຼັບເປັນ Admin ({activeAdmin.name})</span>
               </button>
             </div>
           )}
@@ -267,7 +267,7 @@ export default function UserManagementView({
         </div>
       )}
 
-      {/* Top Banner: Admin ໃຫຍ່ Executive Privileges */}
+      {/* Top Banner: Admin Executive Privileges */}
       <div className="bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -282,7 +282,7 @@ export default function UserManagementView({
             ຈັດການຜູ້ໃຊ້ & ມອບສິດ (User Access Governance)
           </h1>
           <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            Admin ໃຫຍ່: <strong>{currentUser.name}</strong> | ທ່ານສາມາດ **ລົບຜູ້ໃຊ້ອື່ນອອກຈາກລະບົບ** ແລະ **ມອບສິດ/ບົດບາດ** ໄດ້ຕາມຕ້ອງການ
+            Admin: <strong>{currentUser.name}</strong> | ທ່ານສາມາດ **ລົບຜູ້ໃຊ້ອື່ນອອກຈາກລະບົບ** ແລະ **ມອບສິດ/ບົດບາດ** ໄດ້ຕາມຕ້ອງການ
           </p>
         </div>
 
@@ -299,7 +299,7 @@ export default function UserManagementView({
       <div className="bg-zinc-950/80 border border-zinc-800/80 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2">
           <span className="text-zinc-400 font-medium">ສະຫຼັບບັນຊີທົດສອບ (Switch Account):</span>
-          <span className="text-zinc-500 text-[11px]">(ທົດສອບຄວາມແຕກຕ່າງລະຫວ່າງ Admin ໃຫຍ່ ແລະ ຜູ້ໃຊ້ທົ່ວໄປ)</span>
+          <span className="text-zinc-500 text-[11px]">(ທົດສອບຄວາມແຕກຕ່າງລະຫວ່າງ Admin ແລະ ຜູ້ໃຊ້ທົ່ວໄປ)</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -318,7 +318,7 @@ export default function UserManagementView({
               ) : (
                 <span className="w-2 h-2 rounded-full bg-zinc-500"></span>
               )}
-              <span>{u.name.split(' ')[0]} ({u.role === 'super_admin' ? 'Admin ໃຫຍ່' : 'ຜູ້ໃຊ້ທົ່ວໄປ'})</span>
+              <span>{u.name.split(' ')[0]} ({u.role === 'super_admin' ? 'Admin' : 'ຜູ້ໃຊ້ທົ່ວໄປ'})</span>
             </button>
           ))}
         </div>
@@ -360,7 +360,7 @@ export default function UserManagementView({
         </span>
       </div>
 
-      {/* Users List: Table / Cards with Admin ໃຫຍ່ Actions */}
+      {/* Users List: Table / Cards with Admin Actions */}
       <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden">
         <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
           <div>
@@ -540,7 +540,7 @@ export default function UserManagementView({
                         canManageUsers: newRole === 'super_admin',
                         canDeleteUsers: newRole === 'super_admin',
                         canGrantRoles: newRole === 'super_admin',
-                        canEditInventory: newRole === 'super_admin' || newRole === 'admin' || newRole === 'technician',
+                        canEditInventory: newRole === 'super_admin' || newRole === 'admin',
                         canUploadQR: newRole === 'super_admin',
                         canAddModels: newRole === 'super_admin',
                         canDeductPOS: newRole === 'super_admin' || newRole === 'admin' || newRole === 'sales',
@@ -550,7 +550,7 @@ export default function UserManagementView({
                   }}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-white"
                 >
-                  <option value="super_admin">Admin ໃຫຍ່ (Super Admin - ສິດສູງສຸດ)</option>
+                  <option value="super_admin">Admin (Super Admin - ສິດສູງສຸດ)</option>
                   <option value="admin">Admin ສາຂາ (Branch Admin)</option>
                   <option value="sales">ທີ່ປຶກສາການຂາຍ (Sales Staff)</option>
                   <option value="technician">ຊ່າງເຕັກນິກ PDI & ແບັດເຕີຣີ</option>
@@ -803,7 +803,7 @@ export default function UserManagementView({
                     <option value="sales">ທີ່ປຶກສາການຂາຍ (Sales Staff)</option>
                     <option value="technician">ຊ່າງ PDI & CATL</option>
                     <option value="admin">Admin ສາຂາ (Branch Admin)</option>
-                    <option value="super_admin">Admin ໃຫຍ່ (Super Admin)</option>
+                    <option value="super_admin">Admin (Super Admin)</option>
                   </select>
                 </div>
 

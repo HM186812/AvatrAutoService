@@ -53,7 +53,7 @@ async function setSuperAdmin() {
   await setDoc(doc(db, 'users', matchedDoc.id), {
     ...matchedDoc,
     role: 'super_admin',
-    roleTitleLo: 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)',
+    roleTitleLo: 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)',
     department: 'Executive Management & Direction',
     permissions: {
       canManageUsers: true,

@@ -125,7 +125,7 @@ export default function POSSalesView({
   const [downPaymentPercent, setDownPaymentPercent] = useState<number>(30);
   const [tenureMonths, setTenureMonths] = useState<number>(36);
 
-  // Free Gifts & Privileges Packages (Dynamic List with LocalStorage & Admin ໃຫຍ່ Edit/Delete)
+  // Free Gifts & Privileges Packages (Dynamic List with LocalStorage & Admin Edit/Delete)
   const DEFAULT_PACKAGES = [
     'ຕູ້ສາກໄວ Home Charger 7kW ພ້ອມຕິດຕັ້ງມາດຕະຖານ CATL',
     'ປະກັນໄພຊັ້ນ 1 (First Class Insurance) 1 ປີເຕັມ',
@@ -158,7 +158,7 @@ export default function POSSalesView({
   // Super Admin: Upload custom company QR Code to Firebase Storage / Cloud
   const handleCompanyQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ໃຫຍ່ ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!');
       return;
     }
     const file = e.target.files?.[0];
@@ -170,7 +170,7 @@ export default function POSSalesView({
           ...companyBankInfo,
           qrCodeUrl: downloadUrl,
           updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-          updatedBy: currentUser?.name || 'Admin ໃຫຍ່',
+          updatedBy: currentUser?.name || 'Admin',
         };
         setCompanyBankInfo(updated);
         saveStoredCompanyBankInfo(updated);
@@ -185,7 +185,7 @@ export default function POSSalesView({
             ...companyBankInfo,
             qrCodeUrl: qrData,
             updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-            updatedBy: currentUser?.name || 'Admin ໃຫຍ່',
+            updatedBy: currentUser?.name || 'Admin',
           };
           setCompanyBankInfo(updated);
           saveStoredCompanyBankInfo(updated);
@@ -204,7 +204,7 @@ export default function POSSalesView({
       ...companyBankInfo,
       qrCodeUrl: null,
       updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      updatedBy: currentUser?.name || 'Admin ໃຫຍ່',
+      updatedBy: currentUser?.name || 'Admin',
     };
     try {
       await saveDealershipConfigToFirestore({ companyQrImageUrl: null });
@@ -219,7 +219,7 @@ export default function POSSalesView({
   const handleAddPackage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ໃຫຍ່ ຈຶ່ງສາມາດເພີ່ມໝວດໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດເພີ່ມໝວດໄດ້!');
       return;
     }
     if (!newPackageInput.trim()) return;
@@ -243,7 +243,7 @@ export default function POSSalesView({
   const handleDeletePackage = async (pkg: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ໃຫຍ່ ຈຶ່ງສາມາດລົບໝວດໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດລົບໝວດໄດ້!');
       return;
     }
     if (!confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບໝວດ "${pkg}" ອອກຈາກລາຍການ?`)) return;
@@ -718,7 +718,7 @@ export default function POSSalesView({
                     <div className="flex items-center gap-2">
                       {isSuperAdmin ? (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1 shadow-sm">
-                          <ShieldCheck className="w-3 h-3 text-zinc-200" /> Admin ໃຫຍ່: ຈັດການ & ອັບໂຫລດ QR ບໍລິສັດໄດ້
+                          <ShieldCheck className="w-3 h-3 text-zinc-200" /> Admin: ຈັດການ & ອັບໂຫລດ QR ບໍລິສັດໄດ້
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1">
@@ -736,7 +736,7 @@ export default function POSSalesView({
                           <ShieldCheck className="w-4 h-4" />
                         </span>
                         <div>
-                          <span className="font-bold text-white text-xs block">ສິດ Admin ໃຫຍ່: ຈັດການຮູບ QR ບໍລິສັດ</span>
+                          <span className="font-bold text-white text-xs block">ສິດ Admin: ຈັດການຮູບ QR ບໍລິສັດ</span>
                           <span className="text-[10px] text-zinc-400">
                             {companyBankInfo.qrCodeUrl ? 'ກຳລັງໃຊ້ຮູບ QR ທີ່ Admin ອັບໂຫລດເອງ' : 'ກຳລັງໃຊ້ QR ມາດຕະຖານໂຮງງານ AVATR'}
                           </span>
@@ -777,7 +777,7 @@ export default function POSSalesView({
                     <div className="p-2.5 bg-zinc-950/70 border border-zinc-800 rounded-xl flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-400">
                       <div className="flex items-center gap-2">
                         <Lock className="w-3.5 h-3.5 text-zinc-500" />
-                        <span>ຮູບ QR ບັນຊີທາງການຂອງບໍລິສັດ (ອັບໂຫລດ ແລະ ຄວບຄຸມໂດຍ Admin ໃຫຍ່)</span>
+                        <span>ຮູບ QR ບັນຊີທາງການຂອງບໍລິສັດ (ອັບໂຫລດ ແລະ ຄວບຄຸມໂດຍ Admin)</span>
                       </div>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
                         User ທຳມະດາ: ສະແດງ QR ໃຫ້ລູກຄ້າສະແກນ
@@ -1087,7 +1087,7 @@ export default function POSSalesView({
                 </div>
                 {isSuperAdmin ? (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1 font-mono">
-                    <ShieldCheck className="w-3 h-3 text-zinc-200" /> {lang === 'lo' ? 'Admin ໃຫຍ່: ຈັດການ & ເພີ່ມໝວດໄດ້' : lang === 'th' ? 'Admin ใหญ่: จัดการ & เพิ่มหมวดได้' : 'Super Admin Mode'}
+                    <ShieldCheck className="w-3 h-3 text-zinc-200" /> {lang === 'lo' ? 'Admin: ຈັດການ & ເພີ່ມໝວດໄດ້' : lang === 'th' ? 'Admin: จัดการ & เพิ่มหมวดได้' : 'Super Admin Mode'}
                   </span>
                 ) : (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-400 border border-zinc-800 flex items-center gap-1 font-mono">
@@ -1096,13 +1096,13 @@ export default function POSSalesView({
                 )}
               </div>
 
-              {/* Admin ໃຫຍ່: Add New Package Category Form */}
+              {/* Admin: Add New Package Category Form */}
               {isSuperAdmin && (
                 <div className="p-3.5 bg-zinc-900/80 rounded-2xl border border-zinc-700 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-mono text-zinc-300 uppercase flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3" />
-                      <span>{lang === 'lo' ? 'ສິດ Admin ໃຫຍ່: ເພີ່ມໝວດ / ແພັກເກດຂອງແຖມໃໝ່' : lang === 'th' ? 'สิทธิ์ Admin ใหญ่: เพิ่มหมวด / แพ็กเกจของแถมใหม่' : 'Add New Dealership Package'}</span>
+                      <span>{lang === 'lo' ? 'ສິດ Admin: ເພີ່ມໝວດ / ແພັກເກດຂອງແຖມໃໝ່' : lang === 'th' ? 'สิทธิ์ Admin: เพิ่มหมวด / แพ็กเกจของแถมใหม่' : 'Add New Dealership Package'}</span>
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono">{t.firestoreLiveSync}</span>
                   </div>

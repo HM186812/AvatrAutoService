@@ -4,7 +4,7 @@
 @font-face {
   font-family: 'Phetsarath OT';
   src: local('Phetsarath OT'), local('PhetsarathOT'), local('Phetsarath-OT'), local('Phetsarath'),
-       url('/fonts/Phetsarath-Regular.ttf') format('truetype');
+    url('/fonts/Phetsarath-Regular.ttf') format('truetype');
   font-weight: 300 500;
   font-style: normal;
   font-display: swap;
@@ -13,7 +13,7 @@
 @font-face {
   font-family: 'Phetsarath OT';
   src: local('Phetsarath OT Bold'), local('PhetsarathOT-Bold'), local('Phetsarath-Bold'), local('Phetsarath Bold'),
-       url('/fonts/Phetsarath-Bold.ttf') format('truetype');
+    url('/fonts/Phetsarath-Bold.ttf') format('truetype');
   font-weight: 600 900;
   font-style: normal;
   font-display: swap;
@@ -22,7 +22,7 @@
 @font-face {
   font-family: 'Phetsarath';
   src: local('Phetsarath'), local('Phetsarath OT'), local('PhetsarathOT'),
-       url('/fonts/Phetsarath-Regular.ttf') format('truetype');
+    url('/fonts/Phetsarath-Regular.ttf') format('truetype');
   font-weight: 300 500;
   font-style: normal;
   font-display: swap;
@@ -31,7 +31,7 @@
 @font-face {
   font-family: 'Phetsarath';
   src: local('Phetsarath Bold'), local('Phetsarath OT Bold'), local('PhetsarathOT-Bold'),
-       url('/fonts/Phetsarath-Bold.ttf') format('truetype');
+    url('/fonts/Phetsarath-Bold.ttf') format('truetype');
   font-weight: 600 900;
   font-style: normal;
   font-display: swap;
@@ -44,7 +44,10 @@
 }
 
 @layer base {
-  *, ::before, ::after {
+
+  *,
+  ::before,
+  ::after {
     font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
     box-sizing: border-box;
   }
@@ -64,7 +67,12 @@
     min-height: 100vh;
   }
 
-  input, button, select, textarea, optgroup, option {
+  input,
+  button,
+  select,
+  textarea,
+  optgroup,
+  option {
     font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
   }
 }
@@ -74,13 +82,16 @@
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: #09090b;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #27272a;
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
 }
@@ -95,6 +106,7 @@ html.dark body {
 html.dark ::-webkit-scrollbar-track {
   background: #09090b;
 }
+
 html.dark ::-webkit-scrollbar-thumb {
   background: #27272a;
 }
@@ -102,7 +114,7 @@ html.dark ::-webkit-scrollbar-thumb {
 /* ========================================================
    ULTRA-LUXURY MONOCHROME LIGHT MODE ENGINE (.light)
    ======================================================== */
-html.light, 
+html.light,
 html.light body {
   background-color: #f8fafc !important;
   color: #09090b !important;
@@ -111,9 +123,11 @@ html.light body {
 html.light ::-webkit-scrollbar-track {
   background: #f1f5f9;
 }
+
 html.light ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
 }
+
 html.light ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
@@ -337,19 +351,25 @@ html.light .bg-amber-300 {
 
 /* Animations */
 @keyframes float-slow {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px) rotate(0deg);
   }
+
   50% {
     transform: translateY(-6px) rotate(1deg);
   }
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.3;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.7;
     transform: scale(1.03);
@@ -366,13 +386,20 @@ html.light .bg-amber-300 {
 
 /* Print Optimization for Thermal & A4 Monochrome Receipts */
 @media print {
-  body, html {
+
+  body,
+  html {
     background-color: #ffffff !important;
     color: #000000 !important;
   }
-  aside, header, button, .no-print {
+
+  aside,
+  header,
+  button,
+  .no-print {
     display: none !important;
   }
+
   .print-area {
     width: 100% !important;
     margin: 0 !important;

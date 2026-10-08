@@ -166,7 +166,7 @@ export default function StockInView({
   const handleAddNewVehicleModel = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ໃຫຍ່ ຈຶ່ງສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໄດ້!');
       return;
     }
     if (!newModelName.trim()) {
@@ -199,7 +199,7 @@ export default function StockInView({
         { name: 'Pure White', hex: '#ffffff', previewClass: 'bg-white border border-zinc-400' },
         { name: 'Liquid Titanium', hex: '#71717a', previewClass: 'bg-zinc-600 border border-zinc-500' },
       ],
-      description: `AVATR ${cleanName} ລຸ້ນຍານຍົນໃໝ່ເພີ່ມໂດຍ Admin ໃຫຍ່.`,
+      description: `AVATR ${cleanName} ລຸ້ນຍານຍົນໃໝ່ເພີ່ມໂດຍ Admin.`,
       features: [
         'Huawei Qiankun ADS 3.0 Autonomous Driving',
         'HarmonyOS Intelligent Luxury Cockpit',
@@ -222,7 +222,7 @@ export default function StockInView({
     }
     setModel(cleanName);
     setIsAddModelOpen(false);
-    triggerToast(`Admin ໃຫຍ່ ໄດ້ເພີ່ມຕົວເລືອກລຸ້ນ ${cleanName} ສຳເລັດແລ້ວ! (Firestore Synced)`);
+    triggerToast(`Admin ໄດ້ເພີ່ມຕົວເລືອກລຸ້ນ ${cleanName} ສຳເລັດແລ້ວ! (Firestore Synced)`);
     setNewModelName('');
     setNewModelTagline('');
     setNewModelImage('');
@@ -446,7 +446,7 @@ export default function StockInView({
                 </span>
               </label>
 
-              {/* Admin ໃຫຍ່ ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້ */}
+              {/* Admin ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້ */}
               {isSuperAdmin ? (
                 <button
                   type="button"
@@ -454,7 +454,7 @@ export default function StockInView({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold shadow-md transition-all cursor-pointer border border-zinc-300"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>+ ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນ (Admin ໃຫຍ່)</span>
+                  <span>+ ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນ (Admin)</span>
                 </button>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 text-[11px] font-mono">
@@ -1119,7 +1119,7 @@ export default function StockInView({
                   <h3 className="font-extrabold text-base text-white flex items-center gap-2">
                     <span>ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໃໝ່</span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold">
-                      Admin ໃຫຍ່ (Super Admin)
+                      Admin (Super Admin)
                     </span>
                   </h3>
                   <p className="text-xs text-zinc-400 mt-0.5">

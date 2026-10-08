@@ -81,6 +81,7 @@ export default function Sidebar({
   onToggleTheme,
 }: SidebarProps) {
   const isSuperAdmin = currentUser.role === 'super_admin';
+  const isAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
 
   // Grouped Menu Structure for Maximum Ergonomics & Convenience
   const menuGroups: MenuGroup[] = [
@@ -132,7 +133,7 @@ export default function Sidebar({
           labelTh: 'สต็อกรถยนต์ (Stock)',
           icon: Car,
           badge: stockCount,
-          adminOnly: false,
+          adminOnly: true,
         },
         {
           id: 'stock_in',
@@ -143,7 +144,7 @@ export default function Sidebar({
           icon: PackagePlus,
           badge: 'ນຳເຂົ້າ',
           badgeColor: 'text-zinc-200 bg-zinc-800 border-zinc-700 font-bold',
-          adminOnly: false,
+          adminOnly: true,
         },
         {
           id: 'alerts',
@@ -153,7 +154,7 @@ export default function Sidebar({
           icon: AlertTriangle,
           badge: (lowStockCount + outOfStockCount) > 0 ? `${lowStockCount + outOfStockCount}` : null,
           badgeColor: 'text-white bg-zinc-800 border-zinc-600 font-bold',
-          adminOnly: false,
+          adminOnly: true,
         },
       ],
     },
@@ -222,7 +223,7 @@ export default function Sidebar({
         <div className="flex-1 py-3 px-3 space-y-4 overflow-y-auto">
           {menuGroups.map((group, groupIdx) => {
             const visibleItems = group.items.filter(item => {
-              if (item.adminOnly && !isSuperAdmin) return false;
+              if (item.adminOnly && !isAdmin) return false;
               return true;
             });
 
@@ -283,8 +284,8 @@ export default function Sidebar({
             );
           })}
 
-          {/* Quick Stock Alert Notice */}
-          {(lowStockCount > 0 || outOfStockCount > 0) && (
+          {/* Quick Stock Alert Notice (Admin Only) */}
+          {isAdmin && (lowStockCount > 0 || outOfStockCount > 0) && (
             <div 
               onClick={() => {
                 setCurrentMenu('alerts');

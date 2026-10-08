@@ -29,11 +29,7 @@ export function getStoredCurrencies(): CustomCurrencyConfig[] {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Enforce strictly USD, LAK, and THB only
-        const filtered = parsed.filter(c => ['USD', 'LAK', 'THB'].includes(c.code));
-        if (filtered.length >= 3) {
-          return filtered;
-        }
+        return parsed;
       }
     }
   } catch (e) {
@@ -44,9 +40,9 @@ export function getStoredCurrencies(): CustomCurrencyConfig[] {
 
 export function saveStoredCurrencies(currencies: CustomCurrencyConfig[]) {
   try {
-    const validCurrencies = currencies.filter(c => ['USD', 'LAK', 'THB'].includes(c.code));
-    localStorage.setItem(CURRENCY_STORAGE_KEY, JSON.stringify(validCurrencies));
+    localStorage.setItem(CURRENCY_STORAGE_KEY, JSON.stringify(currencies));
   } catch (e) {
     console.error('Error saving stored currencies', e);
   }
 }
+

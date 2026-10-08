@@ -50,6 +50,7 @@ interface DashboardViewProps {
   testDrives: TestDriveBooking[];
   vehicles: VehicleModel[];
   lang: Language;
+  isAdmin?: boolean;
   onNavigateMenu: (menu: ActiveMenu) => void;
   onOpenNewLead: () => void;
   onOpenQuote: (vehicle: VehicleModel, customerName?: string) => void;
@@ -62,6 +63,7 @@ export default function DashboardView({
   testDrives,
   vehicles,
   lang,
+  isAdmin = false,
   onNavigateMenu,
   onOpenNewLead,
   onOpenQuote,
@@ -189,12 +191,14 @@ export default function DashboardView({
 
         {/* KPI 2: Stock Units */}
         <div 
-          onClick={() => onNavigateMenu('inventory')}
-          className="bg-zinc-950 border border-zinc-800 hover:border-zinc-500 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl group"
+          onClick={isAdmin ? () => onNavigateMenu('inventory') : undefined}
+          className={`bg-zinc-950 border border-zinc-800 rounded-2xl p-5 transition-all ${
+            isAdmin ? 'hover:border-zinc-500 cursor-pointer hover:shadow-xl group' : ''
+          }`}
         >
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-3">
             <span className="font-medium">{t.kpiTotalCars}</span>
-            <span className="p-2 bg-zinc-900 rounded-lg group-hover:bg-white group-hover:text-black transition-colors">
+            <span className={`p-2 bg-zinc-900 rounded-lg transition-colors ${isAdmin ? 'group-hover:bg-white group-hover:text-black' : ''}`}>
               <Car className="w-4 h-4" />
             </span>
           </div>
@@ -204,9 +208,11 @@ export default function DashboardView({
               {readyCars.length} {t.readyForSale}
             </span>
           </div>
-          <div className="mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 group-hover:text-white">
-            <span>{t.checkStockAction}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+          <div className={`mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 ${
+            isAdmin ? 'group-hover:text-white' : ''
+          }`}>
+            <span>{isAdmin ? t.checkStockAction : t.totalVehiclesInStock}</span>
+            {isAdmin && <ArrowRight className="w-3.5 h-3.5" />}
           </div>
         </div>
 
@@ -250,13 +256,15 @@ export default function DashboardView({
             </p>
           </div>
 
-          <button
-            onClick={() => onNavigateMenu('inventory')}
-            className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1.5 bg-zinc-900 px-3.5 py-1.5 rounded-xl border border-zinc-700 transition-colors"
-          >
-            <span>{t.manageAllStock}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => onNavigateMenu('inventory')}
+              className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1.5 bg-zinc-900 px-3.5 py-1.5 rounded-xl border border-zinc-700 transition-colors"
+            >
+              <span>{t.manageAllStock}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Stages Grid (6 Stages: Imported, PDI, Ready, Reserved, Event, Promotion) */}
@@ -575,13 +583,15 @@ export default function DashboardView({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => onNavigateMenu('inventory')}
-              className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1.5 bg-zinc-900 px-3.5 py-2 rounded-xl border border-zinc-700 transition-colors"
-            >
-              <Car className="w-3.5 h-3.5 text-zinc-400" />
-              <span>{t.viewEventStock}</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => onNavigateMenu('inventory')}
+                className="text-xs text-zinc-300 hover:text-white font-medium flex items-center gap-1.5 bg-zinc-900 px-3.5 py-2 rounded-xl border border-zinc-700 transition-colors"
+              >
+                <Car className="w-3.5 h-3.5 text-zinc-400" />
+                <span>{t.viewEventStock}</span>
+              </button>
+            )}
             <button
               onClick={() => onNavigateMenu('pos')}
               className="text-xs text-black bg-white hover:bg-zinc-200 font-bold flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors shadow-md"
@@ -673,14 +683,16 @@ export default function DashboardView({
                 {/* Action Footer */}
                 <div className="p-4 pt-0">
                   <div className="pt-3 border-t border-zinc-800/80 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onNavigateMenu('inventory')}
-                      className="flex-1 py-2 px-3 bg-zinc-800 hover:bg-zinc-750 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-zinc-700"
-                    >
-                      <Car className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>{t.viewEventStock}</span>
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => onNavigateMenu('inventory')}
+                        className="flex-1 py-2 px-3 bg-zinc-800 hover:bg-zinc-750 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-zinc-700"
+                      >
+                        <Car className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>{t.viewEventStock}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -689,7 +701,7 @@ export default function DashboardView({
                           onOpenQuote(targetVehicle, `Customer ${promo.badge}`);
                         }
                       }}
-                      className="py-2 px-3 bg-white hover:bg-zinc-200 text-black rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors shadow-sm"
+                      className={`${isAdmin ? 'py-2 px-3' : 'w-full py-2.5 px-4'} bg-white hover:bg-zinc-200 text-black rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors shadow-sm`}
                     >
                       <span>{t.createQuoteAction}</span>
                       <ArrowRight className="w-3.5 h-3.5" />

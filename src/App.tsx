@@ -175,11 +175,11 @@ export default function App() {
 
   const FALLBACK_EMPTY_USER: SystemUser = {
     id: 'USR-ADMIN',
-    name: 'Admin ໃຫຍ່ (Super Admin)',
+    name: 'Admin (Super Admin)',
     email: '',
     phone: '',
     role: 'super_admin',
-    roleTitleLo: 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)',
+    roleTitleLo: 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)',
     department: 'Executive Management & Direction',
     status: 'active',
     avatarInitials: 'AD',
@@ -277,7 +277,7 @@ export default function App() {
     }
   });
 
-  // Vehicle Models State (Admin ໃຫຍ່ ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້)
+  // Vehicle Models State (Admin ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້)
   const [vehicles, setVehicles] = useState<VehicleModel[]>(() => {
     try {
       const saved = localStorage.getItem('avatr_vehicle_models_prod_v1');
@@ -388,6 +388,16 @@ export default function App() {
   const [quoteCustomerName, setQuoteCustomerName] = useState<string | undefined>(undefined);
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
 
+  // Role & Admin Check
+  const isAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+
+  // Guard admin-only sections (Inventory, Stock-In, Stock Alerts)
+  useEffect(() => {
+    if (!isAdmin && (currentMenu === 'inventory' || currentMenu === 'stock_in' || currentMenu === 'alerts')) {
+      setCurrentMenu('dashboard');
+    }
+  }, [currentUser.role, currentMenu, isAdmin]);
+
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -416,7 +426,7 @@ export default function App() {
   // Delete Bill Handler (Super Admin only - synced to Firestore)
   const handleDeleteBill = async (billId: string) => {
     if (currentUser.role !== 'super_admin') {
-      triggerToast('ສະເພາະ Admin ໃຫຍ່ ເທົ່ານັ້ນທີ່ມີສິດລົບບິນ!');
+      triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບບິນ!');
       return;
     }
     try {
@@ -478,7 +488,7 @@ export default function App() {
         priority: 'high',
         source: 'ໂຊຣູມ',
         budget: '$45,000',
-        assignedTo: currentUser?.name || 'Admin ໃຫຍ່',
+        assignedTo: currentUser?.name || 'Admin',
         notes: `ຈອງທົດລອງຂັບ ${tdData.model} ວັນທີ ${tdData.date} @ ${tdData.timeSlot} ທີ່ ${tdData.location}`,
         testDriveDate: `${tdData.date} ${tdData.timeSlot}`,
       });
@@ -513,7 +523,7 @@ export default function App() {
       priority: 'high',
       source: 'web',
       notes: message || 'ສອບຖາມຜ່ານແບບຟອມໜ້າເວັບໄຊທ໌',
-      assignedTo: currentUser?.name || 'Admin ໃຫຍ່',
+      assignedTo: currentUser?.name || 'Admin',
     });
   };
 
@@ -617,57 +627,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick Action Navigation Buttons & User Profile */}
+          {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Quick POS Shortcut */}
-            <button
-              onClick={() => setCurrentMenu('pos')}
-              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                currentMenu === 'pos'
-                  ? 'bg-white text-black border-white shadow-md'
-                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800'
-              }`}
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>{t.quickPOSBtn}</span>
-            </button>
-
-            {/* Quick Stock-In Shortcut */}
-            <button
-              onClick={() => setCurrentMenu('stock_in')}
-              className={`hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                currentMenu === 'stock_in'
-                  ? 'bg-white text-black border-white shadow-md'
-                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800'
-              }`}
-            >
-              <PackagePlus className="w-3.5 h-3.5" />
-              <span>{t.quickStockInBtn}</span>
-            </button>
-
-            {/* Cloud Firestore Spark Plan Live Status Indicator */}
-            <div 
-              className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-mono border bg-zinc-900/90 border-zinc-800 text-zinc-300"
-              title={
-                isFirebaseConfigured()
-                  ? 'Cloud Firestore & Firebase Auth Real-time'
-                  : 'Offline IndexedDB Persistence'
-              }
-            >
-              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              <span>{isFirebaseConfigured() ? t.firestoreLiveSync : t.offlineSync}</span>
-            </div>
-
-            {/* Currency Button */}
-            <button
-              onClick={() => setIsCurrencyModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors"
-              title={t.currencyTooltip}
-            >
-              <Coins className="w-3.5 h-3.5 text-zinc-300" />
-              <span className="font-mono text-[11px] hidden xs:inline">USD · LAK · THB</span>
-            </button>
-
             {/* Theme Toggle Button (Light / Night Mode) */}
             <button
               onClick={toggleTheme}
@@ -695,13 +656,13 @@ export default function App() {
                 const updated: SystemUser = {
                   ...currentUser,
                   role: nextRole,
-                  roleTitleLo: isSuper ? 'Admin ໃຫຍ່ (Super Admin & ຜູ້ອຳນວຍການສູນ)' : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
+                  roleTitleLo: isSuper ? 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)' : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
                   department: isSuper ? 'Executive Management & Direction' : 'General Staff',
                   permissions: {
                     canManageUsers: isSuper,
                     canDeleteUsers: isSuper,
                     canGrantRoles: isSuper,
-                    canEditInventory: true,
+                    canEditInventory: isSuper,
                     canUploadQR: isSuper,
                     canAddModels: isSuper,
                     canDeductPOS: true,
@@ -739,20 +700,6 @@ export default function App() {
                 </>
               )}
             </button>
-
-            {/* Right Status Indicator */}
-            <button
-              onClick={() => setCurrentMenu('profile')}
-              className={`flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs transition-colors border ${
-                currentMenu === 'profile'
-                  ? 'bg-white text-black border-white font-bold shadow-md'
-                  : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-300'
-              }`}
-              title={t.profileTooltip}
-            >
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentUser.role === 'super_admin' ? 'bg-white animate-pulse' : 'bg-zinc-400'}`}></span>
-              <span className="font-medium truncate max-w-[90px] sm:max-w-none">{currentUser.name.split(' ')[0]}</span>
-            </button>
           </div>
         </header>
 
@@ -766,6 +713,7 @@ export default function App() {
               testDrives={testDrives}
               vehicles={vehicles}
               lang={lang}
+              isAdmin={isAdmin}
               onNavigateMenu={(menu) => setCurrentMenu(menu)}
               onOpenNewLead={() => setIsNewLeadOpen(true)}
               onOpenQuote={handleOpenQuoteForVehicle}
@@ -784,7 +732,7 @@ export default function App() {
             />
           )}
 
-          {currentMenu === 'inventory' && (
+          {currentMenu === 'inventory' && isAdmin && (
             <InventoryView
               inventory={inventory}
               setInventory={setInventory}
@@ -793,7 +741,7 @@ export default function App() {
               vehicles={vehicles}
               setVehicles={setVehicles}
               currentUser={currentUser}
-              isSuperAdmin={currentUser.role === 'super_admin'}
+              isSuperAdmin={isAdmin}
               lang={lang}
               onOpenQuote={handleOpenQuoteForVehicle}
               onNavigateToStockIn={() => setCurrentMenu('stock_in')}
@@ -801,7 +749,7 @@ export default function App() {
             />
           )}
 
-          {currentMenu === 'stock_in' && (
+          {currentMenu === 'stock_in' && isAdmin && (
             <StockInView
               inventory={inventory}
               setInventory={setInventory}
@@ -811,7 +759,7 @@ export default function App() {
               setStockLogs={setStockLogs}
               vehicles={vehicles}
               setVehicles={setVehicles}
-              isSuperAdmin={currentUser.role === 'super_admin'}
+              isSuperAdmin={isAdmin}
               lang={lang}
               onNavigateToStock={() => setCurrentMenu('inventory')}
               onNavigateToBills={() => setCurrentMenu('bills')}
@@ -839,14 +787,14 @@ export default function App() {
             <BillsManagementView
               bills={bills}
               lang={lang}
-              isSuperAdmin={currentUser.role === 'super_admin'}
+              isSuperAdmin={isAdmin}
               onDeleteBill={handleDeleteBill}
               onOpenNewSale={() => setCurrentMenu('pos')}
-              onOpenNewImport={() => setCurrentMenu('stock_in')}
+              onOpenNewImport={isAdmin ? () => setCurrentMenu('stock_in') : undefined}
             />
           )}
 
-          {currentMenu === 'alerts' && (
+          {currentMenu === 'alerts' && isAdmin && (
             <StockAlertsView
               inventory={inventory}
               setInventory={setInventory}
