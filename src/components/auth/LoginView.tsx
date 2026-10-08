@@ -630,15 +630,17 @@ export default function LoginView({
             className={`py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               mainTab === 'signin'
                 ? isDark
-                  ? 'bg-zinc-800 text-white font-black shadow-md border border-zinc-700'
-                  : 'bg-slate-900 text-white font-black shadow-sm'
+                  ? 'bg-white text-black font-black shadow-md'
+                  : 'bg-white text-slate-950 font-black shadow-sm'
                 : isDark
-                ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                ? 'text-zinc-300 hover:text-white hover:bg-zinc-800/60'
                 : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200/70'
             }`}
           >
-            <LogIn className={`w-3.5 h-3.5 ${mainTab === 'signin' ? 'text-white' : ''}`} />
-            <span className={mainTab === 'signin' ? 'text-white font-bold' : ''}>{t.authSignInTitle}</span>
+            <LogIn className={`w-3.5 h-3.5 ${mainTab === 'signin' ? (isDark ? 'text-black' : 'text-slate-950') : ''}`} />
+            <span className={mainTab === 'signin' ? (isDark ? 'text-black font-black' : 'text-slate-950 font-black') : 'font-medium'}>
+              {t.authSignInTitle}
+            </span>
           </button>
 
           <button
@@ -651,15 +653,17 @@ export default function LoginView({
             className={`py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               mainTab === 'signup'
                 ? isDark
-                  ? 'bg-zinc-800 text-white font-black shadow-md border border-zinc-700'
-                  : 'bg-slate-900 text-white font-black shadow-sm'
+                  ? 'bg-white text-black font-black shadow-md'
+                  : 'bg-white text-slate-950 font-black shadow-sm'
                 : isDark
-                ? 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+                ? 'text-zinc-300 hover:text-white hover:bg-zinc-800/60'
                 : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200/70'
             }`}
           >
-            <User className={`w-3.5 h-3.5 ${mainTab === 'signup' ? 'text-white' : ''}`} />
-            <span className={mainTab === 'signup' ? 'text-white font-bold' : ''}>{t.authSignUpTitle}</span>
+            <User className={`w-3.5 h-3.5 ${mainTab === 'signup' ? (isDark ? 'text-black' : 'text-slate-950') : ''}`} />
+            <span className={mainTab === 'signup' ? (isDark ? 'text-black font-black' : 'text-slate-950 font-black') : 'font-medium'}>
+              {t.authSignUpTitle}
+            </span>
           </button>
         </div>
 
@@ -803,22 +807,22 @@ export default function LoginView({
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full py-3 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-3 cursor-pointer group disabled:opacity-50 text-white ${
+              className={`w-full py-3 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-3 cursor-pointer group disabled:opacity-50 ${
                 isDark
-                  ? 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 shadow-zinc-950/50'
-                  : 'bg-slate-950 hover:bg-slate-800 shadow-slate-400/50'
+                  ? 'bg-white hover:bg-zinc-100 text-black shadow-zinc-950/50'
+                  : 'bg-slate-950 hover:bg-slate-800 text-white shadow-slate-400/50'
               }`}
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  <span className="text-white font-black">ກຳລັງເຂົ້າສູ່ລະບົບ...</span>
+                  <Loader2 className={`w-4 h-4 animate-spin ${isDark ? 'text-black' : 'text-white'}`} />
+                  <span className={`font-black ${isDark ? 'text-black' : 'text-white'}`}>ກຳລັງເຂົ້າສູ່ລະບົບ...</span>
                 </>
               ) : (
                 <>
-                  <LogIn className="w-4 h-4 text-white" />
-                  <span className="text-white font-black">{t.authSignInBtn}</span>
-                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1 text-white" />
+                  <LogIn className={`w-4 h-4 ${isDark ? 'text-black' : 'text-white'}`} />
+                  <span className={`font-black ${isDark ? 'text-black' : 'text-white'}`}>{t.authSignInBtn}</span>
+                  <ArrowRight className={`w-4 h-4 transition-transform group-hover:translate-x-1 ${isDark ? 'text-black' : 'text-white'}`} />
                 </>
               )}
             </button>
@@ -1033,22 +1037,22 @@ export default function LoginView({
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full py-2.5 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-2 cursor-pointer group disabled:opacity-50 text-white ${
+              className={`w-full py-2.5 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-2 cursor-pointer group disabled:opacity-50 ${
                 isDark
-                  ? 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 shadow-zinc-950/50'
-                  : 'bg-slate-950 hover:bg-slate-800 shadow-slate-400/50'
+                  ? 'bg-white hover:bg-zinc-100 text-black shadow-zinc-950/50'
+                  : 'bg-slate-950 hover:bg-slate-800 text-white shadow-slate-400/50'
               }`}
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  <span className="text-white font-black">ກຳລັງສ້າງບັນຊີ...</span>
+                  <Loader2 className={`w-4 h-4 animate-spin ${isDark ? 'text-black' : 'text-white'}`} />
+                  <span className={`font-black ${isDark ? 'text-black' : 'text-white'}`}>ກຳລັງສ້າງບັນຊີ...</span>
                 </>
               ) : (
                 <>
-                  <User className="w-4 h-4 text-white" />
-                  <span className="text-white font-black">{t.authSignUpBtn}</span>
-                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1 text-white" />
+                  <User className={`w-4 h-4 ${isDark ? 'text-black' : 'text-white'}`} />
+                  <span className={`font-black ${isDark ? 'text-black' : 'text-white'}`}>{t.authSignUpBtn}</span>
+                  <ArrowRight className={`w-4 h-4 transition-transform group-hover:translate-x-1 ${isDark ? 'text-black' : 'text-white'}`} />
                 </>
               )}
             </button>
