@@ -115,8 +115,17 @@ POSSalesView already reads and writes `dealership_settings` in Supabase (my live
 - **L5 is not a bug.** `manage-staff` returned `"You cannot change or suspend your own account here."` – an intentional guard. Staff must be edited by another admin.
 - **L4 is low impact.** `testDriveDate` is never displayed. `lastFollowUp` is real UTC (`toISOString`), so storing it as timestamptz is consistent and it is not shown either. The only display is `createdAt.slice(0, 10)` in CustomerView (line 462): it shows the UTC date, so a customer created between 00:00 and 07:00 Laos time shows the previous day. Fix only if that matters.
 
-## Still open
+## Open at the time of the original audit
 - Browser click-through (UI validation, display) – not done.
 - DB work for the user: cleanup SQL, L1 `delete_vehicle_bill`, `pg_policies` output for L2.
 - Compare the real schema before writing migrations (B1/B2).
 - Test rows left behind (my TEST-/TEST2- rows) until the cleanup SQL is run. I changed the status of one TEST test drive and one TEST service row during this check; they are covered by the cleanup SQL.
+
+## Follow-up (2026-10-10, database verification)
+
+- Installed `public.delete_vehicle_bill(uuid)` in production and verified its ACL: `authenticated` can execute it, `anon` cannot. The function requires an active `super_admin` profile.
+- Added the matching SQL to `supabase/migrations/20261010135942_delete_vehicle_bill.sql`. The production function was installed manually through SQL Editor; this file records the change for the repository and was not applied through the CLI migration history.
+- Read the live `pg_policies` catalog. RLS is enabled on all 10 application tables. The backend's direct delete paths are covered: `vehicles` has a DELETE policy; bill deletion uses the guarded RPC. Other application tables have no DELETE policy, and the backend has no direct delete call for them, so no broader DELETE policies were added.
+- Tested sale and import bill deletion logic against existing `TEST2-` bills inside rollback-only subtransactions. Assertions passed for related rows and vehicle handling; both TEST bills and their data were preserved after rollback.
+- Security Advisor shows 0 errors and 9 warnings. Its warning for `delete_vehicle_bill` is because authenticated callers can reach a SECURITY DEFINER RPC; the function checks the caller's active `super_admin` profile, and `anon` execute is revoked. The remaining warnings include existing auth helper functions, a public storage listing policy, and disabled leaked-password protection; these were not changed as part of bill deletion work.
+- Test/AUDIT cleanup was not run. `supabase_schema.sql` remains a legacy schema and is not a bootstrap source for the current database.

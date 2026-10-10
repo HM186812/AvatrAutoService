@@ -1,6 +1,9 @@
 -- =============================================================
 -- AVATR AUTO SERVICE LAOS - SUPABASE DATABASE SCHEMA SETUP
--- Run this SQL in your Supabase Dashboard (SQL Editor > New Query)
+-- LEGACY ONLY — DO NOT RUN.
+-- This file describes the old schema and grants public anon access. It does
+-- not match the live application database and is not a production bootstrap.
+-- Kept only as a historical reference; use reviewed migrations for changes.
 -- =============================================================
 
 -- 1. Create Tables

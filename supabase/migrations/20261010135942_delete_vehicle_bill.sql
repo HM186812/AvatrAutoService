@@ -1,17 +1,7 @@
--- =============================================================
--- Historical QA draft. L1 is already installed in Supabase production and
--- recorded in supabase/migrations/20261010135942_delete_vehicle_bill.sql.
--- Do not rerun this as a migration; the query below is read-only.
--- I could not read the original function (anon/app roles can't see pg_proc),
--- so the behaviour below is inferred from how the app uses it.
--- =============================================================
-
--- ---------- L1: delete_vehicle_bill ----------
--- Behaviour:
---   * only an active super_admin may call it (matches the app's check)
---   * sale bill   -> the vehicle goes back to 'ready'
---   * import bill -> the vehicle is removed if no other bill references it
---   * removes the bill, its items and its stock movements
+-- Matches the delete_vehicle_bill function installed in Supabase production.
+-- SECURITY DEFINER is required here to delete the related rows across RLS;
+-- the function enforces an active super_admin check and is executable only by
+-- authenticated users.
 create or replace function public.delete_vehicle_bill(p_bill_id uuid)
 returns void
 language plpgsql
@@ -55,10 +45,3 @@ $$;
 
 revoke all on function public.delete_vehicle_bill(uuid) from public, anon;
 grant execute on function public.delete_vehicle_bill(uuid) to authenticated;
-
--- ---------- L2: see which DELETE policies exist (read-only) ----------
--- Run this and send me the result. I will write the exact policies after seeing it.
-select tablename, policyname, cmd, roles, qual
-from pg_policies
-where schemaname = 'public'
-order by tablename, cmd;

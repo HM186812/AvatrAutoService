@@ -12,6 +12,13 @@ import type {
 } from '../types';
 import { requireSupabase } from './client';
 import { newRecordId } from './ids';
+import {
+  sanitizeText,
+  sanitizePhone,
+  sanitizeVIN,
+  sanitizeNumber,
+  hasDangerousPatterns
+} from '../utils/security';
 
 type DbRow = Record<string, any>;
 
@@ -408,22 +415,23 @@ export async function removeDealershipAsset(path: string) {
 
 export async function saveServiceAppointment(appointment: ServiceAppointment, actorId: string) {
   const client = requireSupabase();
-  const customerId = await findCustomerId(appointment.phone);
+  const safePhone = sanitizePhone(appointment.phone, 30);
+  const customerId = await findCustomerId(safePhone);
   const { error } = await client.from('service_appointments').insert({
     id: appointment.id,
     customer_id: customerId,
-    customer_name: appointment.customerName,
-    phone: appointment.phone,
-    model: appointment.model,
-    plate_number: appointment.plateNumber || '',
-    service_type: appointment.serviceType,
-    scheduled_date: appointment.scheduledDate,
-    scheduled_time: appointment.scheduledTime,
+    customer_name: sanitizeText(appointment.customerName, 120),
+    phone: safePhone,
+    model: sanitizeText(appointment.model, 100),
+    plate_number: sanitizeText(appointment.plateNumber, 30) || '',
+    service_type: sanitizeText(appointment.serviceType, 60),
+    scheduled_date: sanitizeText(appointment.scheduledDate, 30),
+    scheduled_time: sanitizeText(appointment.scheduledTime, 20),
     status: appointment.status,
-    technician: appointment.technician || '',
-    estimated_cost_usd: appointment.estimatedCostUSD,
-    battery_health_percent: appointment.batteryHealthPercent ?? null,
-    notes: appointment.notes || '',
+    technician: sanitizeText(appointment.technician, 100) || '',
+    estimated_cost_usd: sanitizeNumber(appointment.estimatedCostUSD, 0),
+    battery_health_percent: appointment.batteryHealthPercent != null ? sanitizeNumber(appointment.batteryHealthPercent, 0, 0, 100) : null,
+    notes: sanitizeText(appointment.notes, 1000) || '',
     created_by: actorId,
   });
   if (error) throw error;
@@ -431,17 +439,18 @@ export async function saveServiceAppointment(appointment: ServiceAppointment, ac
 
 export async function saveTestDriveBooking(booking: TestDriveBooking, actorId: string) {
   const client = requireSupabase();
-  const customerId = await findCustomerId(booking.phone);
+  const safePhone = sanitizePhone(booking.phone, 30);
+  const customerId = await findCustomerId(safePhone);
   const { error } = await client.from('test_drives').insert({
     id: booking.id,
     customer_id: customerId,
-    customer_name: booking.customerName,
-    phone: booking.phone,
-    model: booking.model,
-    drive_date: booking.date,
-    time_slot: booking.timeSlot,
-    location: booking.location,
-    sales_rep: booking.salesRep,
+    customer_name: sanitizeText(booking.customerName, 120),
+    phone: safePhone,
+    model: sanitizeText(booking.model, 100),
+    drive_date: sanitizeText(booking.date, 30),
+    time_slot: sanitizeText(booking.timeSlot, 30),
+    location: sanitizeText(booking.location, 150),
+    sales_rep: sanitizeText(booking.salesRep, 100),
     status: booking.status,
     created_by: actorId,
   });
@@ -473,19 +482,30 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
   if (modelsError) throw modelsError;
   const modelId = (models || []).find((model) => model.name === lead.interestedModel)?.id;
   if (!modelId) throw new Error(`Vehicle model "${lead.interestedModel}" is not configured in the database.`);
+
+  const safeName = sanitizeText(lead.customerName, 120);
+  const safePhone = sanitizePhone(lead.phone, 30);
+  const safeEmail = sanitizeText(lead.email, 120);
+  const safeNotes = sanitizeText(lead.notes, 1000);
+  const safeBudget = sanitizeText(lead.budget, 60);
+
+  if (hasDangerousPatterns(lead.customerName) || hasDangerousPatterns(lead.notes)) {
+    throw new Error('ตรวจพบอักขระหรือรูปแบบคำสั่งที่ไม่อนุญาตในข้อมูลลูกค้า');
+  }
+
   const { error } = await client.from('customers').upsert({
     id: lead.id,
-    name: lead.customerName,
-    phone: lead.phone,
-    email: lead.email || null,
+    name: safeName,
+    phone: safePhone,
+    email: safeEmail || null,
     category: lead.category,
-    source: lead.source || null,
+    source: sanitizeText(lead.source, 100) || null,
     interested_model_id: modelId,
     status: lead.status,
     priority: lead.priority,
-    budget: lead.budget || null,
+    budget: safeBudget || null,
     assigned_to: assignedStaffId || null,
-    notes: lead.notes || null,
+    notes: safeNotes || null,
     last_follow_up: lead.lastFollowUp || null,
     next_test_drive_at: lead.testDriveDate || null,
   });
@@ -497,32 +517,37 @@ export async function saveInventoryItem(item: InventoryItem) {
   const { data: model, error: modelError } = await client.from('vehicle_models').select('id').eq('name', item.model).maybeSingle();
   if (modelError) throw modelError;
   if (!model) throw new Error(`Vehicle model "${item.model}" does not exist in vehicle_models.`);
+  const safeVin = sanitizeVIN(item.vin);
+  if (safeVin.length !== 17) {
+    throw new Error('เลขตัวถัง (VIN) ต้องเป็นตัวพิมพ์ใหญ่ A-Z, 0-9 ความยาว 17 หลักพอดี');
+  }
+
   const { error } = await client.from('vehicles').upsert({
-    vin: item.vin,
+    vin: safeVin,
     model_id: model.id,
-    plate_number: item.plateNumber || null,
-    color: item.color || null,
-    color_hex: item.colorHex || null,
-    interior_color: item.interiorColor || null,
-    trim: item.trim || null,
-    battery: item.battery || null,
-    price_usd: item.priceUSD,
-    price_lak: item.priceLAK,
+    plate_number: sanitizeText(item.plateNumber, 30) || null,
+    color: sanitizeText(item.color, 60) || null,
+    color_hex: sanitizeText(item.colorHex, 20) || null,
+    interior_color: sanitizeText(item.interiorColor, 60) || null,
+    trim: sanitizeText(item.trim, 60) || null,
+    battery: sanitizeText(item.battery, 60) || null,
+    price_usd: sanitizeNumber(item.priceUSD, 0),
+    price_lak: sanitizeNumber(item.priceLAK, 0),
     status: item.status,
     pdi_status: item.pdiStatus,
-    pdi_inspector: item.pdiInspector || null,
-    pdi_notes: item.pdiNotes || null,
-    location: item.location || null,
-    image_url: item.imageUrl || item.image || null,
+    pdi_inspector: sanitizeText(item.pdiInspector, 100) || null,
+    pdi_notes: sanitizeText(item.pdiNotes, 1000) || null,
+    location: sanitizeText(item.location, 100) || null,
+    image_url: sanitizeText(item.imageUrl || item.image, 500) || null,
     reserved_for_customer: item.reservedForCustomer || null,
-    arrival_date: item.arrivalDate || null,
-    mileage_km: item.mileageKm || 0,
-    event_campaign: item.eventCampaign || null,
-    event_start_date: item.eventStartDate || null,
-    event_end_date: item.eventEndDate || null,
-    event_location: item.eventLocation || null,
-    promotion_discount_usd: item.promotionDiscountUSD ?? 0,
-    promotion_notes: item.promotionNotes || null,
+    arrival_date: sanitizeText(item.arrivalDate, 30) || null,
+    mileage_km: sanitizeNumber(item.mileageKm, 0),
+    event_campaign: sanitizeText(item.eventCampaign, 100) || null,
+    event_start_date: sanitizeText(item.eventStartDate, 30) || null,
+    event_end_date: sanitizeText(item.eventEndDate, 30) || null,
+    event_location: sanitizeText(item.eventLocation, 100) || null,
+    promotion_discount_usd: sanitizeNumber(item.promotionDiscountUSD, 0),
+    promotion_notes: sanitizeText(item.promotionNotes, 500) || null,
   }, { onConflict: 'vin' });
   if (error) throw error;
 }
@@ -575,60 +600,60 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string) {
 
   const billRow = {
     id: bill.id,
-    bill_number: bill.billNumber,
+    bill_number: sanitizeText(bill.billNumber, 60),
     type,
-    bill_date: bill.date?.slice(0, 10),
+    bill_date: sanitizeText(bill.date?.slice(0, 10), 20),
     customer_id: customerId,
-    customer_name: bill.customerName || null,
-    phone: bill.customerPhone || null,
-    id_card: bill.customerIDCard || null,
-    address: bill.customerAddress || null,
-    province: bill.customerProvince || null,
+    customer_name: sanitizeText(bill.customerName, 120) || null,
+    phone: sanitizePhone(bill.customerPhone, 30) || null,
+    id_card: sanitizeText(bill.customerIDCard, 60) || null,
+    address: sanitizeText(bill.customerAddress, 250) || null,
+    province: sanitizeText(bill.customerProvince, 100) || null,
     sales_rep: actorId,
     recorded_by: actorId,
-    payment_method: bill.paymentMethod || null,
-    qr_used: bill.qrUsed || null,
-    bank_name: bill.bankName || null,
-    transfer_ref: bill.transferRef || null,
-    finance_company: bill.financeCompany || null,
-    down_payment_percent: bill.downPaymentPercent ?? null,
-    down_payment_usd: bill.downPaymentUSD ?? null,
-    tenure_months: bill.tenureMonths ?? null,
-    monthly_payment_lak: bill.monthlyPaymentLAK ?? null,
+    payment_method: sanitizeText(bill.paymentMethod, 30) || null,
+    qr_used: sanitizeText(bill.qrUsed, 60) || null,
+    bank_name: sanitizeText(bill.bankName, 100) || null,
+    transfer_ref: sanitizeText(bill.transferRef, 100) || null,
+    finance_company: sanitizeText(bill.financeCompany, 100) || null,
+    down_payment_percent: bill.downPaymentPercent != null ? sanitizeNumber(bill.downPaymentPercent, 0, 0, 100) : null,
+    down_payment_usd: bill.downPaymentUSD != null ? sanitizeNumber(bill.downPaymentUSD, 0) : null,
+    tenure_months: bill.tenureMonths != null ? sanitizeNumber(bill.tenureMonths, 0, 1, 120) : null,
+    monthly_payment_lak: bill.monthlyPaymentLAK != null ? sanitizeNumber(bill.monthlyPaymentLAK, 0) : null,
     free_gifts: bill.freeGifts || [],
-    warranty_terms: bill.warrantyTerms || null,
-    payment_slip_path: bill.paymentSlipPath || null,
-    supplier_name: bill.supplierName || null,
-    customs_doc_number: bill.customsDocNumber || null,
-    import_entry_port: bill.importEntryPort || null,
-    destination_warehouse: bill.destinationWarehouse || null,
-    total_usd: bill.netTotalUSD,
-    total_lak: bill.netTotalLAK,
-    notes: bill.notes || null,
+    warranty_terms: sanitizeText(bill.warrantyTerms, 500) || null,
+    payment_slip_path: sanitizeText(bill.paymentSlipPath, 300) || null,
+    supplier_name: sanitizeText(bill.supplierName, 120) || null,
+    customs_doc_number: sanitizeText(bill.customsDocNumber, 100) || null,
+    import_entry_port: sanitizeText(bill.importEntryPort, 100) || null,
+    destination_warehouse: sanitizeText(bill.destinationWarehouse, 100) || null,
+    total_usd: sanitizeNumber(bill.netTotalUSD, 0),
+    total_lak: sanitizeNumber(bill.netTotalLAK, 0),
+    notes: sanitizeText(bill.notes, 1000) || null,
   };
 
   const billItem = {
     id: newRecordId(),
     bill_id: bill.id,
     line_number: 1,
-    vehicle_vin: bill.vin,
-    model_name: bill.model,
-    trim: bill.trim || null,
-    plate_number: bill.plateNumber || null,
-    color: bill.color || null,
-    interior_color: bill.interiorColor || null,
-    battery: bill.battery || null,
-    unit_price_usd: bill.unitPriceUSD,
-    unit_price_lak: bill.unitPriceLAK,
-    discount_usd: bill.discountUSD ?? 0,
-    discount_lak: bill.discountLAK ?? 0,
-    pdi_status_initial: bill.pdiStatusInitial || null,
+    vehicle_vin: sanitizeVIN(bill.vin),
+    model_name: sanitizeText(bill.model, 100),
+    trim: sanitizeText(bill.trim, 60) || null,
+    plate_number: sanitizeText(bill.plateNumber, 30) || null,
+    color: sanitizeText(bill.color, 60) || null,
+    interior_color: sanitizeText(bill.interiorColor, 60) || null,
+    battery: sanitizeText(bill.battery, 60) || null,
+    unit_price_usd: sanitizeNumber(bill.unitPriceUSD, 0),
+    unit_price_lak: sanitizeNumber(bill.unitPriceLAK, 0),
+    discount_usd: sanitizeNumber(bill.discountUSD, 0),
+    discount_lak: sanitizeNumber(bill.discountLAK, 0),
+    pdi_status_initial: sanitizeText(bill.pdiStatusInitial, 30) || null,
     status_initial: bill.statusInitial || (type === 'sale' ? 'ready' : null),
-    inspector_name: bill.inspectorName || null,
-    event_campaign: bill.eventCampaign || null,
-    event_start_date: bill.eventStartDate || null,
-    event_end_date: bill.eventEndDate || null,
-    event_location: bill.eventLocation || null,
+    inspector_name: sanitizeText(bill.inspectorName, 100) || null,
+    event_campaign: sanitizeText(bill.eventCampaign, 100) || null,
+    event_start_date: sanitizeText(bill.eventStartDate, 30) || null,
+    event_end_date: sanitizeText(bill.eventEndDate, 30) || null,
+    event_location: sanitizeText(bill.eventLocation, 100) || null,
   };
   const { error } = await client.rpc('record_vehicle_bill', {
     p_bill: billRow,
