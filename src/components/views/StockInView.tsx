@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceBillRecord, StockLogRecord } from '../../types';
 import { translations } from '../../data/translations';
 import { 
-  saveInventoryItemToFirestore, 
-  saveBillToFirestore, 
-  saveVehicleModelToFirestore 
-} from '../../firebase';
+  saveInventoryItemToSupabase, 
+  saveBillToSupabase, 
+  saveVehicleModelToSupabase,
+  deleteVehicleModelFromSupabase
+} from '../../supabase';
 import AvatrLogo from '../layout/AvatrLogo';
+import { ConfirmDeleteModal } from '../modals';
 import { 
   PackagePlus, 
   Truck, 
@@ -29,7 +31,8 @@ import {
   BadgePercent,
   Flame,
   Plus,
-  Lock
+  Lock,
+  Trash2
 } from 'lucide-react';
 
 interface StockInViewProps {
@@ -172,8 +175,9 @@ export default function StockInView({
       return;
     }
 
+    const modelId = `avatr-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
     const newVehicle: VehicleModel = {
-      id: `avatr-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+      id: modelId,
       name: cleanName,
       subTitle: newModelCategory || 'Next-Gen Intelligent EV',
       tagline: newModelTagline.trim() || 'ຍົນລະກຳອັດສະລິຍະພຣີມຽມ',
@@ -203,22 +207,72 @@ export default function StockInView({
       gallery: [
         'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80',
       ],
+      isCustom: true,
     };
 
     if (setVehicles) {
-      setVehicles(prev => [...prev, newVehicle]);
+      setVehicles(prev => {
+        const filtered = prev.filter(v => v.id !== newVehicle.id && v.name.toLowerCase() !== cleanName.toLowerCase());
+        return [...filtered, newVehicle];
+      });
     }
     try {
-      saveVehicleModelToFirestore(newVehicle);
+      saveVehicleModelToSupabase(newVehicle);
     } catch (e) {
-      console.warn('Firestore save model fallback:', e);
+      console.warn('Supabase save model fallback:', e);
     }
     setModel(cleanName);
     setIsAddModelOpen(false);
-    triggerToast(`Admin ໄດ້ເພີ່ມຕົວເລືອກລຸ້ນ ${cleanName} ສຳເລັດແລ້ວ! (Firestore Synced)`);
+    triggerToast(`Admin ໄດ້ເພີ່ມຕົວເລືອກລຸ້ນ ${cleanName} ເຂົ້າສູ່ລະບົບສຳເລັດແລ້ວ!`);
     setNewModelName('');
     setNewModelTagline('');
     setNewModelImage('');
+  };
+
+  // Delete vehicle model state for modern confirmation modal
+  const [modelToDelete, setModelToDelete] = useState<VehicleModel | null>(null);
+  const [isDeletingModel, setIsDeletingModel] = useState(false);
+
+  const handleRequestDeleteModel = (e: React.MouseEvent, v: VehicleModel) => {
+    e.stopPropagation();
+    if (!isSuperAdmin) {
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດລົບລຸ້ນຍານຍົນໄດ້!');
+      return;
+    }
+    if (vehicles.length <= 1) {
+      triggerToast('ບໍ່ສາມາດລົບໄດ້ ເພາະຕ້ອງມີຢ່າງໜ້ອຍ 1 ລຸ້ນໃນລະບົບ!');
+      return;
+    }
+    setModelToDelete(v);
+  };
+
+  const handleConfirmDeleteModel = async () => {
+    if (!modelToDelete) return;
+    setIsDeletingModel(true);
+
+    const target = modelToDelete;
+    const modelId = target.id || `avatr-${target.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+    
+    if (setVehicles) {
+      setVehicles(prev => prev.filter(v => (v.id || v.name) !== (target.id || target.name)));
+    }
+
+    try {
+      await deleteVehicleModelFromSupabase(modelId);
+    } catch (err) {
+      console.warn('Supabase delete model fallback:', err);
+    }
+
+    if (model === target.name) {
+      const remaining = vehicles.filter(v => (v.id || v.name) !== (target.id || target.name));
+      if (remaining.length > 0) {
+        setModel(remaining[0].name);
+      }
+    }
+
+    setIsDeletingModel(false);
+    setModelToDelete(null);
+    triggerToast(`ລົບລຸ້ນ "${target.name}" ອອກຈາກລະບົບສຳເລັດແລ້ວ!`);
   };
 
   // SUBMIT IMPORT & GENERATE INBOUND BILL
@@ -257,46 +311,55 @@ export default function StockInView({
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const grnNumber = `GRN-AVATR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    // 1. ADD TO INVENTORY
     const newItem: InventoryItem = {
       vin: cleanVin,
       model,
-      image: customImage.trim() || defaultImage,
-      plateNumber: plateNumber.trim() || 'ກມ ປ້າຍແດງ',
-      color,
-      colorHex: color.includes('White') || color.includes('ຂາວ') ? '#ffffff' : '#0a0a0b',
-      interiorColor,
       trim,
+      plateNumber: plateNumber.trim() ? plateNumber.trim() : undefined,
+      color,
+      interiorColor,
       battery,
       priceUSD: finalPriceUSD,
       priceLAK: finalPriceLAK,
       status,
-      pdiStatus,
-      pdiInspector,
-      pdiNotes,
-      location: destinationWarehouse,
-      arrivalDate: new Date().toISOString().slice(0, 10),
-      mileageKm: 0,
       stockQuantity: qty,
-      eventCampaign: (status === 'event' || status === 'promotion') 
-        ? (eventCampaign.trim() || (status === 'event' ? 'ງານ Event ພິເສດ' : 'ໂປຣໂມຊັນພິເສດ'))
-        : eventCampaign,
+      pdiStatus,
+      destinationWarehouse,
+      arrivalDate: now,
+      importDocNumber: customsDocNumber || undefined,
+      image: defaultImage,
+      notes: notes || 'ຮັບເຂົ້າສາງທາງການ ຜ່ານດ່ານສາກົນບໍ່ເຕັນ ກວດສອບສະພາບ 100%',
+      pdiInspector,
+      eventCampaign: (status === 'event' || status === 'promotion') ? eventCampaign : undefined,
       eventStartDate: (status === 'event' || status === 'promotion') ? eventStartDate : undefined,
       eventEndDate: (status === 'event' || status === 'promotion') ? eventEndDate : undefined,
       eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
-      promotionDiscountUSD: (status === 'event' || status === 'promotion') ? promotionDiscountUSD : undefined,
-      promotionNotes: (status === 'event' || status === 'promotion') ? promotionNotes : undefined,
     };
 
-    setInventory(prev => [newItem, ...prev]);
+    // 1. ADD / UPDATE INVENTORY
+    setInventory(prev => {
+      const cleanUpper = cleanVin.toUpperCase().trim();
+      const existingIdx = prev.findIndex(item => item.vin.toUpperCase() === cleanUpper);
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        const existing = updated[existingIdx];
+        updated[existingIdx] = {
+          ...existing,
+          ...newItem,
+          stockQuantity: (existing.stockQuantity || 0) + qty,
+        };
+        return updated;
+      }
+      return [newItem, ...prev];
+    });
 
     try {
-      saveInventoryItemToFirestore(newItem);
+      saveInventoryItemToSupabase(newItem);
     } catch (e) {
-      console.warn('Firestore stock in save item fallback:', e);
+      console.warn('Supabase stock in save item fallback:', e);
     }
 
-    // 2. CREATE OFFICIAL INBOUND BILL (GOODS RECEIPT NOTE)
+    // 2. CREATE OFFICIAL INBOUND BILL (GOODS RECEIPT NOTE - ບັນທຶກບິນ ແລະ ໃບຮັບ)
     const newBill: InvoiceBillRecord = {
       id: grnNumber,
       billType: 'import',
@@ -336,9 +399,9 @@ export default function StockInView({
     setBills(prev => [newBill, ...prev]);
 
     try {
-      saveBillToFirestore(newBill);
+      saveBillToSupabase(newBill);
     } catch (e) {
-      console.warn('Firestore bill save fallback:', e);
+      console.warn('Supabase bill save fallback:', e);
     }
 
     // 3. RECORD TRANSACTION LOG
@@ -360,9 +423,15 @@ export default function StockInView({
 
     setStockLogs(prev => [newStockLog, ...prev]);
 
-    // Open Instant Bill View & Notification
+    // Open Instant Bill View & Dual-System Success Notification
     setCreatedBill(newBill);
-    triggerToast(`ນຳເຂົ້າລົດ ${model} (VIN: ${cleanVin}) ສຳເລັດ ແລະ ອອກໃບຮັບເຂົ້າສິນຄ້າແລ້ວ!`);
+    triggerToast(
+      lang === 'lo'
+        ? `✓ ບັນທຶກສຳເລັດ 2 ລະບົບໃນຄລິກດຽວ: 1. ເພີ່ມເຂົ້າສະຕ໋ອກລົດ (${qty} ຄັນ) + 2. ອອກໃບຮັບໃນໜ້າບິນ & ໃບຮັບ (${grnNumber})`
+        : lang === 'th'
+        ? `✓ บันทึกสำเร็จ 2 ระบบในคลิกเดียว: 1. เพิ่มเข้าสต็อกรถ (${qty} คัน) + 2. ออกใบรับในหน้าบิล & ใบรับ (${grnNumber})`
+        : `✓ 1-Click Dual Save: Added ${qty} units to Inventory Stock + Issued Inbound Bill (${grnNumber})`
+    );
 
     // Reset Form for next entry
     setVin('');
@@ -458,23 +527,34 @@ export default function StockInView({
                 const isSelected = model === v.name;
                 const isCustom = !['AVATR 12', 'AVATR 11', 'AVATR 07'].includes(v.name);
                 return (
-                  <button
+                  <div
                     key={v.id || v.name}
-                    type="button"
                     onClick={() => handleModelChange(v.name)}
-                    className={`p-4 rounded-2xl border text-left transition-all relative ${
+                    className={`p-4 rounded-2xl border text-left transition-all relative cursor-pointer group select-none ${
                       isSelected
-                        ? 'bg-zinc-900 border-white text-white shadow-xl ring-1 ring-white/30'
+                        ? 'bg-zinc-900 border-slate-950 dark:border-white text-white shadow-xl ring-2 ring-slate-950/40 dark:ring-white/50'
                         : 'bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <strong className="block text-sm font-bold text-white">{v.name}</strong>
-                      {isCustom && (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold">
-                          Admin Custom
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {isCustom && (
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold">
+                            Admin Custom
+                          </span>
+                        )}
+                        {isSuperAdmin && (
+                          <button
+                            type="button"
+                            title={lang === 'lo' ? `ລົບລຸ້ນ ${v.name}` : 'Delete Model'}
+                            onClick={(e) => handleRequestDeleteModel(e, v)}
+                            className="p-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 opacity-80 hover:opacity-100 transition-all cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <span className="text-[11px] text-zinc-400 font-sans block mt-0.5 truncate">
                       {v.subTitle || v.category} {v.rangeCLTC ? `(${v.rangeCLTC})` : ''}
@@ -489,7 +569,7 @@ export default function StockInView({
                         </span>
                       )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -900,15 +980,20 @@ export default function StockInView({
             </div>
 
             <div>
-              <label className="block text-zinc-400 mb-1 font-medium">{t.quantityUnits} *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-zinc-400 font-medium">{t.quantityUnits} *</label>
+                <span className="text-[10px] text-zinc-400 font-mono">ບໍ່ຈຳກັດຈຳນວນ (Unlimited)</span>
+              </div>
               <input
                 type="number"
                 required
                 min="1"
-                max="50"
                 placeholder="1"
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setQuantity(val === '' ? '' : Math.max(1, parseInt(val, 10) || 1));
+                }}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-white"
               />
             </div>
@@ -958,24 +1043,40 @@ export default function StockInView({
 
           return (
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
-              <div>
+              <div className="space-y-1">
                 <div className="text-sm font-bold text-white flex items-center gap-2">
                   <span>{lang === 'lo' ? 'ມູນຄ່ານຳເຂົ້າລວມ (Total Inbound Valuation):' : lang === 'th' ? 'มูลค่าการนำเข้ารวม (Total Inbound Valuation):' : 'Total Inbound Valuation:'}</span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
                     USD ($)
                   </span>
                 </div>
-                <div className="text-2xl font-black font-mono text-white mt-1">
+                <div className="text-2xl font-black font-mono text-white">
                   ${totalInUSD.toLocaleString()} USD <span className="text-xs text-zinc-400 font-sans">({qty} {t.unitCars})</span>
                 </div>
+                <p className="text-[11px] text-zinc-400 flex items-center gap-1.5 pt-0.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-zinc-300 flex-shrink-0" />
+                  <span>
+                    {lang === 'lo' 
+                      ? 'ກົດປຸ່ມດຽວ ບັນທຶກພ້ອມກັນທັງ ສະຕ໋ອກລົດ (Inventory) ແລະ ໃບບິນ/ໃບຮັບ (Bills & Invoices)' 
+                      : lang === 'th'
+                      ? 'คลิกปุ่มเดียว บันทึกพร้อมกันทั้ง สต็อกรถ (Inventory) และ ใบบิล/ใบรับ (Bills & Invoices)'
+                      : '1-Click Dual Save: Records to Inventory Stock & Bills/Invoices simultaneously'}
+                  </span>
+                </p>
               </div>
 
               <button
                 type="submit"
-                className="px-8 py-3.5 bg-white hover:bg-zinc-200 text-black font-extrabold text-sm rounded-2xl transition-all shadow-xl flex items-center gap-2 hover:scale-[1.01]"
+                className="px-8 py-3.5 bg-white hover:bg-zinc-200 text-black font-extrabold text-sm rounded-2xl transition-all shadow-xl flex items-center gap-2 hover:scale-[1.01] cursor-pointer"
               >
                 <PackagePlus className="w-5 h-5" />
-                <span>{t.saveStockInBtn}</span>
+                <span>
+                  {lang === 'lo' 
+                    ? 'ບັນທຶກສະຕ໋ອກ & ອອກໃບຮັບ (Dual Save)' 
+                    : lang === 'th' 
+                    ? 'บันทึกสต็อก & ออกใบรับ (Dual Save)' 
+                    : 'Save Stock & Issue Inbound Bill'}
+                </span>
               </button>
             </div>
           );
@@ -989,19 +1090,24 @@ export default function StockInView({
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2 text-white">
                 <CheckCircle2 className="w-5 h-5 text-white" />
-                <h3 className="font-bold text-base text-white">
-                  {lang === 'lo' ? 'ນຳເຂົ້າສຳເລັດ • ອອກໃບຮັບເຂົ້າສິນຄ້າແລ້ວ' : lang === 'th' ? 'นำเข้าสำเร็จ • ออกใบรับสินค้าเรียบร้อย' : 'Stock-In Success • Receipt Issued'}
-                </h3>
+                <div>
+                  <h3 className="font-bold text-base text-white">
+                    {lang === 'lo' ? 'ນຳເຂົ້າສຳເລັດ • ບັນທຶກທັງ 2 ລະບົບແລ້ວ' : lang === 'th' ? 'นำเข้าสำเร็จ • บันทึกทั้ง 2 ระบบแล้ว' : 'Stock-In Success • Dual Recorded'}
+                  </h3>
+                  <p className="text-[11px] text-zinc-400">
+                    {lang === 'lo' ? 'ຂໍ້ມູນຖືກເພີ່ມເຂົ້າ ສະຕ໋ອກລົດ (Inventory) ແລະ ໜ້າໃບບິນ/ໃບຮັບ (Bills) ພ້ອມກັນ' : 'Saved to Inventory Stock & Bills View'}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setCreatedBill(null)}
-                className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800"
+                className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-5 bg-black border border-zinc-800 rounded-2xl space-y-3 text-xs font-mono">
+            <div className="p-5 receipt-paper bg-zinc-900/80 border border-zinc-800 rounded-2xl space-y-3 text-xs font-mono shadow-md">
               <div className="flex justify-between items-start pb-3 border-b border-zinc-800">
                 <div>
                   <span className="font-black text-white text-sm block">AVATR AUTO SERVICE</span>
@@ -1016,35 +1122,47 @@ export default function StockInView({
               <div className="space-y-1.5 text-zinc-300">
                 <div><span className="text-zinc-500 font-sans">{t.tableModel}:</span> <strong className="text-white">{createdBill.model}</strong> ({createdBill.trim})</div>
                 <div><span className="text-zinc-500 font-sans">{t.vinNumber}:</span> <span className="text-white">{createdBill.vin}</span></div>
+                <div><span className="text-zinc-500 font-sans">{t.quantityUnits}:</span> <strong className="text-white">{createdBill.quantity} {t.unitCars}</strong></div>
                 <div><span className="text-zinc-500 font-sans">{t.tableColor}/{t.plateNumber}:</span> {createdBill.color} • {createdBill.plateNumber}</div>
                 <div><span className="text-zinc-500 font-sans">{t.supplierName}:</span> {createdBill.supplierName}</div>
                 <div><span className="text-zinc-500 font-sans">{t.warehouseDest}:</span> {createdBill.destinationWarehouse}</div>
-                <div className="pt-2 flex justify-between text-sm font-bold text-white border-t border-zinc-900">
+                <div className="pt-2 flex justify-between text-sm font-bold text-white border-t border-zinc-800/80">
                   <span>{lang === 'lo' ? 'ມູນຄ່ານຳເຂົ້າ:' : lang === 'th' ? 'มูลค่านำเข้า:' : 'Valuation:'}</span>
-                  <span className="text-white font-bold">${createdBill.netTotalUSD.toLocaleString()}</span>
+                  <span className="text-white font-bold">${createdBill.netTotalUSD.toLocaleString()} USD</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
               <button
-                onClick={() => {
-                  setCreatedBill(null);
-                  onNavigateToBills();
-                }}
-                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold border border-zinc-700"
+                onClick={() => setCreatedBill(null)}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-xl text-xs font-semibold border border-zinc-800 cursor-pointer"
               >
-                {t.billsTitle || 'Bills'}
+                {lang === 'lo' ? 'ປິດປ໋ອບອັບ' : 'Close'}
               </button>
-              <button
-                onClick={() => {
-                  setCreatedBill(null);
-                  onNavigateToStock();
-                }}
-                className="px-4 py-2 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold"
-              >
-                {t.tabStockList || 'Stock'}
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setCreatedBill(null);
+                    onNavigateToBills();
+                  }}
+                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold border border-zinc-700 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>{lang === 'lo' ? 'ເບິ່ງໃນໜ້າ ບັນທຶກບິນ & ໃບຮັບ' : 'View in Bills & Invoices'}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setCreatedBill(null);
+                    onNavigateToStock();
+                  }}
+                  className="px-4 py-2 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Car className="w-3.5 h-3.5 text-black" />
+                  <span>{lang === 'lo' ? 'ເບິ່ງໃນໜ້າ ສະຕ໋ອກລົດ' : 'View in Inventory Stock'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1235,6 +1353,24 @@ export default function StockInView({
           </div>
         </div>
       )}
+
+      {/* Custom Confirmation Popup Modal for Deleting Vehicle Model */}
+      <ConfirmDeleteModal
+        isOpen={!!modelToDelete}
+        isLoading={isDeletingModel}
+        onClose={() => setModelToDelete(null)}
+        onConfirm={handleConfirmDeleteModel}
+        itemName={modelToDelete ? `ລຸ້ນ: ${modelToDelete.name} (${modelToDelete.category || modelToDelete.subTitle || 'EV'})` : ''}
+        itemType="VEHICLE MODEL"
+        title={lang === 'lo' ? `ຢືນຢັນການລົບລຸ້ນ "${modelToDelete?.name}"` : `Confirm Delete Model`}
+        description={lang === 'lo' 
+          ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບລຸ້ນຍານຍົນ "${modelToDelete?.name}" ອອກຈາກລະບົບ? ລຸ້ນນີ້ຈະຖືກລົບອອກຈາກຖານຂໍ້ມູນ Cloud Firestore ຢ່າງຖາວອນ ແລະ ຈະບໍ່ປາກົດໃນຕົວເລືອກອີກ.`
+          : `Are you sure you want to delete vehicle model "${modelToDelete?.name}"? It will be permanently removed from Firestore and will no longer appear in options.`
+        }
+        confirmButtonText={lang === 'lo' ? 'ຢືນຢັນລົບລຸ້ນນີ້' : 'Delete Model'}
+        cancelButtonText={lang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+        lang={lang}
+      />
     </div>
   );
 }

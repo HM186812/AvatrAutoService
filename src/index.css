@@ -220,6 +220,24 @@ html.light .text-white {
   color: #09090b !important;
 }
 
+/* Protected Overlays & Badges ONLY over Car Photos in Light Mode */
+html.light .always-white-text,
+html.light .always-white-text * {
+  color: #ffffff !important;
+}
+
+/* Light Mode Paper & Invoice styling */
+html.light .receipt-paper {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08) !important;
+}
+
+html.light .receipt-paper * {
+  color: #09090b !important;
+}
+
 html.light .text-zinc-100,
 html.light .text-zinc-200 {
   color: #18181b !important;
@@ -294,6 +312,7 @@ html.light table tbody tr:hover {
 }
 
 /* Modal Backdrops & Dialogs in Light Mode */
+html.light .fixed.inset-0.bg-black\/90,
 html.light .fixed.inset-0.bg-black\/85,
 html.light .fixed.inset-0.bg-black\/80,
 html.light .fixed.inset-0.bg-black\/70 {

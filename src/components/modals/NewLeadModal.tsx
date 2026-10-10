@@ -1,22 +1,23 @@
 import React, { useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
-import { Lead, CustomerCategory, Language } from '../../types';
+import { Lead, CustomerCategory, Language, VehicleModel } from '../../types';
 import { translations } from '../../data/translations';
 
 interface NewLeadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => void;
+  vehicles?: VehicleModel[];
   lang?: Language;
 }
 
-export default function NewLeadModal({ isOpen, onClose, onAddLead, lang = 'lo' }: NewLeadModalProps) {
+export default function NewLeadModal({ isOpen, onClose, onAddLead, vehicles, lang = 'lo' }: NewLeadModalProps) {
   const t = translations[lang] || translations.lo;
 
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [interestedModel, setInterestedModel] = useState<string>('AVATR 12');
+  const [interestedModel, setInterestedModel] = useState<string>(() => vehicles?.[0]?.name || 'AVATR 12');
   const [priority, setPriority] = useState<'vip' | 'high' | 'normal'>('vip');
   const [category, setCategory] = useState<CustomerCategory>('walk_in');
   const [budget, setBudget] = useState('$55,000');
@@ -128,9 +129,19 @@ export default function NewLeadModal({ isOpen, onClose, onAddLead, lang = 'lo' }
                 onChange={(e) => setInterestedModel(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-white transition-colors"
               >
-                <option value="AVATR 12">AVATR 12 (Future Luxury Grand Coupé)</option>
-                <option value="AVATR 11">AVATR 11 (Smart Emotional SUV Coupé)</option>
-                <option value="AVATR 07">AVATR 07 (Intelligent Urban Luxury)</option>
+                {vehicles && vehicles.length > 0 ? (
+                  vehicles.map((v) => (
+                    <option key={v.id || v.name} value={v.name}>
+                      {v.name} {v.subTitle ? `(${v.subTitle})` : ''}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="AVATR 12">AVATR 12 (Future Luxury Grand Coupé)</option>
+                    <option value="AVATR 11">AVATR 11 (Smart Emotional SUV Coupé)</option>
+                    <option value="AVATR 07">AVATR 07 (Intelligent Urban Luxury)</option>
+                  </>
+                )}
               </select>
             </div>
 

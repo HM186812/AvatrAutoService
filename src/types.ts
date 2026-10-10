@@ -37,7 +37,7 @@ export interface UserPermissions {
 }
 
 export interface SystemUser {
-  id: string; // Firebase UID or local ID
+  id: string; // Supabase UID or local ID
   name: string;
   email: string;
   phone: string;
@@ -63,7 +63,7 @@ export type KPITimeframe = 'day' | 'week' | 'month' | 'year';
 export interface InventoryItem {
   vin: string; // Document ID (17 chars)
   model: string;
-  plateNumber: string; // ทะเบียน / ປ້າຍ
+  plateNumber?: string; // ทะเบียน / ປ້າຍ
   color: string;
   colorHex?: string;
   interiorColor: string;
@@ -80,7 +80,10 @@ export interface InventoryItem {
   pdiStatus: PDIStatus; // passed, in_progress, pending
   pdiInspector?: string;
   pdiNotes?: string;
-  location: string;
+  location?: string;
+  destinationWarehouse?: string;
+  importDocNumber?: string;
+  notes?: string;
   imageUrl?: string;
   image?: string; // Alias for backward compatibility
   reservedForCustomer?: string;
@@ -262,7 +265,7 @@ export interface StockLogRecord {
   type: StockLogType;
   vin: string;
   model: string;
-  plateNumber: string;
+  plateNumber?: string;
   color?: string;
   quantity: number;
   priceUSD: number;

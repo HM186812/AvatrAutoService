@@ -67,7 +67,7 @@ export default function QuotationModal({
         </div>
 
         {/* Printable Quotation Content */}
-        <div className="mt-4 p-4 sm:p-6 bg-zinc-900/60 rounded-2xl border border-zinc-800">
+        <div className="mt-4 p-4 sm:p-6 receipt-paper bg-zinc-900/60 rounded-2xl border border-zinc-800 shadow-md">
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800 pb-5">
             <div className="flex items-center gap-3">
@@ -105,7 +105,7 @@ export default function QuotationModal({
           </div>
 
           {/* Interactive Calculator Adjusters (Hidden in Print) */}
-          <div className="print:hidden my-4 p-4 bg-black/60 border border-zinc-800 rounded-xl space-y-4 text-xs">
+          <div className="print:hidden my-4 p-4 bg-zinc-900/80 border border-zinc-800 rounded-xl space-y-4 text-xs">
             <h4 className="font-semibold text-zinc-300 text-xs flex items-center justify-between">
               <span>ປັບແຕ່ງແຜນການເງິນ (Loan & Down Payment Settings)</span>
               <span className="text-[11px] text-zinc-400 font-mono">Currency: USD ($)</span>

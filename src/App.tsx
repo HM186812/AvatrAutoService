@@ -23,14 +23,14 @@ import {
 } from './data/mockData';
 import { translations } from './data/translations';
 import { 
-  isFirebaseConfigured, 
-  seedFirestoreIfEmpty, 
+  isSupabaseConfigured, 
+  seedSupabaseIfEmpty, 
   subscribeToInventory, 
   subscribeToBills, 
   subscribeToVehicleModels, 
   subscribeToUsers, 
-  deleteBillFromFirestore 
-} from './firebase';
+  deleteBillFromSupabase 
+} from './supabase';
 // Categorized Components & Views
 import { Sidebar } from './components/layout';
 import { LoginView } from './components/auth';
@@ -90,6 +90,8 @@ export default function App() {
     }
     return 'lo';
   });
+
+  const t = translations[lang] || translations.lo;
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
@@ -273,11 +275,23 @@ export default function App() {
     }
   });
 
-  // Vehicle Models State (Admin ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້)
+  // Vehicle Models State (Admin ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້ບໍ່ຈຳກັດ)
   const [vehicles, setVehicles] = useState<VehicleModel[]>(() => {
     try {
+      const isInit = localStorage.getItem('avatr_vehicle_models_v3_init');
+      if (!isInit) {
+        localStorage.setItem('avatr_vehicle_models_v3_init', 'true');
+        localStorage.setItem('avatr_vehicle_models_prod_v1', JSON.stringify(AVATR_VEHICLES));
+        return AVATR_VEHICLES;
+      }
       const saved = localStorage.getItem('avatr_vehicle_models_prod_v1');
-      return saved ? JSON.parse(saved) : AVATR_VEHICLES;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+      return AVATR_VEHICLES;
     } catch {
       return AVATR_VEHICLES;
     }
@@ -320,10 +334,10 @@ export default function App() {
     localStorage.setItem('avatr_testdrives_prod_v1', JSON.stringify(testDrives));
   }, [testDrives]);
 
-  // Real-time Firestore Cloud Synchronization (100% Spark Free Plan)
+  // Real-time Supabase Cloud Synchronization
   useEffect(() => {
-    if (isFirebaseConfigured()) {
-      seedFirestoreIfEmpty();
+    if (isSupabaseConfigured()) {
+      seedSupabaseIfEmpty();
 
       const unsubInventory = subscribeToInventory((items) => {
         setInventory(items || []);
@@ -338,8 +352,6 @@ export default function App() {
           setVehicles(models);
         }
       });
-
-
 
       const unsubUsers = subscribeToUsers((uList) => {
         const list = uList || [];
@@ -411,16 +423,16 @@ export default function App() {
     triggerToast('ທ່ານໄດ້ອອກຈາກລະບົບຮຽບຮ້ອຍແລ້ວ');
   };
 
-  // Delete Bill Handler (Super Admin only - synced to Firestore)
+  // Delete Bill Handler (Super Admin only - synced to Supabase)
   const handleDeleteBill = async (billId: string) => {
     if (currentUser.role !== 'super_admin') {
       triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບບິນ!');
       return;
     }
     try {
-      await deleteBillFromFirestore(billId);
+      await deleteBillFromSupabase(billId);
     } catch (e) {
-      console.warn('Firestore delete bill fallback:', e);
+      console.warn('Supabase delete bill fallback:', e);
     }
     setBills(prev => prev.filter(b => b.id !== billId));
     triggerToast('ລົບບິນສຳເລັດແລ້ວ!');
@@ -525,7 +537,8 @@ export default function App() {
           setIsLoggedIn(true);
           localStorage.setItem('avatr_logged_in', 'true');
           localStorage.setItem('avatr_active_user_id_v1', user.id);
-          triggerToast(`${t.success}: ${user.name}`);
+          const currentT = translations[lang] || translations.lo;
+          triggerToast(`${currentT.success}: ${user.name}`);
         }}
         onRegisterUser={(newUser) => {
           setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)]);
@@ -537,8 +550,6 @@ export default function App() {
       />
     );
   }
-
-  const t = translations[lang] || translations.lo;
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
@@ -834,6 +845,7 @@ export default function App() {
         isOpen={isNewLeadOpen}
         onClose={() => setIsNewLeadOpen(false)}
         onAddLead={handleAddLead}
+        vehicles={vehicles}
         lang={lang}
       />
 

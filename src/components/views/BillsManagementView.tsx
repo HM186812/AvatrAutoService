@@ -415,7 +415,7 @@ export default function BillsManagementView({
             </div>
 
             {/* PRINTABLE BILL CANVAS (A4-Style Layout) */}
-            <div className="bg-black border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-6 text-xs text-zinc-300 font-sans selection:bg-white selection:text-black">
+            <div className="receipt-paper bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-6 text-xs text-zinc-300 font-sans shadow-xl selection:bg-white selection:text-black">
               {/* Bill Header */}
               <div className="flex flex-wrap items-start justify-between gap-4 pb-6 border-b border-zinc-800">
                 <div className="space-y-1.5">

@@ -2,16 +2,12 @@ import { useState, useEffect } from 'react';
 import { SystemUser, Language, UserRole } from '../../types';
 import { translations } from '../../data/translations';
 import {
-  auth,
-  db,
-  isFirebaseConfigured,
-  saveUserToFirestore
-} from '../../firebase';
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword
-} from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+  isSupabaseConfigured,
+  signInWithSupabase,
+  signUpWithSupabase,
+  getUserFromSupabase,
+  saveUserToSupabase
+} from '../../supabase';
 import AvatrLogo from '../layout/AvatrLogo';
 import {
   Lock,
@@ -137,8 +133,8 @@ export default function LoginView({
     setIsLoading(true);
 
     try {
-      // Try Firebase Authentication if configured
-      if (isFirebaseConfigured() && auth && password) {
+      // Try Supabase Authentication if configured
+      if (isSupabaseConfigured() && password) {
         const emailAttempts: string[] = [];
         if (cleanId.includes('@')) {
           emailAttempts.push(cleanId);
@@ -150,67 +146,48 @@ export default function LoginView({
           emailAttempts.push(`${cleanId}@avatr.phone.la`);
         }
 
-        let userCredential = null;
+        let authUser: any = null;
         for (const attemptEmail of emailAttempts) {
           try {
-            userCredential = await signInWithEmailAndPassword(auth, attemptEmail, password);
-            if (userCredential) break;
+            const res = await signInWithSupabase(attemptEmail, password);
+            if (res?.data?.user) {
+              authUser = res.data.user;
+              break;
+            }
           } catch {
             // continue
           }
         }
 
-        if (userCredential) {
-          const fbUid = userCredential.user.uid;
+        if (authUser) {
+          const supaUid = authUser.id;
 
           // 1. Search in current memory state
-          let matchedFb = users.find(
+          let matchedUser = users.find(
             u =>
-              u.id === fbUid ||
+              u.id === supaUid ||
               (u.email && u.email.toLowerCase() === cleanId) ||
               (u.phone && u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, ''))
           );
 
-          // 2. If not found in memory, try fetching directly from Firestore
-          if (!matchedFb && db) {
+          // 2. If not found in memory, try fetching directly from Supabase
+          if (!matchedUser) {
             try {
-              const docSnap = await getDoc(doc(db, 'users', fbUid));
-              if (docSnap.exists()) {
-                const data = docSnap.data();
-                matchedFb = {
-                  id: docSnap.id,
-                  name: data.name || cleanId,
-                  email: data.email || (cleanId.includes('@') ? cleanId : ''),
-                  phone: data.phone || (cleanId.includes('@') ? '' : cleanId),
-                  role: data.role || 'super_admin',
-                  roleTitleLo: data.roleTitleLo || 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)',
-                  department: data.department || 'Executive Management & Direction',
-                  status: data.status || 'active',
-                  avatarInitials: data.avatarInitials || (data.name ? data.name.slice(0, 2) : 'AD'),
-                  permissions: data.permissions || {
-                    canManageUsers: true,
-                    canDeleteUsers: true,
-                    canGrantRoles: true,
-                    canEditInventory: true,
-                    canUploadQR: true,
-                    canAddModels: true,
-                    canDeductPOS: true,
-                    canViewFinancials: true,
-                  },
-                  createdAt: data.createdAt || new Date().toISOString().slice(0, 10),
-                };
+              const supaProfile = await getUserFromSupabase(supaUid);
+              if (supaProfile) {
+                matchedUser = supaProfile;
               }
             } catch (fetchErr) {
-              console.warn('Firestore user fetch notice:', fetchErr);
+              console.warn('Supabase user fetch notice:', fetchErr);
             }
           }
 
-          // 3. If authenticated in Firebase but no Firestore profile exists yet, auto-create as Super Admin
-          if (!matchedFb) {
+          // 3. If authenticated in Supabase but no profile exists yet, auto-create
+          if (!matchedUser) {
             const isSuperAdmin = !users || users.length === 0 || !users.some(u => u.role === 'super_admin');
-            matchedFb = {
-              id: fbUid,
-              name: cleanId.includes('@') ? cleanId.split('@')[0] : `User-${cleanId.slice(-4)}`,
+            matchedUser = {
+              id: supaUid,
+              name: authUser.user_metadata?.name || (cleanId.includes('@') ? cleanId.split('@')[0] : `User-${cleanId.slice(-4)}`),
               email: cleanId.includes('@') ? cleanId : `${cleanId.replace(/\s+/g, '')}@avatr.phone.la`,
               phone: cleanId.includes('@') ? '' : cleanId,
               role: isSuperAdmin ? 'super_admin' : 'general_user',
@@ -232,15 +209,15 @@ export default function LoginView({
               lastLogin: new Date().toISOString().slice(0, 16).replace('T', ' '),
             };
             try {
-              await saveUserToFirestore(matchedFb);
+              await saveUserToSupabase(matchedUser);
             } catch {}
           } else {
-            const hasAnySuperAdmin = users.some(u => u.role === 'super_admin' && u.id !== matchedFb!.id);
+            const hasAnySuperAdmin = users.some(u => u.role === 'super_admin' && u.id !== matchedUser!.id);
             if (!hasAnySuperAdmin) {
-              matchedFb.role = 'super_admin';
-              matchedFb.roleTitleLo = 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)';
-              matchedFb.department = 'Executive Management & Direction';
-              matchedFb.permissions = {
+              matchedUser.role = 'super_admin';
+              matchedUser.roleTitleLo = 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)';
+              matchedUser.department = 'Executive Management & Direction';
+              matchedUser.permissions = {
                 canManageUsers: true,
                 canDeleteUsers: true,
                 canGrantRoles: true,
@@ -251,22 +228,22 @@ export default function LoginView({
                 canViewFinancials: true,
               };
               try {
-                await saveUserToFirestore(matchedFb);
+                await saveUserToSupabase(matchedUser);
               } catch {}
             }
           }
 
-          if (matchedFb) {
-            if (onRegisterUser) onRegisterUser(matchedFb);
+          if (matchedUser) {
+            if (onRegisterUser) onRegisterUser(matchedUser);
             setSuccessMessage(
               lang === 'lo'
-                ? `ເຂົ້າສູ່ລະບົບ Cloud Firebase ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${matchedFb.name}`
+                ? `ເຂົ້າສູ່ລະບົບ Cloud Supabase ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${matchedUser.name}`
                 : lang === 'th'
-                ? `เข้าสู่ระบบสำเร็จ! ยินดีต้อนรับ ${matchedFb.name}`
-                : `Welcome ${matchedFb.name}`
+                ? `เข้าสู่ระบบสำเร็จ! ยินดีต้อนรับ ${matchedUser.name}`
+                : `Welcome ${matchedUser.name}`
             );
             setTimeout(() => {
-              onLoginSuccess(matchedFb!, rememberMe);
+              onLoginSuccess(matchedUser!, rememberMe);
             }, 300);
             return;
           }
@@ -388,20 +365,22 @@ export default function LoginView({
       const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
       const authEmail = cleanEmail || `${cleanPhone.replace(/\D/g, '') || cleanPhone.replace(/\s+/g, '')}@avatr.phone.la`;
 
-      // Attempt Firebase Auth user creation
-      if (isFirebaseConfigured() && auth) {
+      // Attempt Supabase Auth user creation
+      if (isSupabaseConfigured()) {
         try {
-          const userCred = await createUserWithEmailAndPassword(auth, authEmail, regPassword);
-          newUserId = userCred.user.uid;
+          const res = await signUpWithSupabase(authEmail, regPassword, { name: cleanName, phone: cleanPhone });
+          if (res?.data?.user) {
+            newUserId = res.data.user.id;
+          }
         } catch (err: any) {
-          console.warn('Firebase Auth user creation notice:', err.message);
-          if (err.code === 'auth/email-already-in-use' || err.message?.includes('already in use')) {
-            try {
-              const loginCred = await signInWithEmailAndPassword(auth, authEmail, regPassword);
-              newUserId = loginCred.user.uid;
-            } catch (loginErr) {
-              console.warn('Existing account signin notice:', loginErr);
+          console.warn('Supabase Auth user creation notice:', err?.message || err);
+          try {
+            const loginRes = await signInWithSupabase(authEmail, regPassword);
+            if (loginRes?.data?.user) {
+              newUserId = loginRes.data.user.id;
             }
+          } catch (loginErr) {
+            console.warn('Existing account signin notice:', loginErr);
           }
         }
       }
@@ -432,9 +411,9 @@ export default function LoginView({
       };
 
       try {
-        await saveUserToFirestore(newUser);
+        await saveUserToSupabase(newUser);
       } catch (err) {
-        console.warn('Firestore user save fallback:', err);
+        console.warn('Supabase user save fallback:', err);
       }
 
       setSuccessMessage(
@@ -1060,22 +1039,51 @@ export default function LoginView({
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full py-2.5 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-2 cursor-pointer group disabled:opacity-50 ${
+              style={{
+                backgroundColor: isDark ? '#ffffff' : '#09090b',
+                color: isDark ? '#09090b' : '#ffffff',
+              }}
+              className={`w-full py-3 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-3 cursor-pointer group disabled:opacity-50 ${
                 isDark
-                  ? 'bg-white hover:bg-zinc-100 text-black shadow-zinc-950/50'
-                  : 'bg-slate-950 hover:bg-slate-800 text-white shadow-slate-400/50'
+                  ? 'hover:bg-zinc-100 shadow-zinc-950/50'
+                  : 'hover:bg-zinc-800 shadow-slate-400/50'
               }`}
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>ກຳລັງສ້າງບັນຊີ...</span>
+                  <Loader2
+                    className="w-4 h-4 animate-spin"
+                    style={{ color: isDark ? '#09090b' : '#ffffff' }}
+                  />
+                  <span
+                    className="font-black"
+                    style={{ color: isDark ? '#09090b' : '#ffffff' }}
+                  >
+                    ກຳລັງສ້າງບັນຊີ...
+                  </span>
                 </>
               ) : (
                 <>
-                  <User className="w-4 h-4" />
-                  <span>{t.authSignUpBtn}</span>
-                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                  <User
+                    className="w-4 h-4"
+                    style={{
+                      color: isDark ? '#09090b' : '#ffffff',
+                      stroke: isDark ? '#09090b' : '#ffffff',
+                    }}
+                  />
+                  <span
+                    className="font-black"
+                    style={{ color: isDark ? '#09090b' : '#ffffff' }}
+                  >
+                    {t.authSignUpBtn}
+                  </span>
+                  <ArrowRight
+                    className="w-4 h-4 transition-transform group-hover:translate-x-1"
+                    style={{
+                      color: isDark ? '#09090b' : '#ffffff',
+                      stroke: isDark ? '#09090b' : '#ffffff',
+                    }}
+                  />
                 </>
               )}
             </button>

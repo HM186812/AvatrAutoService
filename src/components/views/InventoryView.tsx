@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SaleLogRecord, SystemUser } from '../../types';
 import { translations } from '../../data/translations';
 import { 
-  saveInventoryItemToFirestore, 
-  deleteInventoryItemFromFirestore 
-} from '../../firebase';
+  saveInventoryItemToSupabase, 
+  deleteInventoryItemFromSupabase 
+} from '../../supabase';
+import { ConfirmDeleteModal } from '../modals';
 import { 
   Car, 
   Search, 
@@ -115,17 +116,25 @@ export default function InventoryView({
     const finalPriceUSD = soldPriceUSD || sellingItem.priceUSD;
 
     // 1) Update inventory stock
+    const updatedInventoryItem: InventoryItem = {
+      ...sellingItem,
+      stockQuantity: remaining,
+      status: remaining === 0 ? 'sold' : sellingItem.status,
+      reservedForCustomer: undefined,
+    };
+
     setInventory(prev => prev.map(item => {
       if (item.vin === sellingItem.vin) {
-        return {
-          ...item,
-          stockQuantity: remaining,
-          status: remaining === 0 ? 'sold' : item.status,
-          reservedForCustomer: undefined,
-        };
+        return updatedInventoryItem;
       }
       return item;
     }));
+
+    try {
+      saveInventoryItemToSupabase(updatedInventoryItem);
+    } catch (e) {
+      console.warn('Supabase inventory deduction fallback:', e);
+    }
 
     // 2) Record into persistent Stock Log (Stock-Out / ຂາຍອອກ)
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -171,33 +180,44 @@ export default function InventoryView({
     setInventory(prev => prev.map(item => item.vin === editingItem.vin ? updatedItem : item));
 
     try {
-      await saveInventoryItemToFirestore(updatedItem);
+      await saveInventoryItemToSupabase(updatedItem);
     } catch (err) {
-      console.warn('Firestore edit item save fallback:', err);
+      console.warn('Supabase edit item save fallback:', err);
     }
 
     triggerToast(`ອັບເດດຂໍ້ມູນລົດ ${editingItem.model} (VIN: ${editingItem.vin}) ສຳເລັດ! (Cloud Synced)`);
     setEditingItem(null);
   };
 
-  // DELETE VEHICLE HANDLER (ລົບສິນຄ້າອອກຈາກຖານຂໍ້ມູນ - Super Admin only)
-  const handleDeleteItem = async (vin: string, model: string) => {
+  // DELETE VEHICLE HANDLER (ລົບສິນຄ້າອອກຈາກຖານຂໍ້ມູນ - Super Admin only with ConfirmDeleteModal)
+  const [inventoryToDelete, setInventoryToDelete] = useState<InventoryItem | null>(null);
+  const [isDeletingInventory, setIsDeletingInventory] = useState(false);
+
+  const handleRequestDeleteItem = (item: InventoryItem) => {
     if (!isSuperAdmin) {
       triggerToast('ສະເພາະ Admin (Super Admin) ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!');
       return;
     }
-    if (window.confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບລົດ ${model} (VIN: ${vin}) ອອກຈາກຖານຂໍ້ມູນສະຕ໋ອກຢ່າງຖາວອນ?`)) {
-      try {
-        await deleteInventoryItemFromFirestore(vin);
-      } catch (err) {
-        console.warn('Firestore delete item fallback:', err);
-      }
-      setInventory(prev => prev.filter(item => item.vin !== vin));
-      if (editingItem?.vin === vin) {
-        setEditingItem(null);
-      }
-      triggerToast(`ລົບລົດ ${model} (VIN: ${vin}) ອອກຈາກຖານຂໍ້ມູນສຳເລັດແລ້ວ!`);
+    setInventoryToDelete(item);
+  };
+
+  const handleConfirmDeleteInventory = async () => {
+    if (!inventoryToDelete) return;
+    setIsDeletingInventory(true);
+    const target = inventoryToDelete;
+
+    try {
+      await deleteInventoryItemFromSupabase(target.vin);
+    } catch (err) {
+      console.warn('Supabase delete item fallback:', err);
     }
+    setInventory(prev => prev.filter(item => item.vin !== target.vin));
+    if (editingItem?.vin === target.vin) {
+      setEditingItem(null);
+    }
+    setIsDeletingInventory(false);
+    setInventoryToDelete(null);
+    triggerToast(`ລົບລົດ ${target.model} (VIN: ${target.vin}) ອອກຈາກຖານຂໍ້ມູນສຳເລັດແລ້ວ!`);
   };
 
   const handleEditImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -225,7 +245,7 @@ export default function InventoryView({
       const q = searchQuery.toLowerCase();
       return (
         item.vin.toLowerCase().includes(q) ||
-        item.plateNumber.toLowerCase().includes(q) ||
+        (item.plateNumber || '').toLowerCase().includes(q) ||
         item.model.toLowerCase().includes(q) ||
         item.color.toLowerCase().includes(q)
       );
@@ -413,59 +433,59 @@ export default function InventoryView({
                     />
 
                     {/* Status Pill */}
-                    <div className="absolute top-3 left-3">
+                    <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 always-white-text">
                       {item.status === 'ready' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-100 border border-zinc-700 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-                          <span>ພ້ອມຂາຍ</span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-black/80 text-white border border-zinc-700 backdrop-blur-md flex items-center gap-1.5 shadow-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                          <span style={{ color: '#ffffff' }}>ພ້ອມຂາຍ</span>
                         </span>
                       )}
                       {item.status === 'pdi' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
-                          <span>ກຳລັງ PDI</span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-black/80 text-white border border-zinc-700 backdrop-blur-md flex items-center gap-1.5 shadow-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                          <span style={{ color: '#ffffff' }}>ກຳລັງ PDI</span>
                         </span>
                       )}
                       {item.status === 'imported' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
-                          <span>ນຳເຂົ້າ / ລໍຖ້າກຽມ</span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-black/80 text-white border border-zinc-700 backdrop-blur-md flex items-center gap-1.5 shadow-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                          <span style={{ color: '#ffffff' }}>ນຳເຂົ້າ / ລໍຖ້າກຽມ</span>
                         </span>
                       )}
                       {item.status === 'reserved' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
-                          <span>ຈອງແລ້ວ</span>
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-black/80 text-white border border-zinc-700 backdrop-blur-md flex items-center gap-1.5 shadow-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                          <span style={{ color: '#ffffff' }}>ຈອງແລ້ວ</span>
                         </span>
                       )}
                       {item.status === 'event' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-200 border border-zinc-600 flex items-center gap-1.5 shadow-md">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-black/80 text-white border border-zinc-600 backdrop-blur-md flex items-center gap-1.5 shadow-md">
                           <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                          <span>ລົດງານ Event</span>
+                          <span style={{ color: '#ffffff' }}>ລົດງານ Event</span>
                         </span>
                       )}
                       {item.status === 'promotion' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-200 border border-zinc-600 flex items-center gap-1.5 shadow-md">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-black/80 text-white border border-zinc-600 backdrop-blur-md flex items-center gap-1.5 shadow-md">
                           <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                          <span>ໂປຣໂມຊັນພິເສດ</span>
+                          <span style={{ color: '#ffffff' }}>ໂປຣໂມຊັນພິເສດ</span>
                         </span>
                       )}
                       {item.status === 'sold' && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-900 text-zinc-400 border border-zinc-800 flex items-center gap-1.5">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-black/80 text-zinc-300 border border-zinc-800 backdrop-blur-md flex items-center gap-1.5 shadow-md">
                           <span className="w-1.5 h-1.5 rounded-full bg-zinc-500"></span>
-                          <span>ຂາຍແລ້ວ (0)</span>
+                          <span style={{ color: '#a1a1aa' }}>ຂາຍແລ້ວ (0)</span>
                         </span>
                       )}
                     </div>
 
                     {/* Stock Count Badge */}
-                    <div className="absolute top-3 right-3 bg-black/80 px-2.5 py-1 rounded-full text-xs font-mono font-bold border border-zinc-700 text-white">
-                      ສະຕ໋ອກ: {item.stockQuantity} ຄັນ
+                    <div className="absolute top-3 right-3 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-mono font-bold border border-zinc-700 text-white shadow-md always-white-text">
+                      <span className="text-white" style={{ color: '#ffffff' }}>ສະຕ໋ອກ: {item.stockQuantity} ຄັນ</span>
                     </div>
 
                     {/* Price */}
-                    <div className="absolute bottom-3 right-3 bg-black/85 backdrop-blur-md px-3 py-1 rounded-xl border border-zinc-700 text-right">
-                      <span className="text-base font-black font-mono text-white">
+                    <div className="absolute bottom-3 right-3 bg-black/85 backdrop-blur-md px-3 py-1 rounded-xl border border-zinc-700 text-right shadow-md always-white-text">
+                      <span className="text-base font-black font-mono text-white tracking-tight" style={{ color: '#ffffff' }}>
                         ${item.priceUSD.toLocaleString()}
                       </span>
                     </div>
@@ -574,8 +594,8 @@ export default function InventoryView({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteItem(item.vin, item.model)}
-                          className="p-1.5 text-zinc-500 hover:text-white bg-zinc-900/60 hover:bg-zinc-800 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors"
+                          onClick={() => handleRequestDeleteItem(item)}
+                          className="p-1.5 text-zinc-500 hover:text-red-400 bg-zinc-900/60 hover:bg-zinc-800 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
                           title={t.btnDeleteCar}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1091,8 +1111,8 @@ export default function InventoryView({
               <div className="pt-3 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
-                  onClick={() => handleDeleteItem(editingItem.vin, editingItem.model)}
-                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-xl border border-zinc-700 flex items-center gap-1.5 transition-colors font-medium text-xs"
+                  onClick={() => handleRequestDeleteItem(editingItem)}
+                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-xl border border-zinc-700 flex items-center gap-1.5 transition-colors font-medium text-xs cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>{t.btnDeleteCar}</span>
@@ -1118,6 +1138,24 @@ export default function InventoryView({
           </div>
         </div>
       )}
+
+      {/* Modern Confirmation Popup Modal for Deleting Inventory Item */}
+      <ConfirmDeleteModal
+        isOpen={!!inventoryToDelete}
+        isLoading={isDeletingInventory}
+        onClose={() => setInventoryToDelete(null)}
+        onConfirm={handleConfirmDeleteInventory}
+        itemName={inventoryToDelete ? `${inventoryToDelete.model} (VIN: ${inventoryToDelete.vin}) | ສີ: ${inventoryToDelete.color}` : ''}
+        itemType="INVENTORY VEHICLE"
+        title={lang === 'lo' ? `ຢືນຢັນການລົບລົດ ${inventoryToDelete?.model}` : 'Confirm Delete Inventory Item'}
+        description={lang === 'lo'
+          ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບລົດ ${inventoryToDelete?.model} (VIN: ${inventoryToDelete?.vin}) ອອກຈາກສະຕ໋ອກ ແລະ ຖານຂໍ້ມູນ Cloud Firestore ຢ່າງຖາວອນ?`
+          : `Are you sure you want to permanently delete ${inventoryToDelete?.model} (VIN: ${inventoryToDelete?.vin}) from inventory and Cloud Firestore?`
+        }
+        confirmButtonText={lang === 'lo' ? 'ຢືນຢັນລົບລົດຄັນນີ້' : 'Delete Vehicle'}
+        cancelButtonText={lang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+        lang={lang}
+      />
     </div>
   );
 }

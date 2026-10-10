@@ -4,10 +4,10 @@ import { getStoredCompanyBankInfo, saveStoredCompanyBankInfo, CompanyBankInfo } 
 import { translations } from '../../data/translations';
 import { 
   uploadCompanyQrCodeToStorage, 
-  saveInventoryItemToFirestore, 
-  saveBillToFirestore, 
-  saveDealershipConfigToFirestore 
-} from '../../firebase';
+  saveInventoryItemToSupabase, 
+  saveBillToSupabase, 
+  saveDealershipConfigToSupabase 
+} from '../../supabase';
 import AvatrLogo from '../layout/AvatrLogo';
 import { 
   Receipt, 
@@ -138,7 +138,7 @@ export default function POSSalesView({
   const [companyBankInfo, setCompanyBankInfo] = useState<CompanyBankInfo>(() => getStoredCompanyBankInfo());
   const [isEnlargeQrOpen, setIsEnlargeQrOpen] = useState(false);
 
-  // Super Admin: Upload custom company QR Code to Firebase Storage / Cloud
+  // Super Admin: Upload custom company QR Code to Supabase Storage / Cloud
   const handleCompanyQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isSuperAdmin) {
       triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!');
@@ -147,7 +147,7 @@ export default function POSSalesView({
     const file = e.target.files?.[0];
     if (file) {
       try {
-        triggerToast('ກຳລັງອັບໂຫຼດຮູບ QR Code ໄປຍັງ Firebase Storage...');
+        triggerToast('ກຳລັງອັບໂຫຼດຮູບ QR Code ໄປຍັງ Supabase Storage...');
         const downloadUrl = await uploadCompanyQrCodeToStorage(file, currentUser);
         const updated: CompanyBankInfo = {
           ...companyBankInfo,
@@ -190,9 +190,9 @@ export default function POSSalesView({
       updatedBy: currentUser?.name || 'Admin',
     };
     try {
-      await saveDealershipConfigToFirestore({ companyQrImageUrl: null });
+      await saveDealershipConfigToSupabase({ companyQrImageUrl: null });
     } catch (e) {
-      console.warn('Firestore reset QR fallback:', e);
+      console.warn('Supabase reset QR fallback:', e);
     }
     setCompanyBankInfo(updated);
     saveStoredCompanyBankInfo(updated);
@@ -215,9 +215,9 @@ export default function POSSalesView({
     setGiftOptions(updated);
     localStorage.setItem('avatr_dealership_packages_v2', JSON.stringify(updated));
     try {
-      await saveDealershipConfigToFirestore({ campaignCategories: updated });
+      await saveDealershipConfigToSupabase({ campaignCategories: updated });
     } catch (e) {
-      console.warn('Firestore save packages fallback:', e);
+      console.warn('Supabase save packages fallback:', e);
     }
     setNewPackageInput('');
     triggerToast(`ເພີ່ມໝວດແພັກເກດ "${trimmed}" ສຳເລັດແລ້ວ!`);
@@ -235,9 +235,9 @@ export default function POSSalesView({
     setSelectedGifts(prev => prev.filter(g => g !== pkg));
     localStorage.setItem('avatr_dealership_packages_v2', JSON.stringify(updated));
     try {
-      await saveDealershipConfigToFirestore({ campaignCategories: updated });
+      await saveDealershipConfigToSupabase({ campaignCategories: updated });
     } catch (e) {
-      console.warn('Firestore delete package fallback:', e);
+      console.warn('Supabase delete package fallback:', e);
     }
     triggerToast(`ລົບໝວດ "${pkg}" ອອກຮຽບຮ້ອຍແລ້ວ!`);
   };
@@ -279,7 +279,7 @@ export default function POSSalesView({
     return (
       item.vin.toLowerCase().includes(q) ||
       item.model.toLowerCase().includes(q) ||
-      item.plateNumber.toLowerCase().includes(q) ||
+      (item.plateNumber || '').toLowerCase().includes(q) ||
       item.color.toLowerCase().includes(q)
     );
   });
@@ -319,9 +319,9 @@ export default function POSSalesView({
     }));
 
     try {
-      saveInventoryItemToFirestore(updatedInventoryItem);
+      saveInventoryItemToSupabase(updatedInventoryItem);
     } catch (e) {
-      console.warn('Firestore inventory deduction fallback:', e);
+      console.warn('Supabase inventory deduction fallback:', e);
     }
 
     // 2. CREATE OFFICIAL INVOICE BILL RECORD
@@ -370,9 +370,9 @@ export default function POSSalesView({
     setBills(prev => [newBill, ...prev]);
 
     try {
-      saveBillToFirestore(newBill);
+      saveBillToSupabase(newBill);
     } catch (e) {
-      console.warn('Firestore bill save fallback:', e);
+      console.warn('Supabase bill save fallback:', e);
     }
 
     // 3. RECORD STOCK-OUT TRANSACTION LOG
@@ -532,8 +532,8 @@ export default function POSSalesView({
                       alt={selectedVehicle.model}
                       className="w-full h-full object-cover filter contrast-125"
                     />
-                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/80 text-white border border-zinc-700 font-mono">
-                      {selectedVehicle.plateNumber}
+                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/80 text-white border border-zinc-700 font-mono shadow-md backdrop-blur-md always-white-text">
+                      <span className="text-white" style={{ color: '#ffffff' }}>{selectedVehicle.plateNumber}</span>
                     </div>
                   </div>
 
@@ -872,7 +872,7 @@ export default function POSSalesView({
 
                     {/* Account Info & Slip Confirmation */}
                     <div className="sm:col-span-7 space-y-3.5">
-                      <div className="p-3.5 bg-black/60 rounded-2xl border border-zinc-800 space-y-2 font-mono text-xs">
+                      <div className="p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800 space-y-2 font-mono text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-zinc-500 text-[10px] uppercase block">ຊື່ບັນຊີບໍລິສັດ (Account Name):</span>
                           {isSuperAdmin && (
@@ -1326,7 +1326,7 @@ export default function POSSalesView({
             </div>
 
             {/* Bill Preview Card */}
-            <div className="p-6 bg-black border border-zinc-800 rounded-2xl space-y-4 text-xs font-sans">
+            <div className="p-6 receipt-paper bg-zinc-900/80 border border-zinc-800 rounded-2xl space-y-4 text-xs font-sans shadow-md">
               <div className="flex justify-between items-start pb-4 border-b border-zinc-800">
                 <div>
                   <span className="font-black tracking-widest text-base text-white">AVATR AUTO SERVICE</span>

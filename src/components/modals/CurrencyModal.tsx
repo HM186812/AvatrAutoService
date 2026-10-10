@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { CustomCurrencyConfig, Language } from '../../types';
 import { translations } from '../../data/translations';
 import { saveStoredCurrencies } from '../../data/currencies';
-import { saveDealershipConfigToFirestore } from '../../firebase';
+import { saveDealershipConfigToSupabase } from '../../supabase';
 import { DollarSign, Plus, Trash2, Check, X, RefreshCw, ShieldCheck, Lock } from 'lucide-react';
 
 interface CurrencyModalProps {
@@ -51,9 +51,9 @@ export default function CurrencyModal({
     onCurrenciesChange(updated);
     saveStoredCurrencies(updated);
     try {
-      saveDealershipConfigToFirestore({ currencies: updated });
+      saveDealershipConfigToSupabase({ currencies: updated });
     } catch (e) {
-      console.warn('Firestore currency save fallback:', e);
+      console.warn('Supabase currency save fallback:', e);
     }
     setEditingCode(null);
   };
@@ -77,9 +77,9 @@ export default function CurrencyModal({
     onCurrenciesChange(updated);
     saveStoredCurrencies(updated);
     try {
-      saveDealershipConfigToFirestore({ currencies: updated });
+      saveDealershipConfigToSupabase({ currencies: updated });
     } catch (e) {
-      console.warn('Firestore currency save fallback:', e);
+      console.warn('Supabase currency save fallback:', e);
     }
     setIsAddingNew(false);
     setNewCode('');
@@ -98,9 +98,9 @@ export default function CurrencyModal({
     onCurrenciesChange(updated);
     saveStoredCurrencies(updated);
     try {
-      saveDealershipConfigToFirestore({ currencies: updated });
+      saveDealershipConfigToSupabase({ currencies: updated });
     } catch (e) {
-      console.warn('Firestore currency save fallback:', e);
+      console.warn('Supabase currency save fallback:', e);
     }
     if (activeCurrencyCode === code) {
       onSelectActiveCurrency('USD');
@@ -117,9 +117,9 @@ export default function CurrencyModal({
     onCurrenciesChange(defaultList);
     saveStoredCurrencies(defaultList);
     try {
-      saveDealershipConfigToFirestore({ currencies: defaultList });
+      saveDealershipConfigToSupabase({ currencies: defaultList });
     } catch (e) {
-      console.warn('Firestore currency save fallback:', e);
+      console.warn('Supabase currency save fallback:', e);
     }
   };
 
@@ -194,7 +194,7 @@ export default function CurrencyModal({
                             step="any"
                             value={tempRate}
                             onChange={(e) => setTempRate(Number(e.target.value))}
-                            className="w-28 bg-black border border-zinc-700 rounded-lg px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-white"
+                            className="w-28 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-slate-950 dark:focus:border-white"
                           />
                         </div>
                       ) : (
@@ -261,7 +261,7 @@ export default function CurrencyModal({
                     placeholder="e.g. CNY, EUR, JPY"
                     value={newCode}
                     onChange={(e) => setNewCode(e.target.value)}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white uppercase font-mono focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white uppercase font-mono focus:outline-none focus:border-slate-950 dark:focus:border-white"
                   />
                 </div>
 
@@ -273,7 +273,7 @@ export default function CurrencyModal({
                     placeholder="e.g. ¥, €, £"
                     value={newSymbol}
                     onChange={(e) => setNewSymbol(e.target.value)}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-slate-950 dark:focus:border-white"
                   />
                 </div>
               </div>
@@ -286,7 +286,7 @@ export default function CurrencyModal({
                     placeholder="e.g. ຢວນຈີນ (CNY)"
                     value={newNameLo}
                     onChange={(e) => setNewNameLo(e.target.value)}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-slate-950 dark:focus:border-white"
                   />
                 </div>
 
@@ -299,7 +299,7 @@ export default function CurrencyModal({
                     min="0.000001"
                     value={newRate}
                     onChange={(e) => setNewRate(Number(e.target.value))}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-slate-950 dark:focus:border-white"
                   />
                 </div>
               </div>

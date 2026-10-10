@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { SystemUser, UserRole, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { saveUserToFirestore, deleteUserFromFirestore } from '../../firebase';
+import { saveUserToSupabase, deleteUserFromSupabase } from '../../supabase';
 import { 
   ShieldCheck, 
   UserPlus, 
@@ -73,9 +73,9 @@ export default function UserManagementView({
     }
 
     try {
-      await deleteUserFromFirestore(deletingUser.id);
+      await deleteUserFromSupabase(deletingUser.id);
     } catch (e) {
-      console.warn('Firestore user delete fallback:', e);
+      console.warn('Supabase user delete fallback:', e);
     }
 
     setUsers(prev => prev.filter(u => u.id !== deletingUser.id));
@@ -105,9 +105,9 @@ export default function UserManagementView({
     };
 
     try {
-      await saveUserToFirestore(updatedUser);
+      await saveUserToSupabase(updatedUser);
     } catch (e) {
-      console.warn('Firestore user update fallback:', e);
+      console.warn('Supabase user update fallback:', e);
     }
 
     setUsers(prev => prev.map(u => (u.id === updatedUser.id ? updatedUser : u)));
@@ -156,9 +156,9 @@ export default function UserManagementView({
     };
 
     try {
-      await saveUserToFirestore(newUser);
+      await saveUserToSupabase(newUser);
     } catch (e) {
-      console.warn('Firestore new user save fallback:', e);
+      console.warn('Supabase new user save fallback:', e);
     }
 
     setUsers(prev => [newUser, ...prev]);

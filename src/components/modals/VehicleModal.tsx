@@ -41,26 +41,26 @@ export default function VehicleModal({
             alt={vehicle.name}
             className="w-full h-full object-cover object-center transform transition-transform duration-700 hover:scale-105 filter grayscale contrast-125 hover:grayscale-0"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
           
-          <div className="absolute bottom-4 left-6 right-6 flex flex-wrap items-end justify-between gap-4">
+          <div className="absolute bottom-4 left-6 right-6 flex flex-wrap items-end justify-between gap-4 always-white-text">
             <div>
-              <span className="text-xs font-mono uppercase tracking-widest px-2.5 py-1 bg-black/70 border border-zinc-700 rounded-lg text-zinc-300">
+              <span className="text-xs font-mono uppercase tracking-widest px-2.5 py-1 bg-black/80 border border-zinc-700 rounded-lg text-zinc-200" style={{ color: '#e4e4e7' }}>
                 {vehicle.category}
               </span>
-              <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1">
+              <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1 drop-shadow-md" style={{ color: '#ffffff' }}>
                 {vehicle.name}
               </h2>
-              <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
+              <p className="text-xs sm:text-sm text-zinc-300 mt-0.5 drop-shadow" style={{ color: '#d4d4d8' }}>
                 {vehicle.subTitle}
               </p>
             </div>
 
             <div className="text-right">
-              <span className="text-[11px] text-zinc-400 uppercase tracking-wider block">
+              <span className="text-[11px] text-zinc-300 uppercase tracking-wider block drop-shadow" style={{ color: '#d4d4d8' }}>
                 {lang === 'lo' ? 'ລາຄາເລີ່ມຕົ້ນ (Starting Price)' : lang === 'th' ? 'ราคาเริ่มต้น (Starting Price)' : 'Starting Price'}
               </span>
-              <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono">
+              <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono drop-shadow-md" style={{ color: '#ffffff' }}>
                 ${vehicle.priceStartingUSD.toLocaleString()} USD
               </span>
             </div>
@@ -149,24 +149,24 @@ export default function VehicleModal({
           </div>
 
           {/* Detailed Battery & Powertrain Specs */}
-          <div className="bg-black/60 border border-zinc-800 rounded-2xl p-4 text-xs font-mono">
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 text-xs font-mono">
             <h4 className="font-sans text-xs uppercase tracking-wider text-zinc-400 font-semibold mb-3">
               {lang === 'lo' ? 'ຂໍ້ມູນຈຳເພາະລະບົບໄຟຟ້າ & ການສາກ (Charging & Technical)' : lang === 'th' ? 'ข้อมูลสเปกระบบไฟฟ้า & การชาร์จ (Charging & Technical)' : 'Charging & Technical'}
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6 text-zinc-300">
-              <div className="flex justify-between border-b border-zinc-900 pb-1">
+              <div className="flex justify-between border-b border-zinc-800/80 pb-1">
                 <span className="text-zinc-500">{lang === 'lo' ? 'ຄວາມຈຸແບັດເຕີຣີ:' : lang === 'th' ? 'ความจุแบตเตอรี่:' : 'Battery:'}</span>
                 <span className="text-white font-medium">{vehicle.batteryCapacity}</span>
               </div>
-              <div className="flex justify-between border-b border-zinc-900 pb-1">
+              <div className="flex justify-between border-b border-zinc-800/80 pb-1">
                 <span className="text-zinc-500">{lang === 'lo' ? 'ເທັກໂນໂລຊີສາກໄວ:' : lang === 'th' ? 'เทคโนโลยีชาร์จเร็ว:' : 'Fast Charging:'}</span>
                 <span className="text-white font-medium">{vehicle.chargingSpeed}</span>
               </div>
-              <div className="flex justify-between border-b border-zinc-900 pb-1">
+              <div className="flex justify-between border-b border-zinc-800/80 pb-1">
                 <span className="text-zinc-500">{lang === 'lo' ? 'ລະບົບຂັບເຄື່ອນ:' : lang === 'th' ? 'ระบบขับเคลื่อน:' : 'Powertrain:'}</span>
                 <span className="text-white font-medium">{vehicle.powertrain}</span>
               </div>
-              <div className="flex justify-between border-b border-zinc-900 pb-1">
+              <div className="flex justify-between border-b border-zinc-800/80 pb-1">
                 <span className="text-zinc-500">{lang === 'lo' ? 'ຈຳນວນລົດພ້ອມສົ່ງ:' : lang === 'th' ? 'จำนวนรถพร้อมส่งมอบ:' : 'In Stock:'}</span>
                 <span className="text-white font-mono font-bold">
                   {vehicle.stockCount} {lang === 'lo' ? 'ຄັນ (In Stock Vientiane)' : lang === 'th' ? 'คัน (พร้อมส่งมอบ)' : 'Units'}

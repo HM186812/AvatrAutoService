@@ -630,15 +630,15 @@ export default function DashboardView({
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent"></div>
 
-                    <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border backdrop-blur-md bg-zinc-900/90 text-white border-zinc-700">
-                        {promo.badge}
+                    <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 always-white-text">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border backdrop-blur-md bg-black/80 text-white border-zinc-700 shadow-md">
+                        <span style={{ color: '#ffffff' }}>{promo.badge}</span>
                       </span>
                     </div>
 
-                    <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-[11px] text-zinc-300 font-mono">
-                      <span className="flex items-center gap-1 text-zinc-300">
-                        <Clock className="w-3 h-3 text-zinc-400" />
+                    <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-[11px] font-mono always-white-text">
+                      <span className="flex items-center gap-1 text-zinc-200" style={{ color: '#e4e4e7' }}>
+                        <Clock className="w-3 h-3 text-zinc-300" />
                         <span>{promo.period}</span>
                       </span>
                     </div>
