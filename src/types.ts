@@ -1,6 +1,6 @@
 export type Language = 'lo' | 'en' | 'th';
 
-export type ActiveMenu = 'dashboard' | 'customers' | 'inventory' | 'stock_in' | 'pos' | 'bills' | 'alerts' | 'users' | 'profile';
+export type ActiveMenu = 'dashboard' | 'customers' | 'inventory' | 'stock_in' | 'pos' | 'bills' | 'alerts' | 'appointments' | 'users' | 'profile';
 
 export type UserRole = 'super_admin' | 'admin' | 'sales' | 'technician' | 'general_user';
 
@@ -34,10 +34,12 @@ export interface UserPermissions {
   canGrantRoles?: boolean;
   canDeductPOS?: boolean;
   canViewFinancials?: boolean;
+  canUpdatePDI?: boolean;
+  canViewVehicles?: boolean;
 }
 
 export interface SystemUser {
-  id: string; // Supabase UID or local ID
+  id: string; // Supabase Auth user UUID
   name: string;
   email: string;
   phone: string;
@@ -49,7 +51,6 @@ export interface SystemUser {
   status?: 'active' | 'suspended';
   createdAt: string;
   lastLogin?: string;
-  password?: string;
 }
 
 export type CustomerCategory = 'walk_in' | 'online' | 'event';
@@ -63,7 +64,7 @@ export type KPITimeframe = 'day' | 'week' | 'month' | 'year';
 export interface InventoryItem {
   vin: string; // Document ID (17 chars)
   model: string;
-  plateNumber?: string; // ทะเบียน / ປ້າຍ
+  plateNumber: string; // ทะเบียน / ປ້າຍ
   color: string;
   colorHex?: string;
   interiorColor: string;
@@ -80,10 +81,7 @@ export interface InventoryItem {
   pdiStatus: PDIStatus; // passed, in_progress, pending
   pdiInspector?: string;
   pdiNotes?: string;
-  location?: string;
-  destinationWarehouse?: string;
-  importDocNumber?: string;
-  notes?: string;
+  location: string;
   imageUrl?: string;
   image?: string; // Alias for backward compatibility
   reservedForCustomer?: string;
@@ -186,6 +184,7 @@ export interface InvoiceBillRecord {
   eventLocation?: string;
 
   // Operational Metadata
+  paymentSlipPath?: string;
   recordedBy?: string;
   notes?: string;
 }
@@ -265,7 +264,7 @@ export interface StockLogRecord {
   type: StockLogType;
   vin: string;
   model: string;
-  plateNumber?: string;
+  plateNumber: string;
   color?: string;
   quantity: number;
   priceUSD: number;

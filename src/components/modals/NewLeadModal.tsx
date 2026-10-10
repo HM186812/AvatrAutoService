@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
 import { Lead, CustomerCategory, Language, VehicleModel } from '../../types';
 import { translations } from '../../data/translations';
@@ -7,7 +7,7 @@ interface NewLeadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => void;
-  vehicles?: VehicleModel[];
+  vehicles: VehicleModel[];
   lang?: Language;
 }
 
@@ -17,11 +17,17 @@ export default function NewLeadModal({ isOpen, onClose, onAddLead, vehicles, lan
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [interestedModel, setInterestedModel] = useState<string>(() => vehicles?.[0]?.name || 'AVATR 12');
+  const [interestedModel, setInterestedModel] = useState<string>('AVATR 12');
   const [priority, setPriority] = useState<'vip' | 'high' | 'normal'>('vip');
   const [category, setCategory] = useState<CustomerCategory>('walk_in');
   const [budget, setBudget] = useState('$55,000');
   const [notes, setNotes] = useState('');
+
+  useEffect(() => {
+    if (vehicles.length && !vehicles.some((vehicle) => vehicle.name === interestedModel)) {
+      setInterestedModel(vehicles[0].name);
+    }
+  }, [vehicles, interestedModel]);
 
   if (!isOpen) return null;
 
@@ -129,19 +135,7 @@ export default function NewLeadModal({ isOpen, onClose, onAddLead, vehicles, lan
                 onChange={(e) => setInterestedModel(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-white transition-colors"
               >
-                {vehicles && vehicles.length > 0 ? (
-                  vehicles.map((v) => (
-                    <option key={v.id || v.name} value={v.name}>
-                      {v.name} {v.subTitle ? `(${v.subTitle})` : ''}
-                    </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="AVATR 12">AVATR 12 (Future Luxury Grand Coupé)</option>
-                    <option value="AVATR 11">AVATR 11 (Smart Emotional SUV Coupé)</option>
-                    <option value="AVATR 07">AVATR 07 (Intelligent Urban Luxury)</option>
-                  </>
-                )}
+                {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.name}>{vehicle.name}</option>)}
               </select>
             </div>
 

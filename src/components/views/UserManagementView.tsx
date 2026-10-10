@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { SystemUser, UserRole, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { saveUserToSupabase, deleteUserFromSupabase } from '../../supabase';
+import { createStaffAccount, deactivateStaffProfile, saveStaffProfile } from '../../backend/data';
 import { 
   ShieldCheck, 
   UserPlus, 
@@ -29,7 +29,6 @@ interface UserManagementViewProps {
   users: SystemUser[];
   setUsers: React.Dispatch<React.SetStateAction<SystemUser[]>>;
   lang: Language;
-  onSwitchUser: (user: SystemUser) => void;
 }
 
 export default function UserManagementView({
@@ -37,7 +36,6 @@ export default function UserManagementView({
   users,
   setUsers,
   lang,
-  onSwitchUser,
 }: UserManagementViewProps) {
   const t = translations[lang] || translations.lo;
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,7 +59,8 @@ export default function UserManagementView({
     setTimeout(() => setActionSuccessMsg(null), 4000);
   };
 
-  const isSuperAdmin = currentUser.role === 'super_admin' || Boolean(currentUser.permissions?.canManageUsers) || users.length <= 1 || !users.some(u => u.role === 'super_admin');
+  const canManageUsers = Boolean(currentUser.permissions?.canManageUsers);
+  const canGrantRoles = Boolean(currentUser.permissions?.canGrantRoles);
 
   // 1. DELETE USER HANDLER (Admin ລົບຜູ້ໃຊ້ອື່ນໄດ້)
   const handleConfirmDelete = async () => {
@@ -73,13 +72,14 @@ export default function UserManagementView({
     }
 
     try {
-      await deleteUserFromSupabase(deletingUser.id);
-    } catch (e) {
-      console.warn('Supabase user delete fallback:', e);
+      await deactivateStaffProfile(deletingUser.id);
+    } catch (error) {
+      triggerFeedback(error instanceof Error ? error.message : 'Could not suspend this account.');
+      return;
     }
 
-    setUsers(prev => prev.filter(u => u.id !== deletingUser.id));
-    triggerFeedback(`ລົບຜູ້ໃຊ້ "${deletingUser.name}" ອອກຈາກລະບົບສຳເລັດແລ້ວ!`);
+    setUsers(prev => prev.map(user => user.id === deletingUser.id ? { ...user, status: 'suspended' } : user));
+    triggerFeedback(`ປິດສິດບັນຊີ "${deletingUser.name}" ສຳເລັດແລ້ວ`);
     setDeletingUser(null);
   };
 
@@ -87,6 +87,14 @@ export default function UserManagementView({
   const handleSaveRoleAndPermissions = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
+    if (!canGrantRoles) {
+      triggerFeedback('ບັນຊີນີ້ບໍ່ມີສິດມອບບົດບາດ.');
+      return;
+    }
+    if (currentUser.role !== 'super_admin' && ['admin', 'super_admin'].includes(editingUser.role)) {
+      triggerFeedback('ມີພຽງ Super Admin ທີ່ມອບສິດ Admin ໄດ້.');
+      return;
+    }
 
     // Get default role title
     const getRoleTitle = (role: UserRole) => {
@@ -105,12 +113,13 @@ export default function UserManagementView({
     };
 
     try {
-      await saveUserToSupabase(updatedUser);
-    } catch (e) {
-      console.warn('Supabase user update fallback:', e);
+      const savedUser = await saveStaffProfile(updatedUser);
+      setUsers(prev => prev.map(u => (u.id === savedUser.id ? savedUser : u)));
+    } catch (error) {
+      triggerFeedback(error instanceof Error ? error.message : 'Could not update staff role.');
+      return;
     }
 
-    setUsers(prev => prev.map(u => (u.id === updatedUser.id ? updatedUser : u)));
     triggerFeedback(`${t.success}: ${updatedUser.name}`);
     setEditingUser(null);
   };
@@ -118,56 +127,24 @@ export default function UserManagementView({
   // 3. CREATE NEW USER HANDLER
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newPhone.trim()) return;
-
-    const initials = newName.trim().slice(0, 2);
-    const getRoleTitle = (role: UserRole) => {
-      switch (role) {
-        case 'super_admin': return t.roleSuperAdmin;
-        case 'admin': return t.roleBranchAdmin;
-        case 'sales': return t.roleSales;
-        case 'technician': return t.roleTechnician;
-        case 'general_user': return t.roleGeneralUser;
-      }
-    };
-
-    const newUser: SystemUser = {
-      id: `USR-${Math.floor(100 + Math.random() * 900)}`,
-      name: newName.trim(),
-      email: newEmail.trim() || `${newName.toLowerCase().replace(/\s+/g, '')}@laos-ev.la`,
-      phone: newPhone.trim(),
-      role: newRole,
-      roleTitleLo: getRoleTitle(newRole),
-      department: newDepartment,
-      status: 'active',
-      avatarInitials: initials,
-      permissions: {
-        canManageUsers: newRole === 'super_admin',
-        canDeleteUsers: newRole === 'super_admin',
-        canGrantRoles: newRole === 'super_admin',
-        canEditInventory: newRole === 'super_admin' || newRole === 'admin',
-        canUploadQR: newRole === 'super_admin',
-        canAddModels: newRole === 'super_admin',
-        canDeductPOS: newRole === 'super_admin' || newRole === 'admin' || newRole === 'sales',
-        canViewFinancials: newRole === 'super_admin' || newRole === 'admin',
-      },
-      createdAt: new Date().toISOString().slice(0, 10),
-      lastLogin: 'ຍັງບໍ່ເຄີຍເຂົ້າສູ່ລະບົບ',
-    };
-
+    if (!newName.trim() || !newEmail.trim()) return;
     try {
-      await saveUserToSupabase(newUser);
-    } catch (e) {
-      console.warn('Supabase new user save fallback:', e);
+      const newUser = await createStaffAccount({
+        name: newName.trim(),
+        email: newEmail.trim(),
+        phone: newPhone.trim(),
+        department: newDepartment,
+        role: newRole,
+      });
+      setUsers(prev => [newUser, ...prev]);
+      setIsAddUserOpen(false);
+      triggerFeedback(`ສົ່ງຄຳເຊີນໄປ ${newUser.email} ແລ້ວ`);
+      setNewName('');
+      setNewEmail('');
+      setNewPhone('');
+    } catch (error) {
+      triggerFeedback(error instanceof Error ? error.message : 'Could not invite the staff account.');
     }
-
-    setUsers(prev => [newUser, ...prev]);
-    setIsAddUserOpen(false);
-    triggerFeedback(`${t.success}: ${newUser.name}`);
-
-    setNewName('');
-    setNewEmail('');
-    setNewPhone('');
   };
 
   // Role Badge Helper
@@ -225,8 +202,7 @@ export default function UserManagementView({
   });
 
   // RESTRICTED VIEW: If current logged in user is a General User
-  if (!isSuperAdmin) {
-    const activeAdmin = users.find(u => u.role === 'super_admin');
+  if (!canManageUsers) {
     return (
       <div className="space-y-6 pb-12">
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8 text-center max-w-2xl mx-auto space-y-4 my-8">
@@ -238,19 +214,8 @@ export default function UserManagementView({
           </h2>
           <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
             ທ່ານກຳລັງເຂົ້າສູ່ລະບົບໃນຖານະ: <strong className="text-white">{currentUser.name} ({currentUser.roleTitleLo})</strong>. 
-            ສະເພາະ <strong>Admin (Super Admin{activeAdmin ? `: ${activeAdmin.name}` : ''})</strong> ເທົ່ານັ້ນ ທີ່ມີສິດລົບຜູ້ໃຊ້ອອກຈາກລະບົບ ແລະ ມອບສິດ/ບົດບາດໃຫ້ແກ່ຜູ້ອື່ນ.
+            ຜູ້ดูแลระบบเท่านั้นที่มีสิทธิ์จัดการบัญชีพนักงานและกำหนด role
           </p>
-          {activeAdmin && (
-            <div className="pt-4 border-t border-zinc-900 flex justify-center gap-3">
-              <button
-                onClick={() => onSwitchUser(activeAdmin)}
-                className="px-5 py-2.5 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2 shadow-md"
-              >
-                <ShieldCheck className="w-4 h-4 text-black" />
-                <span>ສະຫຼັບເປັນ Admin ({activeAdmin.name})</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -295,34 +260,6 @@ export default function UserManagementView({
         </button>
       </div>
 
-      {/* Fast Switch User Role for Testing/Verification */}
-      <div className="bg-zinc-950/80 border border-zinc-800/80 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-zinc-400 font-medium">ສະຫຼັບບັນຊີທົດສອບ (Switch Account):</span>
-          <span className="text-zinc-500 text-[11px]">(ທົດສອບຄວາມແຕກຕ່າງລະຫວ່າງ Admin ແລະ ຜູ້ໃຊ້ທົ່ວໄປ)</span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {users.map((u) => (
-            <button
-              key={u.id}
-              onClick={() => onSwitchUser(u)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 border ${
-                currentUser.id === u.id
-                  ? 'bg-white text-black border-white font-bold shadow-md'
-                  : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:text-white'
-              }`}
-            >
-              {u.role === 'super_admin' ? (
-                <ShieldCheck className="w-3 h-3 text-black" />
-              ) : (
-                <span className="w-2 h-2 rounded-full bg-zinc-500"></span>
-              )}
-              <span>{u.name.split(' ')[0]} ({u.role === 'super_admin' ? 'Admin' : 'ຜູ້ໃຊ້ທົ່ວໄປ'})</span>
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* Filter and Search Bar */}
       <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -370,7 +307,7 @@ export default function UserManagementView({
         </div>
 
         <div className="divide-y divide-zinc-800/80">
-          {filteredUsers.map((user) => {
+      {filteredUsers.map((user) => {
             const isCurrentUser = user.id === currentUser.id;
 
             return (
@@ -470,14 +407,14 @@ export default function UserManagementView({
                 {/* ADMIN ACTIONS: GRANT ROLE & DELETE USER */}
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-900">
                   {/* Grant / Change Role Button */}
-                  <button
-                    onClick={() => setEditingUser(user)}
+                    {canGrantRoles && <button
+                      onClick={() => setEditingUser(user)}
                     className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl border border-zinc-700 font-semibold flex items-center gap-1.5 transition-colors"
                     title="ມອບສິດ ແລະ ປ່ຽນບົດບາດ"
                   >
                     <Key className="w-3.5 h-3.5 text-zinc-300" />
                     <span>ມອບສິດ (Grant)</span>
-                  </button>
+                    </button>}
 
                   {/* Delete User Button (Disabled for current self Super Admin) */}
                   <button
@@ -533,149 +470,21 @@ export default function UserManagementView({
                   value={editingUser.role}
                   onChange={(e) => {
                     const newRole = e.target.value as UserRole;
-                    setEditingUser({
-                      ...editingUser,
-                      role: newRole,
-                      permissions: {
-                        canManageUsers: newRole === 'super_admin',
-                        canDeleteUsers: newRole === 'super_admin',
-                        canGrantRoles: newRole === 'super_admin',
-                        canEditInventory: newRole === 'super_admin' || newRole === 'admin',
-                        canUploadQR: newRole === 'super_admin',
-                        canAddModels: newRole === 'super_admin',
-                        canDeductPOS: newRole === 'super_admin' || newRole === 'admin' || newRole === 'sales',
-                        canViewFinancials: newRole === 'super_admin' || newRole === 'admin',
-                      }
-                    });
+                    setEditingUser({ ...editingUser, role: newRole });
                   }}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-white"
                 >
-                  <option value="super_admin">Admin (Super Admin - ສິດສູງສຸດ)</option>
-                  <option value="admin">Admin ສາຂາ (Branch Admin)</option>
+                  {currentUser.role === 'super_admin' && <option value="super_admin">Admin (Super Admin - ສິດສູງສຸດ)</option>}
+                  {currentUser.role === 'super_admin' && <option value="admin">Admin ສາຂາ (Branch Admin)</option>}
                   <option value="sales">ທີ່ປຶກສາການຂາຍ (Sales Staff)</option>
                   <option value="technician">ຊ່າງເຕັກນິກ PDI & ແບັດເຕີຣີ</option>
                   <option value="general_user">ຜູ້ໃຊ້ທົ່ວໄປ (General User / Staff)</option>
                 </select>
               </div>
 
-              {/* Granular Permissions Checkboxes */}
-              <div className="space-y-2 pt-2 border-t border-zinc-800">
-                <span className="text-zinc-400 font-semibold block text-xs">
-                  ກຳນົດສິດລະອຽດ (Permissions Configuration):
-                </span>
-
-                <label className="flex items-center gap-2 p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800 cursor-pointer hover:bg-zinc-900">
-                  <input
-                    type="checkbox"
-                    checked={editingUser.permissions.canManageUsers}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      permissions: { ...editingUser.permissions, canManageUsers: e.target.checked }
-                    })}
-                    className="accent-white w-4 h-4 rounded"
-                  />
-                  <div>
-                    <span className="text-white font-medium block">ຈັດການຜູ້ໃຊ້ອື່ນ (Manage Users)</span>
-                    <span className="text-zinc-500 text-[11px]">ສາມາດເບິ່ງ ແລະ ແກ້ໄຂຂໍ້ມູນພະນັກງານໃນລະບົບໄດ້</span>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-2 p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800 cursor-pointer hover:bg-zinc-900">
-                  <input
-                    type="checkbox"
-                    checked={editingUser.permissions.canDeleteUsers}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      permissions: { ...editingUser.permissions, canDeleteUsers: e.target.checked }
-                    })}
-                    className="accent-white w-4 h-4 rounded"
-                  />
-                  <div>
-                    <span className="text-white font-medium block">ລົບຜູ້ໃຊ້ອື່ນອອກຈາກລະບົບ (Delete Users)</span>
-                    <span className="text-zinc-500 text-[11px]">ອະນຸຍາດໃຫ້ລົບ ແລະ ຍົກເລີກສິດຜູ້ໃຊ້ອື່ນ</span>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-2 p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800 cursor-pointer hover:bg-zinc-900">
-                  <input
-                    type="checkbox"
-                    checked={editingUser.permissions.canGrantRoles}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      permissions: { ...editingUser.permissions, canGrantRoles: e.target.checked }
-                    })}
-                    className="accent-white w-4 h-4 rounded"
-                  />
-                  <div>
-                    <span className="text-white font-medium block">ມອບສິດ & ປ່ຽນບົດບາດ (Grant Roles)</span>
-                    <span className="text-zinc-500 text-[11px]">ສາມາດແຕ່ງຕັ້ງ ຫຼື ປ່ຽນ Role ໃຫ້ພະນັກງານຄົນອື່ນ</span>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-2 p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800 cursor-pointer hover:bg-zinc-900">
-                  <input
-                    type="checkbox"
-                    checked={editingUser.permissions.canEditInventory}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      permissions: { ...editingUser.permissions, canEditInventory: e.target.checked }
-                    })}
-                    className="accent-white w-4 h-4 rounded"
-                  />
-                  <div>
-                    <span className="text-white font-medium block">ແກ້ໄຂສະຕ໋ອກລົດ & PDI (Edit Stock)</span>
-                    <span className="text-zinc-500 text-[11px]">ສາມາດເພີ່ມ, ແກ້ໄຂເລກ VIN, ທະບຽນ ແລະ ລາຄາລົດ</span>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-2 p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800 cursor-pointer hover:bg-zinc-900">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(editingUser.permissions.canUploadQR)}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      permissions: { ...editingUser.permissions, canUploadQR: e.target.checked }
-                    })}
-                    className="accent-white w-4 h-4 rounded"
-                  />
-                  <div>
-                    <span className="text-white font-medium block">ອັບໂຫລດ QR ບໍລິສັດ (Upload Company QR)</span>
-                    <span className="text-zinc-500 text-[11px]">ສິດອັບໂຫລດ ແລະ ປ່ຽນຮູບ QR ບໍລິສັດທາງການ</span>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-2 p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800 cursor-pointer hover:bg-zinc-900">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(editingUser.permissions.canAddModels)}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      permissions: { ...editingUser.permissions, canAddModels: e.target.checked }
-                    })}
-                    className="accent-white w-4 h-4 rounded"
-                  />
-                  <div>
-                    <span className="text-white font-medium block">ເພີ່ມລຸ້ນຍານຍົນ (Add Vehicle Models)</span>
-                    <span className="text-zinc-500 text-[11px]">ສິດເພີ່ມຕົວເລືອກລຸ້ນລົດ AVATR ໃໝ່ເຂົ້າລະບົບ</span>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-2 p-2.5 bg-zinc-900/60 rounded-xl border border-zinc-800 cursor-pointer hover:bg-zinc-900">
-                  <input
-                    type="checkbox"
-                    checked={editingUser.permissions.canDeductPOS}
-                    onChange={(e) => setEditingUser({
-                      ...editingUser,
-                      permissions: { ...editingUser.permissions, canDeductPOS: e.target.checked }
-                    })}
-                    className="accent-white w-4 h-4 rounded"
-                  />
-                  <div>
-                    <span className="text-white font-medium block">ຕັດສະຕ໋ອກ & ອອກໃບຮັບເງິນ POS (POS Deduction)</span>
-                    <span className="text-zinc-500 text-[11px]">ສາມາດຕັດຍອດລົດອອກຈາກສາງເມື່ອມີການຂາຍ</span>
-                  </div>
-                </label>
-              </div>
+              <p className="pt-3 border-t border-zinc-800 text-zinc-400 text-xs">
+                ສິດເຂົ້າເຖິງມາຈາກ role ໃນຖານຂໍ້ມູນ staff_roles.
+              </p>
 
               <div className="pt-4 border-t border-zinc-800 flex justify-end gap-3">
                 <button
@@ -802,8 +611,8 @@ export default function UserManagementView({
                     <option value="general_user">ຜູ້ໃຊ້ທົ່ວໄປ (General User)</option>
                     <option value="sales">ທີ່ປຶກສາການຂາຍ (Sales Staff)</option>
                     <option value="technician">ຊ່າງ PDI & CATL</option>
-                    <option value="admin">Admin ສາຂາ (Branch Admin)</option>
-                    <option value="super_admin">Admin (Super Admin)</option>
+                    {currentUser.role === 'super_admin' && <option value="admin">Admin ສາຂາ (Branch Admin)</option>}
+                    {currentUser.role === 'super_admin' && <option value="super_admin">Admin (Super Admin)</option>}
                   </select>
                 </div>
 

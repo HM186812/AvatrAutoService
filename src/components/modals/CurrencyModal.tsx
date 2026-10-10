@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { CustomCurrencyConfig, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { saveStoredCurrencies } from '../../data/currencies';
-import { saveDealershipConfigToSupabase } from '../../supabase';
 import { DollarSign, Plus, Trash2, Check, X, RefreshCw, ShieldCheck, Lock } from 'lucide-react';
 
 interface CurrencyModalProps {
@@ -12,6 +10,7 @@ interface CurrencyModalProps {
   onCurrenciesChange: (updated: CustomCurrencyConfig[]) => void;
   activeCurrencyCode: string;
   onSelectActiveCurrency: (code: string) => void;
+  onPersist?: (updated: CustomCurrencyConfig[]) => void;
   isSuperAdmin?: boolean;
   lang?: Language;
 }
@@ -23,6 +22,7 @@ export default function CurrencyModal({
   onCurrenciesChange,
   activeCurrencyCode,
   onSelectActiveCurrency,
+  onPersist,
   isSuperAdmin = false,
   lang = 'lo',
 }: CurrencyModalProps) {
@@ -49,12 +49,7 @@ export default function CurrencyModal({
     const updated = list.map(c => c.code === code ? { ...c, rateToUSD: tempRate } : c);
     setList(updated);
     onCurrenciesChange(updated);
-    saveStoredCurrencies(updated);
-    try {
-      saveDealershipConfigToSupabase({ currencies: updated });
-    } catch (e) {
-      console.warn('Supabase currency save fallback:', e);
-    }
+    onPersist?.(updated);
     setEditingCode(null);
   };
 
@@ -75,12 +70,7 @@ export default function CurrencyModal({
     const updated = [...list, newCurr];
     setList(updated);
     onCurrenciesChange(updated);
-    saveStoredCurrencies(updated);
-    try {
-      saveDealershipConfigToSupabase({ currencies: updated });
-    } catch (e) {
-      console.warn('Supabase currency save fallback:', e);
-    }
+    onPersist?.(updated);
     setIsAddingNew(false);
     setNewCode('');
     setNewNameLo('');
@@ -96,12 +86,7 @@ export default function CurrencyModal({
     const updated = list.filter(c => c.code !== code);
     setList(updated);
     onCurrenciesChange(updated);
-    saveStoredCurrencies(updated);
-    try {
-      saveDealershipConfigToSupabase({ currencies: updated });
-    } catch (e) {
-      console.warn('Supabase currency save fallback:', e);
-    }
+    onPersist?.(updated);
     if (activeCurrencyCode === code) {
       onSelectActiveCurrency('USD');
     }
@@ -115,12 +100,7 @@ export default function CurrencyModal({
     ];
     setList(defaultList);
     onCurrenciesChange(defaultList);
-    saveStoredCurrencies(defaultList);
-    try {
-      saveDealershipConfigToSupabase({ currencies: defaultList });
-    } catch (e) {
-      console.warn('Supabase currency save fallback:', e);
-    }
+    onPersist?.(defaultList);
   };
 
   return (
@@ -194,7 +174,7 @@ export default function CurrencyModal({
                             step="any"
                             value={tempRate}
                             onChange={(e) => setTempRate(Number(e.target.value))}
-                            className="w-28 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-slate-950 dark:focus:border-white"
+                            className="w-28 bg-black border border-zinc-700 rounded-lg px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-white"
                           />
                         </div>
                       ) : (
@@ -261,7 +241,7 @@ export default function CurrencyModal({
                     placeholder="e.g. CNY, EUR, JPY"
                     value={newCode}
                     onChange={(e) => setNewCode(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white uppercase font-mono focus:outline-none focus:border-slate-950 dark:focus:border-white"
+                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white uppercase font-mono focus:outline-none focus:border-white"
                   />
                 </div>
 
@@ -273,7 +253,7 @@ export default function CurrencyModal({
                     placeholder="e.g. ¥, €, £"
                     value={newSymbol}
                     onChange={(e) => setNewSymbol(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-slate-950 dark:focus:border-white"
+                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
                   />
                 </div>
               </div>
@@ -286,7 +266,7 @@ export default function CurrencyModal({
                     placeholder="e.g. ຢວນຈີນ (CNY)"
                     value={newNameLo}
                     onChange={(e) => setNewNameLo(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-slate-950 dark:focus:border-white"
+                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-white"
                   />
                 </div>
 
@@ -299,7 +279,7 @@ export default function CurrencyModal({
                     min="0.000001"
                     value={newRate}
                     onChange={(e) => setNewRate(Number(e.target.value))}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-slate-950 dark:focus:border-white"
+                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
                   />
                 </div>
               </div>
@@ -357,4 +337,3 @@ export default function CurrencyModal({
     </div>
   );
 }
-

@@ -6,4 +6,5 @@ export { default as POSSalesView } from './POSSalesView';
 export { default as BillsManagementView } from './BillsManagementView';
 export { default as StockAlertsView } from './StockAlertsView';
 export { default as UserManagementView } from './UserManagementView';
+export { default as AppointmentsView } from './AppointmentsView';
 export { default as ProfileView } from './ProfileView';

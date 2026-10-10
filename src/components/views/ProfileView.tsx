@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { SystemUser, Language } from '../../types';
 import { translations } from '../../data/translations';
 import UserManagementView from './UserManagementView';
+import { requireSupabase } from '../../backend/client';
 import { 
   User, 
   Mail, 
@@ -29,7 +30,6 @@ interface ProfileViewProps {
   onClose?: () => void;
   users?: SystemUser[];
   setUsers?: React.Dispatch<React.SetStateAction<SystemUser[]>>;
-  onSwitchUser?: (user: SystemUser) => void;
 }
 
 export default function ProfileView({
@@ -40,7 +40,6 @@ export default function ProfileView({
   onClose,
   users = [],
   setUsers,
-  onSwitchUser,
 }: ProfileViewProps) {
   const t = translations[lang] || translations.lo;
   const [activeTab, setActiveTab] = useState<'profile' | 'users'>('profile');
@@ -48,7 +47,7 @@ export default function ProfileView({
   // Profile Form State
   const [name, setName] = useState(currentUser.name);
   const [phone, setPhone] = useState(currentUser.phone);
-  const [email, setEmail] = useState(currentUser.email);
+  const email = currentUser.email;
   const [department, setDepartment] = useState(currentUser.department);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -90,29 +89,17 @@ export default function ProfileView({
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
 
-    // Verify current password if user already had a password set
-    if (currentUser.password && currentUser.password !== currentPassword) {
+    if (!newPassword || newPassword.length < 8) {
       setPasswordError(
         lang === 'lo'
-          ? 'ລະຫັດຜ່ານປັດຈຸບັນບໍ່ຖືກຕ້ອງ!'
+          ? 'ລະຫັດຜ່ານໃໝ່ຕ້ອງມີຢ່າງໜ້ອຍ 8 ຕົວອັກສອນ!'
           : lang === 'th'
-          ? 'รหัสผ่านปัจจุบันไม่ถูกต้อง!'
-          : 'Current password is incorrect!'
-      );
-      return;
-    }
-
-    if (!newPassword || newPassword.length < 4) {
-      setPasswordError(
-        lang === 'lo'
-          ? 'ລະຫັດຜ່ານໃໝ່ຕ້ອງມີຢ່າງໜ້ອຍ 4 ຕົວອັກສອນ!'
-          : lang === 'th'
-          ? 'รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร!'
-          : 'New password must be at least 4 characters!'
+          ? 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร!'
+          : 'New password must be at least 8 characters!'
       );
       return;
     }
@@ -122,12 +109,18 @@ export default function ProfileView({
       return;
     }
 
-    const updatedUser: SystemUser = {
-      ...currentUser,
-      password: newPassword,
-    };
-
-    onUpdateProfile(updatedUser);
+    try {
+      const { error: verifyError } = await requireSupabase().auth.signInWithPassword({
+        email: currentUser.email,
+        password: currentPassword,
+      });
+      if (verifyError) throw verifyError;
+      const { error } = await requireSupabase().auth.updateUser({ password: newPassword });
+      if (error) throw error;
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : 'Could not update the password.');
+      return;
+    }
     setPasswordSuccess(t.passwordSuccessMsg || 'ປ່ຽນລະຫັດຜ່ານສຳເລັດແລ້ວ!');
     
     setTimeout(() => {
@@ -231,7 +224,6 @@ export default function ProfileView({
             users={users}
             setUsers={setUsers}
             lang={lang}
-            onSwitchUser={onSwitchUser || (() => {})}
           />
         </div>
       ) : (
@@ -291,10 +283,10 @@ export default function ProfileView({
                       <Mail className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="email"
-                        required
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white font-mono focus:outline-none focus:border-white"
+                        readOnly
+                        aria-readonly="true"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-zinc-400 font-mono"
                       />
                     </div>
                   </div>

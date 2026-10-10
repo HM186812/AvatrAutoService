@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Calendar } from 'lucide-react';
-import { TestDriveBooking, Language } from '../../types';
+import { TestDriveBooking, Language, VehicleModel } from '../../types';
 import { translations } from '../../data/translations';
 
 interface TestDriveModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTestDrive: (booking: Omit<TestDriveBooking, 'id'>) => void;
+  vehicles: VehicleModel[];
   initialModel?: string;
   lang?: Language;
 }
@@ -15,6 +16,7 @@ export default function TestDriveModal({
   isOpen,
   onClose,
   onAddTestDrive,
+  vehicles,
   initialModel = 'AVATR 12',
   lang = 'lo',
 }: TestDriveModalProps) {
@@ -26,6 +28,11 @@ export default function TestDriveModal({
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [timeSlot, setTimeSlot] = useState('11:00 AM');
   const [location, setLocation] = useState('ໂຊຣູມ AVATR ວຽງຈັນ (ຫຼັກ 3 ຖະໜົນທ່າເດື່ອ)');
+
+  useEffect(() => {
+    if (vehicles.some((vehicle) => vehicle.name === initialModel)) setModel(initialModel);
+    else if (vehicles.length && !vehicles.some((vehicle) => vehicle.name === model)) setModel(vehicles[0].name);
+  }, [initialModel, vehicles, model]);
 
   if (!isOpen) return null;
 
@@ -111,9 +118,7 @@ export default function TestDriveModal({
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white"
               >
-                <option value="AVATR 12">AVATR 12 (Grand Coupé)</option>
-                <option value="AVATR 11">AVATR 11 (Luxury SUV Coupé)</option>
-                <option value="AVATR 07">AVATR 07 (Smart Urban SUV)</option>
+                {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.name}>{vehicle.name}</option>)}
               </select>
             </div>
 

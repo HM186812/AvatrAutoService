@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { InvoiceBillRecord, Language, BillType } from '../../types';
-import { getStoredCompanyBankInfo } from '../../data/companySettings';
+import { DEFAULT_COMPANY_BANK_INFO } from '../../data/companySettings';
 import { translations } from '../../data/translations';
 import AvatrLogo from '../layout/AvatrLogo';
 import { 
@@ -29,6 +29,7 @@ import {
 
 interface BillsManagementViewProps {
   bills: InvoiceBillRecord[];
+  dealershipSettings: Record<string, unknown>;
   lang: Language;
   isSuperAdmin?: boolean;
   onDeleteBill?: (billId: string) => void;
@@ -38,6 +39,7 @@ interface BillsManagementViewProps {
 
 export default function BillsManagementView({
   bills,
+  dealershipSettings,
   lang,
   isSuperAdmin = false,
   onDeleteBill,
@@ -45,6 +47,11 @@ export default function BillsManagementView({
   onOpenNewImport,
 }: BillsManagementViewProps) {
   const t = translations[lang] || translations.lo;
+  const companyBankInfo = {
+    ...DEFAULT_COMPANY_BANK_INFO,
+    ...dealershipSettings,
+    qrCodeUrl: (dealershipSettings.companyQrImageUrl as string | null) || null,
+  };
   const [filterType, setFilterType] = useState<'all' | 'sale' | 'import'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBillForPrint, setSelectedBillForPrint] = useState<InvoiceBillRecord | null>(null);
@@ -177,7 +184,7 @@ export default function BillsManagementView({
           </div>
           <div className="mt-2 pt-2 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400 font-mono">
             <span>{t.tableStatus}:</span>
-            <span className="text-zinc-200 font-bold">{t.firestoreLiveSync}</span>
+            <span className="text-zinc-200 font-bold">{t.supabaseDatabase}</span>
           </div>
         </div>
       </div>
@@ -415,7 +422,7 @@ export default function BillsManagementView({
             </div>
 
             {/* PRINTABLE BILL CANVAS (A4-Style Layout) */}
-            <div className="receipt-paper bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-6 text-xs text-zinc-300 font-sans shadow-xl selection:bg-white selection:text-black">
+            <div className="bg-black border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-6 text-xs text-zinc-300 font-sans selection:bg-white selection:text-black">
               {/* Bill Header */}
               <div className="flex flex-wrap items-start justify-between gap-4 pb-6 border-b border-zinc-800">
                 <div className="space-y-1.5">
@@ -582,12 +589,12 @@ export default function BillsManagementView({
                   <div className="flex items-center gap-3">
                     <div className="text-right text-[10px] font-mono">
                       <span className="text-zinc-400 block">ບັນຊີທາງການບໍລິສັດ</span>
-                      <strong className="text-white block">{getStoredCompanyBankInfo().usdAccount} (USD)</strong>
-                      <span className="text-zinc-300 block">{getStoredCompanyBankInfo().lakAccount} (LAK)</span>
+                      <strong className="text-white block">{companyBankInfo.usdAccount} (USD)</strong>
+                      <span className="text-zinc-300 block">{companyBankInfo.lakAccount} (LAK)</span>
                     </div>
                     <div className="w-14 h-14 bg-white p-1 rounded-lg border border-black flex items-center justify-center">
-                      {getStoredCompanyBankInfo().qrCodeUrl ? (
-                        <img src={getStoredCompanyBankInfo().qrCodeUrl!} alt="QR" className="w-full h-full object-contain" />
+                      {companyBankInfo.qrCodeUrl ? (
+                        <img src={companyBankInfo.qrCodeUrl} alt="QR" className="w-full h-full object-contain" />
                       ) : (
                         <QrCode className="w-10 h-10 text-black" />
                       )}

@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Wrench } from 'lucide-react';
-import { ServiceAppointment, Language } from '../../types';
+import { ServiceAppointment, Language, VehicleModel } from '../../types';
 import { translations } from '../../data/translations';
 
 interface ServiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddService: (service: Omit<ServiceAppointment, 'id'>) => void;
+  vehicles: VehicleModel[];
   lang?: Language;
 }
 
-export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo' }: ServiceModalProps) {
+export default function ServiceModal({ isOpen, onClose, onAddService, vehicles, lang = 'lo' }: ServiceModalProps) {
   const t = translations[lang] || translations.lo;
 
   const [customerName, setCustomerName] = useState('');
@@ -21,6 +22,10 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
   const [scheduledDate, setScheduledDate] = useState(new Date().toISOString().split('T')[0]);
   const [scheduledTime, setScheduledTime] = useState('10:00');
   const [notes, setNotes] = useState('');
+
+  useEffect(() => {
+    if (vehicles.length && !vehicles.some((vehicle) => vehicle.name === model)) setModel(vehicles[0].name);
+  }, [vehicles, model]);
 
   if (!isOpen) return null;
 
@@ -124,9 +129,7 @@ export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white"
               >
-                <option value="AVATR 12">AVATR 12</option>
-                <option value="AVATR 11">AVATR 11</option>
-                <option value="AVATR 07">AVATR 07</option>
+                {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.name}>{vehicle.name}</option>)}
               </select>
             </div>
 

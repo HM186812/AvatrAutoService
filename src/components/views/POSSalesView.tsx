@@ -1,14 +1,12 @@
-import { useState } from 'react';
-import { InventoryItem, VehicleModel, Language, InvoiceBillRecord, StockLogRecord, SystemUser } from '../../types';
-import { getStoredCompanyBankInfo, saveStoredCompanyBankInfo, CompanyBankInfo } from '../../data/companySettings';
+import { useEffect, useState } from 'react';
+import { CustomCurrencyConfig, InventoryItem, VehicleModel, Language, InvoiceBillRecord, StockLogRecord, SystemUser } from '../../types';
+import { DEFAULT_CURRENCIES } from '../../data/currencies';
+import { DEFAULT_COMPANY_BANK_INFO, CompanyBankInfo } from '../../data/companySettings';
 import { translations } from '../../data/translations';
-import { 
-  uploadCompanyQrCodeToStorage, 
-  saveInventoryItemToSupabase, 
-  saveBillToSupabase, 
-  saveDealershipConfigToSupabase 
-} from '../../supabase';
+import { saveDealershipSettingsPatch, uploadDealershipAsset, uploadPaymentSlip } from '../../backend/data';
+import { newRecordId } from '../../backend/ids';
 import AvatrLogo from '../layout/AvatrLogo';
+import { CurrencyModal } from '../modals';
 import { 
   Receipt, 
   ShoppingBag, 
@@ -52,6 +50,9 @@ interface POSSalesViewProps {
   stockLogs: StockLogRecord[];
   setStockLogs: React.Dispatch<React.SetStateAction<StockLogRecord[]>>;
   vehicles: VehicleModel[];
+  initialVin?: string;
+  dealershipSettings: Record<string, unknown>;
+  onSettingsChange: (settings: Record<string, unknown>) => void;
   currentUser?: SystemUser;
   lang: Language;
   onNavigateToBills: () => void;
@@ -65,6 +66,9 @@ export default function POSSalesView({
   stockLogs,
   setStockLogs,
   vehicles,
+  initialVin,
+  dealershipSettings,
+  onSettingsChange,
   currentUser,
   lang,
   onNavigateToBills,
@@ -73,7 +77,7 @@ export default function POSSalesView({
   // Available vehicles for sale (not sold and stock > 0)
   const availableVehicles = inventory.filter(i => i.status !== 'sold' && i.stockQuantity > 0);
 
-  const [selectedVin, setSelectedVin] = useState<string>(availableVehicles[0]?.vin || '');
+  const [selectedVin, setSelectedVin] = useState<string>(initialVin || availableVehicles[0]?.vin || '');
   const [vehicleSearch, setVehicleSearch] = useState('');
 
   // Selected vehicle object
@@ -94,6 +98,12 @@ export default function POSSalesView({
       setDiscountUSD('');
       return;
     }
+    const maxDiscount = selectedVehicle ? selectedVehicle.priceUSD : Infinity;
+    if (val > maxDiscount) {
+      triggerToast(lang === 'lo' ? 'ສ່ວນຫຼຸດບໍ່ສາມາດເກີນລາຄາລົດໄດ້!' : lang === 'th' ? 'ส่วนลดไม่สามารถเกินราคารถได้!' : 'Discount cannot exceed vehicle price!');
+      setDiscountUSD(maxDiscount);
+      return;
+    }
     setDiscountUSD(val);
   };
 
@@ -102,6 +112,7 @@ export default function POSSalesView({
   const [bankName, setBankName] = useState('ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ');
   const [transferRef, setTransferRef] = useState('');
   const [slipImage, setSlipImage] = useState<string | null>(null);
+  const [slipFile, setSlipFile] = useState<File | null>(null);
   
   // Finance Options
   const [financeCompany, setFinanceCompany] = useState('');
@@ -120,13 +131,12 @@ export default function POSSalesView({
   ];
 
   const [giftOptions, setGiftOptions] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('avatr_dealership_packages_v2');
-      return saved ? JSON.parse(saved) : DEFAULT_PACKAGES;
-    } catch {
-      return DEFAULT_PACKAGES;
-    }
+    return Array.isArray(dealershipSettings.packages) ? dealershipSettings.packages as string[] : DEFAULT_PACKAGES;
   });
+
+  useEffect(() => {
+    if (Array.isArray(dealershipSettings.packages)) setGiftOptions(dealershipSettings.packages as string[]);
+  }, [dealershipSettings]);
 
   // Empty selected gifts by default (ຄ່າເລີ່ມຕົ້ນບໍ່ມີການຕິກເລືອກໄວ້ກ່ອນ)
   const [selectedGifts, setSelectedGifts] = useState<string[]>([]);
@@ -135,47 +145,75 @@ export default function POSSalesView({
   const isSuperAdmin = currentUser?.role === 'super_admin';
 
   // Company Official Banking & QR Code Settings
-  const [companyBankInfo, setCompanyBankInfo] = useState<CompanyBankInfo>(() => getStoredCompanyBankInfo());
+  const [companyBankInfo, setCompanyBankInfo] = useState<CompanyBankInfo>(() => ({
+    ...DEFAULT_COMPANY_BANK_INFO,
+    ...dealershipSettings,
+    qrCodeUrl: (dealershipSettings.companyQrImageUrl as string | null) || null,
+  }));
   const [isEnlargeQrOpen, setIsEnlargeQrOpen] = useState(false);
+  const [isCurrencyOpen, setIsCurrencyOpen] = useState(false);
+  const [currencies, setCurrencies] = useState<CustomCurrencyConfig[]>(() => (
+    Array.isArray(dealershipSettings.currencies) ? dealershipSettings.currencies as CustomCurrencyConfig[] : DEFAULT_CURRENCIES
+  ));
+  const [activeCurrencyCode, setActiveCurrencyCode] = useState<string>(
+    typeof dealershipSettings.activeCurrencyCode === 'string' ? dealershipSettings.activeCurrencyCode : 'USD'
+  );
 
-  // Super Admin: Upload custom company QR Code to Supabase Storage / Cloud
+  useEffect(() => {
+    if (initialVin && availableVehicles.some((vehicle) => vehicle.vin === initialVin)) setSelectedVin(initialVin);
+  }, [initialVin, availableVehicles]);
+
+  useEffect(() => {
+    setCompanyBankInfo({
+      ...DEFAULT_COMPANY_BANK_INFO,
+      ...dealershipSettings,
+      qrCodeUrl: (dealershipSettings.companyQrImageUrl as string | null) || null,
+    });
+  }, [dealershipSettings]);
+
+  useEffect(() => {
+    if (Array.isArray(dealershipSettings.currencies)) setCurrencies(dealershipSettings.currencies as CustomCurrencyConfig[]);
+    if (typeof dealershipSettings.activeCurrencyCode === 'string') setActiveCurrencyCode(dealershipSettings.activeCurrencyCode);
+  }, [dealershipSettings]);
+
+  const persistCurrencies = (updated: CustomCurrencyConfig[]) => {
+    setCurrencies(updated);
+    void saveDealershipSettingsPatch({ currencies: updated, activeCurrencyCode }, currentUser?.id || '')
+      .then(onSettingsChange)
+      .catch((error) => triggerToast(error instanceof Error ? error.message : 'Could not save currencies.'));
+  };
+
+  const selectCurrency = (code: string) => {
+    setActiveCurrencyCode(code);
+    void saveDealershipSettingsPatch({ currencies, activeCurrencyCode: code }, currentUser?.id || '')
+      .then(onSettingsChange)
+      .catch((error) => triggerToast(error instanceof Error ? error.message : 'Could not save currency selection.'));
+  };
+
+  // QR storage will move to Supabase Storage with dealership settings.
   const handleCompanyQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isSuperAdmin) {
       triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!');
       return;
     }
     const file = e.target.files?.[0];
-    if (file) {
-      try {
-        triggerToast('ກຳລັງອັບໂຫຼດຮູບ QR Code ໄປຍັງ Supabase Storage...');
-        const downloadUrl = await uploadCompanyQrCodeToStorage(file, currentUser);
-        const updated: CompanyBankInfo = {
-          ...companyBankInfo,
-          qrCodeUrl: downloadUrl,
-          updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-          updatedBy: currentUser?.name || 'Admin',
-        };
-        setCompanyBankInfo(updated);
-        saveStoredCompanyBankInfo(updated);
-        triggerToast('ອັບໂຫຼດຮູບ QR Code ບໍລິສັດສຳເລັດແລ້ວ! (Real-time Cloud Synced)');
-      } catch (err: any) {
-        console.error('Company QR upload error:', err);
-        // Fallback local reader
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const qrData = event.target?.result as string;
-          const updated: CompanyBankInfo = {
-            ...companyBankInfo,
-            qrCodeUrl: qrData,
-            updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-            updatedBy: currentUser?.name || 'Admin',
-          };
-          setCompanyBankInfo(updated);
-          saveStoredCompanyBankInfo(updated);
-          triggerToast('ອັບໂຫຼດຮູບ QR Code ບໍລິສັດສຳເລັດແລ້ວ!');
-        };
-        reader.readAsDataURL(file);
-      }
+    if (!file) return;
+    try {
+      const uploaded = await uploadDealershipAsset(file, 'qr');
+      const updated: CompanyBankInfo = {
+        ...companyBankInfo,
+        qrCodeUrl: uploaded.url,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser?.name || 'Admin',
+      };
+      const config = await saveDealershipSettingsPatch({ ...updated, companyQrImageUrl: uploaded.url }, currentUser?.id || '');
+      onSettingsChange(config);
+      setCompanyBankInfo(updated);
+      triggerToast('ບັນທຶກ QR ໃນ Supabase ແລ້ວ');
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Could not upload the company QR.');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -190,13 +228,13 @@ export default function POSSalesView({
       updatedBy: currentUser?.name || 'Admin',
     };
     try {
-      await saveDealershipConfigToSupabase({ companyQrImageUrl: null });
-    } catch (e) {
-      console.warn('Supabase reset QR fallback:', e);
+      const config = await saveDealershipSettingsPatch({ ...updated, companyQrImageUrl: null }, currentUser?.id || '');
+      onSettingsChange(config);
+      setCompanyBankInfo(updated);
+      triggerToast('ຣີເຊັດ QR ໃນ Supabase ແລ້ວ');
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Could not reset the company QR.');
     }
-    setCompanyBankInfo(updated);
-    saveStoredCompanyBankInfo(updated);
-    triggerToast('ຣີເຊັດຮູບ QR ບໍລິສັດເປັນຄ່າມາດຕະຖານຮຽບຮ້ອຍແລ້ວ!');
   };
 
   const handleAddPackage = async (e: React.FormEvent) => {
@@ -212,13 +250,14 @@ export default function POSSalesView({
       return;
     }
     const updated = [...giftOptions, trimmed];
-    setGiftOptions(updated);
-    localStorage.setItem('avatr_dealership_packages_v2', JSON.stringify(updated));
     try {
-      await saveDealershipConfigToSupabase({ campaignCategories: updated });
-    } catch (e) {
-      console.warn('Supabase save packages fallback:', e);
+      const config = await saveDealershipSettingsPatch({ packages: updated }, currentUser?.id || '');
+      onSettingsChange(config);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Could not save the package list.');
+      return;
     }
+    setGiftOptions(updated);
     setNewPackageInput('');
     triggerToast(`ເພີ່ມໝວດແພັກເກດ "${trimmed}" ສຳເລັດແລ້ວ!`);
   };
@@ -231,14 +270,15 @@ export default function POSSalesView({
     }
     if (!confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບໝວດ "${pkg}" ອອກຈາກລາຍການ?`)) return;
     const updated = giftOptions.filter(g => g !== pkg);
+    try {
+      const config = await saveDealershipSettingsPatch({ packages: updated }, currentUser?.id || '');
+      onSettingsChange(config);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Could not save the package list.');
+      return;
+    }
     setGiftOptions(updated);
     setSelectedGifts(prev => prev.filter(g => g !== pkg));
-    localStorage.setItem('avatr_dealership_packages_v2', JSON.stringify(updated));
-    try {
-      await saveDealershipConfigToSupabase({ campaignCategories: updated });
-    } catch (e) {
-      console.warn('Supabase delete package fallback:', e);
-    }
     triggerToast(`ລົບໝວດ "${pkg}" ອອກຮຽບຮ້ອຍແລ້ວ!`);
   };
 
@@ -261,16 +301,20 @@ export default function POSSalesView({
     setTimeout(() => setToastMsg(null), 4000);
   };
 
+  // Dynamic Exchange Rate for LAK from active currencies / settings
+  const lakCurrency = currencies.find((c) => c.code === 'LAK');
+  const lakRate = lakCurrency && lakCurrency.rateToUSD > 0 ? lakCurrency.rateToUSD : 22000;
+
   // Calculations
   const basePriceUSD = selectedVehicle ? selectedVehicle.priceUSD : 0;
   const netPriceUSD = Math.max(0, basePriceUSD - (discountUSD || 0));
-  const netPriceLAK = netPriceUSD * 22000;
+  const netPriceLAK = netPriceUSD * lakRate;
   const downPaymentUSD = Math.round(netPriceUSD * (downPaymentPercent / 100));
-  const downPaymentLAK = downPaymentUSD * 22000;
+  const downPaymentLAK = downPaymentUSD * lakRate;
   const loanPrincipalUSD = netPriceUSD - downPaymentUSD;
   // Estimated monthly calculation (approx 7.5% per annum for Lao banks)
   const monthlyPaymentUSD = Math.round((loanPrincipalUSD * (1 + 0.075 * (tenureMonths / 12))) / tenureMonths);
-  const monthlyPaymentLAK = monthlyPaymentUSD * 22000;
+  const monthlyPaymentLAK = monthlyPaymentUSD * lakRate;
 
   // Filtered available vehicles list
   const filteredAvailableVehicles = availableVehicles.filter(item => {
@@ -279,13 +323,13 @@ export default function POSSalesView({
     return (
       item.vin.toLowerCase().includes(q) ||
       item.model.toLowerCase().includes(q) ||
-      (item.plateNumber || '').toLowerCase().includes(q) ||
+      item.plateNumber.toLowerCase().includes(q) ||
       item.color.toLowerCase().includes(q)
     );
   });
 
   // CONFIRM SALE & DEDUCT STOCK
-  const handleProcessSale = (e: React.FormEvent) => {
+  const handleProcessSale = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedVehicle) {
@@ -298,9 +342,19 @@ export default function POSSalesView({
       return;
     }
 
+    let paymentSlipPath: string | undefined;
+    if (slipFile) {
+      try {
+        paymentSlipPath = await uploadPaymentSlip(slipFile);
+      } catch (error) {
+        triggerToast(error instanceof Error ? error.message : 'Could not upload the payment slip.');
+        return;
+      }
+    }
+
     const currentQty = selectedVehicle.stockQuantity;
     const remainingQty = Math.max(0, currentQty - 1);
-    const invoiceNum = `INV-AVATR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const invoiceNum = `INV-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
     // 1. DEDUCT STOCK (ຕັດສະຕ໋ອກອອກ)
@@ -318,15 +372,9 @@ export default function POSSalesView({
       return item;
     }));
 
-    try {
-      saveInventoryItemToSupabase(updatedInventoryItem);
-    } catch (e) {
-      console.warn('Supabase inventory deduction fallback:', e);
-    }
-
     // 2. CREATE OFFICIAL INVOICE BILL RECORD
     const newBill: InvoiceBillRecord = {
-      id: invoiceNum,
+      id: newRecordId(),
       billType: 'sale',
       billNumber: invoiceNum,
       date: now,
@@ -341,7 +389,7 @@ export default function POSSalesView({
       unitPriceUSD: selectedVehicle.priceUSD,
       unitPriceLAK: selectedVehicle.priceLAK,
       discountUSD: Number(discountUSD) || 0,
-      discountLAK: (Number(discountUSD) || 0) * 22000,
+      discountLAK: (Number(discountUSD) || 0) * lakRate,
       netTotalUSD: netPriceUSD,
       netTotalLAK: netPriceLAK,
       amountUSD: netPriceUSD,
@@ -362,18 +410,13 @@ export default function POSSalesView({
       monthlyPaymentLAK: paymentMethod === 'finance' ? monthlyPaymentLAK : undefined,
       freeGifts: selectedGifts,
       warrantyTerms: 'ຮັບປະກັນແບັດເຕີຣີ CATL 8 ປີ / 160,000 km | ຕົວລົດ 5 ປີ / 120,000 km',
+      paymentSlipPath,
       salesRep: salesRep,
       recordedBy: salesRep,
       notes: saleNotes || 'ຂາຍອອກຜ່ານລະບົບ POS ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ ພ້ອມຕັດສະຕ໋ອກອັດຕະໂນມັດ',
     };
 
     setBills(prev => [newBill, ...prev]);
-
-    try {
-      saveBillToSupabase(newBill);
-    } catch (e) {
-      console.warn('Supabase bill save fallback:', e);
-    }
 
     // 3. RECORD STOCK-OUT TRANSACTION LOG
     const newStockLog: StockLogRecord = {
@@ -409,6 +452,8 @@ export default function POSSalesView({
     setTransferRef('');
     setDiscountUSD(0);
     setSaleNotes('');
+    setSlipImage(null);
+    setSlipFile(null);
   };
 
   return (
@@ -448,6 +493,16 @@ export default function POSSalesView({
           <span>{t.filterSaleBills} ({bills.filter(b => b.billType === 'sale').length})</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setIsCurrencyOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors"
+          >
+            <DollarSign className="w-4 h-4 text-zinc-400" />
+            <span>ຈັດການສະກຸນເງິນ</span>
+          </button>
+        )}
       </div>
 
       {availableVehicles.length === 0 ? (
@@ -532,8 +587,8 @@ export default function POSSalesView({
                       alt={selectedVehicle.model}
                       className="w-full h-full object-cover filter contrast-125"
                     />
-                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/80 text-white border border-zinc-700 font-mono shadow-md backdrop-blur-md always-white-text">
-                      <span className="text-white" style={{ color: '#ffffff' }}>{selectedVehicle.plateNumber}</span>
+                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/80 text-white border border-zinc-700 font-mono">
+                      {selectedVehicle.plateNumber}
                     </div>
                   </div>
 
@@ -872,7 +927,7 @@ export default function POSSalesView({
 
                     {/* Account Info & Slip Confirmation */}
                     <div className="sm:col-span-7 space-y-3.5">
-                      <div className="p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800 space-y-2 font-mono text-xs">
+                      <div className="p-3.5 bg-black/60 rounded-2xl border border-zinc-800 space-y-2 font-mono text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-zinc-500 text-[10px] uppercase block">ຊື່ບັນຊີບໍລິສັດ (Account Name):</span>
                           {isSuperAdmin && (
@@ -913,12 +968,9 @@ export default function POSSalesView({
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  const reader = new FileReader();
-                                  reader.onload = (event) => {
-                                    setSlipImage(event.target?.result as string);
-                                    triggerToast('ອັບໂຫຼດຮູບສະລິບໂອນສຳເລັດ!');
-                                  };
-                                  reader.readAsDataURL(file);
+                                  setSlipFile(file);
+                                  setSlipImage(file.type === 'application/pdf' ? 'pdf' : URL.createObjectURL(file));
+                                  triggerToast('ເລືອກສະລິບແລ້ວ; ຈະບັນທຶກເຂົ້າ Supabase ເມື່ອຢືນຢັນການຂາຍ');
                                 }
                               }}
                             />
@@ -931,7 +983,7 @@ export default function POSSalesView({
                               </span>
                               <button
                                 type="button"
-                                onClick={() => setSlipImage(null)}
+                                onClick={() => { setSlipImage(null); setSlipFile(null); }}
                                 className="text-zinc-500 hover:text-white text-xs"
                               >
                                 ລົບຮູບ
@@ -1064,7 +1116,7 @@ export default function POSSalesView({
                       <ShieldCheck className="w-3 h-3" />
                       <span>{lang === 'lo' ? 'ສິດ Admin: ເພີ່ມໝວດ / ແພັກເກດຂອງແຖມໃໝ່' : lang === 'th' ? 'สิทธิ์ Admin: เพิ่มหมวด / แพ็กเกจของแถมใหม่' : 'Add New Dealership Package'}</span>
                     </span>
-                    <span className="text-[10px] text-zinc-500 font-mono">{t.firestoreLiveSync}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">{t.supabaseDatabase}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
@@ -1326,7 +1378,7 @@ export default function POSSalesView({
             </div>
 
             {/* Bill Preview Card */}
-            <div className="p-6 receipt-paper bg-zinc-900/80 border border-zinc-800 rounded-2xl space-y-4 text-xs font-sans shadow-md">
+            <div className="p-6 bg-black border border-zinc-800 rounded-2xl space-y-4 text-xs font-sans">
               <div className="flex justify-between items-start pb-4 border-b border-zinc-800">
                 <div>
                   <span className="font-black tracking-widest text-base text-white">AVATR AUTO SERVICE</span>
@@ -1387,6 +1439,17 @@ export default function POSSalesView({
           </div>
         </div>
       )}
+
+      <CurrencyModal
+        isOpen={isCurrencyOpen}
+        onClose={() => setIsCurrencyOpen(false)}
+        currencies={currencies}
+        onCurrenciesChange={persistCurrencies}
+        activeCurrencyCode={activeCurrencyCode}
+        onSelectActiveCurrency={selectCurrency}
+        isSuperAdmin={isSuperAdmin}
+        lang={lang}
+      />
     </div>
   );
 }

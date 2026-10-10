@@ -12,6 +12,8 @@ import {
   PackagePlus, 
   ShoppingBag, 
   FileText, 
+  CalendarDays,
+  Key,
   LogOut, 
   Sun, 
   Moon 
@@ -29,8 +31,6 @@ interface SidebarProps {
   billsCount?: number;
   pendingRequestsCount?: number;
   currentUser: SystemUser;
-  allUsers: SystemUser[];
-  onSwitchUser: (user: SystemUser) => void;
   isMobileOpen: boolean;
   setIsMobileOpen: (open: boolean) => void;
   onLogout?: () => void;
@@ -48,6 +48,7 @@ interface MenuItem {
   badge?: string | number | null;
   badgeColor?: string;
   adminOnly?: boolean;
+  userManagementOnly?: boolean;
 }
 
 interface MenuGroup {
@@ -69,8 +70,6 @@ export default function Sidebar({
   billsCount = 4,
   pendingRequestsCount = 3,
   currentUser,
-  allUsers,
-  onSwitchUser,
   isMobileOpen,
   setIsMobileOpen,
   onLogout,
@@ -78,7 +77,7 @@ export default function Sidebar({
   onToggleTheme,
 }: SidebarProps) {
   const isSuperAdmin = currentUser.role === 'super_admin';
-  const isAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+  const isAdmin = Boolean(currentUser.permissions?.canEditInventory);
 
   // Grouped Menu Structure for Maximum Ergonomics & Convenience
   const menuGroups: MenuGroup[] = [
@@ -114,6 +113,14 @@ export default function Sidebar({
           labelTh: 'ลูกค้า (CRM)',
           icon: Users,
           badge: leadCount > 0 ? leadCount : null,
+          adminOnly: false,
+        },
+        {
+          id: 'appointments',
+          labelLo: 'ນັດໝາຍບໍລິການ / ທົດລອງຂັບ',
+          labelEn: 'Service & Test Drive',
+          labelTh: 'นัดบริการ / ทดลองขับ',
+          icon: CalendarDays,
           adminOnly: false,
         },
       ],
@@ -170,6 +177,14 @@ export default function Sidebar({
           badgeColor: 'text-zinc-300 bg-zinc-900 border-zinc-700',
           adminOnly: false,
         },
+        {
+          id: 'users',
+          labelLo: 'ຈັດການຜູ້ໃຊ້',
+          labelEn: 'Staff & Access',
+          labelTh: 'ผู้ใช้และสิทธิ์',
+          icon: Key,
+          userManagementOnly: true,
+        },
       ],
     },
   ];
@@ -221,6 +236,9 @@ export default function Sidebar({
           {menuGroups.map((group, groupIdx) => {
             const visibleItems = group.items.filter(item => {
               if (item.adminOnly && !isAdmin) return false;
+              if (item.userManagementOnly && !currentUser.permissions?.canManageUsers) return false;
+              if (item.id === 'appointments' && !currentUser.permissions?.canDeductPOS && !currentUser.permissions?.canUpdatePDI && !currentUser.permissions?.canManageUsers) return false;
+              if (item.id === 'pos' && !currentUser.permissions?.canDeductPOS) return false;
               return true;
             });
 

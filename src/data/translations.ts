@@ -59,7 +59,7 @@ export interface TranslationSchema {
   roleTechnician: string;
   roleGeneralUser: string;
   switchRoleBtn: string;
-  firestoreLiveSync: string;
+  supabaseDatabase: string;
   offlineSync: string;
   profileTooltip: string;
   currencyTooltip: string;
@@ -506,7 +506,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     roleTechnician: 'ຊ່າງກວດ PDI & CATL',
     roleGeneralUser: 'User ທຳມະດາ',
     switchRoleBtn: 'ປ່ຽນສິດ',
-    firestoreLiveSync: 'Firestore Live Sync',
+    supabaseDatabase: 'Supabase Database',
     offlineSync: 'Offline Persistence',
     profileTooltip: 'ເບິ່ງໂປຣໄຟລ໌ສ່ວນຕົວ',
     currencyTooltip: 'ເລືອກ ຫຼື ຕັ້ງຄ່າສະກຸນເງິນ',
@@ -950,7 +950,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     roleTechnician: 'PDI & CATL Technician',
     roleGeneralUser: 'General User',
     switchRoleBtn: 'Switch Role',
-    firestoreLiveSync: 'Firestore Live Sync',
+    supabaseDatabase: 'Supabase Database',
     offlineSync: 'Offline Persistence',
     profileTooltip: 'View User Profile',
     currencyTooltip: 'Select or configure currencies',
@@ -1390,7 +1390,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     roleTechnician: 'ช่างตรวจ PDI & CATL',
     roleGeneralUser: 'ผู้ใช้งานทั่วไป',
     switchRoleBtn: 'เปลี่ยนสิทธิ์',
-    firestoreLiveSync: 'Firestore Live Sync',
+    supabaseDatabase: 'Supabase Database',
     offlineSync: 'Offline Persistence',
     profileTooltip: 'ดูโปรไฟล์ส่วนตัว',
     currencyTooltip: 'เลือกหรือตั้งค่าสกุลเงิน',
