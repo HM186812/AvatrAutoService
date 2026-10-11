@@ -4,6 +4,7 @@
 @font-face {
   font-family: 'Phetsarath OT';
   src: local('Phetsarath OT'), local('PhetsarathOT'), local('Phetsarath-OT'), local('Phetsarath'),
+    url('/fonts/Phetsarath-Regular.woff2') format('woff2'),
     url('/fonts/Phetsarath-Regular.ttf') format('truetype');
   font-weight: 300 500;
   font-style: normal;
@@ -13,6 +14,7 @@
 @font-face {
   font-family: 'Phetsarath OT';
   src: local('Phetsarath OT Bold'), local('PhetsarathOT-Bold'), local('Phetsarath-Bold'), local('Phetsarath Bold'),
+    url('/fonts/Phetsarath-Bold.woff2') format('woff2'),
     url('/fonts/Phetsarath-Bold.ttf') format('truetype');
   font-weight: 600 900;
   font-style: normal;
@@ -22,6 +24,7 @@
 @font-face {
   font-family: 'Phetsarath';
   src: local('Phetsarath'), local('Phetsarath OT'), local('PhetsarathOT'),
+    url('/fonts/Phetsarath-Regular.woff2') format('woff2'),
     url('/fonts/Phetsarath-Regular.ttf') format('truetype');
   font-weight: 300 500;
   font-style: normal;
@@ -31,6 +34,7 @@
 @font-face {
   font-family: 'Phetsarath';
   src: local('Phetsarath Bold'), local('Phetsarath OT Bold'), local('PhetsarathOT-Bold'),
+    url('/fonts/Phetsarath-Bold.woff2') format('woff2'),
     url('/fonts/Phetsarath-Bold.ttf') format('truetype');
   font-weight: 600 900;
   font-style: normal;

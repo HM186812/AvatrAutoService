@@ -18,5 +18,19 @@ export default defineConfig(() => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
+    build: {
+      rolldownOptions: {
+        output: {
+          // Keep rarely-changing vendor code in separate, long-cached chunks.
+          codeSplitting: {
+            groups: [
+              { name: 'vendor-react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/, priority: 30 },
+              { name: 'vendor-supabase', test: /node_modules[\\/]@supabase[\\/]/, priority: 20 },
+              { name: 'vendor-ui', test: /node_modules[\\/](lucide-react|motion|framer-motion|motion-dom|motion-utils)[\\/]/, priority: 10 },
+            ],
+          },
+        },
+      },
+    },
   };
 });
