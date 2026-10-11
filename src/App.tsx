@@ -361,7 +361,7 @@ export default function App() {
   useEffect(() => {
     let active = true;
     if (!isSupabaseConfigured) {
-      setBackendError('ตั้งค่า VITE_SUPABASE_URL และ VITE_SUPABASE_ANON_KEY ก่อนเชื่อมต่อ Supabase');
+      setBackendError('ຕັ້ງຄ່າ VITE_SUPABASE_URL ແລະ VITE_SUPABASE_ANON_KEY ກ່ອນເຊື່ອມຕໍ່ Supabase');
       setIsAuthLoading(false);
       return;
     }
@@ -380,6 +380,13 @@ export default function App() {
       }
     });
 
+    // Safety timeout: ensure the app never stays stuck on the loading screen
+    const safetyTimer = setTimeout(() => {
+      if (active) {
+        setIsAuthLoading(false);
+      }
+    }, 3500);
+
     void client.auth.getSession().then(async ({ data, error }) => {
       if (!active) return;
       if (error) throw error;
@@ -389,11 +396,13 @@ export default function App() {
       await client.auth.signOut();
       setBackendError(error instanceof Error ? error.message : 'Could not restore the Supabase session.');
     }).finally(() => {
+      clearTimeout(safetyTimer);
       if (active) setIsAuthLoading(false);
     });
 
     return () => {
       active = false;
+      clearTimeout(safetyTimer);
       authListener.subscription.unsubscribe();
     };
   }, []);
@@ -615,7 +624,13 @@ export default function App() {
   // If user is logged out, show LoginView
   if (!isLoggedIn) {
     if (isAuthLoading) {
-      return <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center text-sm">Connecting to Supabase…</div>;
+      return (
+        <div className="min-h-screen bg-[#09090b] text-white flex flex-col items-center justify-center p-4">
+          <div className="w-9 h-9 border-2 border-zinc-700 border-t-white rounded-full animate-spin mb-4" />
+          <p className="text-sm font-medium text-zinc-300">ກຳລັງເຊື່ອມຕໍ່ລະບົບ…</p>
+          <p className="text-xs text-zinc-500 mt-1">Connecting to AVATR Service…</p>
+        </div>
+      );
     }
     return (
       <LoginView
