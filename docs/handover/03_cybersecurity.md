@@ -10,8 +10,8 @@
 ```mermaid
 flowchart LR
     User["🌐 ຜູ້ໃຊ້ງານ (Client / Web)"] --> Turnstile["🛡️ Cloudflare Turnstile (Bot Defense)"]
-    Turnstile --> NetlifyHeaders["🔒 HTTP Security Headers (CSP, HSTS, XFO)"]
-    NetlifyHeaders --> InputSanitize["🧹 Input Sanitization (Anti-SQLi & XSS)"]
+    Turnstile --> CloudflareHeaders["🔒 Cloudflare Edge Security Headers (CSP, HSTS, XFO)"]
+    CloudflareHeaders --> InputSanitize["🧹 Input Sanitization (Anti-SQLi & XSS)"]
     InputSanitize --> SupabaseAuth["🔑 Supabase Auth (JWT Token)"]
     SupabaseAuth --> RLS["🚦 Row-Level Security (RLS Policies)"]
     RLS --> HardenedDB[("🗄️ PostgreSQL Hardened Database")]
@@ -86,20 +86,20 @@ flowchart LR
 #### 6.1 Cloudflare Turnstile (Bot & Anti-Abuse)
 - ຕິດຕັ້ງ Widget Cloudflare Turnstile ທີ່ໜ້າ Login ([`TurnstileWidget.tsx`](file:///home/pheuang01/Projects/AvatrAutoService/src/components/common/TurnstileWidget.tsx)) ເພື່ອປ້ອງກັນການຍິງ Brute-Force Password ແລະ Bot Credential Stuffing
 
-#### 6.2 Strict HTTP Security Headers (Netlify Production Config)
-ໃນໄຟລ໌ [`netlify.toml`](file:///home/pheuang01/Projects/AvatrAutoService/netlify.toml) ໄດ້ກຳນົດ Security Headers ມາດຕະຖານ A+ Rating:
+#### 6.2 Strict HTTP Security Headers (Cloudflare Pages Production Config)
+ໃນໄຟລ໌ [`public/_headers`](file:///home/pheuang01/Projects/AvatrAutoService/public/_headers) ໄດ້ກຳນົດ Security Headers ສຳລັບ Cloudflare Pages ມາດຕະຖານ A+ Rating:
 
-```toml
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-    Content-Security-Policy = "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:;"
+```http
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:;
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
 ```
 
 - **X-Frame-Options: DENY:** ປ້ອງກັນການນຳເວັບໄປໃສ່ໃນ `<iframe>` (Anti-Clickjacking)
@@ -131,6 +131,6 @@ flowchart LR
 - [x] ໄຟລ໌ `.env` ຖືກປົກປ້ອງດ້ວຍ `.gitignore` ບໍ່ຫຼຸດຂຶ້ນ Git
 - [x] ທຸກໆຕາຕະລາງໃນ PostgreSQL ເປີດໃຊ້ງານ Row-Level Security (RLS)
 - [x] ຟັງຊັນ `record_vehicle_bill` ແລະ `delete_vehicle_bill` ລັອກ `search_path = public`
-- [x] ລະບົບຕັ້ງຄ່າ Security Headers (CSP, HSTS, XFO) ຄົບຖ້ວນໃນ `netlify.toml`
+- [x] ລະບົບຕັ້ງຄ່າ Security Headers (CSP, HSTS, XFO) ຄົບຖ້ວນໃນ `public/_headers` (Cloudflare Pages)
 - [x] ລະບົບປ້ອງກັນ Bot ດ້ວຍ Cloudflare Turnstile ພ້ອມໃຊ້ງານ
 - [x] ມີໂມດູນ Sanitize ຂໍ້ມູນ VIN, ເບີໂທ, ແລະ ຈຳນວນເງິນກ່ອນບັນທຶກລົງ Database

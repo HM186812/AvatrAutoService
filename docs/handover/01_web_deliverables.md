@@ -84,11 +84,12 @@ flowchart TD
 
 ### 4. ສະເປັກການ Deploy ແລະ Hosting (Deployment Specifications)
 
-- **Platform:** Netlify Global Edge Network
-- **Build Environment:** Node.js version `24`
+- **Platform:** Cloudflare Pages (Global Edge Network)
+- **Build Environment:** Node.js version `20+` ຫຼື `24`
 - **Build Command:** `npm run build`
 - **Output Directory:** `dist`
-- **Single Page Redirect:** `/* -> /index.html 200`
+- **Single Page Redirect:** `public/_redirects` (`/* /index.html 200`)
+- **Security & Cache Headers:** `public/_headers` (Content-Security-Policy, HSTS, X-Frame-Options: DENY, Cache-Control)
 - **Static Asset Optimization:**
   - Font ໄຟລ໌ພາສາລາວ WOFF2 ຝັງຢູ່ໃນ `public/fonts/` ພ້ອມ HTTP Header: `Cache-Control: public, max-age=31536000, immutable`
   - Vendor Chunk Splitting ໃນ `vite.config.ts` (ແຍກ React, Supabase, Lucide ອອກຈາກ bundle ຫຼັກ)

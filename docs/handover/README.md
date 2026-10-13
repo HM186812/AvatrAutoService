@@ -33,7 +33,7 @@ flowchart TB
     end
 
     subgraph SecurityGateway["🛡️ Network & Edge Security Layer"]
-        CF["Cloudflare Edge Network / Netlify CDN"]
+        CF["Cloudflare Global Edge Network (Pages CDN)"]
         Headers["Strict Security Headers (CSP, HSTS, XFO)"]
     end
 
@@ -71,7 +71,7 @@ flowchart TB
 - **ບໍລິສັດເຈົ້າຂອງລະບົບ (Client / Dealership):** ບໍລິສັດ ລາວທານີ ກົນຈັກໜັກ ຈຳກັດຜູ້ດຽວ (Laothani Tractor Sole Co., Ltd)
 - **ສະຖານທີ່ຕັ້ງ (Location):** ຖະໜົນ ໄກສອນ ພົມວິຫານ, ບ້ານ ສີວິໄລ, ເມືອງ ໄຊທານີ, ນະຄອນຫຼວງວຽງຈັນ, ສປປ ລາວ
 - **ສະພາບແວດລ້ອມການຕິດຕັ້ງ (Hosting / Runtime):**
-  - **Frontend:** Netlify Global Edge (Node.js 24 runtime, Vite Build)
+  - **Frontend:** Cloudflare Pages (Global Edge Network, Vite Build)
   - **Backend & Database:** Supabase Cloud Enterprise Infrastructure (PostgreSQL 15+)
   - **Domain & Security:** Cloudflare CDN & Turnstile Bot Mitigation
 
