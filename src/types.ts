@@ -1,6 +1,6 @@
 export type Language = 'lo' | 'en' | 'th';
 
-export type ActiveMenu = 'dashboard' | 'customers' | 'inventory' | 'stock_in' | 'pos' | 'bills' | 'alerts' | 'appointments' | 'users' | 'profile';
+export type ActiveMenu = 'dashboard' | 'installment_dashboard' | 'customers' | 'inventory' | 'stock_in' | 'pos' | 'bills' | 'alerts' | 'users' | 'profile';
 
 export type UserRole = 'super_admin' | 'admin' | 'sales' | 'technician' | 'general_user';
 
@@ -34,12 +34,10 @@ export interface UserPermissions {
   canGrantRoles?: boolean;
   canDeductPOS?: boolean;
   canViewFinancials?: boolean;
-  canUpdatePDI?: boolean;
-  canViewVehicles?: boolean;
 }
 
 export interface SystemUser {
-  id: string; // Supabase Auth user UUID
+  id: string; // Supabase UID or local ID
   name: string;
   email: string;
   phone: string;
@@ -47,10 +45,12 @@ export interface SystemUser {
   roleTitleLo: string;
   department: string;
   avatarInitials: string;
+  avatarUrl?: string;
   permissions: UserPermissions;
   status?: 'active' | 'suspended';
   createdAt: string;
   lastLogin?: string;
+  password?: string;
 }
 
 export type CustomerCategory = 'walk_in' | 'online' | 'event';
@@ -63,8 +63,9 @@ export type KPITimeframe = 'day' | 'week' | 'month' | 'year';
 
 export interface InventoryItem {
   vin: string; // Document ID (17 chars)
+  engineNumber?: string; // ເລກຈັກ / Motor No.
   model: string;
-  plateNumber: string; // ทะเบียน / ປ້າຍ
+  plateNumber?: string; // ทะเบียน / ປ້າຍ
   color: string;
   colorHex?: string;
   interiorColor: string;
@@ -81,7 +82,10 @@ export interface InventoryItem {
   pdiStatus: PDIStatus; // passed, in_progress, pending
   pdiInspector?: string;
   pdiNotes?: string;
-  location: string;
+  location?: string;
+  destinationWarehouse?: string;
+  importDocNumber?: string;
+  notes?: string;
   imageUrl?: string;
   image?: string; // Alias for backward compatibility
   reservedForCustomer?: string;
@@ -123,16 +127,17 @@ export interface VehicleModel {
   gallery?: string[];
 }
 
-export type BillType = 'sale' | 'import';
+export type BillType = 'sale' | 'import' | 'installment';
 
 export interface InvoiceBillRecord {
   id: string; // Document ID e.g. "INV-2026-0001", "REC-2026-0001"
-  type?: BillType; // 'sale' | 'import'
-  billType: BillType; // 'sale' | 'import'
+  type?: BillType; // 'sale' | 'import' | 'installment'
+  billType: BillType; // 'sale' | 'import' | 'installment'
   billNumber: string;
   customerName?: string;
   customerPhone?: string;
   vin: string;
+  engineNumber?: string; // ເລກຈັກ / Motor No.
   model: string;
   amountUSD?: number;
   amountLAK?: number;
@@ -156,7 +161,7 @@ export interface InvoiceBillRecord {
   interiorColor?: string;
   battery?: string;
 
-  // For Sales Bills
+  // For Sales Bills & Installments
   customerIDCard?: string;
   customerAddress?: string;
   customerProvince?: string;
@@ -169,6 +174,12 @@ export interface InvoiceBillRecord {
   monthlyPaymentLAK?: number;
   freeGifts?: string[];
   warrantyTerms?: string;
+
+  // For Installment & Down Payment Bills
+  installmentPeriod?: number; // ງວດທີ 1, 2, 3...
+  installmentTotalPeriods?: number; // ຈຳນວນງວດທັງໝົດ ເຊັ່ນ 36, 48, 60
+  installmentType?: 'down_payment' | 'monthly_installment'; // ບິນຮັບເງິນດາວ ຫຼື ບິນຮັບຄ່າງວດ
+  leadId?: string; // ລິ້ງຫາລະຫັດລູກຄ້າ
 
   // For Import Bills
   supplierName?: string;
@@ -184,7 +195,6 @@ export interface InvoiceBillRecord {
   eventLocation?: string;
 
   // Operational Metadata
-  paymentSlipPath?: string;
   recordedBy?: string;
   notes?: string;
 }
@@ -211,11 +221,34 @@ export type LeadStatus = 'new' | 'contacted' | 'test_drive' | 'negotiation' | 'd
 
 export type LeadPriority = 'normal' | 'high' | 'vip';
 
+export interface InstallmentPaymentRecord {
+  period: number; // ງວດທີ 1, 2, 3...
+  dueDate: string; // ວັນທີຄົບກຳນົດ YYYY-MM-DD
+  amountUSD: number; // ຍອດງວດ USD
+  amountLAK: number; // ຍອດງວດ LAK
+  principalUSD: number; // ເງິນຕົ້ນ USD
+  interestUSD: number; // ດອກເບ້ຍ USD
+  status: 'paid' | 'due' | 'pending' | 'overdue';
+  paidDate?: string; // ວັນທີຊຳລະ
+  paidAmountUSD?: number;
+  paidAmountLAK?: number;
+  paymentMethod?: 'cash' | 'transfer';
+  bankName?: string;
+  transferRef?: string; // ເລກອ້າງອີງ / Slip No.
+  receiptNo?: string; // ເລກບິນຮັບເງິນງວດ
+  notes?: string;
+  collectedBy?: string; // ພະນັກງານຮັບເງິນ
+}
+
 export interface Lead {
   id: string;
   customerName: string;
   phone: string;
   email?: string;
+  idCardNumber?: string; // ເລກບັດປະຈຳຕົວ / Passport
+  province?: string;
+  district?: string;
+  village?: string;
   category: CustomerCategory;
   source?: string;
   interestedModel: string;
@@ -223,10 +256,30 @@ export interface Lead {
   priority: LeadPriority;
   notes: string;
   budget?: string;
+  paymentType?: 'cash' | 'transfer' | 'finance' | 'installment';
+  downPaymentPercent?: number;
+  downPaymentUSD?: number;
+  financeCompany?: string;
+  tenureMonths?: number;
+  monthlyPaymentLAK?: number;
+  installmentStatus?: 'pending_approval' | 'approved' | 'rejected' | 'contract_signed' | 'completed' | 'active_repaying';
   assignedTo: string;
   createdAt: string;
   lastFollowUp?: string;
   testDriveDate?: string;
+
+  // Payment Confirmation fields
+  paidAmountUSD?: number;
+  paidAmountLAK?: number;
+  paymentDate?: string;
+  paymentMethodRef?: string;
+  paymentBank?: string;
+  paymentReceiptNo?: string;
+  paymentConfirmedBy?: string;
+  paymentTypeConfirmed?: 'deposit' | 'down_payment' | 'full' | 'installment';
+
+  // Installment payment schedule ledger
+  installmentRecords?: InstallmentPaymentRecord[];
 }
 
 export interface ServiceAppointment {
@@ -261,10 +314,12 @@ export type StockLogType = 'stock_in' | 'stock_out';
 
 export interface StockLogRecord {
   id: string;
+  billId?: string;
+  leadId?: string;
   type: StockLogType;
   vin: string;
   model: string;
-  plateNumber: string;
+  plateNumber?: string;
   color?: string;
   quantity: number;
   priceUSD: number;

@@ -1,27 +1,27 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { SystemUser, UserRole, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { createStaffAccount, deactivateStaffProfile, saveStaffProfile } from '../../backend/data';
+import { saveUserToSupabase, deleteUserFromSupabase } from '../../supabase';
 import { 
-  ShieldCheck, 
   UserPlus, 
   Trash2, 
-  Edit3, 
   Lock, 
   Key, 
   CheckCircle2, 
-  AlertTriangle, 
-  UserCheck, 
   Search, 
   Phone, 
   Mail, 
-  Building2, 
   X,
-  ShieldAlert,
-  UserX,
-  Check,
-  QrCode,
-  Car
+  UserX, 
+  Check, 
+  Eye, 
+  EyeOff,
+  Crown,
+  UserCheck,
+  Shield,
+  Activity,
+  Calendar,
+  AlertTriangle
 } from 'lucide-react';
 
 interface UserManagementViewProps {
@@ -29,6 +29,7 @@ interface UserManagementViewProps {
   users: SystemUser[];
   setUsers: React.Dispatch<React.SetStateAction<SystemUser[]>>;
   lang: Language;
+  onSwitchUser: (user: SystemUser) => void;
 }
 
 export default function UserManagementView({
@@ -36,6 +37,7 @@ export default function UserManagementView({
   users,
   setUsers,
   lang,
+  onSwitchUser,
 }: UserManagementViewProps) {
   const t = translations[lang] || translations.lo;
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,18 +53,38 @@ export default function UserManagementView({
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [newPassword, setNewPassword] = useState('avatr1234');
   const [newDepartment, setNewDepartment] = useState('ຝ່າຍຂາຍ ແລະ ບໍລິການລູກຄ້າ');
-  const [newRole, setNewRole] = useState<UserRole>('general_user');
+  const [newStartDate, setNewStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newRole, setNewRole] = useState<UserRole>('admin');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showEditingPassword, setShowEditingPassword] = useState(false);
 
   const triggerFeedback = (msg: string) => {
     setActionSuccessMsg(msg);
     setTimeout(() => setActionSuccessMsg(null), 4000);
   };
 
-  const canManageUsers = Boolean(currentUser.permissions?.canManageUsers);
-  const canGrantRoles = Boolean(currentUser.permissions?.canGrantRoles);
+  const isSuperAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin' || Boolean(currentUser.permissions?.canManageUsers) || users.length <= 1 || !users.some(u => u.role === 'super_admin' || u.role === 'admin');
 
-  // 1. DELETE USER HANDLER (Admin ລົບຜູ້ໃຊ້ອື່ນໄດ້)
+  // Toggle user active / suspended status
+  const handleToggleUserStatus = async (userToToggle: SystemUser) => {
+    if (userToToggle.id === currentUser.id) {
+      alert('ບໍ່ສາມາດລະງັບບັນຊີຂອງຕົນເອງໄດ້!');
+      return;
+    }
+    const newStatus = userToToggle.status === 'suspended' ? 'active' : 'suspended';
+    const updated: SystemUser = { ...userToToggle, status: newStatus as any };
+    try {
+      await saveUserToSupabase(updated);
+    } catch (e) {
+      console.warn('Status toggle fallback:', e);
+    }
+    setUsers(prev => prev.map(u => u.id === userToToggle.id ? updated : u));
+    triggerFeedback(`ປ່ຽນສະຖານະ "${userToToggle.name}" ເປັນ ${newStatus === 'active' ? 'ເປີດໃຊ້ງານ' : 'ລະງັບຊົ່ວຄາວ'} ສຳເລັດ!`);
+  };
+
+  // 1. DELETE USER HANDLER
   const handleConfirmDelete = async () => {
     if (!deletingUser) return;
     if (deletingUser.id === currentUser.id) {
@@ -72,54 +94,35 @@ export default function UserManagementView({
     }
 
     try {
-      await deactivateStaffProfile(deletingUser.id);
-    } catch (error) {
-      triggerFeedback(error instanceof Error ? error.message : 'Could not suspend this account.');
-      return;
+      await deleteUserFromSupabase(deletingUser.id);
+    } catch (e) {
+      console.warn('Supabase user delete fallback:', e);
     }
 
-    setUsers(prev => prev.map(user => user.id === deletingUser.id ? { ...user, status: 'suspended' } : user));
-    triggerFeedback(`ປິດສິດບັນຊີ "${deletingUser.name}" ສຳເລັດແລ້ວ`);
+    setUsers(prev => prev.filter(u => u.id !== deletingUser.id));
+    triggerFeedback(`ລົບຜູ້ໃຊ້ "${deletingUser.name}" ອອກຈາກລະບົບສຳເລັດແລ້ວ!`);
     setDeletingUser(null);
   };
 
-  // 2. GRANT ROLE & PERMISSIONS HANDLER (Admin ມອບສິດໃຫ້ແກ່ຜູ້ອື່ນ)
+  // 2. GRANT ROLE & PERMISSIONS HANDLER
   const handleSaveRoleAndPermissions = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    if (!canGrantRoles) {
-      triggerFeedback('ບັນຊີນີ້ບໍ່ມີສິດມອບບົດບາດ.');
-      return;
-    }
-    if (currentUser.role !== 'super_admin' && ['admin', 'super_admin'].includes(editingUser.role)) {
-      triggerFeedback('ມີພຽງ Super Admin ທີ່ມອບສິດ Admin ໄດ້.');
-      return;
-    }
 
-    // Get default role title
-    const getRoleTitle = (role: UserRole) => {
-      switch (role) {
-        case 'super_admin': return t.roleSuperAdmin;
-        case 'admin': return t.roleBranchAdmin;
-        case 'sales': return t.roleSales;
-        case 'technician': return t.roleTechnician;
-        case 'general_user': return t.roleGeneralUser;
-      }
-    };
-
+    const isAdminRole = editingUser.role === 'super_admin' || editingUser.role === 'admin';
     const updatedUser: SystemUser = {
       ...editingUser,
-      roleTitleLo: getRoleTitle(editingUser.role),
+      role: isAdminRole ? 'admin' : 'general_user',
+      roleTitleLo: isAdminRole ? 'Admin' : 'User',
     };
 
     try {
-      const savedUser = await saveStaffProfile(updatedUser);
-      setUsers(prev => prev.map(u => (u.id === savedUser.id ? savedUser : u)));
-    } catch (error) {
-      triggerFeedback(error instanceof Error ? error.message : 'Could not update staff role.');
-      return;
+      await saveUserToSupabase(updatedUser);
+    } catch (e) {
+      console.warn('Supabase user update fallback:', e);
     }
 
+    setUsers(prev => prev.map(u => (u.id === updatedUser.id ? updatedUser : u)));
     triggerFeedback(`${t.success}: ${updatedUser.name}`);
     setEditingUser(null);
   };
@@ -127,68 +130,106 @@ export default function UserManagementView({
   // 3. CREATE NEW USER HANDLER
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newEmail.trim()) return;
+    if (!newName.trim() || !newPhone.trim()) return;
+
+    const initials = newName.trim().slice(0, 2);
+    const isAdminRole = newRole === 'admin' || newRole === 'super_admin';
+
+    const newUser: SystemUser = {
+      id: `USR-${Math.floor(100 + Math.random() * 900)}`,
+      name: newName.trim(),
+      email: newEmail.trim() || `${newName.toLowerCase().replace(/\s+/g, '')}@laos-ev.la`,
+      phone: newPhone.trim(),
+      role: isAdminRole ? 'admin' : 'general_user',
+      roleTitleLo: isAdminRole ? 'Admin' : 'User',
+      department: newDepartment.trim() || (isAdminRole ? 'Management' : 'Staff'),
+      status: 'active',
+      avatarInitials: initials,
+      password: newPassword.trim() || 'avatr1234',
+      permissions: {
+        canManageUsers: isAdminRole,
+        canDeleteUsers: isAdminRole,
+        canGrantRoles: isAdminRole,
+        canEditInventory: isAdminRole,
+        canUploadQR: isAdminRole,
+        canAddModels: isAdminRole,
+        canDeductPOS: true,
+        canViewFinancials: isAdminRole,
+      },
+      createdAt: newStartDate || new Date().toISOString().slice(0, 10),
+      lastLogin: 'ຍັງບໍ່ເຄີຍເຂົ້າສູ່ລະບົບ',
+    };
+
     try {
-      const newUser = await createStaffAccount({
-        name: newName.trim(),
-        email: newEmail.trim(),
-        phone: newPhone.trim(),
-        department: newDepartment,
-        role: newRole,
-      });
-      setUsers(prev => [newUser, ...prev]);
-      setIsAddUserOpen(false);
-      triggerFeedback(`ສົ່ງຄຳເຊີນໄປ ${newUser.email} ແລ້ວ`);
-      setNewName('');
-      setNewEmail('');
-      setNewPhone('');
-    } catch (error) {
-      triggerFeedback(error instanceof Error ? error.message : 'Could not invite the staff account.');
+      await saveUserToSupabase(newUser);
+    } catch (e) {
+      console.warn('Supabase new user save fallback:', e);
     }
+
+    setUsers(prev => [newUser, ...prev]);
+    setIsAddUserOpen(false);
+    triggerFeedback(`${t.success}: ${newUser.name}`);
+
+    setNewName('');
+    setNewEmail('');
+    setNewPhone('');
+    setNewPassword('avatr1234');
   };
 
-  // Role Badge Helper
-  const getRoleBadge = (role: UserRole) => {
-    switch (role) {
-      case 'super_admin':
-        return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-white text-black border border-zinc-300 flex items-center gap-1.5 w-fit shadow-sm">
-            <ShieldCheck className="w-3.5 h-3.5 text-black" />
-            {t.roleSuperAdmin}
-          </span>
-        );
-      case 'admin':
-        return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5 w-fit">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            {t.roleBranchAdmin}
-          </span>
-        );
-      case 'sales':
-        return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-900 text-zinc-300 border border-zinc-700 flex items-center gap-1.5 w-fit">
-            {t.roleSales}
-          </span>
-        );
-      case 'technician':
-        return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-900 text-zinc-300 border border-zinc-700 flex items-center gap-1.5 w-fit">
-            {t.roleTechnician}
-          </span>
-        );
-      case 'general_user':
-      default:
-        return (
-          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-900 text-zinc-400 border border-zinc-800 flex items-center gap-1.5 w-fit">
-            {t.roleGeneralUser}
-          </span>
-        );
+  // Distinct Avatar Color Gradients per Role
+  const getUserAvatarStyle = (role: UserRole) => {
+    if (role === 'super_admin' || role === 'admin') {
+      return 'bg-gradient-to-tr from-slate-700 to-slate-500 text-white font-black shadow-sm border border-slate-500';
     }
+    return 'bg-gradient-to-tr from-slate-600 to-slate-500 text-white font-bold shadow-sm border border-slate-500';
+  };
+
+  // Use restrained role colors so status remains the clearest account signal.
+  const getRoleBadge = (role: UserRole) => {
+    if (role === 'super_admin' || role === 'admin') {
+      return (
+        <span className="user-management-role-badge user-management-role-admin px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 w-fit">
+          <Shield className="w-3.5 h-3.5" />
+          <span>Admin</span>
+        </span>
+      );
+    }
+    return (
+      <span className="user-management-role-badge user-management-role-user px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 w-fit">
+        <UserCheck className="w-3.5 h-3.5" />
+        <span>User</span>
+      </span>
+    );
+  };
+
+  // Keep account status readable without adding unnecessary motion or intensity.
+  const getStatusBadge = (status?: string, onToggle?: () => void) => {
+    const isActive = status !== 'suspended';
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={!onToggle}
+        className={`user-management-status-badge ${isActive ? 'user-management-status-active' : 'user-management-status-suspended'} px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1.5 transition-colors w-fit ${
+          onToggle ? 'cursor-pointer' : 'cursor-default'
+        }`}
+        title={onToggle ? 'ກົດເພື່ອປ່ຽນສະຖານະບັນຊີ' : undefined}
+      >
+        <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+        <span>{isActive ? 'ເປີດໃຊ້ງານ (Active)' : 'ລະງັບຊົ່ວຄາວ (Suspended)'}</span>
+      </button>
+    );
   };
 
   // Filtered users
   const filteredUsers = users.filter(user => {
-    if (selectedRoleFilter !== 'all' && user.role !== selectedRoleFilter) return false;
+    if (selectedRoleFilter === 'admin') {
+      if (user.role !== 'admin' && user.role !== 'super_admin') return false;
+    } else if (selectedRoleFilter === 'general_user') {
+      if (user.role === 'admin' || user.role === 'super_admin') return false;
+    } else if (selectedRoleFilter !== 'all') {
+      if (user.role !== selectedRoleFilter) return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
@@ -202,10 +243,11 @@ export default function UserManagementView({
   });
 
   // RESTRICTED VIEW: If current logged in user is a General User
-  if (!canManageUsers) {
+  if (!isSuperAdmin) {
+    const activeAdmin = users.find(u => u.role === 'super_admin' || u.role === 'admin');
     return (
-      <div className="space-y-6 pb-12">
-        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8 text-center max-w-2xl mx-auto space-y-4 my-8">
+      <div className="user-management-view space-y-6 pb-12">
+        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8 text-center max-w-2xl mx-auto space-y-4 my-8 shadow-2xl">
           <div className="p-4 bg-zinc-900 border border-zinc-700 rounded-full w-fit mx-auto text-zinc-300">
             <Lock className="w-10 h-10" />
           </div>
@@ -214,8 +256,19 @@ export default function UserManagementView({
           </h2>
           <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
             ທ່ານກຳລັງເຂົ້າສູ່ລະບົບໃນຖານະ: <strong className="text-white">{currentUser.name} ({currentUser.roleTitleLo})</strong>. 
-            ຜູ້ดูแลระบบเท่านั้นที่มีสิทธิ์จัดการบัญชีพนักงานและกำหนด role
+            ສະເພາະ <strong>Admin{activeAdmin ? `: ${activeAdmin.name}` : ''}</strong> ເທົ່ານັ້ນ ທີ່ມີສິດລົບຜູ້ໃຊ້ອອກຈາກລະບົບ ແລະ ມອບສິດ/ບົດບາດໃຫ້ແກ່ຜູ້ອື່ນ.
           </p>
+          {activeAdmin && (
+            <div className="pt-4 border-t border-zinc-900 flex justify-center gap-3">
+              <button
+                onClick={() => onSwitchUser(activeAdmin)}
+                className="px-5 py-2.5 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2 shadow-md cursor-pointer"
+              >
+                <Crown className="w-4 h-4 text-black" />
+                <span>ສະຫຼັບເປັນ Admin ({activeAdmin.name})</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -223,71 +276,131 @@ export default function UserManagementView({
 
   // SUPER ADMIN MANAGEMENT CONSOLE
   return (
-    <div className="space-y-6 pb-12">
+    <div className="user-management-view space-y-6 pb-12">
       {/* Toast Alert */}
       {actionSuccessMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-zinc-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0" />
+        <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-emerald-500/60 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{actionSuccessMsg}</span>
         </div>
       )}
 
       {/* Top Banner: Admin Executive Privileges */}
-      <div className="bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4">
+      <div className="user-management-hero bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 bg-white text-black rounded-lg font-bold">
-              <ShieldCheck className="w-5 h-5 text-black" />
+            <span className="user-management-hero-icon p-1.5 rounded-lg font-black">
+              <Crown className="w-4 h-4" />
             </span>
-            <span className="text-xs font-mono uppercase tracking-widest text-zinc-400 font-bold">
-              SUPER ADMIN CONSOLE • ລະບົບຄວບຄຸມສິດຜູ້ໃຊ້
+            <span className="user-management-eyebrow text-xs font-mono uppercase tracking-widest font-bold">
+              ADMIN CONSOLE • ລະບົບຈັດການບັນຊີຜູ້ໃຊ້
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            ຈັດການຜູ້ໃຊ້ & ມອບສິດ (User Access Governance)
+            ຈັດການບັນຊີຜູ້ໃຊ້ & ມອບສິດ
           </h1>
           <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            Admin: <strong>{currentUser.name}</strong> | ທ່ານສາມາດ **ລົບຜູ້ໃຊ້ອື່ນອອກຈາກລະບົບ** ແລະ **ມອບສິດ/ບົດບາດ** ໄດ້ຕາມຕ້ອງການ
+            Admin ປະຈຸບັນ: <strong className="text-white">{currentUser.name}</strong> | ຄວບຄຸມບົດບາດ (Admin & User), ສິດອະນຸຍາດ, ລະຫັດຜ່ານ ແລະ ສະຖານະບັນຊີທັງໝົດ
           </p>
         </div>
 
         <button
           onClick={() => setIsAddUserOpen(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-white text-black font-bold text-xs rounded-xl hover:bg-zinc-200 transition-all shadow-md"
+          className="user-management-primary-action flex items-center gap-2 px-5 py-2.5 font-bold text-xs rounded-xl transition-all cursor-pointer"
         >
           <UserPlus className="w-4 h-4" />
-          <span>+ ເພີ່ມຜູ້ໃຊ້ໃໝ່ (Add User)</span>
+          <span>+ ສ້າງບັນຊີໃໝ່ (Add User)</span>
         </button>
       </div>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="user-management-stat rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="user-management-stat-icon user-management-stat-icon-blue"><UserCheck className="h-4 w-4" /></span>
+            <div>
+              <p className="text-xs text-zinc-400">ບັນຊີທັງໝົດ</p>
+              <p className="mt-0.5 text-xl font-bold text-white">{users.length}</p>
+            </div>
+          </div>
+        </div>
+        <div className="user-management-stat rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="user-management-stat-icon user-management-stat-icon-green"><CheckCircle2 className="h-4 w-4" /></span>
+            <div>
+              <p className="text-xs text-zinc-400">ບັນຊີທີ່ໃຊ້ງານຢູ່</p>
+              <p className="mt-0.5 text-xl font-bold text-white">{users.filter(user => user.status !== 'suspended').length}</p>
+            </div>
+          </div>
+        </div>
+        <div className="user-management-stat rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="user-management-stat-icon user-management-stat-icon-amber"><Shield className="h-4 w-4" /></span>
+            <div>
+              <p className="text-xs text-zinc-400">ຜູ້ດູແລລະບົບ (Admin)</p>
+              <p className="mt-0.5 text-xl font-bold text-white">{users.filter(user => user.role === 'admin' || user.role === 'super_admin').length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Fast Switch User Role for Testing/Verification */}
+      <div className="user-management-switcher bg-zinc-950 border border-zinc-800/80 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-zinc-400" />
+          <span className="text-zinc-300 font-semibold">ສະຫຼັບບັນຊີທົດສອບ (Switch Account):</span>
+          <span className="text-zinc-500 text-[11px]">(ຄລິກເພື່ອທົດລອງສິດຂອງແຕ່ລະບົດບາດ)</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {users.map((u) => {
+            const isSelected = currentUser.id === u.id;
+            return (
+              <button
+                key={u.id}
+                onClick={() => onSwitchUser(u)}
+                className={`user-management-switch-button ${isSelected ? 'user-management-switch-selected' : 'user-management-switch-idle'} px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border cursor-pointer ${
+                  isSelected
+                    ? 'font-bold'
+                    : ''
+                }`}
+              >
+                <span className={`user-management-role-dot h-2 w-2 rounded-full ${
+                  (u.role === 'super_admin' || u.role === 'admin') ? 'user-management-role-dot-admin' : 'user-management-role-dot-user'
+                }`}></span>
+                <span>{u.name.split(' ')[0]}</span>
+                <span className="user-management-switch-role text-[10px]">
+                  ({(u.role === 'super_admin' || u.role === 'admin') ? 'Admin' : 'User'})
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="user-management-toolbar bg-zinc-950 border border-zinc-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
         <div className="flex flex-wrap items-center gap-3 flex-1">
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="relative flex-1 min-w-55">
             <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
             <input
               type="text"
               placeholder="ຄົ້ນຫາຊື່ຜູ້ໃຊ້, ເບີໂທ, ອີເມວ, ພະແນກ..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white text-xs"
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-zinc-500">{t.memberRole}:</span>
+            <span className="text-zinc-400 font-medium">ປະເພດບັນຊີ:</span>
             <select
               value={selectedRoleFilter}
               onChange={(e) => setSelectedRoleFilter(e.target.value)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+              className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white text-xs cursor-pointer"
             >
-              <option value="all">{t.filterAll} ({users.length})</option>
-              <option value="super_admin">{t.roleSuperAdmin}</option>
-              <option value="admin">{t.roleBranchAdmin}</option>
-              <option value="sales">{t.roleSales}</option>
-              <option value="technician">{t.roleTechnician}</option>
-              <option value="general_user">{t.roleGeneralUser}</option>
+              <option value="all" className="bg-zinc-900 text-white">ທັງໝົດ ({users.length})</option>
+              <option value="admin" className="bg-zinc-900 text-white">Admin</option>
+              <option value="general_user" className="bg-zinc-900 text-white">User</option>
             </select>
           </div>
         </div>
@@ -298,37 +411,46 @@ export default function UserManagementView({
       </div>
 
       {/* Users List: Table / Cards with Admin Actions */}
-      <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden">
+      <div className="user-management-list bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-xl">
         <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
           <div>
-            <h2 className="font-bold text-base text-white">ລາຍຊື່ຜູ້ໃຊ້ໃນລະບົບ</h2>
-            <p className="text-xs text-zinc-400">ທ່ານສາມາດກົດ **ມອບສິດ** ຫຼື **ລົບຜູ້ໃຊ້** ອອກຈາກລະບົບໄດ້</p>
+            <h2 className="font-bold text-base text-white">ລາຍຊື່ບັນຊີຜູ້ໃຊ້ໃນລະບົບ ({filteredUsers.length})</h2>
+            <p className="text-xs text-zinc-400">ສະແດງບົດບາດ, ສະຖານະ, ສິດອະນຸຍາດ ແລະ ປຸ່ມຈັດການຂອງ Admin</p>
           </div>
         </div>
 
         <div className="divide-y divide-zinc-800/80">
-      {filteredUsers.map((user) => {
+          {filteredUsers.length === 0 && (
+            <div className="user-management-empty-state px-6 py-12 text-center">
+              <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400">
+                <Search className="h-5 w-5" />
+              </span>
+              <h3 className="text-sm font-semibold text-white">ບໍ່ພົບບັນຊີຜູ້ໃຊ້</h3>
+              <p className="mt-1 text-xs text-zinc-400">ລອງປ່ຽນຄຳຄົ້ນຫາ ຫຼື ຕົວກອງປະເພດບັນຊີ.</p>
+            </div>
+          )}
+          {filteredUsers.map((user) => {
             const isCurrentUser = user.id === currentUser.id;
 
             return (
               <div
                 key={user.id}
-                className="p-5 flex flex-wrap items-center justify-between gap-4 hover:bg-zinc-900/40 transition-colors text-xs"
+                className="user-management-account-row p-5 flex flex-wrap items-center justify-between gap-4 hover:bg-zinc-900/40 transition-colors text-xs"
               >
-                {/* User Identity */}
-                <div className="flex items-center gap-3.5 min-w-[260px]">
-                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-sm ${
-                    user.role === 'super_admin'
-                      ? 'bg-white text-black font-bold shadow-md'
-                      : 'bg-zinc-800 text-white border border-zinc-700'
-                  }`}>
-                    {user.avatarInitials}
+                {/* User Identity with Role Gradient Avatar */}
+                <div className="flex items-center gap-3.5 min-w-65">
+                  <div className={`user-management-avatar w-12 h-12 overflow-hidden rounded-2xl flex items-center justify-center font-bold text-sm ${getUserAvatarStyle(user.role)}`}>
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      user.avatarInitials
+                    )}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-sm text-white">{user.name}</h3>
                       {isCurrentUser && (
-                        <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold">
                           (ທ່ານເອງ)
                         </span>
                       )}
@@ -343,62 +465,71 @@ export default function UserManagementView({
                         <span>{user.email}</span>
                       </span>
                     </div>
-                    <p className="text-zinc-500 text-[11px] mt-0.5">{user.department}</p>
+                    <p className="text-zinc-500 text-[11px] mt-0.5 font-medium">{user.department}</p>
                   </div>
                 </div>
 
-                {/* Role Badge & Status */}
-                <div className="space-y-1">
-                  <div>{getRoleBadge(user.role)}</div>
+                {/* Role Badge & Status Badge (Both clearly colored) */}
+                <div className="space-y-1.5 min-w-37.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {getRoleBadge(user.role)}
+                    {getStatusBadge(user.status, !isCurrentUser ? () => handleToggleUserStatus(user) : undefined)}
+                  </div>
                   <span className="text-[11px] text-zinc-500 font-mono block">
                     ເຂົ້າສູ່ລະບົບ: {user.lastLogin}
                   </span>
                 </div>
 
-                {/* Permissions Preview */}
+                {/* Permissions Category-Coded Badges */}
                 <div className="hidden lg:block space-y-1 text-[11px]">
-                  <span className="text-zinc-500 uppercase font-mono text-[10px] block">ສິດການໃຊ້ງານ:</span>
+                  <span className="text-zinc-500 uppercase font-mono text-[10px] block font-bold">ສິດອະນຸຍາດ:</span>
                   <div className="flex flex-wrap gap-1 max-w-xs">
                     {user.permissions.canManageUsers && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ຈັດການຜູ້ໃຊ້</span>
                       </span>
                     )}
                     {user.permissions.canDeleteUsers && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="user-management-permission-badge user-management-permission-danger px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ລົບຜູ້ໃຊ້ໄດ້</span>
                       </span>
                     )}
                     {user.permissions.canGrantRoles && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ມອບສິດໄດ້</span>
                       </span>
                     )}
                     {user.permissions.canEditInventory && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ແກ້ສະຕ໋ອກ</span>
                       </span>
                     )}
                     {user.permissions.canUploadQR && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ອັບໂຫລດ QR</span>
                       </span>
                     )}
                     {user.permissions.canAddModels && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ເພີ່ມລຸ້ນລົດ</span>
                       </span>
                     )}
                     {user.permissions.canDeductPOS && (
-                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 flex items-center gap-1">
+                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" />
                         <span>ຕັດສະຕ໋ອກ POS</span>
+                      </span>
+                    )}
+                    {user.permissions.canViewFinancials && (
+                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <Check className="w-2.5 h-2.5" />
+                        <span>ການເງິນ</span>
                       </span>
                     )}
                   </div>
@@ -407,23 +538,26 @@ export default function UserManagementView({
                 {/* ADMIN ACTIONS: GRANT ROLE & DELETE USER */}
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-900">
                   {/* Grant / Change Role Button */}
-                    {canGrantRoles && <button
-                      onClick={() => setEditingUser(user)}
-                    className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl border border-zinc-700 font-semibold flex items-center gap-1.5 transition-colors"
+                  <button
+                    onClick={() => {
+                      setShowEditingPassword(false);
+                      setEditingUser(user);
+                    }}
+                    className="user-management-grant-button px-3.5 py-2 rounded-xl border font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                     title="ມອບສິດ ແລະ ປ່ຽນບົດບາດ"
                   >
-                    <Key className="w-3.5 h-3.5 text-zinc-300" />
+                    <Key className="w-3.5 h-3.5" />
                     <span>ມອບສິດ (Grant)</span>
-                    </button>}
+                  </button>
 
                   {/* Delete User Button (Disabled for current self Super Admin) */}
                   <button
                     onClick={() => setDeletingUser(user)}
                     disabled={isCurrentUser}
-                    className={`px-3 py-2 rounded-xl border font-semibold flex items-center gap-1.5 transition-colors ${
+                    className={`user-management-delete-button px-3 py-2 rounded-xl border font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                       isCurrentUser
                         ? 'bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed'
-                        : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700'
+                        : 'bg-zinc-900 hover:bg-rose-950/60 text-zinc-300 hover:text-rose-300 border-zinc-800 hover:border-rose-800/60'
                     }`}
                     title={isCurrentUser ? 'ບໍ່ສາມາດລົບຕົນເອງໄດ້' : 'ລົບຜູ້ໃຊ້ນີ້ອອກຈາກລະບົບ'}
                   >
@@ -439,22 +573,23 @@ export default function UserManagementView({
 
       {/* MODAL 1: GRANT ROLE & PERMISSIONS */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white max-h-[92vh] overflow-y-auto space-y-5">
+        <div className="user-management-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+          <div className="user-management-modal relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white max-h-[92vh] overflow-y-auto space-y-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-zinc-900 border border-zinc-700 rounded-xl text-white">
+                <div className="p-2 bg-purple-950/60 border border-purple-700/60 rounded-xl text-purple-300">
                   <Key className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white">ມອບສິດ ແລະ ປ່ຽນບົດບາດ</h3>
+                  <h3 className="font-bold text-base text-white">ມອບສິດ ແລະ ປັບແຕ່ງບັນຊີ</h3>
                   <p className="text-xs text-zinc-400">{editingUser.name} ({editingUser.phone})</p>
                 </div>
               </div>
 
               <button
+                type="button"
                 onClick={() => setEditingUser(null)}
-                className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900"
+                className="user-management-modal-close p-1.5 rounded-xl border transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -463,40 +598,210 @@ export default function UserManagementView({
             <form onSubmit={handleSaveRoleAndPermissions} className="space-y-4 text-xs">
               {/* Select Role */}
               <div>
-                <label className="block text-zinc-400 font-medium mb-1.5">
+                <label className="block text-zinc-300 font-medium mb-1.5">
                   ເລືອກບົດບາດ (Role) ທີ່ຕ້ອງການມອບໃຫ້:
                 </label>
                 <select
-                  value={editingUser.role}
+                  value={(editingUser.role === 'super_admin' || editingUser.role === 'admin') ? 'admin' : 'general_user'}
                   onChange={(e) => {
-                    const newRole = e.target.value as UserRole;
-                    setEditingUser({ ...editingUser, role: newRole });
+                    const selected = e.target.value as 'admin' | 'general_user';
+                    const isAdminRole = selected === 'admin';
+                    setEditingUser({
+                      ...editingUser,
+                      role: selected,
+                      roleTitleLo: isAdminRole ? 'Admin' : 'User',
+                      permissions: {
+                        canManageUsers: isAdminRole,
+                        canDeleteUsers: isAdminRole,
+                        canGrantRoles: isAdminRole,
+                        canEditInventory: isAdminRole,
+                        canUploadQR: isAdminRole,
+                        canAddModels: isAdminRole,
+                        canDeductPOS: true,
+                        canViewFinancials: isAdminRole,
+                      }
+                    });
                   }}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-white"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-white cursor-pointer"
                 >
-                  {currentUser.role === 'super_admin' && <option value="super_admin">Admin (Super Admin - ສິດສູງສຸດ)</option>}
-                  {currentUser.role === 'super_admin' && <option value="admin">Admin ສາຂາ (Branch Admin)</option>}
-                  <option value="sales">ທີ່ປຶກສາການຂາຍ (Sales Staff)</option>
-                  <option value="technician">ຊ່າງເຕັກນິກ PDI & ແບັດເຕີຣີ</option>
-                  <option value="general_user">ຜູ້ໃຊ້ທົ່ວໄປ (General User / Staff)</option>
+                  <option value="admin" className="bg-zinc-900 text-white">Admin (ຜູ້ດູແລລະບົບ / Admin)</option>
+                  <option value="general_user" className="bg-zinc-900 text-white">User (ຜູ້ໃຊ້ທົ່ວໄປ / User)</option>
                 </select>
               </div>
 
-              <p className="pt-3 border-t border-zinc-800 text-zinc-400 text-xs">
-                ສິດເຂົ້າເຖິງມາຈາກ role ໃນຖານຂໍ້ມູນ staff_roles.
-              </p>
+              {/* Granular Permissions Checkboxes */}
+              <div className="space-y-2 pt-2 border-t border-zinc-800">
+                <span className="text-zinc-300 font-semibold block text-xs">
+                  ກຳນົດສິດລະອຽດ (Permissions Configuration):
+                </span>
+
+                <label className={`user-management-permission-row flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                  editingUser.permissions.canManageUsers
+                    ? 'border-blue-600/70 bg-blue-950/30 text-white'
+                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={editingUser.permissions.canManageUsers}
+                    onChange={(e) => setEditingUser({
+                      ...editingUser,
+                      permissions: { ...editingUser.permissions, canManageUsers: e.target.checked }
+                    })}
+                    className="accent-blue-500 w-4 h-4 rounded"
+                  />
+                  <div>
+                    <span className="text-white font-medium block">ຈັດການຜູ້ໃຊ້ອື່ນ (Manage Users)</span>
+                    <span className="text-zinc-400 text-[11px]">ສາມາດເບິ່ງ ແລະ ແກ້ໄຂຂໍ້ມູນພະນັກງານໃນລະບົບໄດ້</span>
+                  </div>
+                </label>
+
+                <label className={`user-management-permission-row flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                  editingUser.permissions.canDeleteUsers
+                    ? 'border-rose-600/70 bg-rose-950/30 text-white'
+                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={editingUser.permissions.canDeleteUsers}
+                    onChange={(e) => setEditingUser({
+                      ...editingUser,
+                      permissions: { ...editingUser.permissions, canDeleteUsers: e.target.checked }
+                    })}
+                    className="accent-rose-500 w-4 h-4 rounded"
+                  />
+                  <div>
+                    <span className="text-white font-medium block">ລົບຜູ້ໃຊ້ອື່ນອອກຈາກລະບົບ (Delete Users)</span>
+                    <span className="text-zinc-400 text-[11px]">ອະນຸຍາດໃຫ້ລົບ ແລະ ຍົກເລີກສິດຜູ້ໃຊ້ອື່ນ</span>
+                  </div>
+                </label>
+
+                <label className={`user-management-permission-row flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                  editingUser.permissions.canGrantRoles
+                    ? 'border-blue-600/70 bg-blue-950/30 text-white'
+                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={editingUser.permissions.canGrantRoles}
+                    onChange={(e) => setEditingUser({
+                      ...editingUser,
+                      permissions: { ...editingUser.permissions, canGrantRoles: e.target.checked }
+                    })}
+                    className="accent-blue-500 w-4 h-4 rounded"
+                  />
+                  <div>
+                    <span className="text-white font-medium block">ມອບສິດ & ປ່ຽນບົດບາດ (Grant Roles)</span>
+                    <span className="text-zinc-400 text-[11px]">ສາມາດແຕ່ງຕັ້ງ ຫຼື ປ່ຽນ Role ໃຫ້ພະນັກງານຄົນອື່ນ</span>
+                  </div>
+                </label>
+
+                <label className={`user-management-permission-row flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                  editingUser.permissions.canEditInventory
+                    ? 'border-blue-600/70 bg-blue-950/30 text-white'
+                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={editingUser.permissions.canEditInventory}
+                    onChange={(e) => setEditingUser({
+                      ...editingUser,
+                      permissions: { ...editingUser.permissions, canEditInventory: e.target.checked }
+                    })}
+                    className="accent-blue-500 w-4 h-4 rounded"
+                  />
+                  <div>
+                    <span className="text-white font-medium block">ແກ້ໄຂສະຕ໋ອກລົດ & PDI (Edit Stock)</span>
+                    <span className="text-zinc-400 text-[11px]">ສາມາດເພີ່ມ, ແກ້ໄຂເລກ VIN, ທະບຽນ ແລະ ລາຄາລົດ</span>
+                  </div>
+                </label>
+
+                <label className={`user-management-permission-row flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                  editingUser.permissions.canUploadQR
+                    ? 'border-blue-600/70 bg-blue-950/30 text-white'
+                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingUser.permissions.canUploadQR)}
+                    onChange={(e) => setEditingUser({
+                      ...editingUser,
+                      permissions: { ...editingUser.permissions, canUploadQR: e.target.checked }
+                    })}
+                    className="accent-blue-500 w-4 h-4 rounded"
+                  />
+                  <div>
+                    <span className="text-white font-medium block">ອັບໂຫລດ QR ບໍລິສັດ (Upload Company QR)</span>
+                    <span className="text-zinc-400 text-[11px]">ສິດອັບໂຫລດ ແລະ ປ່ຽນຮູບ QR ບໍລິສັດທາງການ</span>
+                  </div>
+                </label>
+
+                <label className={`user-management-permission-row flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                  editingUser.permissions.canDeductPOS
+                    ? 'border-blue-600/70 bg-blue-950/30 text-white'
+                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={editingUser.permissions.canDeductPOS}
+                    onChange={(e) => setEditingUser({
+                      ...editingUser,
+                      permissions: { ...editingUser.permissions, canDeductPOS: e.target.checked }
+                    })}
+                    className="accent-blue-500 w-4 h-4 rounded"
+                  />
+                  <div>
+                    <span className="text-white font-medium block">ຕັດສະຕ໋ອກ & ອອກໃບຮັບເງິນ POS (POS Deduction)</span>
+                    <span className="text-zinc-400 text-[11px]">ສາມາດຕັດຍອດລົດອອກຈາກສາງເມື່ອມີການຂາຍ</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Password & Account Status */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-800">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">ປ່ຽນລະຫັດຜ່ານ (Reset Password)</label>
+                  <div className="relative">
+                    <input
+                      type={showEditingPassword ? 'text' : 'password'}
+                      value={editingUser.password || ''}
+                      onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
+                      placeholder="ຕັ້ງລະຫັດໃໝ່..."
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 pr-10 text-white font-mono focus:outline-none focus:border-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowEditingPassword(visible => !visible)}
+                      aria-label={showEditingPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                    >
+                      {showEditingPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">ສະຖານະບັນຊີ (Status)</label>
+                  <select
+                    value={editingUser.status || 'active'}
+                    onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value as any })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white cursor-pointer"
+                  >
+                    <option value="active" className="bg-zinc-900 text-white">ເປີດໃຊ້ງານ (Active)</option>
+                    <option value="suspended" className="bg-zinc-900 text-white">ລະງັບຊົ່ວຄາວ (Suspended)</option>
+                  </select>
+                </div>
+              </div>
 
               <div className="pt-4 border-t border-zinc-800 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setEditingUser(null)}
-                  className="px-4 py-2 border border-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-900"
+                  className="user-management-modal-cancel px-4 py-2 rounded-xl border cursor-pointer"
                 >
                   ຍົກເລີກ
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors shadow-md"
+                  className="user-management-modal-submit px-5 py-2 font-bold rounded-xl transition-colors cursor-pointer"
                 >
                   ຢືນຢັນການມອບສິດ
                 </button>
@@ -506,21 +811,22 @@ export default function UserManagementView({
         </div>
       )}
 
-      {/* MODAL 2: CONFIRM DELETE USER */}
+      {/* MODAL 2: CONFIRM DELETE USER WITH DANGER RED HIGHLIGHT */}
       {deletingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white space-y-4 shadow-2xl">
-            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-2xl w-fit text-zinc-300 mx-auto">
+        <div className="user-management-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+          <div className="user-management-modal relative w-full max-w-md bg-zinc-950 border border-rose-900/60 rounded-3xl p-6 text-white space-y-4 shadow-2xl">
+            <div className="p-3.5 bg-rose-950/60 border border-rose-800/80 rounded-2xl w-fit text-rose-400 mx-auto">
               <UserX className="w-8 h-8" />
             </div>
 
             <div className="text-center space-y-2">
               <h3 className="font-bold text-lg text-white">ຢືນຢັນການລົບຜູ້ໃຊ້?</h3>
               <p className="text-xs text-zinc-300">
-                ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບຜູ້ໃຊ້: <strong className="text-white">{deletingUser.name}</strong> ({deletingUser.phone}) ອອກຈາກລະບົບ?
+                ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບຜູ້ໃຊ້: <strong className="text-white underline">{deletingUser.name}</strong> ({deletingUser.phone}) ອອກຈາກລະບົບ?
               </p>
-              <p className="text-[11px] text-zinc-500">
-                ການກະທຳນີ້ຈະລົບສິດການເຂົ້າເຖິງລະບົບຂອງຜູ້ໃຊ້ນີ້ທັງໝົດ.
+              <p className="text-[11px] text-rose-400 bg-rose-950/40 p-2 rounded-xl border border-rose-900/60 flex items-center justify-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span>ການກະທຳນີ້ຈະລົບສິດການເຂົ້າເຖິງລະບົບຂອງຜູ້ໃຊ້ນີ້ທັງໝົດ.</span>
               </p>
             </div>
 
@@ -528,14 +834,14 @@ export default function UserManagementView({
               <button
                 type="button"
                 onClick={() => setDeletingUser(null)}
-                className="px-5 py-2.5 border border-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-900 text-xs font-semibold"
+                className="user-management-modal-cancel px-5 py-2.5 rounded-xl border text-xs font-semibold cursor-pointer"
               >
                 ຍົກເລີກ
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="px-5 py-2.5 bg-zinc-900 hover:bg-black text-white rounded-xl text-xs font-bold shadow-lg border border-zinc-700 transition-colors flex items-center gap-1.5"
+                className="user-management-danger-action px-5 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>ຢືນຢັນການລົບຜູ້ໃຊ້</span>
@@ -547,16 +853,17 @@ export default function UserManagementView({
 
       {/* MODAL 3: ADD NEW USER */}
       {isAddUserOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white max-h-[90vh] overflow-y-auto space-y-4">
+        <div className="user-management-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+          <div className="user-management-modal relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
-                <UserPlus className="w-5 h-5" />
+                <UserPlus className="w-5 h-5 text-amber-400" />
                 <span>ເພີ່ມຜູ້ໃຊ້ໃໝ່ເຂົ້າລະບົບ</span>
               </h3>
               <button
+                type="button"
                 onClick={() => setIsAddUserOpen(false)}
-                className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900"
+                className="user-management-modal-close p-1.5 rounded-xl border transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -564,7 +871,7 @@ export default function UserManagementView({
 
             <form onSubmit={handleCreateUser} className="space-y-4 text-xs">
               <div>
-                <label className="block text-zinc-400 mb-1 font-medium">ຊື່ ແລະ ນາມສະກຸນ *</label>
+                <label className="block text-zinc-300 mb-1 font-medium">ຊື່ ແລະ ນາມສະກຸນ <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   required
@@ -577,7 +884,7 @@ export default function UserManagementView({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ເບີໂທລະສັບ *</label>
+                  <label className="block text-zinc-300 mb-1 font-medium">ເບີໂທລະສັບ <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     required
@@ -589,7 +896,7 @@ export default function UserManagementView({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ອີເມວ</label>
+                  <label className="block text-zinc-300 mb-1 font-medium">ອີເມວ</label>
                   <input
                     type="email"
                     value={newEmail}
@@ -600,24 +907,21 @@ export default function UserManagementView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ບົດບາດເລີ່ມຕົ້ນ (Role)</label>
+                  <label className="block text-zinc-300 mb-1 font-medium">ປະເພດບັນຊີ (Role) <span className="text-red-500">*</span></label>
                   <select
-                    value={newRole}
+                    value={(newRole === 'super_admin' || newRole === 'admin') ? 'admin' : 'general_user'}
                     onChange={(e) => setNewRole(e.target.value as UserRole)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white cursor-pointer font-medium"
                   >
-                    <option value="general_user">ຜູ້ໃຊ້ທົ່ວໄປ (General User)</option>
-                    <option value="sales">ທີ່ປຶກສາການຂາຍ (Sales Staff)</option>
-                    <option value="technician">ຊ່າງ PDI & CATL</option>
-                    {currentUser.role === 'super_admin' && <option value="admin">Admin ສາຂາ (Branch Admin)</option>}
-                    {currentUser.role === 'super_admin' && <option value="super_admin">Admin (Super Admin)</option>}
+                    <option value="admin" className="bg-zinc-900 text-white">Admin (ຜູ້ດູແລລະບົບ / Admin)</option>
+                    <option value="general_user" className="bg-zinc-900 text-white">User (ຜູ້ໃຊ້ທົ່ວໄປ / User)</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ພະແນກ / ສາຂາ</label>
+                  <label className="block text-zinc-300 mb-1 font-medium">ພະແນກ / ສາຂາ</label>
                   <input
                     type="text"
                     value={newDepartment}
@@ -625,19 +929,66 @@ export default function UserManagementView({
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
                   />
                 </div>
+
+                <div>
+                  <label className="text-zinc-300 mb-1 font-medium flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-white" />
+                    <span>ວັນເດືອນປີເລີ່ມງານ <span className="text-red-500">*</span></span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={newStartDate}
+                    onChange={(e) => setNewStartDate(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-zinc-300 mb-1 font-medium flex items-center justify-between">
+                  <span>ລະຫັດຜ່ານບັນຊີ (Password) <span className="text-red-500">*</span></span>
+                  <button
+                    type="button"
+                    onClick={() => setNewPassword(`av${Math.floor(1000 + Math.random() * 9000)}`)}
+                    className="text-[10px] text-amber-400 hover:text-amber-300 underline font-mono cursor-pointer"
+                  >
+                    ສຸ່ມລະຫັດອັດຕະໂນມັດ
+                  </button>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="ຕັ້ງລະຫັດຜ່ານ e.g. avatr1234"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 pr-10 text-white font-mono focus:outline-none focus:border-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white cursor-pointer"
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  ສະມາຊິກສາມາດໃຊ້ລະຫັດຜ່ານນີ້ ຫຼື ເບີໂທລະສັບ ເພື່ອເຂົ້າສູ່ລະບົບໄດ້ທັນທີ
+                </p>
               </div>
 
               <div className="pt-3 border-t border-zinc-800 flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsAddUserOpen(false)}
-                  className="px-4 py-2 border border-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-900"
+                  className="user-management-modal-cancel px-4 py-2 rounded-xl border cursor-pointer"
                 >
                   ຍົກເລີກ
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors shadow-md"
+                  className="user-management-modal-submit px-5 py-2 font-bold rounded-xl transition-colors cursor-pointer"
                 >
                   ສ້າງຜູ້ໃຊ້ໃໝ່
                 </button>

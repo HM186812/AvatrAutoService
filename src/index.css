@@ -4,7 +4,6 @@
 @font-face {
   font-family: 'Phetsarath OT';
   src: local('Phetsarath OT'), local('PhetsarathOT'), local('Phetsarath-OT'), local('Phetsarath'),
-    url('/fonts/Phetsarath-Regular.woff2') format('woff2'),
     url('/fonts/Phetsarath-Regular.ttf') format('truetype');
   font-weight: 300 500;
   font-style: normal;
@@ -14,7 +13,6 @@
 @font-face {
   font-family: 'Phetsarath OT';
   src: local('Phetsarath OT Bold'), local('PhetsarathOT-Bold'), local('Phetsarath-Bold'), local('Phetsarath Bold'),
-    url('/fonts/Phetsarath-Bold.woff2') format('woff2'),
     url('/fonts/Phetsarath-Bold.ttf') format('truetype');
   font-weight: 600 900;
   font-style: normal;
@@ -24,7 +22,6 @@
 @font-face {
   font-family: 'Phetsarath';
   src: local('Phetsarath'), local('Phetsarath OT'), local('PhetsarathOT'),
-    url('/fonts/Phetsarath-Regular.woff2') format('woff2'),
     url('/fonts/Phetsarath-Regular.ttf') format('truetype');
   font-weight: 300 500;
   font-style: normal;
@@ -34,7 +31,6 @@
 @font-face {
   font-family: 'Phetsarath';
   src: local('Phetsarath Bold'), local('Phetsarath OT Bold'), local('PhetsarathOT-Bold'),
-    url('/fonts/Phetsarath-Bold.woff2') format('woff2'),
     url('/fonts/Phetsarath-Bold.ttf') format('truetype');
   font-weight: 600 900;
   font-style: normal;
@@ -155,11 +151,57 @@ html.light .bg-black {
   color: #09090b !important;
 }
 
-html.light .bg-zinc-950 {
+html.light .bg-zinc-950,
+html.light .bg-zinc-950\/90,
+html.light .bg-zinc-950\/80,
+html.light .bg-zinc-950\/70,
+html.light .bg-zinc-950\/60,
+html.light .bg-zinc-950\/50 {
   background-color: #ffffff !important;
   color: #09090b !important;
   border-color: #e2e8f0 !important;
   box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.03) !important;
+}
+
+html.light .theme-adaptive-dark-surface {
+  background-image: none !important;
+  background-color: #ffffff !important;
+}
+
+/* Regular User QR Indicator Banner in Light Mode */
+html.light .qr-user-indicator {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light .qr-user-indicator span,
+html.light .qr-user-indicator p,
+html.light .qr-user-indicator strong {
+  color: #0f172a !important;
+}
+
+html.light .qr-user-indicator svg {
+  color: #0f172a !important;
+  stroke: #0f172a !important;
+}
+
+html.light .qr-user-indicator .qr-user-badge {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light .qr-user-indicator .qr-user-icon-wrap {
+  background-color: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light .qr-user-indicator .qr-user-icon-wrap svg {
+  color: #0f172a !important;
 }
 
 html.light .bg-zinc-900,
@@ -225,9 +267,51 @@ html.light .text-white {
 }
 
 /* Protected Overlays & Badges ONLY over Car Photos in Light Mode */
-html.light .always-white-text,
-html.light .always-white-text * {
+html.light .always-white-text:not(.stock-badge-low),
+html.light .always-white-text:not(.stock-badge-low) *:not(.stock-badge-low):not(.stock-badge-low *) {
   color: #ffffff !important;
+}
+
+/* Stock Badges in Default / Dark Mode */
+.stock-badge-low {
+  background-color: rgba(69, 26, 3, 0.95) !important;
+  border-color: rgba(245, 158, 11, 0.8) !important;
+}
+.stock-badge-low .stock-low-text,
+.stock-badge-low span {
+  color: #fef08a !important;
+  font-weight: 800 !important;
+}
+.stock-badge-low .stock-low-icon,
+.stock-badge-low svg {
+  color: #fbbf24 !important;
+  stroke: #fbbf24 !important;
+}
+
+/* Stock Badges in Light Mode (.light) - Fix 'ໃກ້ໝົດ' becoming white in light mode */
+html.light .stock-badge-low {
+  background-color: #fef3c7 !important; /* warm amber-100 */
+  border-color: #f59e0b !important; /* solid amber-500 border */
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25) !important;
+}
+html.light .stock-badge-low .stock-low-text,
+html.light .stock-badge-low span {
+  color: #92400e !important; /* deep amber-800 - high contrast, never white! */
+  font-weight: 800 !important;
+}
+html.light .stock-badge-low .stock-low-icon,
+html.light .stock-badge-low svg {
+  color: #d97706 !important; /* amber-600 */
+  stroke: #d97706 !important;
+}
+
+/* Safeguard for amber text in light mode */
+html.light .text-amber-200,
+html.light .text-amber-300 {
+  color: #b45309 !important;
+}
+html.light .text-amber-400 {
+  color: #92400e !important;
 }
 
 /* Light Mode Paper & Invoice styling */
@@ -263,6 +347,61 @@ html.light .text-zinc-600 {
   color: #64748b !important;
 }
 
+html.light .app-shell .pos-province-trigger {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light .app-shell .pos-province-trigger .text-zinc-400,
+html.light .app-shell .pos-province-trigger > svg {
+  color: #64748b !important;
+}
+
+html.light .app-shell .pos-province-options {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light .app-shell .pos-province-option {
+  color: #334155 !important;
+}
+
+html.light .app-shell .pos-province-option:hover {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .app-shell .pos-province-option-selected,
+html.light .app-shell .pos-province-option-selected:hover {
+  background-color: #eff6ff !important;
+  color: #0f172a !important;
+}
+
+html.dark .app-shell .pos-province-trigger {
+  background-color: #172235 !important;
+  border-color: #2a3951 !important;
+  color: #f4f4f5 !important;
+}
+
+html.dark .app-shell .pos-province-options {
+  background-color: #111827 !important;
+  border-color: #34445d !important;
+}
+
+html.dark .app-shell .pos-province-option {
+  color: #cbd5e1 !important;
+}
+
+html.dark .app-shell .pos-province-option:hover {
+  background-color: #223149 !important;
+}
+
+html.dark .app-shell .pos-province-option-selected,
+html.dark .app-shell .pos-province-option-selected:hover {
+  background-color: #223149 !important;
+  color: #ffffff !important;
+}
+
 /* Forms, Inputs, Dropdowns in Light Mode */
 html.light input,
 html.light select,
@@ -285,14 +424,14 @@ html.light textarea::placeholder {
 }
 
 /* Solid Active Buttons & Tabs Inversion in Light Mode (Deep Obsidian in Light Mode) */
-html.light .bg-white.text-black,
-html.light .bg-white.text-zinc-950 {
+html.light .bg-white.text-black:not(.official-dealer-document):not(.official-dealer-document *),
+html.light .bg-white.text-zinc-950:not(.official-dealer-document):not(.official-dealer-document *) {
   background-color: #09090b !important;
   color: #ffffff !important;
 }
 
-html.light .bg-white.text-black svg,
-html.light .bg-white.text-zinc-950 svg {
+html.light .bg-white.text-black:not(.official-dealer-document):not(.official-dealer-document *) svg,
+html.light .bg-white.text-zinc-950:not(.official-dealer-document):not(.official-dealer-document *) svg {
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
@@ -319,57 +458,124 @@ html.light table tbody tr:hover {
 html.light .fixed.inset-0.bg-black\/90,
 html.light .fixed.inset-0.bg-black\/85,
 html.light .fixed.inset-0.bg-black\/80,
+html.light .fixed.inset-0.bg-black\/75,
 html.light .fixed.inset-0.bg-black\/70 {
-  background-color: rgba(15, 23, 42, 0.55) !important;
+  background-color: rgba(15, 23, 42, 0.6) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px) !important;
 }
 
-/* Monochrome Normalization for Rainbow Utilities */
-html.light .bg-emerald-950,
-html.light .bg-emerald-950\/80,
-html.light .bg-emerald-950\/70,
+/* Luxurious Semantic Status Badges & Accents in Light Mode */
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/20,
+html.light .bg-emerald-950\/30,
 html.light .bg-emerald-950\/40,
-html.light .bg-blue-950,
-html.light .bg-blue-950\/80,
-html.light .bg-blue-950\/40,
-html.light .bg-amber-950,
-html.light .bg-amber-950\/90,
-html.light .bg-amber-950\/80,
-html.light .bg-amber-950\/40,
-html.light .bg-amber-950\/30,
-html.light .bg-purple-950,
-html.light .bg-purple-950\/90,
-html.light .bg-purple-950\/80,
-html.light .bg-purple-950\/20,
-html.light .bg-rose-950,
-html.light .bg-rose-950\/90 {
-  background-color: #f1f5f9 !important;
-  color: #09090b !important;
-  border-color: #cbd5e1 !important;
+html.light .bg-emerald-950\/60,
+html.light .bg-emerald-950 {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #065f46 !important;
 }
-
 html.light .text-emerald-400,
 html.light .text-emerald-300,
-html.light .text-blue-400,
-html.light .text-blue-300,
-html.light .text-amber-400,
-html.light .text-amber-300,
-html.light .text-purple-400,
-html.light .text-purple-300,
-html.light .text-cyan-400,
-html.light .text-cyan-300,
-html.light .text-rose-400,
-html.light .text-rose-300 {
-  color: #09090b !important;
+html.light .text-emerald-500 {
+  color: #059669 !important;
 }
 
-html.light .bg-emerald-500,
-html.light .bg-emerald-400,
-html.light .bg-blue-600,
-html.light .bg-blue-500,
-html.light .bg-amber-400,
-html.light .bg-amber-300 {
-  background-color: #09090b !important;
+html.light .bg-blue-500\/10,
+html.light .bg-blue-500\/20,
+html.light .bg-blue-950\/30,
+html.light .bg-blue-950\/40,
+html.light .bg-blue-950\/60,
+html.light .bg-blue-950 {
+  background-color: #eff6ff !important;
+  border-color: #bfdbfe !important;
+  color: #1e40af !important;
+}
+html.light .text-blue-400,
+html.light .text-blue-300,
+html.light .text-blue-500 {
+  color: #2563eb !important;
+}
+
+html.light .bg-amber-500\/10,
+html.light .bg-amber-500\/20,
+html.light .bg-amber-950\/30,
+html.light .bg-amber-950\/40,
+html.light .bg-amber-950\/60,
+html.light .bg-amber-950 {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}
+html.light .text-amber-400,
+html.light .text-amber-300,
+html.light .text-amber-500 {
+  color: #b45309 !important;
+}
+
+html.light .bg-rose-500\/10,
+html.light .bg-rose-500\/20,
+html.light .bg-rose-950\/30,
+html.light .bg-rose-950\/40,
+html.light .bg-rose-950\/60,
+html.light .bg-rose-950 {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+html.light .text-rose-400,
+html.light .text-rose-300,
+html.light .text-red-400,
+html.light .text-rose-500 {
+  color: #e11d48 !important;
+}
+
+/* Crisp White Text for Action Buttons in Light Mode */
+html.light a.bg-emerald-600,
+html.light button.bg-emerald-600,
+html.light .bg-emerald-600,
+html.light a.bg-emerald-700,
+html.light button.bg-emerald-700,
+html.light .bg-emerald-700 {
+  background-color: #059669 !important;
   color: #ffffff !important;
+}
+html.light a.bg-emerald-600 *,
+html.light button.bg-emerald-600 *,
+html.light .bg-emerald-600 * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+html.light button.bg-rose-600,
+html.light button.bg-rose-700,
+html.light button.bg-red-600,
+html.light button.bg-red-700,
+html.light .bg-rose-600,
+html.light .bg-red-600 {
+  background-color: #e11d48 !important;
+  color: #ffffff !important;
+}
+html.light button.bg-rose-600 *,
+html.light button.bg-rose-700 *,
+html.light button.bg-red-600 *,
+html.light .bg-rose-600 *,
+html.light .bg-red-600 * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+html.light button.bg-blue-600,
+html.light button.bg-blue-700,
+html.light .bg-blue-600 {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+}
+html.light button.bg-blue-600 *,
+html.light .bg-blue-600 * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 /* Animations */
@@ -407,27 +613,1456 @@ html.light .bg-amber-300 {
   animation: pulse-glow 3s ease-in-out infinite;
 }
 
-/* Print Optimization for Thermal & A4 Monochrome Receipts */
+/* Official Dealership Printable Document Protection (Pure crisp monochrome white paper & black font) */
+.official-dealer-document,
+.official-dealer-document.bg-white,
+.official-dealer-document.bg-white.text-black,
+#printable-customer-document,
+html.light .official-dealer-document,
+html.light .official-dealer-document.bg-white,
+html.light .official-dealer-document.bg-white.text-black,
+html.light #printable-customer-document,
+html.dark .official-dealer-document,
+html.dark .official-dealer-document.bg-white,
+html.dark .official-dealer-document.bg-white.text-black,
+html.dark #printable-customer-document,
+html.dark #printable-official-bill {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+  text-shadow: none !important;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.08) !important;
+}
+
+.official-dealer-document *,
+#printable-customer-document *,
+#printable-official-bill *,
+html.light .official-dealer-document *,
+html.light #printable-customer-document *,
+html.light #printable-official-bill *,
+html.dark .official-dealer-document *,
+html.dark #printable-customer-document *,
+html.dark #printable-official-bill * {
+  color: #000000 !important;
+  border-color: #000000 !important;
+  text-shadow: none !important;
+}
+
+/* Ensure headings, paragraphs, spans, strong, ol, li are pure black */
+.official-dealer-document h1,
+.official-dealer-document h2,
+.official-dealer-document h3,
+.official-dealer-document p,
+.official-dealer-document span,
+.official-dealer-document strong,
+.official-dealer-document div,
+.official-dealer-document ol,
+.official-dealer-document li,
+#printable-customer-document h1,
+#printable-customer-document h2,
+#printable-customer-document h3,
+#printable-customer-document p,
+#printable-customer-document span,
+#printable-customer-document strong,
+#printable-customer-document div,
+#printable-customer-document ol,
+#printable-customer-document li,
+#printable-official-bill h1,
+#printable-official-bill h2,
+#printable-official-bill h3,
+#printable-official-bill p,
+#printable-official-bill span,
+#printable-official-bill strong,
+#printable-official-bill div,
+#printable-official-bill ol,
+#printable-official-bill li {
+  color: #000000 !important;
+}
+
+/* Tables inside official document: pure black text, pure black borders, white background */
+.official-dealer-document table,
+#printable-customer-document table,
+#printable-official-bill table,
+html.light .official-dealer-document table,
+html.light #printable-customer-document table,
+html.light #printable-official-bill table,
+html.dark .official-dealer-document table,
+html.dark #printable-customer-document table,
+html.dark #printable-official-bill table {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  border-color: #000000 !important;
+  border-collapse: collapse !important;
+}
+
+.official-dealer-document th,
+.official-dealer-document td,
+#printable-customer-document th,
+#printable-customer-document td,
+#printable-official-bill th,
+#printable-official-bill td,
+html.light .official-dealer-document th,
+html.light .official-dealer-document td,
+html.light #printable-customer-document th,
+html.light #printable-customer-document td,
+html.light #printable-official-bill th,
+html.light #printable-official-bill td,
+html.dark .official-dealer-document th,
+html.dark .official-dealer-document td,
+html.dark #printable-customer-document th,
+html.dark #printable-customer-document td,
+html.dark #printable-official-bill th,
+html.dark #printable-official-bill td {
+  border: 1px solid #000000 !important;
+  color: #000000 !important;
+  background-color: transparent !important;
+}
+
+.official-dealer-document thead,
+.official-dealer-document thead th,
+#printable-customer-document thead,
+#printable-customer-document thead th,
+#printable-official-bill thead,
+#printable-official-bill thead th,
+html.light .official-dealer-document thead,
+html.light .official-dealer-document thead th,
+html.light #printable-customer-document thead,
+html.light #printable-customer-document thead th,
+html.light #printable-official-bill thead,
+html.light #printable-official-bill thead th {
+  background-color: #f4f4f5 !important;
+  color: #000000 !important;
+  font-weight: 700 !important;
+  border: 1px solid #000000 !important;
+}
+
+.official-dealer-document tbody tr:hover,
+#printable-customer-document tbody tr:hover,
+#printable-official-bill tbody tr:hover,
+html.light .official-dealer-document tbody tr:hover,
+html.light #printable-customer-document tbody tr:hover,
+html.light #printable-official-bill tbody tr:hover {
+  background-color: #ffffff !important;
+}
+
+.official-dealer-document .bg-zinc-50,
+.official-dealer-document .bg-zinc-100,
+#printable-customer-document .bg-zinc-50,
+#printable-customer-document .bg-zinc-100,
+#printable-official-bill .bg-zinc-50,
+#printable-official-bill .bg-zinc-100,
+html.light .official-dealer-document .bg-zinc-50,
+html.light .official-dealer-document .bg-zinc-100,
+html.light #printable-customer-document .bg-zinc-50,
+html.light #printable-customer-document .bg-zinc-100,
+html.light #printable-official-bill .bg-zinc-50,
+html.light #printable-official-bill .bg-zinc-100,
+html.dark .official-dealer-document .bg-zinc-50,
+html.dark .official-dealer-document .bg-zinc-100,
+html.dark #printable-customer-document .bg-zinc-50,
+html.dark #printable-customer-document .bg-zinc-100,
+html.dark #printable-official-bill .bg-zinc-50,
+html.dark #printable-official-bill .bg-zinc-100 {
+  background-color: #f4f4f5 !important;
+  color: #000000 !important;
+}
+
+.official-dealer-document svg,
+#printable-customer-document svg,
+#printable-official-bill svg,
+html.light .official-dealer-document svg,
+html.light #printable-customer-document svg,
+html.light #printable-official-bill svg,
+html.dark .official-dealer-document svg,
+html.dark #printable-customer-document svg,
+html.dark #printable-official-bill svg {
+  color: #000000 !important;
+  stroke: #000000 !important;
+}
+
+/* Customer Documents Modal Light Mode Styling */
+html.light .customer-documents-modal {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light .customer-documents-modal .modal-topbar {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .customer-documents-modal h2,
+html.light .customer-documents-modal .modal-title {
+  color: #09090b !important;
+}
+
+html.light .customer-documents-modal .customer-badge {
+  background-color: #f1f5f9 !important;
+  color: #09090b !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light .customer-documents-modal .officer-name {
+  color: #09090b !important;
+}
+
+html.light .customer-documents-modal .btn-close {
+  color: #64748b !important;
+  border-color: #e2e8f0 !important;
+  background-color: transparent !important;
+}
+
+html.light .customer-documents-modal .btn-close:hover {
+  background-color: #f1f5f9 !important;
+  color: #09090b !important;
+}
+
+html.light .customer-documents-modal .tab-btn-active {
+  background-color: #09090b !important;
+  color: #ffffff !important;
+  border-color: #09090b !important;
+}
+
+html.light .customer-documents-modal .tab-btn-active * {
+  color: #ffffff !important;
+}
+
+html.light .customer-documents-modal .tab-btn-inactive {
+  background-color: #f8fafc !important;
+  color: #475569 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .customer-documents-modal .tab-btn-inactive:hover {
+  background-color: #f1f5f9 !important;
+  color: #09090b !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light .customer-documents-modal .toolbar-box {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #09090b !important;
+}
+
+html.light .customer-documents-modal .toolbar-box label {
+  color: #64748b !important;
+}
+
+html.light .customer-documents-modal .toolbar-box input,
+html.light .customer-documents-modal .toolbar-box select {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* ========================================================
+   PDF SINGLE-PAGE PRECISION A4 CANVAS ENGINE
+   ======================================================== */
+.a4-document-canvas,
+.exporting-pdf-single-page {
+  width: 794px !important;
+  max-width: 794px !important;
+  min-width: 794px !important;
+  min-height: 1123px !important;
+  height: 1123px !important;
+  box-sizing: border-box !important;
+  margin: 0 auto !important;
+  padding: 28px 36px !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  box-shadow: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+}
+
+.exporting-pdf-single-page * {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+  text-shadow: none !important;
+}
+
+/* Print all official documents on A4 monochrome pages. */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
 
   body,
   html {
     background-color: #ffffff !important;
+    background: #ffffff !important;
     color: #000000 !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    width: 100% !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
+  /* Universal isolation of non-printable elements */
   aside,
   header,
+  nav,
   button,
-  .no-print {
+  input,
+  select,
+  textarea,
+  .no-print,
+  .print\:hidden,
+  .hide-on-print-bill,
+  .hide-on-print-doc,
+  .hide-on-print-pos,
+  .hide-on-print-quote {
     display: none !important;
   }
 
-  .print-area {
-    width: 100% !important;
-    margin: 0 !important;
+  /* When an official document modal is active, hide all other main content */
+  body:has(#printable-customer-document) main > *:not(:has(#printable-customer-document)),
+  body:has(#printable-official-bill) main > *:not(:has(#printable-official-bill)),
+  body:has(#printable-pos-receipt) main > *:not(:has(#printable-pos-receipt)),
+  body:has(#printable-quotation) main > *:not(:has(#printable-quotation)),
+  body:has(.print-modal-container) aside,
+  body:has(.print-modal-container) header {
+    display: none !important;
+  }
+
+  /* Reset modal containers when printing */
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    background-color: transparent !important;
     padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .print-modal-container {
+    background: transparent !important;
+    background-color: transparent !important;
     border: none !important;
     box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  .official-dealer-document,
+  #printable-customer-document,
+  #printable-official-bill,
+  #printable-quotation,
+  .a4-document-canvas,
+  .print-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 275mm !important;
+    height: 275mm !important;
+    max-height: 280mm !important;
+    margin: 0 auto !important;
+    padding: 2mm 4mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-sizing: border-box !important;
+  }
+
+}
+
+/* Shared application UI polish */
+.app-shell {
+  --ui-accent: #2563eb;
+  --ui-focus: rgba(37, 99, 235, 0.22);
+  --ui-radius: 0.875rem;
+  color-scheme: light;
+  background: #f3f6fa !important;
+  color: #172033;
+}
+
+html.dark .app-shell {
+  --ui-accent: #60a5fa;
+  --ui-focus: rgba(96, 165, 250, 0.25);
+  color-scheme: dark;
+  background: #0b1120 !important;
+  color: #e5e7eb;
+}
+
+.app-content {
+  width: min(100%, 90rem);
+  padding-top: clamp(1.25rem, 2.5vw, 2rem);
+  padding-bottom: 3rem;
+}
+
+.app-content h1,
+.app-content h2,
+.app-content h3 {
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+.app-content h1 {
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  font-weight: 750;
+}
+
+.app-content h2 {
+  font-size: clamp(1.05rem, 1.5vw, 1.25rem);
+  font-weight: 700;
+}
+
+.app-content h3 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.app-shell button,
+.app-shell a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-shell button:not(:disabled) {
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.app-shell button:focus-visible,
+.app-shell a:focus-visible,
+.app-shell input:focus-visible,
+.app-shell select:focus-visible,
+.app-shell textarea:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.app-shell input:not([type="checkbox"]):not([type="radio"]),
+.app-shell select,
+.app-shell textarea {
+  min-height: 2.625rem;
+  border-radius: var(--ui-radius);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.app-shell input:focus,
+.app-shell select:focus,
+.app-shell textarea:focus {
+  border-color: var(--ui-accent) !important;
+  box-shadow: 0 0 0 3px var(--ui-focus) !important;
+}
+
+.app-shell label {
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.app-shell table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.app-shell table th {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
+
+.app-shell table td,
+.app-shell table th {
+  vertical-align: middle;
+}
+
+.app-shell .fixed.inset-0[class*="bg-black/"] {
+  background-color: rgba(15, 23, 42, 0.62) !important;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.app-shell .fixed.inset-0 > div[class*="bg-zinc-950"] {
+  border: 1px solid #e3e9f2 !important;
+  border-radius: 1.25rem;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22) !important;
+}
+
+.app-shell .app-header {
+  min-height: 4.25rem;
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  border-color: #e4eaf2 !important;
+  color: #172033;
+}
+
+.app-shell .app-sidebar {
+  background-color: #ffffff !important;
+  border-color: #e4eaf2 !important;
+  box-shadow: 8px 0 28px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light .app-shell {
+  background: #f3f6fa !important;
+  color: #172033 !important;
+}
+
+html.light .app-shell [class*="bg-zinc-950"]:not(.official-dealer-document):not(.official-dealer-document *):not(#printable-customer-document):not(#printable-customer-document *):not(#printable-official-bill):not(#printable-official-bill *) {
+  background-color: #ffffff !important;
+  border-color: #e3e9f2 !important;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.055) !important;
+}
+
+html.light .app-shell [class*="bg-zinc-900"]:not(.official-dealer-document *):not(#printable-customer-document *):not(#printable-official-bill *) {
+  background-color: #f5f7fb !important;
+  border-color: #e5eaf2 !important;
+}
+
+html.light .app-shell [class*="bg-zinc-800"]:not(.official-dealer-document *):not(#printable-customer-document *):not(#printable-official-bill *) {
+  background-color: #eaf0f7 !important;
+  border-color: #dce4ef !important;
+}
+
+html.light .app-shell .app-header,
+html.light .app-shell .app-sidebar {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+}
+
+html.light .app-shell .app-sidebar [class*="bg-zinc-900"] {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .app-shell .fixed.inset-0 > div[class*="bg-zinc-950"] {
+  background-color: #ffffff !important;
+  border-color: #e3e9f2 !important;
+}
+
+html.dark .app-shell .app-header {
+  background-color: rgba(15, 23, 42, 0.94) !important;
+  border-color: #243148 !important;
+  color: #e5e7eb;
+}
+
+html.dark .app-shell .app-sidebar {
+  background-color: #111827 !important;
+  border-color: #243148 !important;
+}
+
+html.dark .app-shell [class*="bg-zinc-950"]:not(.official-dealer-document):not(.official-dealer-document *):not(#printable-customer-document):not(#printable-customer-document *):not(#printable-official-bill):not(#printable-official-bill *) {
+  background-color: #111827 !important;
+  border-color: #26344b !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16) !important;
+}
+
+html.dark .app-shell [class*="bg-zinc-900"]:not(.official-dealer-document *):not(#printable-customer-document *):not(#printable-official-bill *) {
+  background-color: #172235 !important;
+  border-color: #2a3951 !important;
+}
+
+html.dark .app-shell [class*="bg-zinc-800"]:not(.official-dealer-document *):not(#printable-customer-document *):not(#printable-official-bill *) {
+  background-color: #223149 !important;
+  border-color: #34445d !important;
+}
+
+html.dark .app-shell .fixed.inset-0 > div[class*="bg-zinc-950"] {
+  background-color: #111827 !important;
+  border-color: #334155 !important;
+}
+
+@media (max-width: 640px) {
+  .app-content {
+    padding-inline: 1rem;
+  }
+
+  .app-content table {
+    font-size: 0.8125rem;
+  }
+}
+
+html.light .user-management-view .user-management-stat {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light .user-management-view .user-management-stat-icon {
+  display: flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+}
+
+html.light .user-management-view .user-management-stat-icon-blue {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+
+html.light .user-management-view .user-management-stat-icon-green {
+  background-color: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
+}
+
+html.light .user-management-view .user-management-stat-icon-amber {
+  background-color: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+html.light .user-management-view .text-zinc-400,
+html.light .user-management-view .text-zinc-500 {
+  color: #64748b !important;
+}
+
+html.light .user-management-view .text-zinc-300 {
+  color: #475569 !important;
+}
+
+html.light .user-management-view .text-zinc-100,
+html.light .user-management-view .text-zinc-200 {
+  color: #1e293b !important;
+}
+
+html.light .user-management-view [class*="text-purple-"] {
+  color: #7e22ce !important;
+}
+
+html.light .user-management-view [class*="text-indigo-"] {
+  color: #4338ca !important;
+}
+
+html.light .user-management-view [class*="text-cyan-"] {
+  color: #0e7490 !important;
+}
+
+html.light .user-management-view [class*="text-teal-"] {
+  color: #0f766e !important;
+}
+
+html.light .user-management-view .user-management-avatar[class*="text-blue-"] {
+  color: #dbeafe !important;
+}
+
+html.light .user-management-view [class*="bg-purple-950"] {
+  background-color: #faf5ff !important;
+  border-color: #e9d5ff !important;
+}
+
+html.light .user-management-view [class*="bg-indigo-950"] {
+  background-color: #eef2ff !important;
+  border-color: #c7d2fe !important;
+}
+
+html.light .user-management-view [class*="bg-cyan-950"] {
+  background-color: #ecfeff !important;
+  border-color: #a5f3fc !important;
+}
+
+html.light .user-management-view [class*="bg-teal-950"] {
+  background-color: #f0fdfa !important;
+  border-color: #99f6e4 !important;
+}
+
+html.light .user-management-view .user-management-role-admin {
+  background-color: #fffbeb !important;
+  border-color: #fcd34d !important;
+  color: #78350f !important;
+}
+
+html.light .user-management-view .user-management-role-user {
+  background-color: #eff6ff !important;
+  border-color: #bfdbfe !important;
+  color: #1e40af !important;
+}
+
+html.light .user-management-view .user-management-status-active {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #065f46 !important;
+}
+
+html.light .user-management-view .user-management-status-suspended {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+
+html.light .user-management-view .user-management-role-badge svg {
+  color: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html.light .user-management-view .user-management-account-row:hover {
+  background-color: #f8fafc !important;
+}
+
+html.light .user-management-view .user-management-delete-button:not(:disabled):hover {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+
+html.light .user-management-view .user-management-danger-action,
+html.light .user-management-view .user-management-danger-action * {
+  color: #ffffff !important;
+}
+
+html.light .user-management-view .user-management-modal {
+  background-color: #ffffff !important;
+  border-color: #dbe3ed !important;
+  color: #172033 !important;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.24) !important;
+}
+
+html.light .user-management-view .user-management-modal input:not([type="checkbox"]),
+html.light .user-management-view .user-management-modal select {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light .user-management-view .user-management-modal input:focus,
+html.light .user-management-view .user-management-modal select:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14) !important;
+}
+
+html.light .user-management-view .user-management-modal input::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.dark .user-management-view .user-management-stat {
+  border-color: #26344b !important;
+}
+
+.user-management-view .user-management-stat-icon {
+  display: flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+}
+
+.user-management-view .user-management-stat-icon-blue,
+.user-management-view .user-management-stat-icon-green,
+.user-management-view .user-management-stat-icon-amber {
+  background-color: #223149;
+  border-color: #34445d;
+  color: #b6c3d5;
+}
+
+.user-management-view .user-management-hero-icon,
+.user-management-view .user-management-eyebrow {
+  background-color: #223149;
+  color: #cbd5e1;
+}
+
+.user-management-view .user-management-primary-action {
+  border: 1px solid #334155;
+  background-color: #334155;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
+.user-management-view .user-management-primary-action:hover {
+  background-color: #475569;
+}
+
+.user-management-view .user-management-permission-badge {
+  background-color: #223149;
+  border: 1px solid #34445d;
+  color: #cbd5e1;
+}
+
+.user-management-view .user-management-permission-danger {
+  background-color: #3b2731;
+  border-color: #66404d;
+  color: #f0c5ce;
+}
+
+.user-management-view .user-management-permission-row:has(input:checked) {
+  background-color: #223149 !important;
+  border-color: #3b4d66 !important;
+}
+
+.user-management-view .user-management-permission-row:has(input:checked):has(input.accent-rose-500) {
+  background-color: #3b2731 !important;
+  border-color: #66404d !important;
+}
+
+.user-management-view .user-management-switch-button {
+  border-color: #34445d;
+  background-color: #172235;
+  color: #cbd5e1;
+}
+
+.user-management-view .user-management-switch-button:hover {
+  border-color: #52637b;
+  background-color: #223149;
+}
+
+.user-management-view .user-management-switch-selected {
+  border-color: #52637b;
+  background-color: #334155;
+  color: #ffffff;
+}
+
+.user-management-view .user-management-switch-role {
+  color: #b6c3d5;
+}
+
+.user-management-view .user-management-role-dot-admin,
+.user-management-view .user-management-role-dot-user {
+  background-color: #94a3b8;
+}
+
+.user-management-view .user-management-grant-button,
+.user-management-view .user-management-modal-cancel,
+.user-management-view .user-management-modal-close {
+  border-color: #3b4d66;
+  background-color: #223149;
+  color: #dbe4ef;
+}
+
+.user-management-view .user-management-grant-button:hover,
+.user-management-view .user-management-modal-cancel:hover,
+.user-management-view .user-management-modal-close:hover {
+  border-color: #52637b;
+  background-color: #2b3b53;
+  color: #ffffff;
+}
+
+.user-management-view .user-management-modal-submit {
+  border: 1px solid #52637b;
+  background-color: #334155;
+  color: #ffffff;
+}
+
+.user-management-view .user-management-modal-submit:hover {
+  background-color: #475569;
+}
+
+.user-management-view .user-management-danger-action {
+  border: 1px solid #80505c;
+  background-color: #673c49;
+  color: #ffffff;
+}
+
+.user-management-view .user-management-danger-action:hover {
+  background-color: #7a4655;
+}
+
+.user-management-view .user-management-delete-button:not(:disabled) {
+  border-color: #3b4d66;
+  background-color: #223149;
+  color: #dbe4ef;
+}
+
+.user-management-view .user-management-delete-button:not(:disabled):hover {
+  border-color: #80505c;
+  background-color: #3b2731;
+  color: #f0c5ce;
+}
+
+.user-management-view .user-management-delete-button:disabled {
+  border-color: #334155;
+  background-color: #1e293b;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.user-management-view .user-management-role-admin,
+.user-management-view .user-management-role-user {
+  background-color: #223149;
+  border: 1px solid #34445d;
+  color: #d2dbe7;
+}
+
+.user-management-view .user-management-status-active {
+  background-color: #20332f;
+  border-color: #38564e;
+  color: #b8d4cb;
+}
+
+.user-management-view .user-management-status-suspended {
+  background-color: #3b2731;
+  border-color: #66404d;
+  color: #f0c5ce;
+}
+
+html.light .user-management-view .user-management-stat-icon-blue,
+html.light .user-management-view .user-management-stat-icon-green,
+html.light .user-management-view .user-management-stat-icon-amber {
+  background-color: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+html.light .user-management-view .user-management-hero-icon,
+html.light .user-management-view .user-management-eyebrow {
+  background-color: #f1f5f9;
+  color: #475569 !important;
+}
+
+html.light .user-management-view .user-management-primary-action {
+  border-color: #334155 !important;
+  background-color: #334155 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12) !important;
+}
+
+html.light .user-management-view .user-management-primary-action:hover {
+  background-color: #475569 !important;
+  color: #ffffff !important;
+}
+
+html.light .user-management-view .user-management-primary-action svg,
+html.light .user-management-view .user-management-primary-action span {
+  color: #ffffff !important;
+}
+
+html.light .user-management-view .user-management-switch-button {
+  border-color: #dbe3ed !important;
+  background-color: #f8fafc !important;
+  color: #475569 !important;
+}
+
+html.light .user-management-view .user-management-switch-button:hover {
+  border-color: #cbd5e1 !important;
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+html.light .user-management-view .user-management-switch-selected {
+  border-color: #cbd5e1 !important;
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light .user-management-view .user-management-switch-role {
+  color: #64748b !important;
+}
+
+html.light .user-management-view .user-management-role-dot-admin,
+html.light .user-management-view .user-management-role-dot-user {
+  background-color: #64748b !important;
+}
+
+html.light .user-management-view .user-management-grant-button,
+html.light .user-management-view .user-management-modal-cancel,
+html.light .user-management-view .user-management-modal-close {
+  border-color: #cbd5e1 !important;
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+}
+
+html.light .user-management-view .user-management-grant-button:hover,
+html.light .user-management-view .user-management-modal-cancel:hover,
+html.light .user-management-view .user-management-modal-close:hover {
+  border-color: #94a3b8 !important;
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.light .user-management-view .user-management-grant-button svg,
+html.light .user-management-view .user-management-modal-close svg {
+  color: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html.light .user-management-view .user-management-modal-submit {
+  border-color: #334155 !important;
+  background-color: #334155 !important;
+  color: #ffffff !important;
+}
+
+html.light .user-management-view .user-management-modal-submit:hover {
+  background-color: #475569 !important;
+  color: #ffffff !important;
+}
+
+html.light .user-management-view .user-management-modal-submit svg {
+  color: #ffffff !important;
+  stroke: currentColor !important;
+}
+
+html.light .user-management-view .user-management-danger-action {
+  border-color: #be7b89 !important;
+  background-color: #9f5364 !important;
+  color: #ffffff !important;
+}
+
+html.light .user-management-view .user-management-danger-action:hover {
+  background-color: #8f4657 !important;
+  color: #ffffff !important;
+}
+
+html.light .user-management-view .user-management-danger-action svg,
+html.light .user-management-view .user-management-danger-action span {
+  color: #ffffff !important;
+  stroke: currentColor !important;
+}
+
+html.light .user-management-view .user-management-delete-button:not(:disabled) {
+  border-color: #dbe3ed !important;
+  background-color: #f8fafc !important;
+  color: #475569 !important;
+}
+
+html.light .user-management-view .user-management-delete-button:not(:disabled):hover {
+  border-color: #fecdd3 !important;
+  background-color: #fff1f2 !important;
+  color: #9f1239 !important;
+}
+
+html.light .user-management-view .user-management-delete-button:disabled {
+  border-color: #e2e8f0 !important;
+  background-color: #f1f5f9 !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed;
+}
+
+html.light .user-management-view .user-management-permission-badge {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+html.light .user-management-view .user-management-permission-danger {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+
+html.light .user-management-view .user-management-permission-row:has(input:checked) {
+  background-color: #eff6ff !important;
+  border-color: #bfdbfe !important;
+}
+
+html.light .user-management-view .user-management-permission-row:has(input:checked):has(input.accent-rose-500) {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+}
+
+html.light .user-management-view .user-management-role-admin,
+html.light .user-management-view .user-management-role-user {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+html.light .user-management-view .user-management-status-active {
+  background-color: #ecfdf5 !important;
+  border-color: #bbded2 !important;
+  color: #27634f !important;
+}
+
+html.light .user-management-view .user-management-status-suspended {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+
+@media (max-width: 640px) {
+  .user-management-view .user-management-account-row {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .user-management-view .user-management-account-row > div:first-child {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .user-management-view .user-management-account-row > div:first-child > div:last-child {
+    min-width: 0;
+  }
+
+  .user-management-view .user-management-account-row > div:first-child > div:last-child > div:nth-child(2) {
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .user-management-view .user-management-modal {
+    padding: 1.125rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.dashboard-view {
+  --dashboard-accent: #2563eb;
+  --dashboard-line: #e2e8f0;
+  gap: 1.5rem;
+}
+
+html.dark .dashboard-view {
+  --dashboard-accent: #60a5fa;
+  --dashboard-line: #26344b;
+}
+
+.dashboard-view > .dashboard-hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.25rem, 2.4vw, 1.75rem);
+  border-color: var(--dashboard-line) !important;
+  border-radius: 1.25rem;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.055);
+}
+
+.dashboard-view > .dashboard-hero::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, #3b82f6, #14b8a6);
+  content: "";
+}
+
+.dashboard-view > .dashboard-hero h1 {
+  font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+}
+
+.dashboard-view .dashboard-timeframe {
+  flex-wrap: wrap;
+  border-radius: 0.875rem;
+}
+
+.dashboard-view .dashboard-timeframe button {
+  min-height: 2.5rem;
+  padding-inline: 0.9rem;
+  border-radius: 0.65rem;
+}
+
+.dashboard-view > .dashboard-kpis {
+  gap: 1rem;
+}
+
+.dashboard-view .dashboard-kpi-card {
+  min-width: 0;
+  border-color: var(--dashboard-line) !important;
+  border-radius: 1rem;
+  padding: 1.2rem;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.035);
+}
+
+.dashboard-view .dashboard-kpi-card[onclick] {
+  cursor: pointer;
+}
+
+.dashboard-view .dashboard-kpi-card:hover {
+  border-color: color-mix(in srgb, var(--dashboard-accent), transparent 35%) !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.09);
+  transform: translateY(-2px);
+}
+
+.dashboard-view .dashboard-kpi-card > div:nth-child(2) > span:first-child {
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-view > .dashboard-panel {
+  padding: clamp(1rem, 2.3vw, 1.75rem);
+  border-color: var(--dashboard-line) !important;
+  border-radius: 1.25rem;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.04);
+}
+
+.dashboard-view .dashboard-panel > div:first-child {
+  border-color: var(--dashboard-line) !important;
+}
+
+.dashboard-view .dashboard-panel h2 {
+  font-size: clamp(1.05rem, 1.5vw, 1.25rem);
+}
+
+.dashboard-view .dashboard-panel table {
+  min-width: 680px;
+}
+
+.dashboard-view .dashboard-panel table thead th {
+  white-space: nowrap;
+  padding-block: 0.875rem;
+}
+
+.dashboard-view .dashboard-panel table tbody td {
+  padding-block: 0.8rem;
+}
+
+.dashboard-view .dashboard-panel > .grid > div,
+.dashboard-view .dashboard-panel > div > .grid > div {
+  border-color: var(--dashboard-line);
+  border-radius: 0.875rem;
+}
+
+@layer utilities {
+  html.light .app-shell .inventory-filter-panel {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.045) !important;
+  }
+
+  html.light .app-shell .inventory-filter-panel .inventory-filter-title {
+    color: #0f172a !important;
+  }
+
+  html.light .app-shell .inventory-filter-panel .inventory-filter-label {
+    color: #475569 !important;
+  }
+
+  html.light .app-shell .inventory-filter-panel .inventory-filter-count {
+    background-color: #f1f5f9 !important;
+    border-color: #e2e8f0 !important;
+    color: #475569 !important;
+  }
+
+  html.light .app-shell .inventory-filter-panel .inventory-filter-count strong {
+    color: #0f172a !important;
+  }
+
+  html.light .app-shell .inventory-filter-panel .inventory-filter-reset {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
+  }
+
+  html.light .app-shell .inventory-filter-panel .inventory-filter-reset:hover {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+
+  html.dark .app-shell .inventory-filter-panel {
+    border-color: #26344b !important;
+  }
+
+  html.light .app-shell .inventory-tabs {
+    background-color: #eaf0f7 !important;
+    border-color: #dbe3ed !important;
+  }
+
+  html.light .app-shell .inventory-tabs .inventory-tab:not(.inventory-tab-active) {
+    background-color: transparent !important;
+    color: #475569 !important;
+  }
+
+  html.light .app-shell .inventory-tabs .inventory-tab:not(.inventory-tab-active):hover {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  html.light .app-shell .inventory-tabs .inventory-tab.inventory-tab-active {
+    background-color: #ffffff !important;
+    border: 1px solid #dbe3ed !important;
+    color: #0f172a !important;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1) !important;
+  }
+
+  html.light .app-shell .inventory-tabs .inventory-tab svg {
+    color: currentColor !important;
+    stroke: currentColor !important;
+  }
+
+  html.light .app-shell .officer-indicator {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    color: #0f172a !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+  }
+
+  html.light .app-shell .officer-indicator-avatar {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
+  }
+
+  html.light .app-shell .officer-indicator-label {
+    color: #64748b !important;
+  }
+
+  html.light .app-shell .officer-indicator-name {
+    color: #0f172a !important;
+  }
+
+  html.light .app-shell .officer-indicator-role {
+    color: #64748b !important;
+  }
+
+  html.dark .app-shell .officer-indicator {
+    background-color: #172235 !important;
+    border-color: #2a3951 !important;
+    color: #e5e7eb !important;
+  }
+
+  html.dark .app-shell .officer-indicator-avatar {
+    background-color: #223149 !important;
+    border-color: #34445d !important;
+    color: #cbd5e1 !important;
+  }
+
+  html.dark .app-shell .officer-indicator-label,
+  html.dark .app-shell .officer-indicator-role {
+    color: #94a3b8 !important;
+  }
+
+  html.dark .app-shell .officer-indicator-name {
+    color: #f1f5f9 !important;
+  }
+
+  html.light .app-shell .vehicle-edit-modal {
+    background-color: #ffffff !important;
+    border-color: #dbe3ed !important;
+    color: #172033 !important;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.24) !important;
+  }
+
+  html.light .app-shell .vehicle-edit-modal > div:first-child,
+  html.light .app-shell .vehicle-edit-modal .vehicle-edit-actions {
+    border-color: #e2e8f0 !important;
+    background-color: rgba(255, 255, 255, 0.96) !important;
+  }
+
+  html.light .app-shell .vehicle-edit-modal .vehicle-edit-price-card {
+    border-color: #bfdbfe !important;
+    background-color: #eff6ff !important;
+  }
+
+  html.light .app-shell .vehicle-edit-modal .vehicle-edit-stock-card,
+  html.light .app-shell .vehicle-edit-modal .vehicle-edit-image-panel {
+    border-color: #e2e8f0 !important;
+    background-color: #f8fafc !important;
+  }
+
+  html.light .app-shell .vehicle-edit-modal .vehicle-edit-price-card svg {
+    color: #2563eb !important;
+  }
+
+  html.light .app-shell .vehicle-edit-modal .vehicle-edit-stock-card > div:first-child span {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  html.light .app-shell .vehicle-edit-modal button[type="submit"] {
+    background-color: #0f172a !important;
+    border-color: #0f172a !important;
+    color: #ffffff !important;
+  }
+
+  html.light .app-shell .vehicle-edit-modal button[type="submit"]:hover {
+    background-color: #1e293b !important;
+  }
+
+  html.light .app-shell .vehicle-edit-modal button[type="submit"] svg {
+    color: #ffffff !important;
+    stroke: currentColor !important;
+  }
+
+  html.light .app-shell .pos-customer-section {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+  }
+
+  html.light .app-shell button.pos-whatsapp-button:not(:disabled) {
+    background-color: #16a34a !important;
+    border-color: #15803d !important;
+    color: #ffffff !important;
+  }
+
+  html.light .app-shell button.pos-whatsapp-button:not(:disabled):hover {
+    background-color: #15803d !important;
+  }
+
+  html.light .app-shell button.pos-whatsapp-button:not(:disabled) svg {
+    color: #ffffff !important;
+    fill: currentColor !important;
+  }
+
+  html.light .app-shell button.pos-whatsapp-button:disabled {
+    background-color: #f1f5f9 !important;
+    border-color: #e2e8f0 !important;
+    color: #64748b !important;
+    opacity: 1 !important;
+  }
+
+  html.light .app-shell .pos-net-total {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    color: #09090b !important;
+  }
+
+  html.light .app-shell button.pos-confirm-sale-button {
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #09090b !important;
+  }
+
+  html.light .app-shell button.pos-confirm-sale-button:hover {
+    background-color: #f8fafc !important;
+  }
+
+  html.light .app-shell button.pos-confirm-sale-button svg {
+    color: #09090b !important;
+    stroke: currentColor !important;
+  }
+}
+
+.dashboard-view .dashboard-panel button {
+  min-height: 2.5rem;
+}
+
+@media (max-width: 640px) {
+  .dashboard-view {
+    gap: 1.125rem;
+  }
+
+  .dashboard-view > .dashboard-hero {
+    align-items: stretch;
+  }
+
+  .dashboard-view .dashboard-timeframe {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .dashboard-view .dashboard-timeframe > span {
+    width: 100%;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .dashboard-view .dashboard-timeframe button {
+    flex: 1;
+    padding-inline: 0.5rem;
+  }
+
+  .dashboard-view > .dashboard-panel {
+    padding: 1rem;
+    border-radius: 1rem;
   }
 }

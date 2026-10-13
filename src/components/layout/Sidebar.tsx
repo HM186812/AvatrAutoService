@@ -12,8 +12,6 @@ import {
   PackagePlus, 
   ShoppingBag, 
   FileText, 
-  CalendarDays,
-  Key,
   LogOut, 
   Sun, 
   Moon 
@@ -31,6 +29,8 @@ interface SidebarProps {
   billsCount?: number;
   pendingRequestsCount?: number;
   currentUser: SystemUser;
+  allUsers: SystemUser[];
+  onSwitchUser: (user: SystemUser) => void;
   isMobileOpen: boolean;
   setIsMobileOpen: (open: boolean) => void;
   onLogout?: () => void;
@@ -48,7 +48,6 @@ interface MenuItem {
   badge?: string | number | null;
   badgeColor?: string;
   adminOnly?: boolean;
-  userManagementOnly?: boolean;
 }
 
 interface MenuGroup {
@@ -70,14 +69,16 @@ export default function Sidebar({
   billsCount = 4,
   pendingRequestsCount = 3,
   currentUser,
+  allUsers,
+  onSwitchUser,
   isMobileOpen,
   setIsMobileOpen,
   onLogout,
   theme = 'dark',
   onToggleTheme,
 }: SidebarProps) {
-  const isSuperAdmin = currentUser.role === 'super_admin';
-  const isAdmin = Boolean(currentUser.permissions?.canEditInventory);
+  const isSuperAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+  const isAdmin = isSuperAdmin;
 
   // Grouped Menu Structure for Maximum Ergonomics & Convenience
   const menuGroups: MenuGroup[] = [
@@ -113,14 +114,6 @@ export default function Sidebar({
           labelTh: 'ลูกค้า (CRM)',
           icon: Users,
           badge: leadCount > 0 ? leadCount : null,
-          adminOnly: false,
-        },
-        {
-          id: 'appointments',
-          labelLo: 'ນັດໝາຍບໍລິການ / ທົດລອງຂັບ',
-          labelEn: 'Service & Test Drive',
-          labelTh: 'นัดบริการ / ทดลองขับ',
-          icon: CalendarDays,
           adminOnly: false,
         },
       ],
@@ -163,9 +156,9 @@ export default function Sidebar({
       ],
     },
     {
-      groupLo: 'ການເງິນ & ບໍລິຫານ',
-      groupEn: 'FINANCE & ADMIN',
-      groupTh: 'การเงิน & บริหาร',
+      groupLo: 'ການເງິນ & ໃບບິນ',
+      groupEn: 'FINANCE & BILLS',
+      groupTh: 'การเงิน & บิล',
       items: [
         {
           id: 'bills',
@@ -176,14 +169,6 @@ export default function Sidebar({
           badge: billsCount > 0 ? `${billsCount}` : null,
           badgeColor: 'text-zinc-300 bg-zinc-900 border-zinc-700',
           adminOnly: false,
-        },
-        {
-          id: 'users',
-          labelLo: 'ຈັດການຜູ້ໃຊ້',
-          labelEn: 'Staff & Access',
-          labelTh: 'ผู้ใช้และสิทธิ์',
-          icon: Key,
-          userManagementOnly: true,
         },
       ],
     },
@@ -202,7 +187,7 @@ export default function Sidebar({
       )}
 
       {/* Left Sidebar Container */}
-      <aside className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-zinc-950 border-r border-zinc-800/80 flex flex-col justify-between transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+      <aside className={`app-sidebar fixed top-0 bottom-0 left-0 z-50 w-72 bg-zinc-950 border-r border-zinc-800/80 flex flex-col justify-between transition-transform duration-300 ease-in-out lg:translate-x-0 ${
         isMobileOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         {/* Sidebar Header: Logo & Branding */}
@@ -214,7 +199,7 @@ export default function Sidebar({
             }}
             className="flex items-center gap-3 cursor-pointer group select-none"
           >
-            <AvatrLogo className="w-9 h-9 flex-shrink-0" />
+            <AvatrLogo className="w-9 h-9 shrink-0" />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="font-black text-lg tracking-widest text-white group-hover:text-zinc-200">
@@ -236,9 +221,6 @@ export default function Sidebar({
           {menuGroups.map((group, groupIdx) => {
             const visibleItems = group.items.filter(item => {
               if (item.adminOnly && !isAdmin) return false;
-              if (item.userManagementOnly && !currentUser.permissions?.canManageUsers) return false;
-              if (item.id === 'appointments' && !currentUser.permissions?.canDeductPOS && !currentUser.permissions?.canUpdatePDI && !currentUser.permissions?.canManageUsers) return false;
-              if (item.id === 'pos' && !currentUser.permissions?.canDeductPOS) return false;
               return true;
             });
 
@@ -276,7 +258,7 @@ export default function Sidebar({
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                          <Icon className={`w-4 h-4 shrink-0 transition-colors ${
                             isActive 
                               ? 'text-black' 
                               : 'text-zinc-400 group-hover:text-white'
@@ -285,7 +267,7 @@ export default function Sidebar({
                         </div>
 
                         {badgeText !== null && badgeText !== undefined && (
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono border flex-shrink-0 ml-1.5 ${
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono border shrink-0 ml-1.5 ${
                             item.badgeColor || (isActive ? 'bg-zinc-200 text-black border-zinc-300 font-bold' : 'bg-zinc-900 text-zinc-300 border-zinc-800')
                           }`}>
                             {badgeText}
@@ -309,7 +291,7 @@ export default function Sidebar({
               className="mt-2 p-2.5 bg-zinc-900/90 border border-zinc-700/80 rounded-xl cursor-pointer hover:bg-zinc-800 transition-colors"
             >
               <div className="flex items-center gap-1.5 text-white font-semibold text-xs mb-1">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-zinc-300" />
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-zinc-300" />
                 <span className="truncate">{t.navAlerts}</span>
               </div>
               <div className="text-[11px] text-zinc-400 space-y-0.5">
@@ -337,18 +319,22 @@ export default function Sidebar({
             }`}
           >
             <div className="flex items-center gap-2 min-w-0">
-              <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 ${
+              <div className={`w-7 h-7 overflow-hidden rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
                 currentMenu === 'profile'
                   ? 'bg-black text-white'
                   : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
               }`}>
-                {currentUser.avatarInitials || currentUser.name.slice(0, 2)}
+                {currentUser.avatarUrl ? (
+                  <img src={currentUser.avatarUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  currentUser.avatarInitials || currentUser.name.slice(0, 2)
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1">
                   <span className="text-xs font-bold truncate">{currentUser.name.split(' ')[0]}</span>
                   {isSuperAdmin && (
-                    <ShieldCheck className={`w-3 h-3 flex-shrink-0 ${currentMenu === 'profile' ? 'text-black' : 'text-zinc-200'}`} />
+                    <ShieldCheck className={`w-3 h-3 shrink-0 ${currentMenu === 'profile' ? 'text-black' : 'text-zinc-200'}`} />
                   )}
                 </div>
                 <p className={`text-[10px] truncate ${currentMenu === 'profile' ? 'text-zinc-600' : 'text-zinc-400'}`}>
@@ -357,7 +343,7 @@ export default function Sidebar({
               </div>
             </div>
 
-            <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 transition-transform group-hover:translate-x-0.5 ${
+            <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-transform group-hover:translate-x-0.5 ${
               currentMenu === 'profile' ? 'text-black' : 'text-zinc-500'
             }`} />
           </button>

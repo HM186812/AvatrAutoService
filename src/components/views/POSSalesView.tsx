@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react';
-import { CustomCurrencyConfig, InventoryItem, VehicleModel, Language, InvoiceBillRecord, StockLogRecord, SystemUser } from '../../types';
-import { DEFAULT_CURRENCIES } from '../../data/currencies';
-import { DEFAULT_COMPANY_BANK_INFO, CompanyBankInfo } from '../../data/companySettings';
+import { useState, useEffect, useRef } from 'react';
+import { InventoryItem, VehicleModel, Language, InvoiceBillRecord, StockLogRecord, SystemUser, Lead } from '../../types';
+import { getStoredCompanyBankInfo, saveStoredCompanyBankInfo, CompanyBankInfo } from '../../data/companySettings';
 import { translations } from '../../data/translations';
-import { saveDealershipSettingsPatch, uploadDealershipAsset, uploadPaymentSlip } from '../../backend/data';
-import { newRecordId } from '../../backend/ids';
+import { LAO_PROVINCES } from '../../data/laoProvinces';
+import { 
+  uploadCompanyQrCodeToStorage, 
+  saveInventoryItemToSupabase, 
+  saveBillToSupabase, 
+  saveDealershipConfigToSupabase 
+} from '../../supabase';
 import AvatrLogo from '../layout/AvatrLogo';
-import { CurrencyModal } from '../modals';
+import { ConfirmDeleteModal } from '../modals';
 import { 
   Receipt, 
   ShoppingBag, 
@@ -39,23 +43,29 @@ import {
   RefreshCw,
   Edit3,
   Lock,
-  Copy
+  Copy,
+  Download,
+  Loader2,
+  ChevronDown
 } from 'lucide-react';
+import WhatsAppIcon from '../common/WhatsAppIcon';
+import { getWhatsAppUrl, formatWhatsAppDisplay, formatWhatsAppNumber, openWhatsApp } from '../../utils/whatsapp';
+import { exportElementToPdf } from '../../utils/pdfExport';
 
 interface POSSalesViewProps {
   inventory: InventoryItem[];
   setInventory: React.Dispatch<React.SetStateAction<InventoryItem[]>>;
   bills: InvoiceBillRecord[];
   setBills: React.Dispatch<React.SetStateAction<InvoiceBillRecord[]>>;
+  leads: Lead[];
   stockLogs: StockLogRecord[];
   setStockLogs: React.Dispatch<React.SetStateAction<StockLogRecord[]>>;
   vehicles: VehicleModel[];
-  initialVin?: string;
-  dealershipSettings: Record<string, unknown>;
-  onSettingsChange: (settings: Record<string, unknown>) => void;
   currentUser?: SystemUser;
   lang: Language;
   onNavigateToBills: () => void;
+  prefilledCustomer?: Lead | null;
+  onClearPrefilledCustomer?: () => void;
 }
 
 export default function POSSalesView({
@@ -63,21 +73,21 @@ export default function POSSalesView({
   setInventory,
   bills,
   setBills,
+  leads,
   stockLogs,
   setStockLogs,
   vehicles,
-  initialVin,
-  dealershipSettings,
-  onSettingsChange,
   currentUser,
   lang,
   onNavigateToBills,
+  prefilledCustomer,
+  onClearPrefilledCustomer,
 }: POSSalesViewProps) {
   const t = translations[lang] || translations.lo;
   // Available vehicles for sale (not sold and stock > 0)
   const availableVehicles = inventory.filter(i => i.status !== 'sold' && i.stockQuantity > 0);
 
-  const [selectedVin, setSelectedVin] = useState<string>(initialVin || availableVehicles[0]?.vin || '');
+  const [selectedVin, setSelectedVin] = useState<string>(availableVehicles[0]?.vin || '');
   const [vehicleSearch, setVehicleSearch] = useState('');
 
   // Selected vehicle object
@@ -85,10 +95,62 @@ export default function POSSalesView({
 
   // Customer Details Form - Zero pre-filled values
   const [customerName, setCustomerName] = useState('');
+  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerIDCard, setCustomerIDCard] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
-  const [customerProvince, setCustomerProvince] = useState('');
+  const [customerProvince, setCustomerProvince] = useState('ນະຄອນຫຼວງວຽງຈັນ');
+  const [isProvinceDropdownOpen, setIsProvinceDropdownOpen] = useState(false);
+  const provinceDropdownRef = useRef<HTMLDivElement>(null);
+  const [isDistrictDropdownOpen, setIsDistrictDropdownOpen] = useState(false);
+  const districtDropdownRef = useRef<HTMLDivElement>(null);
+  const [isVillageDropdownOpen, setIsVillageDropdownOpen] = useState(false);
+  const villageDropdownRef = useRef<HTMLDivElement>(null);
+  const [customerDistrict, setCustomerDistrict] = useState('');
+  const [customerVillage, setCustomerVillage] = useState('');
+  const [customerCustomVillage, setCustomerCustomVillage] = useState('');
+  const [customerAddressDetail, setCustomerAddressDetail] = useState('');
+  const whatsAppNumber = formatWhatsAppNumber(customerPhone);
+  const canOpenWhatsApp = /^\d{8,15}$/.test(whatsAppNumber);
+  const selectedProvince = LAO_PROVINCES.find(province => province.nameLo === customerProvince);
+  const districtOptions = selectedProvince?.districts || [];
+  const selectedDistrictName = customerDistrict || districtOptions[0]?.nameLo || '';
+  const selectedDistrict = districtOptions.find(district => district.nameLo === selectedDistrictName);
+  const villageOptions = selectedDistrict?.popularVillages || [];
+
+  useEffect(() => {
+    if (!isProvinceDropdownOpen && !isDistrictDropdownOpen && !isVillageDropdownOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (
+        !provinceDropdownRef.current?.contains(target) &&
+        !districtDropdownRef.current?.contains(target) &&
+        !villageDropdownRef.current?.contains(target)
+      ) {
+        setIsProvinceDropdownOpen(false);
+        setIsDistrictDropdownOpen(false);
+        setIsVillageDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsProvinceDropdownOpen(false);
+        setIsDistrictDropdownOpen(false);
+        setIsVillageDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isProvinceDropdownOpen, isDistrictDropdownOpen, isVillageDropdownOpen]);
+
+  // Package delete popup modal state
+  const [packageToDelete, setPackageToDelete] = useState<string | null>(null);
 
   // Pricing & Discounts (USD Only)
   const [discountUSD, setDiscountUSD] = useState<number | ''>('');
@@ -98,12 +160,6 @@ export default function POSSalesView({
       setDiscountUSD('');
       return;
     }
-    const maxDiscount = selectedVehicle ? selectedVehicle.priceUSD : Infinity;
-    if (val > maxDiscount) {
-      triggerToast(lang === 'lo' ? 'ສ່ວນຫຼຸດບໍ່ສາມາດເກີນລາຄາລົດໄດ້!' : lang === 'th' ? 'ส่วนลดไม่สามารถเกินราคารถได้!' : 'Discount cannot exceed vehicle price!');
-      setDiscountUSD(maxDiscount);
-      return;
-    }
     setDiscountUSD(val);
   };
 
@@ -111,13 +167,37 @@ export default function POSSalesView({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'finance'>('transfer');
   const [bankName, setBankName] = useState('ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ');
   const [transferRef, setTransferRef] = useState('');
-  const [slipImage, setSlipImage] = useState<string | null>(null);
-  const [slipFile, setSlipFile] = useState<File | null>(null);
   
   // Finance Options
-  const [financeCompany, setFinanceCompany] = useState('');
   const [downPaymentPercent, setDownPaymentPercent] = useState<number>(30);
-  const [tenureMonths, setTenureMonths] = useState<number>(36);
+  const [tenureMonths, setTenureMonths] = useState<number>(48);
+
+  // Handle prefilled customer incoming from CRM
+  useEffect(() => {
+    if (prefilledCustomer) {
+      setCustomerName(prefilledCustomer.customerName || '');
+      setCustomerPhone(prefilledCustomer.phone || '');
+      setCustomerIDCard(prefilledCustomer.idCardNumber || '');
+      if (prefilledCustomer.paymentType === 'installment' || prefilledCustomer.paymentType === 'finance') {
+        setPaymentMethod('finance');
+        if (prefilledCustomer.downPaymentPercent) setDownPaymentPercent(prefilledCustomer.downPaymentPercent);
+        if (prefilledCustomer.tenureMonths) setTenureMonths(prefilledCustomer.tenureMonths);
+      }
+      if (prefilledCustomer.interestedModel) {
+        const matching = availableVehicles.find(v => v.model === prefilledCustomer.interestedModel);
+        if (matching) setSelectedVin(matching.vin);
+      }
+      if (prefilledCustomer.province) {
+        setCustomerProvince(prefilledCustomer.province);
+      }
+      if (prefilledCustomer.district) {
+        setCustomerDistrict(prefilledCustomer.district);
+      }
+      if (prefilledCustomer.village) {
+        setCustomerVillage(prefilledCustomer.village);
+      }
+    }
+  }, [prefilledCustomer]);
 
   // Free Gifts & Privileges Packages (Dynamic List with LocalStorage & Admin Edit/Delete)
   const DEFAULT_PACKAGES = [
@@ -131,89 +211,62 @@ export default function POSSalesView({
   ];
 
   const [giftOptions, setGiftOptions] = useState<string[]>(() => {
-    return Array.isArray(dealershipSettings.packages) ? dealershipSettings.packages as string[] : DEFAULT_PACKAGES;
+    try {
+      const saved = localStorage.getItem('avatr_dealership_packages_v2');
+      return saved ? JSON.parse(saved) : DEFAULT_PACKAGES;
+    } catch {
+      return DEFAULT_PACKAGES;
+    }
   });
-
-  useEffect(() => {
-    if (Array.isArray(dealershipSettings.packages)) setGiftOptions(dealershipSettings.packages as string[]);
-  }, [dealershipSettings]);
 
   // Empty selected gifts by default (ຄ່າເລີ່ມຕົ້ນບໍ່ມີການຕິກເລືອກໄວ້ກ່ອນ)
   const [selectedGifts, setSelectedGifts] = useState<string[]>([]);
   const [newPackageInput, setNewPackageInput] = useState('');
 
-  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
 
   // Company Official Banking & QR Code Settings
-  const [companyBankInfo, setCompanyBankInfo] = useState<CompanyBankInfo>(() => ({
-    ...DEFAULT_COMPANY_BANK_INFO,
-    ...dealershipSettings,
-    qrCodeUrl: (dealershipSettings.companyQrImageUrl as string | null) || null,
-  }));
+  const [companyBankInfo, setCompanyBankInfo] = useState<CompanyBankInfo>(() => getStoredCompanyBankInfo());
   const [isEnlargeQrOpen, setIsEnlargeQrOpen] = useState(false);
-  const [isCurrencyOpen, setIsCurrencyOpen] = useState(false);
-  const [currencies, setCurrencies] = useState<CustomCurrencyConfig[]>(() => (
-    Array.isArray(dealershipSettings.currencies) ? dealershipSettings.currencies as CustomCurrencyConfig[] : DEFAULT_CURRENCIES
-  ));
-  const [activeCurrencyCode, setActiveCurrencyCode] = useState<string>(
-    typeof dealershipSettings.activeCurrencyCode === 'string' ? dealershipSettings.activeCurrencyCode : 'USD'
-  );
 
-  useEffect(() => {
-    if (initialVin && availableVehicles.some((vehicle) => vehicle.vin === initialVin)) setSelectedVin(initialVin);
-  }, [initialVin, availableVehicles]);
-
-  useEffect(() => {
-    setCompanyBankInfo({
-      ...DEFAULT_COMPANY_BANK_INFO,
-      ...dealershipSettings,
-      qrCodeUrl: (dealershipSettings.companyQrImageUrl as string | null) || null,
-    });
-  }, [dealershipSettings]);
-
-  useEffect(() => {
-    if (Array.isArray(dealershipSettings.currencies)) setCurrencies(dealershipSettings.currencies as CustomCurrencyConfig[]);
-    if (typeof dealershipSettings.activeCurrencyCode === 'string') setActiveCurrencyCode(dealershipSettings.activeCurrencyCode);
-  }, [dealershipSettings]);
-
-  const persistCurrencies = (updated: CustomCurrencyConfig[]) => {
-    setCurrencies(updated);
-    void saveDealershipSettingsPatch({ currencies: updated, activeCurrencyCode }, currentUser?.id || '')
-      .then(onSettingsChange)
-      .catch((error) => triggerToast(error instanceof Error ? error.message : 'Could not save currencies.'));
-  };
-
-  const selectCurrency = (code: string) => {
-    setActiveCurrencyCode(code);
-    void saveDealershipSettingsPatch({ currencies, activeCurrencyCode: code }, currentUser?.id || '')
-      .then(onSettingsChange)
-      .catch((error) => triggerToast(error instanceof Error ? error.message : 'Could not save currency selection.'));
-  };
-
-  // QR storage will move to Supabase Storage with dealership settings.
+  // Super Admin: Upload custom company QR Code to Supabase Storage / Cloud
   const handleCompanyQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isSuperAdmin) {
       triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!');
       return;
     }
     const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const uploaded = await uploadDealershipAsset(file, 'qr');
-      const updated: CompanyBankInfo = {
-        ...companyBankInfo,
-        qrCodeUrl: uploaded.url,
-        updatedAt: new Date().toISOString(),
-        updatedBy: currentUser?.name || 'Admin',
-      };
-      const config = await saveDealershipSettingsPatch({ ...updated, companyQrImageUrl: uploaded.url }, currentUser?.id || '');
-      onSettingsChange(config);
-      setCompanyBankInfo(updated);
-      triggerToast('ບັນທຶກ QR ໃນ Supabase ແລ້ວ');
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Could not upload the company QR.');
-    } finally {
-      e.target.value = '';
+    if (file) {
+      try {
+        triggerToast('ກຳລັງອັບໂຫຼດຮູບ QR Code ໄປຍັງ Supabase Storage...');
+        const downloadUrl = await uploadCompanyQrCodeToStorage(file, currentUser);
+        const updated: CompanyBankInfo = {
+          ...companyBankInfo,
+          qrCodeUrl: downloadUrl,
+          updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+          updatedBy: currentUser?.name || 'Admin',
+        };
+        setCompanyBankInfo(updated);
+        saveStoredCompanyBankInfo(updated);
+        triggerToast('ອັບໂຫຼດຮູບ QR Code ບໍລິສັດສຳເລັດແລ້ວ! (Real-time Cloud Synced)');
+      } catch (err: any) {
+        console.error('Company QR upload error:', err);
+        // Fallback local reader
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const qrData = event.target?.result as string;
+          const updated: CompanyBankInfo = {
+            ...companyBankInfo,
+            qrCodeUrl: qrData,
+            updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+            updatedBy: currentUser?.name || 'Admin',
+          };
+          setCompanyBankInfo(updated);
+          saveStoredCompanyBankInfo(updated);
+          triggerToast('ອັບໂຫຼດຮູບ QR Code ບໍລິສັດສຳເລັດແລ້ວ!');
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -228,13 +281,13 @@ export default function POSSalesView({
       updatedBy: currentUser?.name || 'Admin',
     };
     try {
-      const config = await saveDealershipSettingsPatch({ ...updated, companyQrImageUrl: null }, currentUser?.id || '');
-      onSettingsChange(config);
-      setCompanyBankInfo(updated);
-      triggerToast('ຣີເຊັດ QR ໃນ Supabase ແລ້ວ');
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Could not reset the company QR.');
+      await saveDealershipConfigToSupabase({ companyQrImageUrl: null });
+    } catch (e) {
+      console.warn('Supabase reset QR fallback:', e);
     }
+    setCompanyBankInfo(updated);
+    saveStoredCompanyBankInfo(updated);
+    triggerToast('ຣີເຊັດຮູບ QR ບໍລິສັດເປັນຄ່າມາດຕະຖານຮຽບຮ້ອຍແລ້ວ!');
   };
 
   const handleAddPackage = async (e: React.FormEvent) => {
@@ -250,36 +303,24 @@ export default function POSSalesView({
       return;
     }
     const updated = [...giftOptions, trimmed];
-    try {
-      const config = await saveDealershipSettingsPatch({ packages: updated }, currentUser?.id || '');
-      onSettingsChange(config);
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Could not save the package list.');
-      return;
-    }
     setGiftOptions(updated);
+    localStorage.setItem('avatr_dealership_packages_v2', JSON.stringify(updated));
+    try {
+      await saveDealershipConfigToSupabase({ campaignCategories: updated });
+    } catch (e) {
+      console.warn('Supabase save packages fallback:', e);
+    }
     setNewPackageInput('');
     triggerToast(`ເພີ່ມໝວດແພັກເກດ "${trimmed}" ສຳເລັດແລ້ວ!`);
   };
 
-  const handleDeletePackage = async (pkg: string, e: React.MouseEvent) => {
+  const handleDeletePackage = (pkg: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isSuperAdmin) {
       triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດລົບໝວດໄດ້!');
       return;
     }
-    if (!confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບໝວດ "${pkg}" ອອກຈາກລາຍການ?`)) return;
-    const updated = giftOptions.filter(g => g !== pkg);
-    try {
-      const config = await saveDealershipSettingsPatch({ packages: updated }, currentUser?.id || '');
-      onSettingsChange(config);
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Could not save the package list.');
-      return;
-    }
-    setGiftOptions(updated);
-    setSelectedGifts(prev => prev.filter(g => g !== pkg));
-    triggerToast(`ລົບໝວດ "${pkg}" ອອກຮຽບຮ້ອຍແລ້ວ!`);
+    setPackageToDelete(pkg);
   };
 
   const toggleGift = (gift: string) => {
@@ -288,8 +329,6 @@ export default function POSSalesView({
     );
   };
 
-  // Sales Representative - defaults to current user name or empty
-  const [salesRep, setSalesRep] = useState(currentUser?.name || '');
   const [saleNotes, setSaleNotes] = useState('');
 
   // Generated Bill for Instant View Modal
@@ -301,20 +340,16 @@ export default function POSSalesView({
     setTimeout(() => setToastMsg(null), 4000);
   };
 
-  // Dynamic Exchange Rate for LAK from active currencies / settings
-  const lakCurrency = currencies.find((c) => c.code === 'LAK');
-  const lakRate = lakCurrency && lakCurrency.rateToUSD > 0 ? lakCurrency.rateToUSD : 22000;
-
   // Calculations
   const basePriceUSD = selectedVehicle ? selectedVehicle.priceUSD : 0;
   const netPriceUSD = Math.max(0, basePriceUSD - (discountUSD || 0));
-  const netPriceLAK = netPriceUSD * lakRate;
+  const netPriceLAK = netPriceUSD * 22000;
   const downPaymentUSD = Math.round(netPriceUSD * (downPaymentPercent / 100));
-  const downPaymentLAK = downPaymentUSD * lakRate;
+  const downPaymentLAK = downPaymentUSD * 22000;
   const loanPrincipalUSD = netPriceUSD - downPaymentUSD;
   // Estimated monthly calculation (approx 7.5% per annum for Lao banks)
   const monthlyPaymentUSD = Math.round((loanPrincipalUSD * (1 + 0.075 * (tenureMonths / 12))) / tenureMonths);
-  const monthlyPaymentLAK = monthlyPaymentUSD * lakRate;
+  const monthlyPaymentLAK = monthlyPaymentUSD * 22000;
 
   // Filtered available vehicles list
   const filteredAvailableVehicles = availableVehicles.filter(item => {
@@ -323,13 +358,13 @@ export default function POSSalesView({
     return (
       item.vin.toLowerCase().includes(q) ||
       item.model.toLowerCase().includes(q) ||
-      item.plateNumber.toLowerCase().includes(q) ||
-      item.color.toLowerCase().includes(q)
+      (item.plateNumber || '').toLowerCase().includes(q) ||
+      (item.color || '').toLowerCase().includes(q)
     );
   });
 
   // CONFIRM SALE & DEDUCT STOCK
-  const handleProcessSale = async (e: React.FormEvent) => {
+  const handleProcessSale = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedVehicle) {
@@ -338,24 +373,23 @@ export default function POSSalesView({
     }
 
     if (!customerName.trim() || !customerPhone.trim()) {
-      triggerToast('ກະລຸນາປ້ອນຊື່ ແລະ ເບີໂທລະສັບລູກຄ້າ!');
+      triggerToast('ກະລຸນາປ້ອນຊື່ ແລະ ເບີໂທລະສັບ ຂອງລູກຄ້າ!');
       return;
-    }
-
-    let paymentSlipPath: string | undefined;
-    if (slipFile) {
-      try {
-        paymentSlipPath = await uploadPaymentSlip(slipFile);
-      } catch (error) {
-        triggerToast(error instanceof Error ? error.message : 'Could not upload the payment slip.');
-        return;
-      }
     }
 
     const currentQty = selectedVehicle.stockQuantity;
     const remainingQty = Math.max(0, currentQty - 1);
-    const invoiceNum = `INV-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const invoiceNum = `INV-AVATR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const saleDateTime = saleDate ? `${saleDate} ${new Date().toTimeString().slice(0, 5)}` : now;
+
+    const effectiveVillage = customerVillage === '__custom__' ? customerCustomVillage.trim() : customerVillage;
+    const fullAddress = [
+      customerAddressDetail.trim(),
+      effectiveVillage,
+      customerDistrict,
+      customerProvince
+    ].filter(Boolean).join(', ');
 
     // 1. DEDUCT STOCK (ຕັດສະຕ໋ອກອອກ)
     const updatedInventoryItem: InventoryItem = {
@@ -372,13 +406,29 @@ export default function POSSalesView({
       return item;
     }));
 
+    try {
+      saveInventoryItemToSupabase(updatedInventoryItem);
+    } catch (e) {
+      console.warn('Supabase inventory deduction fallback:', e);
+    }
+
+    const linkedLead = prefilledCustomer
+      ? leads.find(lead => lead.id === prefilledCustomer.id) || prefilledCustomer
+      : (() => {
+          const normalizedPhone = customerPhone.replace(/\D/g, '');
+          if (!normalizedPhone) return undefined;
+          const matches = leads.filter(lead => lead.phone.replace(/\D/g, '') === normalizedPhone);
+          return matches.length === 1 ? matches[0] : undefined;
+        })();
+
     // 2. CREATE OFFICIAL INVOICE BILL RECORD
     const newBill: InvoiceBillRecord = {
-      id: newRecordId(),
+      id: invoiceNum,
       billType: 'sale',
       billNumber: invoiceNum,
-      date: now,
+      date: saleDateTime,
       vin: selectedVehicle.vin,
+      engineNumber: selectedVehicle.engineNumber,
       model: selectedVehicle.model,
       trim: selectedVehicle.trim,
       plateNumber: selectedVehicle.plateNumber,
@@ -389,38 +439,45 @@ export default function POSSalesView({
       unitPriceUSD: selectedVehicle.priceUSD,
       unitPriceLAK: selectedVehicle.priceLAK,
       discountUSD: Number(discountUSD) || 0,
-      discountLAK: (Number(discountUSD) || 0) * lakRate,
+      discountLAK: (Number(discountUSD) || 0) * 22000,
       netTotalUSD: netPriceUSD,
       netTotalLAK: netPriceLAK,
       amountUSD: netPriceUSD,
       amountLAK: netPriceLAK,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
+      leadId: linkedLead?.id,
       customerIDCard: customerIDCard.trim(),
-      customerAddress: customerAddress.trim(),
+      customerAddress: fullAddress || customerAddress.trim(),
       customerProvince,
       paymentMethod,
       qrUsed: 'company_official_qr',
       bankName: paymentMethod === 'transfer' ? bankName : undefined,
       transferRef: paymentMethod === 'transfer' ? transferRef || 'QR-CONFIRMED' : undefined,
-      financeCompany: paymentMethod === 'finance' ? financeCompany : undefined,
       downPaymentPercent: paymentMethod === 'finance' ? downPaymentPercent : undefined,
       downPaymentUSD: paymentMethod === 'finance' ? downPaymentUSD : undefined,
       tenureMonths: paymentMethod === 'finance' ? tenureMonths : undefined,
       monthlyPaymentLAK: paymentMethod === 'finance' ? monthlyPaymentLAK : undefined,
       freeGifts: selectedGifts,
       warrantyTerms: 'ຮັບປະກັນແບັດເຕີຣີ CATL 8 ປີ / 160,000 km | ຕົວລົດ 5 ປີ / 120,000 km',
-      paymentSlipPath,
-      salesRep: salesRep,
-      recordedBy: salesRep,
+      salesRep: currentUser?.name || 'Admin',
+      recordedBy: currentUser?.name || 'Admin',
       notes: saleNotes || 'ຂາຍອອກຜ່ານລະບົບ POS ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ ພ້ອມຕັດສະຕ໋ອກອັດຕະໂນມັດ',
     };
 
     setBills(prev => [newBill, ...prev]);
 
+    try {
+      saveBillToSupabase(newBill);
+    } catch (e) {
+      console.warn('Supabase bill save fallback:', e);
+    }
+
     // 3. RECORD STOCK-OUT TRANSACTION LOG
     const newStockLog: StockLogRecord = {
       id: `LOG-OUT-${Date.now().toString().slice(-6)}`,
+      billId: newBill.id,
+      leadId: linkedLead?.id,
       type: 'stock_out',
       vin: selectedVehicle.vin,
       model: selectedVehicle.model,
@@ -429,8 +486,8 @@ export default function POSSalesView({
       quantity: 1,
       priceUSD: netPriceUSD,
       priceLAK: netPriceLAK,
-      timestamp: now,
-      recordedBy: salesRep,
+      timestamp: saleDateTime,
+      recordedBy: currentUser?.name || 'Admin',
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       paymentMethod,
@@ -452,12 +509,32 @@ export default function POSSalesView({
     setTransferRef('');
     setDiscountUSD(0);
     setSaleNotes('');
-    setSlipImage(null);
-    setSlipFile(null);
+  };
+
+  const [isExportingPosPdf, setIsExportingPosPdf] = useState(false);
+
+  const handleDownloadPosPdf = async () => {
+    if (!createdBill) return;
+    try {
+      setIsExportingPosPdf(true);
+      const cleanName = (createdBill.customerName || createdBill.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+      const filename = `AVATR_Sales_Invoice_${createdBill.billNumber}_${cleanName}.pdf`;
+      await exportElementToPdf('printable-pos-receipt', {
+        filename,
+        margin: [4, 4, 4, 4],
+        orientation: 'portrait',
+        singlePage: true,
+      });
+    } catch (err) {
+      console.error('Error generating POS receipt PDF:', err);
+      alert('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້');
+    } finally {
+      setIsExportingPosPdf(false);
+    }
   };
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="mx-auto max-w-screen-2xl space-y-6 pb-16">
       {/* Toast Alert */}
       {toastMsg && (
         <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-zinc-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
@@ -466,44 +543,76 @@ export default function POSSalesView({
         </div>
       )}
 
-      {/* Top Banner */}
-      <div className="bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="p-1.5 bg-white text-black rounded-lg">
-              <ShoppingBag className="w-5 h-5 fill-current" />
-            </span>
-            <span className="text-xs font-mono uppercase tracking-widest text-zinc-300 font-bold">
-              AUTOMOTIVE POINT OF SALE (POS)
-            </span>
+      {/* WRAPPER FOR POS VIEWS - SUPPRESSED DURING PRINT WHEN BILL IS BEING PRINTED */}
+      <div className={createdBill ? "print:hidden hide-on-print-pos space-y-6" : "space-y-6"}>
+        {/* Top Banner */}
+        <div className="theme-adaptive-dark-surface relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black border border-zinc-800 p-5 sm:p-7 rounded-3xl shadow-xl">
+          <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full bg-white/[0.04] blur-3xl pointer-events-none" />
+          <div className="relative flex flex-wrap items-center justify-between gap-5">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="p-2 bg-white text-black rounded-xl shadow-sm">
+                  <ShoppingBag className="w-5 h-5 fill-current" />
+                </span>
+                <span className="text-[11px] sm:text-xs font-mono uppercase tracking-[0.18em] text-zinc-300 font-bold">
+                  SALES · POINT OF SALE
+                </span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                {t.posHeader || t.posTitle}
+              </h1>
+              <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-2xl">
+                {t.posHeaderSub || t.posSubtitle}
+              </p>
+            </div>
+
+            <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
+              <div className="officer-indicator pos-assigned-officer theme-adaptive-dark-surface flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs sm:flex-none">
+                <span className="officer-indicator-avatar grid h-8 w-8 shrink-0 place-items-center rounded-lg border">
+                  <User className="w-4 h-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="officer-indicator-label block text-[10px]">{t.assignedOfficer || 'ຜູ້ຮັບຜິດຊອບ'}</span>
+                  <span className="officer-indicator-name block truncate font-semibold">
+                    {currentUser?.name || 'Admin'}
+                    <span className="officer-indicator-role ml-1 font-mono text-[10px]">({currentUser?.roleTitleLo?.split(' ')[0] || 'Staff'})</span>
+                  </span>
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={onNavigateToBills}
+                className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:border-zinc-500 hover:bg-zinc-800 sm:flex-none"
+              >
+                <Receipt className="w-4 h-4 text-zinc-300" />
+                <span>{t.filterSaleBills} ({bills.filter(b => b.billType === 'sale').length})</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            {t.posHeader || t.posTitle}
-          </h1>
-          <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            {t.posHeaderSub || t.posSubtitle}
-          </p>
         </div>
 
-        <button
-          onClick={onNavigateToBills}
-          className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors"
-        >
-          <Receipt className="w-4 h-4 text-zinc-400" />
-          <span>{t.filterSaleBills} ({bills.filter(b => b.billType === 'sale').length})</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-        {isSuperAdmin && (
-          <button
-            type="button"
-            onClick={() => setIsCurrencyOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors"
-          >
-            <DollarSign className="w-4 h-4 text-zinc-400" />
-            <span>ຈັດການສະກຸນເງິນ</span>
-          </button>
-        )}
-      </div>
+        <nav aria-label="Sales workflow" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {[
+            { number: '01', label: lang === 'lo' ? 'ເລືອກລົດ' : lang === 'th' ? 'เลือกรถ' : 'Vehicle' },
+            { number: '02', label: lang === 'lo' ? 'ຂໍ້ມູນລູກຄ້າ' : lang === 'th' ? 'ข้อมูลลูกค้า' : 'Customer' },
+            { number: '03', label: lang === 'lo' ? 'ການຊຳລະ' : lang === 'th' ? 'การชำระเงิน' : 'Payment' },
+            { number: '04', label: lang === 'lo' ? 'ຂອງແຖມ' : lang === 'th' ? 'ของแถม' : 'Packages' },
+            { number: '05', label: lang === 'lo' ? 'ກວດສອບ & ອອກບິນ' : lang === 'th' ? 'ตรวจสอบและออกบิล' : 'Review & bill' },
+          ].map((step, index) => (
+            <div key={step.number} className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 ${
+              index === 0
+                ? 'border-white/20 bg-white/[0.08] text-white'
+                : 'border-zinc-800 bg-zinc-950/70 text-zinc-400'
+            }`}>
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg font-mono text-[10px] font-bold ${
+                index === 0 ? 'bg-white text-black' : 'bg-zinc-900 text-zinc-400'
+              }`}>{step.number}</span>
+              <span className="truncate text-[11px] font-medium">{step.label}</span>
+            </div>
+          ))}
+        </nav>
 
       {availableVehicles.length === 0 ? (
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-12 text-center text-zinc-400 space-y-4">
@@ -520,14 +629,14 @@ export default function POSSalesView({
           </p>
         </div>
       ) : (
-        <form onSubmit={handleProcessSale} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT COLUMN: Vehicle Selection & Visual Preview (4 cols) */}
-          <div className="lg:col-span-4 space-y-5">
-            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 space-y-4">
+        <form onSubmit={handleProcessSale} className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12 lg:gap-6">
+          {/* Vehicle selection */}
+          <div className="space-y-5 lg:col-span-5">
+            <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-6">
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <span className="font-bold text-sm text-white flex items-center gap-2">
                   <Car className="w-4 h-4 text-white" />
-                  <span>1. {t.selectVehicleToSell} *</span>
+                  <span>1. {t.selectVehicleToSell} <span className="text-red-500">*</span></span>
                 </span>
                 <span className="text-[10px] font-mono text-zinc-400">
                   {t.stockAvailable}: {availableVehicles.length} {t.unitCars}
@@ -542,23 +651,25 @@ export default function POSSalesView({
                   placeholder={t.searchPlaceholder}
                   value={vehicleSearch}
                   onChange={(e) => setVehicleSearch(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
                 />
               </div>
 
               {/* Vehicle Options List */}
-              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
                 {filteredAvailableVehicles.map((item) => {
                   const isSelected = selectedVin === item.vin;
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={item.vin}
                       onClick={() => setSelectedVin(item.vin)}
+                      aria-pressed={isSelected}
                       className={`p-3 rounded-2xl border cursor-pointer transition-all ${
                         isSelected
-                          ? 'bg-zinc-900 border-white shadow-lg text-white'
-                          : 'bg-zinc-900/40 border-zinc-800/80 hover:border-zinc-700 text-zinc-400'
-                      }`}
+                          ? 'bg-zinc-900 border-white/70 shadow-md text-white ring-1 ring-white/10'
+                          : 'bg-zinc-900/40 border-zinc-800/80 hover:border-zinc-600 text-zinc-400'
+                      } w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70`}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <strong className="text-white text-xs font-bold">{item.model}</strong>
@@ -570,12 +681,23 @@ export default function POSSalesView({
                         VIN: {item.vin}
                       </div>
                       <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-1">
-                        <span>{item.color}</span>
+                        <span>{item.color || '-'}</span>
                         <span className="text-zinc-400 font-mono">{t.tableStock}: {item.stockQuantity} {t.unitCars}</span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
+                {filteredAvailableVehicles.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-zinc-800 px-4 py-6 text-center">
+                    <Search className="mx-auto mb-2 h-5 w-5 text-zinc-500" />
+                    <p className="text-xs font-medium text-zinc-300">
+                      {lang === 'lo' ? 'ບໍ່ພົບລົດຕາມຄຳຄົ້ນຫາ' : lang === 'th' ? 'ไม่พบรถที่ตรงกับการค้นหา' : 'No matching vehicles found'}
+                    </p>
+                    <p className="mt-1 text-[10px] text-zinc-500">
+                      {lang === 'lo' ? 'ລອງຄົ້ນຫາດ້ວຍລຸ້ນລົດ, VIN ຫຼື ສີ' : lang === 'th' ? 'ลองค้นหาด้วยรุ่นรถ VIN หรือสี' : 'Try searching by model, VIN, or color'}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Selected Vehicle Visual Card */}
@@ -587,12 +709,19 @@ export default function POSSalesView({
                       alt={selectedVehicle.model}
                       className="w-full h-full object-cover filter contrast-125"
                     />
-                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/80 text-white border border-zinc-700 font-mono">
-                      {selectedVehicle.plateNumber}
+                    <div className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-black/80 text-white border border-zinc-700 font-mono shadow-md backdrop-blur-md always-white-text">
+                      <span className="text-white" style={{ color: '#ffffff' }}>{t.tableStock}: {selectedVehicle.stockQuantity} {t.unitCars}</span>
+                    </div>
+                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/80 text-white border border-zinc-700 font-mono shadow-md backdrop-blur-md always-white-text">
+                      <span className="text-white" style={{ color: '#ffffff' }}>{selectedVehicle.plateNumber}</span>
                     </div>
                   </div>
 
                   <div className="space-y-1 text-xs">
+                    <div className="flex justify-between text-zinc-400">
+                      <span>{t.tableStock}:</span>
+                      <span className="text-white font-bold font-mono px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800">{selectedVehicle.stockQuantity} {t.unitCars}</span>
+                    </div>
                     <div className="flex justify-between text-zinc-400">
                       <span>{t.trimSpec}:</span>
                       <span className="text-white font-medium text-right truncate max-w-[170px]">{selectedVehicle.trim}</span>
@@ -603,7 +732,7 @@ export default function POSSalesView({
                     </div>
                     <div className="flex justify-between text-zinc-400">
                       <span>{t.bodyColor}:</span>
-                      <span className="text-white font-medium">{selectedVehicle.color}</span>
+                      <span className="text-white font-medium">{selectedVehicle.color || '-'}</span>
                     </div>
                     <div className="flex justify-between text-zinc-400">
                       <span>{t.warehouseDest}:</span>
@@ -615,98 +744,331 @@ export default function POSSalesView({
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Detailed Customer, Financials & Sale Execution (8 cols) */}
-          <div className="lg:col-span-8 space-y-5">
+          {/* Customer, payment and checkout */}
+          <div className="space-y-5 lg:col-span-7">
             {/* Step 2: Customer Details */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4">
+            <div className="pos-customer-section theme-adaptive-dark-surface rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-6 space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
                 <User className="w-4 h-4 text-white" />
                 <span>2. {t.buyerInfo}</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2 2xl:grid-cols-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerName} *</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerName} <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     required
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: ທ່ານ ບຸນມີ ໄຊຍະວົງ' : lang === 'th' ? 'ตัวอย่าง: คุณ สมชาย ใจดี' : 'e.g. John Doe'}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerPhone} *</label>
+                  <label className="block text-zinc-400 mb-1 font-medium flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-white" />
+                    <span>ວັນທີອອກບິນ (ວັນ/ເດືອນ/ປີ) <span className="text-red-500">*</span></span>
+                  </label>
                   <input
-                    type="text"
+                    type="date"
                     required
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="020 5xxxxxxx"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
+                    value={saleDate}
+                    onChange={(e) => setSaleDate(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerIDPassport}</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-zinc-400 font-medium">{t.buyerPhone} <span className="text-red-500">*</span></label>
+                    {canOpenWhatsApp && (
+                      <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>WA: {formatWhatsAppDisplay(customerPhone)}</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      required
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="020 5xxxxxxx"
+                      className="min-w-0 flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                    />
+                    <button
+                      type="button"
+                      disabled={!canOpenWhatsApp}
+                      onClick={() => openWhatsApp(customerPhone, customerName, selectedVehicle?.model, lang)}
+                      className={`pos-whatsapp-button inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-semibold transition-all shadow-sm sm:px-3 ${
+                        canOpenWhatsApp
+                          ? 'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95'
+                          : 'border-zinc-700 bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-60'
+                      }`}
+                      aria-label={lang === 'lo' ? 'ເປີດ WhatsApp ຫາລູກຄ້າ' : lang === 'th' ? 'เปิด WhatsApp ถึงลูกค้า' : 'Open WhatsApp for customer'}
+                      title={canOpenWhatsApp
+                        ? 'ກົດເພື່ອເປີດ WhatsApp ຕາມເບີໂທທີ່ປ້ອນເຂົ້າໄປ'
+                        : lang === 'lo' ? 'ປ້ອນເບີໂທທີ່ຖືກຕ້ອງກ່ອນ' : lang === 'th' ? 'กรอกหมายเลขโทรศัพท์ที่ถูกต้องก่อน' : 'Enter a valid phone number first'}
+                    >
+                      <WhatsAppIcon className="h-4 w-4 shrink-0" />
+                      <span>WhatsApp</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">
+                    {lang === 'lo' ? 'ເລກບັດປະຊາຊົນ / Passport (ຈະໃສ່ ຫຼື ບໍ່ໃສ່ກໍໄດ້)' : lang === 'th' ? 'เลขบัตรประจำตัว / Passport (ใส่หรือไม่ใส่ก็ได้)' : 'ID Card / Passport (Optional)'}
+                  </label>
                   <input
                     type="text"
                     value={customerIDCard}
                     onChange={(e) => setCustomerIDCard(e.target.value)}
-                    placeholder="ID-01-VTE-884920"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
+                    placeholder="ID-01-VTE-884920 / P0123456"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
                   />
                 </div>
 
+                {/* Province Selector (All 18 Provinces) */}
                 <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">{lang === 'lo' ? 'ແຂວງ / ນະຄອນຫຼວງ' : lang === 'th' ? 'แขวง / นครหลวง' : 'Province / City'}</label>
-                  <select
-                    value={customerProvince}
-                    onChange={(e) => setCustomerProvince(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
-                  >
-                    <option value="">-- {lang === 'lo' ? 'ເລືອກແຂວງ / ນະຄອນຫຼວງ' : lang === 'th' ? 'เลือกแขวง / นครหลวง' : 'Select Province'} --</option>
-                    <option value="Vientiane Capital">{lang === 'lo' ? 'ນະຄອນຫຼວງວຽງຈັນ' : lang === 'th' ? 'นครหลวงเวียงจันทน์' : 'Vientiane Capital'}</option>
-                    <option value="Luang Prabang">{lang === 'lo' ? 'ແຂວງ ຫຼວງພະບາງ' : lang === 'th' ? 'แขวงหลวงพระบาง' : 'Luang Prabang'}</option>
-                    <option value="Champasak">{lang === 'lo' ? 'ແຂວງ ຈຳປາສັກ' : lang === 'th' ? 'แขวงจำปาสัก' : 'Champasak'}</option>
-                    <option value="Savannakhet">{lang === 'lo' ? 'ແຂວງ ສະຫວັນນະເຂດ' : lang === 'th' ? 'แขวงสะหวันนะเขต' : 'Savannakhet'}</option>
-                    <option value="Vientiane Province">{lang === 'lo' ? 'ແຂວງ ວຽງຈັນ' : lang === 'th' ? 'แขวงเวียงจันทน์' : 'Vientiane Province'}</option>
-                    <option value="Other Provinces">{lang === 'lo' ? 'ແຂວງ ອື່ນໆ' : lang === 'th' ? 'แขวง / จังหวัดอื่นๆ' : 'Other'}</option>
-                  </select>
+                  <label className="block text-zinc-400 mb-1 font-medium">
+                    ແຂວງ / ນະຄອນຫຼວງ (18 ແຂວງ) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative" ref={provinceDropdownRef}>
+                    <button
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={isProvinceDropdownOpen}
+                      onClick={() => {
+                        setIsProvinceDropdownOpen(open => !open);
+                        setIsDistrictDropdownOpen(false);
+                        setIsVillageDropdownOpen(false);
+                      }}
+                      className="pos-province-trigger flex w-full items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-white transition-colors hover:border-zinc-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                    >
+                      <span className="truncate">
+                        {selectedProvince?.nameLo || customerProvince}
+                        {selectedProvince?.nameEn && (
+                          <span className="ml-1 text-zinc-400">
+                            ({selectedProvince.nameEn})
+                          </span>
+                        )}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isProvinceDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isProvinceDropdownOpen && (
+                      <div
+                        role="listbox"
+                        aria-label="ເລືອກແຂວງ"
+                        className="pos-province-options absolute left-0 top-full z-50 mt-1.5 max-h-56 w-full overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl"
+                      >
+                        {LAO_PROVINCES.map(province => (
+                          <button
+                            key={province.id}
+                            type="button"
+                            role="option"
+                            aria-selected={customerProvince === province.nameLo}
+                            onClick={() => {
+                              setCustomerProvince(province.nameLo);
+                              setCustomerDistrict(province.districts[0]?.nameLo || '');
+                              setCustomerVillage(province.districts[0]?.popularVillages[0] || '');
+                              setIsProvinceDropdownOpen(false);
+                            }}
+                            className={`pos-province-option flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                              customerProvince === province.nameLo
+                                ? 'pos-province-option-selected bg-zinc-800 text-white'
+                                : 'text-zinc-300 hover:bg-zinc-800'
+                            }`}
+                          >
+                            <span>{province.nameLo}</span>
+                            <span className="shrink-0 text-[10px] text-zinc-500">{province.nameEn}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
+                {/* District Selector */}
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">
+                    ເມືອງ (District) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative" ref={districtDropdownRef}>
+                    <button
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={isDistrictDropdownOpen}
+                      onClick={() => {
+                        setIsDistrictDropdownOpen(open => !open);
+                        setIsProvinceDropdownOpen(false);
+                        setIsVillageDropdownOpen(false);
+                      }}
+                      className="pos-province-trigger flex w-full items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-white transition-colors hover:border-zinc-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                    >
+                      <span className="truncate">
+                        {districtOptions.find(district => district.nameLo === selectedDistrictName)?.nameLo || selectedDistrictName}
+                        {selectedDistrict?.nameEn && <span className="ml-1 text-zinc-400">({selectedDistrict.nameEn})</span>}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isDistrictDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isDistrictDropdownOpen && (
+                      <div
+                        role="listbox"
+                        aria-label="ເລືອກເມືອງ"
+                        className="pos-province-options absolute left-0 top-full z-50 mt-1.5 max-h-56 w-full overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl"
+                      >
+                        {districtOptions.map(district => (
+                          <button
+                            key={district.nameLo}
+                            type="button"
+                            role="option"
+                            aria-selected={selectedDistrictName === district.nameLo}
+                            onClick={() => {
+                              setCustomerDistrict(district.nameLo);
+                              setCustomerVillage(district.popularVillages[0] || '');
+                              setIsDistrictDropdownOpen(false);
+                            }}
+                            className={`pos-province-option flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                              selectedDistrictName === district.nameLo
+                                ? 'pos-province-option-selected bg-zinc-800 text-white'
+                                : 'text-zinc-300 hover:bg-zinc-800'
+                            }`}
+                          >
+                            <span>{district.nameLo}</span>
+                            <span className="shrink-0 text-[10px] text-zinc-500">{district.nameEn}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Village Selector */}
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">
+                    ບ້ານ (Village) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative" ref={villageDropdownRef}>
+                    <button
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={isVillageDropdownOpen}
+                      onClick={() => {
+                        setIsVillageDropdownOpen(open => !open);
+                        setIsProvinceDropdownOpen(false);
+                        setIsDistrictDropdownOpen(false);
+                      }}
+                      className="pos-province-trigger flex w-full items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-white transition-colors hover:border-zinc-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                    >
+                      <span className="truncate">
+                        {customerVillage === '__custom__'
+                          ? '+ ລະບຸບ້ານອື່ນໆ...'
+                          : customerVillage || 'ເລືອກບ້ານ'}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isVillageDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isVillageDropdownOpen && (
+                      <div
+                        role="listbox"
+                        aria-label="ເລືອກບ້ານ"
+                        className="pos-province-options absolute left-0 top-full z-50 mt-1.5 max-h-56 w-full overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl"
+                      >
+                        {villageOptions.map(village => (
+                          <button
+                            key={village}
+                            type="button"
+                            role="option"
+                            aria-selected={customerVillage === village}
+                            onClick={() => {
+                              setCustomerVillage(village);
+                              setIsVillageDropdownOpen(false);
+                            }}
+                            className={`pos-province-option flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                              customerVillage === village
+                                ? 'pos-province-option-selected bg-zinc-800 text-white'
+                                : 'text-zinc-300 hover:bg-zinc-800'
+                            }`}
+                          >
+                            <span>{village}</span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={customerVillage === '__custom__'}
+                          onClick={() => {
+                            setCustomerVillage('__custom__');
+                            setIsVillageDropdownOpen(false);
+                          }}
+                          className={`pos-province-option flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs transition-colors ${
+                            customerVillage === '__custom__'
+                              ? 'pos-province-option-selected bg-zinc-800 text-white'
+                              : 'text-zinc-300 hover:bg-zinc-800'
+                          }`}
+                        >
+                          <span>+ ລະບຸບ້ານອື່ນໆ...</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {customerVillage === '__custom__' && (
+                  <div>
+                    <label className="block text-zinc-400 mb-1 font-medium">
+                      ລະບຸຊື່ບ້ານ (Custom Village) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={customerCustomVillage}
+                      onChange={(e) => setCustomerCustomVillage(e.target.value)}
+                      placeholder="ປ້ອນຊື່ບ້ານ..."
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                    />
+                  </div>
+                )}
+
+                {/* House No. / Street Details */}
                 <div className="sm:col-span-2">
-                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerAddress}</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">
+                    ເຮືອນເລກທີ / ຖະໜົນ / ຮ່ອມ (Street / House Details)
+                  </label>
                   <input
                     type="text"
-                    value={customerAddress}
-                    onChange={(e) => setCustomerAddress(e.target.value)}
-                    placeholder="e.g. Phonxay Village, Saysettha District"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+                    value={customerAddressDetail}
+                    onChange={(e) => setCustomerAddressDetail(e.target.value)}
+                    placeholder="ຕົວຢ່າງ: ເຮືອນເລກທີ 45, ຮ່ອມ 12, ຖະໜົນ ໄກສອນ ພົມວິຫານ"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
                   />
                 </div>
               </div>
             </div>
 
             {/* Step 3: Payment & Financial Terms */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4">
+            <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-6 space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
                 <CreditCard className="w-4 h-4 text-white" />
                 <span>3. {t.paymentType}</span>
               </div>
 
               {/* Payment Method Selector */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('transfer')}
+                  aria-pressed={paymentMethod === 'transfer'}
                   className={`p-3 rounded-2xl border flex flex-col items-center justify-center transition-all ${
                     paymentMethod === 'transfer'
-                      ? 'bg-white text-black font-bold shadow-lg border-white'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
-                  }`}
+                      ? 'bg-white text-black font-bold shadow-md border-white ring-2 ring-white/15'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'
+                  } min-h-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70`}
                 >
                   <QrCode className={`w-5 h-5 mb-1 ${paymentMethod === 'transfer' ? 'text-black' : 'text-zinc-400'}`} />
                   <span>{t.paymentTransfer}</span>
@@ -715,11 +1077,12 @@ export default function POSSalesView({
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('cash')}
+                  aria-pressed={paymentMethod === 'cash'}
                   className={`p-3 rounded-2xl border flex flex-col items-center justify-center transition-all ${
                     paymentMethod === 'cash'
-                      ? 'bg-white text-black font-bold shadow-lg border-white'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
-                  }`}
+                      ? 'bg-white text-black font-bold shadow-md border-white ring-2 ring-white/15'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'
+                  } min-h-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70`}
                 >
                   <Banknote className={`w-5 h-5 mb-1 ${paymentMethod === 'cash' ? 'text-black' : 'text-zinc-400'}`} />
                   <span>{t.paymentCash}</span>
@@ -728,11 +1091,12 @@ export default function POSSalesView({
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('finance')}
+                  aria-pressed={paymentMethod === 'finance'}
                   className={`p-3 rounded-2xl border flex flex-col items-center justify-center transition-all ${
                     paymentMethod === 'finance'
-                      ? 'bg-white text-black font-bold shadow-lg border-white'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
-                  }`}
+                      ? 'bg-white text-black font-bold shadow-md border-white ring-2 ring-white/15'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'
+                  } min-h-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70`}
                 >
                   <Building2 className={`w-5 h-5 mb-1 ${paymentMethod === 'finance' ? 'text-black' : 'text-zinc-400'}`} />
                   <span>{t.paymentInstallments}</span>
@@ -741,7 +1105,7 @@ export default function POSSalesView({
 
               {/* Dealership Company QR Code Payment Details */}
               {paymentMethod === 'transfer' && (
-                <div className="p-5 bg-zinc-900/80 rounded-3xl border border-zinc-800 space-y-4 text-xs">
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 text-xs space-y-4 sm:p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
                     <div className="flex items-center gap-2">
                       <div className="p-1.5 bg-zinc-800 text-zinc-200 rounded-lg border border-zinc-700">
@@ -812,39 +1176,43 @@ export default function POSSalesView({
 
                   {/* Regular User Read-Only Indicator */}
                   {!isSuperAdmin && (
-                    <div className="p-2.5 bg-zinc-950/70 border border-zinc-800 rounded-xl flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-400">
-                      <div className="flex items-center gap-2">
-                        <Lock className="w-3.5 h-3.5 text-zinc-500" />
-                        <span>ຮູບ QR ບັນຊີທາງການຂອງບໍລິສັດ (ອັບໂຫລດ ແລະ ຄວບຄຸມໂດຍ Admin)</span>
+                    <div className="qr-user-indicator p-3 rounded-2xl border flex flex-wrap items-center justify-between gap-2.5 text-xs transition-colors shadow-sm bg-zinc-950/70 border-zinc-800 text-zinc-300">
+                      <div className="flex items-center gap-2.5">
+                        <span className="qr-user-icon-wrap p-1.5 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-xs">
+                          <Lock className="w-3.5 h-3.5 text-zinc-400" />
+                        </span>
+                        <span className="font-semibold text-[11px] text-zinc-200">
+                          ຮູບ QR ບັນຊີທາງການຂອງບໍລິສັດ (ອັບໂຫລດ ແລະ ຄວບຄຸມໂດຍ Admin)
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
+                      <span className="qr-user-badge text-[10px] font-mono font-bold px-2.5 py-1 rounded-xl bg-zinc-900 text-zinc-300 border border-zinc-800 shadow-sm">
                         User ທຳມະດາ: ສະແດງ QR ໃຫ້ລູກຄ້າສະແກນ
                       </span>
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
-                    {/* QR Code Graphic Card */}
-                    <div className="sm:col-span-5 flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-xl text-black space-y-2">
-                      <div className="w-full text-center border-b border-zinc-200 pb-1.5">
-                        <span className="text-[11px] font-black tracking-wider text-black block truncate">
-                          {companyBankInfo.accountName}
+                  {/* Centered Luxury Official QR Code Card */}
+                  <div className="flex flex-col items-center justify-center py-2">
+                    <div className="w-full max-w-sm flex flex-col items-center justify-center p-5 sm:p-6 bg-white rounded-3xl shadow-2xl text-black space-y-3.5 border border-zinc-200">
+                      <div className="w-full text-center border-b border-zinc-200 pb-2">
+                        <span className="text-xs font-black tracking-wider text-black block truncate">
+                          {companyBankInfo.accountName || 'AVATR AUTO SERVICE SOLE CO., LTD'}
                         </span>
-                        <span className="text-[9px] font-bold text-zinc-700 block truncate">
-                          {companyBankInfo.bankName} LAO QR
+                        <span className="text-[10px] font-bold text-zinc-600 block truncate">
+                          {companyBankInfo.bankName || 'LAO QR'} • OFFICIAL PAYMENT QR
                         </span>
                       </div>
 
                       {/* Display Custom Uploaded QR or Stylized Vector QR */}
-                      <div className="relative p-2 bg-white rounded-xl border-2 border-black flex items-center justify-center min-h-[144px] w-full max-w-[170px] overflow-hidden">
+                      <div className="relative p-2.5 bg-white rounded-2xl border-2 border-black flex items-center justify-center min-h-[180px] w-full max-w-[210px] overflow-hidden shadow-inner">
                         {companyBankInfo.qrCodeUrl ? (
                           <img
                             src={companyBankInfo.qrCodeUrl}
                             alt="Official Company QR Code"
-                            className="w-36 h-36 object-contain rounded-lg shadow-sm"
+                            className="w-44 h-44 object-contain rounded-xl shadow-sm"
                           />
                         ) : (
-                          <svg className="w-36 h-36" viewBox="0 0 140 140" fill="none">
+                          <svg className="w-44 h-44" viewBox="0 0 140 140" fill="none">
                             {/* Corner Markers */}
                             <rect x="5" y="5" width="35" height="35" rx="6" fill="black" />
                             <rect x="10" y="10" width="25" height="25" rx="3" fill="white" />
@@ -909,89 +1277,23 @@ export default function POSSalesView({
                         )}
                       </div>
 
-                      <div className="w-full text-center pt-1 border-t border-zinc-200">
-                        <span className="text-[10px] font-mono font-black text-black block">
+                      <div className="w-full text-center pt-2 border-t border-zinc-200">
+                        <span className="text-xs font-mono font-black text-black block">
                           ຍອດຊຳລະ: ${netPriceUSD.toLocaleString()} USD
+                        </span>
+                        <span className="text-[10px] font-mono text-zinc-600 block mt-0.5">
+                          ≈ {netPriceLAK.toLocaleString()} LAK
                         </span>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => setIsEnlargeQrOpen(true)}
-                        className="w-full py-1.5 px-2.5 bg-zinc-900 hover:bg-black text-white rounded-xl text-[10px] font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                        className="w-full py-2 px-3 bg-zinc-900 hover:bg-black text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                       >
-                        <Maximize2 className="w-3 h-3 text-white" />
+                        <Maximize2 className="w-3.5 h-3.5 text-white" />
                         <span>ຂະຫຍາຍເບິ່ງ QR ເຕັມຈໍ</span>
                       </button>
-                    </div>
-
-                    {/* Account Info & Slip Confirmation */}
-                    <div className="sm:col-span-7 space-y-3.5">
-                      <div className="p-3.5 bg-black/60 rounded-2xl border border-zinc-800 space-y-2 font-mono text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-zinc-500 text-[10px] uppercase block">ຊື່ບັນຊີບໍລິສັດ (Account Name):</span>
-                          {isSuperAdmin && (
-                            <span className="text-[9px] text-zinc-300 font-sans font-semibold">Admin ຄວບຄຸມ</span>
-                          )}
-                        </div>
-                        <strong className="text-white text-xs block truncate">{companyBankInfo.accountName}</strong>
-                        <div className="pt-2 border-t border-zinc-800/80 space-y-1.5 text-[11px]">
-                          <div className="flex justify-between items-center">
-                            <span className="text-zinc-400">ເລກບັນຊີ USD:</span>
-                            <span className="text-white font-bold">{companyBankInfo.usdAccount}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-zinc-400">ເລກບັນຊີ LAK:</span>
-                            <span className="text-zinc-300 font-bold">{companyBankInfo.lakAccount}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-zinc-400">ຊ່ອງທາງ:</span>
-                            <span className="text-zinc-300 truncate max-w-[180px]">ຊຳລະເງິນຜ່ານ QR</span>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-zinc-500">Hotline:</span>
-                            <span className="text-zinc-400">{companyBankInfo.hotline}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-zinc-400 mb-1 font-medium">ແນບຮູບສະລິບໂອນເງິນ (Upload Payment Slip)</label>
-                        <div className="flex items-center gap-3">
-                          <label className="cursor-pointer px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl border border-zinc-700 font-semibold text-xs flex items-center gap-1.5 transition-colors">
-                            <Upload className="w-3.5 h-3.5" />
-                            <span>ເລືອກຮູບສະລິບຈາກອຸປະກອນ</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  setSlipFile(file);
-                                  setSlipImage(file.type === 'application/pdf' ? 'pdf' : URL.createObjectURL(file));
-                                  triggerToast('ເລືອກສະລິບແລ້ວ; ຈະບັນທຶກເຂົ້າ Supabase ເມື່ອຢືນຢັນການຂາຍ');
-                                }
-                              }}
-                            />
-                          </label>
-
-                          {slipImage && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-zinc-200 font-mono flex items-center gap-1">
-                                <Check className="w-3.5 h-3.5" /> ແນບສະລິບແລ້ວ
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => { setSlipImage(null); setSlipFile(null); }}
-                                className="text-zinc-500 hover:text-white text-xs"
-                              >
-                                ລົບຮູບ
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -1000,49 +1302,30 @@ export default function POSSalesView({
               {/* Financing Details */}
               {paymentMethod === 'finance' && (
                 <div className="p-4 bg-zinc-900/80 rounded-2xl border border-zinc-800 space-y-3 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-zinc-400 mb-1 font-medium">ສະຖາບັນການເງິນ / ໄຟແນນສ໌</label>
-                      <select
-                        value={financeCompany}
-                        onChange={(e) => setFinanceCompany(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
-                      >
-                        <option value="">-- ເລືອກສະຖາບັນການເງິນ / ໄຟແນນສ໌ --</option>
-                        <option value="Lao-Viet Bank (LVB Auto Lease)">Lao-Viet Bank (LVB)</option>
-                        <option value="BCEL Leasing">BCEL Leasing</option>
-                        <option value="JDB Auto Finance">JDB Auto Finance</option>
-                        <option value="GL Leasing Laos">GL Leasing Laos</option>
-                      </select>
-                    </div>
-
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-zinc-400 mb-1 font-medium">ວາງເງິນດາວ (%)</label>
-                      <select
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
                         value={downPaymentPercent}
                         onChange={(e) => setDownPaymentPercent(Number(e.target.value))}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
-                      >
-                        <option value={20}>20% (${Math.round(netPriceUSD * 0.2).toLocaleString()})</option>
-                        <option value={30}>30% (${Math.round(netPriceUSD * 0.3).toLocaleString()})</option>
-                        <option value={40}>40% (${Math.round(netPriceUSD * 0.4).toLocaleString()})</option>
-                        <option value={50}>50% (${Math.round(netPriceUSD * 0.5).toLocaleString()})</option>
-                      </select>
+                        placeholder="30"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                      />
                     </div>
 
                     <div>
                       <label className="block text-zinc-400 mb-1 font-medium">ໄລຍະເວລາຜ່ອນ (ເດືອນ)</label>
-                      <select
+                      <input
+                        type="number"
+                        min="1"
                         value={tenureMonths}
                         onChange={(e) => setTenureMonths(Number(e.target.value))}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
-                      >
-                        <option value={12}>12 ເດືອນ (1 ປີ)</option>
-                        <option value={24}>24 ເດືອນ (2 ປີ)</option>
-                        <option value={36}>36 ເດືອນ (3 ປີ)</option>
-                        <option value={48}>48 ເດືອນ (4 ປີ)</option>
-                        <option value={60}>60 ເດືອນ (5 ປີ)</option>
-                      </select>
+                        placeholder="48"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                      />
                     </div>
                   </div>
 
@@ -1057,8 +1340,8 @@ export default function POSSalesView({
               )}
 
               {/* Discount Input (USD Only) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2">
-                <div>
+              <div className="text-xs pt-2">
+                <div className="max-w-md">
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-zinc-400 font-medium">ສ່ວນຫຼຸດພິເສດ ($ USD)</label>
                   </div>
@@ -1072,26 +1355,15 @@ export default function POSSalesView({
                       placeholder="0"
                       value={discountUSD}
                       onChange={(e) => handleDiscountChange(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-7 pr-3 py-2 text-white font-mono focus:outline-none"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-7 pr-3 py-2 text-white font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ທີ່ປຶກສາການຂາຍ (Sales Rep)</label>
-                  <input
-                    type="text"
-                    value={salesRep}
-                    placeholder="ຊື່ທີ່ປຶກສາການຂາຍ..."
-                    onChange={(e) => setSalesRep(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
-                  />
                 </div>
               </div>
             </div>
 
             {/* Step 4: Free Gifts & Privileges Selection with Admin Management */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4">
+            <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
                 <div className="flex items-center gap-2 text-white font-bold text-sm">
                   <Sparkles className="w-4 h-4 text-zinc-300" />
@@ -1116,7 +1388,7 @@ export default function POSSalesView({
                       <ShieldCheck className="w-3 h-3" />
                       <span>{lang === 'lo' ? 'ສິດ Admin: ເພີ່ມໝວດ / ແພັກເກດຂອງແຖມໃໝ່' : lang === 'th' ? 'สิทธิ์ Admin: เพิ่มหมวด / แพ็กเกจของแถมใหม่' : 'Add New Dealership Package'}</span>
                     </span>
-                    <span className="text-[10px] text-zinc-500 font-mono">{t.supabaseDatabase}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">{t.supabaseLiveSync}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
@@ -1190,7 +1462,7 @@ export default function POSSalesView({
             </div>
 
             {/* Step 5: Final Price Summary & Execute Sale Button */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 space-y-4 shadow-2xl">
+            <div className="theme-adaptive-dark-surface rounded-3xl border border-zinc-700 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 shadow-xl sm:p-6 space-y-4">
               <div className="flex justify-between items-baseline pb-3 border-b border-zinc-800 font-mono">
                 <span className="text-zinc-400 text-xs">{t.sellingPrice}:</span>
                 <span className="text-white text-base">${basePriceUSD.toLocaleString()}</span>
@@ -1203,12 +1475,12 @@ export default function POSSalesView({
                 </div>
               )}
 
-              <div className="flex justify-between items-baseline text-white">
+              <div className="pos-net-total flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 text-white">
                 <div>
                   <span className="text-sm font-bold block">{t.netPaymentTotal}:</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-3xl font-black font-mono text-white">
+                  <span className="text-3xl sm:text-4xl font-black font-mono text-white">
                     ${netPriceUSD.toLocaleString()} USD
                   </span>
                 </div>
@@ -1217,7 +1489,7 @@ export default function POSSalesView({
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3.5 bg-white hover:bg-zinc-200 text-black font-extrabold text-sm rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 hover:scale-[1.01]"
+                  className="pos-confirm-sale-button w-full min-h-14 py-3.5 bg-white hover:bg-zinc-200 active:scale-[0.99] text-black font-extrabold text-sm rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/30"
                 >
                   <ShoppingBag className="w-5 h-5 fill-black" />
                   <span>{t.confirmSaleAndDeduct}</span>
@@ -1243,8 +1515,9 @@ export default function POSSalesView({
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsEnlargeQrOpen(false)}
-                className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800"
+                className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1350,27 +1623,47 @@ export default function POSSalesView({
           </div>
         </div>
       )}
+    </div>
 
       {/* INSTANT PRINTABLE BILL MODAL UPON SALE COMPLETION */}
       {createdBill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 text-white space-y-5 max-h-[95vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:max-w-none print:shadow-none">
+          <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 text-white space-y-5 max-h-[95vh] overflow-y-auto shadow-2xl print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0 print:max-h-none print:max-w-none print:w-full print:overflow-visible print-modal-container">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800 print:hidden">
               <div className="flex items-center gap-2 text-white">
                 <CheckCircle2 className="w-5 h-5 text-white" />
                 <h3 className="font-bold text-base text-white">{t.saleCompletedSuccess}</h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={handleDownloadPosPdf}
+                  disabled={isExportingPosPdf}
+                  className="px-3 py-1.5 bg-zinc-100 hover:bg-white text-black rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-zinc-300 disabled:opacity-60 cursor-pointer"
+                  title="ບັນທຶກໃບບິນເປັນ PDF"
+                >
+                  {isExportingPosPdf ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                      <span>ກຳລັງສ້າງ PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5 text-black" />
+                      <span>{lang === 'lo' ? 'ບັນທຶກເປັນ PDF' : 'Save PDF'}</span>
+                    </>
+                  )}
+                </button>
+                <button
                   onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                  className="px-3 py-1.5 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span>{t.printInvoiceBtn}</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setCreatedBill(null)}
-                  className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800"
+                  className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1378,44 +1671,61 @@ export default function POSSalesView({
             </div>
 
             {/* Bill Preview Card */}
-            <div className="p-6 bg-black border border-zinc-800 rounded-2xl space-y-4 text-xs font-sans">
+            <div
+              id="printable-pos-receipt"
+              className="a4-document-canvas p-6 official-dealer-document bg-white text-black border border-black rounded-2xl space-y-4 text-xs font-sans shadow-md print:m-0 print:p-2 print:border-none print:shadow-none"
+            >
               <div className="flex justify-between items-start pb-4 border-b border-zinc-800">
                 <div>
-                  <span className="font-black tracking-widest text-base text-white">AVATR AUTO SERVICE</span>
-                  <p className="text-[10px] text-zinc-400 font-mono">{t.printInvoiceBtn || 'OFFICIAL SALES INVOICE'}</p>
+                  <span className="font-black tracking-widest text-base text-black">AVATR AUTO SERVICE</span>
+                  <p className="text-[10px] text-zinc-600 font-mono">{t.printInvoiceBtn || 'OFFICIAL SALES INVOICE'}</p>
                 </div>
                 <div className="text-right font-mono">
-                  <span className="text-white font-bold block">{createdBill.billNumber}</span>
-                  <span className="text-zinc-500 text-[10px]">{createdBill.date}</span>
+                  <span className="text-black font-bold block">{createdBill.billNumber}</span>
+                  <span className="text-zinc-600 text-[10px]">{createdBill.date}</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-zinc-300">
+              <div className="grid grid-cols-2 gap-4 text-zinc-700">
                 <div>
-                  <span className="text-zinc-500 font-mono text-[10px] uppercase block">{t.buyerInfo}:</span>
-                  <strong className="text-white text-sm block">{createdBill.customerName}</strong>
-                  <span className="font-mono text-zinc-400 flex items-center gap-1 mt-0.5">
-                    <Phone className="w-3 h-3 text-zinc-400" />
-                    <span>{createdBill.customerPhone}</span>
-                  </span>
-                  <span className="text-zinc-400 block">{createdBill.customerAddress}, {createdBill.customerProvince}</span>
+                  <span className="text-zinc-600 font-mono text-[10px] uppercase block">{t.buyerInfo}:</span>
+                  <strong className="text-black text-sm block">{createdBill.customerName}</strong>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="font-mono text-zinc-700 flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-zinc-600" />
+                      <span>{createdBill.customerPhone}</span>
+                    </span>
+                    {createdBill.customerPhone && (
+                      <a
+                        href={getWhatsAppUrl(createdBill.customerPhone, createdBill.customerName, createdBill.model, lang)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-sans font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-emerald-200"
+                        title="ສົນທະນາ WhatsApp ກັບລູກຄ້າ"
+                      >
+                        <WhatsAppIcon className="w-3 h-3" />
+                        <span>WhatsApp</span>
+                      </a>
+                    )}
+                  </div>
+                  <span className="text-zinc-700 block">{createdBill.customerAddress}, {createdBill.customerProvince}</span>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-zinc-500 font-mono text-[10px] uppercase block">{t.tableModel}:</span>
-                  <strong className="text-white text-sm block">{createdBill.model}</strong>
-                  <span className="text-zinc-400 font-mono block">VIN: {createdBill.vin}</span>
-                  <span className="text-zinc-400 block">{createdBill.color} • {createdBill.plateNumber}</span>
+                  <span className="text-zinc-600 font-mono text-[10px] uppercase block">{t.tableModel}:</span>
+                  <strong className="text-black text-sm block">{createdBill.model}</strong>
+                  <span className="text-zinc-700 font-mono block">VIN: {createdBill.vin}</span>
+                  <span className="text-zinc-700 block">{createdBill.color || '-'} • {createdBill.plateNumber || '-'}</span>
                 </div>
               </div>
 
-              <div className="p-3 bg-zinc-900/80 rounded-xl border border-zinc-800 flex justify-between items-center font-mono">
+              <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-300 flex justify-between items-center font-mono text-black">
                 <span>{t.netPaymentTotal}:</span>
-                <span className="text-xl font-black text-white">${createdBill.netTotalUSD.toLocaleString()}</span>
+                <span className="text-xl font-black text-black">${createdBill.netTotalUSD.toLocaleString()}</span>
               </div>
 
-              <div className="text-[11px] text-zinc-400">
-                {t.paymentType}: <strong className="text-white uppercase">{createdBill.paymentMethod}</strong> • {t.salesRepresentative}: {createdBill.recordedBy}
+              <div className="text-[11px] text-zinc-700">
+                {t.paymentType}: <strong className="text-black uppercase">{createdBill.paymentMethod}</strong> • {t.salesRepresentative}: {createdBill.recordedBy}
               </div>
             </div>
 
@@ -1440,14 +1750,34 @@ export default function POSSalesView({
         </div>
       )}
 
-      <CurrencyModal
-        isOpen={isCurrencyOpen}
-        onClose={() => setIsCurrencyOpen(false)}
-        currencies={currencies}
-        onCurrenciesChange={persistCurrencies}
-        activeCurrencyCode={activeCurrencyCode}
-        onSelectActiveCurrency={selectCurrency}
-        isSuperAdmin={isSuperAdmin}
+      {/* Modern Confirmation Popup Modal for Deleting Package / Privilege */}
+      <ConfirmDeleteModal
+        isOpen={!!packageToDelete}
+        onClose={() => setPackageToDelete(null)}
+        onConfirm={async () => {
+          if (!packageToDelete) return;
+          const pkg = packageToDelete;
+          const updated = giftOptions.filter(g => g !== pkg);
+          setGiftOptions(updated);
+          setSelectedGifts(prev => prev.filter(g => g !== pkg));
+          localStorage.setItem('avatr_dealership_packages_v2', JSON.stringify(updated));
+          try {
+            await saveDealershipConfigToSupabase({ campaignCategories: updated });
+          } catch (e) {
+            console.warn('Supabase delete package fallback:', e);
+          }
+          triggerToast(`ລົບໝວດ "${pkg}" ອອກຮຽບຮ້ອຍແລ້ວ!`);
+          setPackageToDelete(null);
+        }}
+        itemName={packageToDelete || ''}
+        itemType="PACKAGE / PRIVILEGE"
+        title={lang === 'lo' ? 'ຢືນຢັນການລົບຊຸດຂອງແຖມ / ບໍລິການ' : 'Confirm Delete Package'}
+        description={lang === 'lo'
+          ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບ "${packageToDelete}" ອອກຈາກລາຍການຂອງແຖມ?`
+          : `Are you sure you want to delete package "${packageToDelete}"?`
+        }
+        confirmButtonText={lang === 'lo' ? 'ຢືນຢັນລົບ' : 'Delete'}
+        cancelButtonText={lang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
         lang={lang}
       />
     </div>

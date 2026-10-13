@@ -28,8 +28,9 @@ export default function VehicleModal({
       <div className="relative w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl text-white max-h-[92vh] overflow-y-auto">
         {/* Close Button */}
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 bg-black/60 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full transition-colors border border-zinc-700"
+          className="absolute top-4 right-4 z-10 p-2 bg-black/70 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full transition-colors border border-zinc-700 cursor-pointer shadow-lg"
         >
           <X className="w-5 h-5" />
         </button>
@@ -189,20 +190,22 @@ export default function VehicleModal({
 
             <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => {
                   onClose();
                   onOpenQuote(vehicle);
                 }}
-                className="px-4 py-2 border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-medium transition-colors"
+                className="px-4 py-2.5 border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
               >
                 {lang === 'lo' ? 'ອອກໃບສະເໜີລາຄາ / ຕາຕະລາງຜ່ອນ' : lang === 'th' ? 'ออกใบเสนอราคา / ตารางผ่อน' : 'Quotation & Finance'}
               </button>
               <button
+                type="button"
                 onClick={() => {
                   onClose();
                   onOpenTestDrive(vehicle.name);
                 }}
-                className="px-5 py-2 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-semibold transition-colors shadow-md"
+                className="px-6 py-2.5 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer active:scale-98"
               >
                 {lang === 'lo' ? 'ນັດໝາຍທົດລອງຂັບ' : lang === 'th' ? 'นัดหมายทดลองขับ' : 'Book Test Drive'}
               </button>

@@ -1,10 +1,64 @@
+# Dependencies
 node_modules/
-build/
+.pnp
+.pnp.js
+
+# Production build artifacts
 dist/
+build/
+out/
+
+# Testing & Coverage
 coverage/
+*.lcov
+
+# System Files
 .DS_Store
+Thumbs.db
 *.log
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# -------------------------------------------------------------
+# STRICT SECURITY & SECRET LEAK PREVENTION
+# NEVER COMMIT CREDENTIALS, KEYS, SERVICE ROLES, OR PASSWORDS
+# -------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+.env.test
 .env*
 !.env.example
-.vscode/
 
+# Private Keys & Certificates
+*.pem
+*.key
+*.crt
+*.cert
+*.pfx
+*.p12
+
+# Cloud & Service Account Secrets
+*secret*
+*credentials*.json
+serviceAccountKey*.json
+service-account*.json
+*.service_role*
+supabase-service-key*
+
+# Local Supabase & Firebase Residuals
+.supabase/
+.firebaserc
+firebase.json
+firestore.rules
+firestore.indexes.json

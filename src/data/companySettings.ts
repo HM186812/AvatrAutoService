@@ -13,14 +13,14 @@ export interface CompanyBankInfo {
 }
 
 export const DEFAULT_COMPANY_BANK_INFO: CompanyBankInfo = {
-  accountName: 'AVATR AUTO SERVICE SOLE CO., LTD',
-  bankName: 'ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ',
+  accountName: 'LAO THANI TRACTOR SOLE CO., LTD',
+  bankName: 'BCEL (307) - ທະນາຄານການຄ້າຕ່າງປະເທດລາວ ມະຫາຊົນ',
   usdAccount: '010-12-00-01458923-001',
   lakAccount: '010-12-00-01458923-002',
   cnyAccount: '010-12-00-01458923-003',
   thbAccount: '010-12-00-01458923-004',
-  hotline: '+856 20 55575537',
-  branch: 'ສາຂາ ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ, ນະຄອນຫຼວງວຽງຈັນ',
+  hotline: '(856-20) 58181999',
+  branch: 'ຖະໜົນໄກສອນ ພົມວິຫານ, ບ້ານ ສີວິໄລ, ເມືອງ ໄຊທານີ, ນະຄອນຫຼວງວຽງຈັນ',
   qrCodeUrl: null,
   updatedAt: '2026-10-01 09:00',
   updatedBy: 'Admin (Super Admin)',

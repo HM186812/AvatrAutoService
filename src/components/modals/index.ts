@@ -4,3 +4,7 @@ export { default as ServiceModal } from './ServiceModal';
 export { default as TestDriveModal } from './TestDriveModal';
 export { default as VehicleModal } from './VehicleModal';
 export { default as CurrencyModal } from './CurrencyModal';
+export { default as ConfirmDeleteModal } from './ConfirmDeleteModal';
+export { default as CustomerDocumentsModal } from './CustomerDocumentsModal';
+export { default as InstallmentLedgerModal } from './InstallmentLedgerModal';
+export { default as PaymentConfirmModal } from './PaymentConfirmModal';

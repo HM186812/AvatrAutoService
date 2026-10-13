@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { CustomCurrencyConfig, Language } from '../../types';
 import { translations } from '../../data/translations';
+import { saveStoredCurrencies } from '../../data/currencies';
+import { saveDealershipConfigToSupabase } from '../../supabase';
 import { DollarSign, Plus, Trash2, Check, X, RefreshCw, ShieldCheck, Lock } from 'lucide-react';
 
 interface CurrencyModalProps {
@@ -10,7 +12,6 @@ interface CurrencyModalProps {
   onCurrenciesChange: (updated: CustomCurrencyConfig[]) => void;
   activeCurrencyCode: string;
   onSelectActiveCurrency: (code: string) => void;
-  onPersist?: (updated: CustomCurrencyConfig[]) => void;
   isSuperAdmin?: boolean;
   lang?: Language;
 }
@@ -22,7 +23,6 @@ export default function CurrencyModal({
   onCurrenciesChange,
   activeCurrencyCode,
   onSelectActiveCurrency,
-  onPersist,
   isSuperAdmin = false,
   lang = 'lo',
 }: CurrencyModalProps) {
@@ -49,7 +49,12 @@ export default function CurrencyModal({
     const updated = list.map(c => c.code === code ? { ...c, rateToUSD: tempRate } : c);
     setList(updated);
     onCurrenciesChange(updated);
-    onPersist?.(updated);
+    saveStoredCurrencies(updated);
+    try {
+      saveDealershipConfigToSupabase({ currencies: updated });
+    } catch (e) {
+      console.warn('Supabase currency save fallback:', e);
+    }
     setEditingCode(null);
   };
 
@@ -70,7 +75,12 @@ export default function CurrencyModal({
     const updated = [...list, newCurr];
     setList(updated);
     onCurrenciesChange(updated);
-    onPersist?.(updated);
+    saveStoredCurrencies(updated);
+    try {
+      saveDealershipConfigToSupabase({ currencies: updated });
+    } catch (e) {
+      console.warn('Supabase currency save fallback:', e);
+    }
     setIsAddingNew(false);
     setNewCode('');
     setNewNameLo('');
@@ -86,7 +96,12 @@ export default function CurrencyModal({
     const updated = list.filter(c => c.code !== code);
     setList(updated);
     onCurrenciesChange(updated);
-    onPersist?.(updated);
+    saveStoredCurrencies(updated);
+    try {
+      saveDealershipConfigToSupabase({ currencies: updated });
+    } catch (e) {
+      console.warn('Supabase currency save fallback:', e);
+    }
     if (activeCurrencyCode === code) {
       onSelectActiveCurrency('USD');
     }
@@ -100,7 +115,12 @@ export default function CurrencyModal({
     ];
     setList(defaultList);
     onCurrenciesChange(defaultList);
-    onPersist?.(defaultList);
+    saveStoredCurrencies(defaultList);
+    try {
+      saveDealershipConfigToSupabase({ currencies: defaultList });
+    } catch (e) {
+      console.warn('Supabase currency save fallback:', e);
+    }
   };
 
   return (
@@ -118,8 +138,9 @@ export default function CurrencyModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 transition-colors"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -174,7 +195,7 @@ export default function CurrencyModal({
                             step="any"
                             value={tempRate}
                             onChange={(e) => setTempRate(Number(e.target.value))}
-                            className="w-28 bg-black border border-zinc-700 rounded-lg px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-white"
+                            className="w-28 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-slate-950 dark:focus:border-white"
                           />
                         </div>
                       ) : (
@@ -234,26 +255,26 @@ export default function CurrencyModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1">ລະຫັດສະກຸນເງິນ (Code) *</label>
+                  <label className="block text-zinc-400 mb-1">ລະຫັດສະກຸນເງິນ (Code) <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. CNY, EUR, JPY"
                     value={newCode}
                     onChange={(e) => setNewCode(e.target.value)}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white uppercase font-mono focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white uppercase font-mono focus:outline-none focus:border-slate-950 dark:focus:border-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1">ສັນຍະລັກ (Symbol) *</label>
+                  <label className="block text-zinc-400 mb-1">ສັນຍະລັກ (Symbol) <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. ¥, €, £"
                     value={newSymbol}
                     onChange={(e) => setNewSymbol(e.target.value)}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-slate-950 dark:focus:border-white"
                   />
                 </div>
               </div>
@@ -266,12 +287,12 @@ export default function CurrencyModal({
                     placeholder="e.g. ຢວນຈີນ (CNY)"
                     value={newNameLo}
                     onChange={(e) => setNewNameLo(e.target.value)}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-slate-950 dark:focus:border-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1">ຄ່າອ້າງອີງທຽບ 1 USD *</label>
+                  <label className="block text-zinc-400 mb-1">ຄ່າອ້າງອີງທຽບ 1 USD <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     step="any"
@@ -279,7 +300,7 @@ export default function CurrencyModal({
                     min="0.000001"
                     value={newRate}
                     onChange={(e) => setNewRate(Number(e.target.value))}
-                    className="w-full bg-black border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-white"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono focus:outline-none focus:border-slate-950 dark:focus:border-white"
                   />
                 </div>
               </div>
@@ -288,13 +309,13 @@ export default function CurrencyModal({
                 <button
                   type="button"
                   onClick={() => setIsAddingNew(false)}
-                  className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-700"
+                  className="px-3.5 py-2 bg-zinc-800 text-zinc-300 hover:text-white rounded-xl hover:bg-zinc-700 transition-colors text-xs font-semibold cursor-pointer"
                 >
                   ຍົກເລີກ
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl shadow-md"
+                  className="px-5 py-2 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl shadow-md transition-all text-xs cursor-pointer active:scale-98"
                 >
                   ບັນທຶກສະກຸນເງິນ
                 </button>
@@ -305,7 +326,7 @@ export default function CurrencyModal({
               <button
                 type="button"
                 onClick={() => setIsAddingNew(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-zinc-200 text-black rounded-xl text-xs font-bold shadow-md"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-zinc-200 text-black rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-98"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>+ ເພີ່ມສະກຸນເງິນ (Admin)</span>

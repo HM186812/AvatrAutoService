@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { X, Wrench } from 'lucide-react';
-import { ServiceAppointment, Language, VehicleModel } from '../../types';
+import React, { useState } from 'react';
+import { X, Wrench, Calendar, Clock } from 'lucide-react';
+import { ServiceAppointment, Language } from '../../types';
 import { translations } from '../../data/translations';
 
 interface ServiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddService: (service: Omit<ServiceAppointment, 'id'>) => void;
-  vehicles: VehicleModel[];
   lang?: Language;
 }
 
-export default function ServiceModal({ isOpen, onClose, onAddService, vehicles, lang = 'lo' }: ServiceModalProps) {
+export default function ServiceModal({ isOpen, onClose, onAddService, lang = 'lo' }: ServiceModalProps) {
   const t = translations[lang] || translations.lo;
 
   const [customerName, setCustomerName] = useState('');
@@ -22,10 +21,6 @@ export default function ServiceModal({ isOpen, onClose, onAddService, vehicles, 
   const [scheduledDate, setScheduledDate] = useState(new Date().toISOString().split('T')[0]);
   const [scheduledTime, setScheduledTime] = useState('10:00');
   const [notes, setNotes] = useState('');
-
-  useEffect(() => {
-    if (vehicles.length && !vehicles.some((vehicle) => vehicle.name === model)) setModel(vehicles[0].name);
-  }, [vehicles, model]);
 
   if (!isOpen) return null;
 
@@ -51,15 +46,15 @@ export default function ServiceModal({ isOpen, onClose, onAddService, vehicles, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl p-6 text-white max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl p-6 sm:p-7 text-white max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-zinc-900 border border-zinc-700 rounded-xl">
               <Wrench className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-white">
+              <h3 className="font-bold text-base text-white">
                 {lang === 'lo' ? 'ນັດໝາຍສ້ອມບຳລຸງ avatrAutoService' : lang === 'th' ? 'นัดหมายซ่อมบำรุง avatrAutoService' : 'Schedule Auto Service'}
               </h3>
               <p className="text-xs text-zinc-400">
@@ -68,8 +63,9 @@ export default function ServiceModal({ isOpen, onClose, onAddService, vehicles, 
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 transition-colors"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -129,7 +125,9 @@ export default function ServiceModal({ isOpen, onClose, onAddService, vehicles, 
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white"
               >
-                {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.name}>{vehicle.name}</option>)}
+                <option value="AVATR 12">AVATR 12</option>
+                <option value="AVATR 11">AVATR 11</option>
+                <option value="AVATR 07">AVATR 07</option>
               </select>
             </div>
 
@@ -153,14 +151,16 @@ export default function ServiceModal({ isOpen, onClose, onAddService, vehicles, 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ວັນທີນັດໝາຍ' : lang === 'th' ? 'วันที่นัดหมาย' : 'Date'}
+              <label className="block text-zinc-400 mb-1 font-medium flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                <span>{lang === 'lo' ? 'ວັນເດືອນປີ ນັດໝາຍ *' : lang === 'th' ? 'วัน/เดือน/ปี นัดหมาย *' : 'Scheduled Date (YYYY-MM-DD) *'}</span>
               </label>
               <input
                 type="date"
+                required
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
               />
             </div>
 
@@ -194,13 +194,13 @@ export default function ServiceModal({ isOpen, onClose, onAddService, vehicles, 
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-zinc-800 hover:bg-zinc-900 text-zinc-300 rounded-xl"
+              className="px-4 py-2.5 border border-zinc-800 hover:bg-zinc-900 text-zinc-300 hover:text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
             >
               {lang === 'lo' ? 'ຍົກເລີກ' : lang === 'th' ? 'ยกเลิก' : 'Cancel'}
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-white text-black font-semibold rounded-xl hover:bg-zinc-200 transition-colors shadow-md"
+              className="px-6 py-2.5 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all shadow-md text-xs cursor-pointer active:scale-98"
             >
               {lang === 'lo' ? 'ຢືນຢັນການນັດໝາຍ' : lang === 'th' ? 'ยืนยันการนัดหมาย' : 'Confirm Service'}
             </button>

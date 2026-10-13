@@ -59,7 +59,7 @@ export interface TranslationSchema {
   roleTechnician: string;
   roleGeneralUser: string;
   switchRoleBtn: string;
-  supabaseDatabase: string;
+  supabaseLiveSync: string;
   offlineSync: string;
   profileTooltip: string;
   currencyTooltip: string;
@@ -181,6 +181,7 @@ export interface TranslationSchema {
   billsSubtitle: string;
   filterAllBills: string;
   filterSaleBills: string;
+  filterInstallmentBills: string;
   filterImportBills: string;
   billNumber: string;
   billDate: string;
@@ -506,7 +507,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     roleTechnician: 'ຊ່າງກວດ PDI & CATL',
     roleGeneralUser: 'User ທຳມະດາ',
     switchRoleBtn: 'ປ່ຽນສິດ',
-    supabaseDatabase: 'Supabase Database',
+    supabaseLiveSync: 'Supabase Cloud Sync (ສົດ)',
     offlineSync: 'Offline Persistence',
     profileTooltip: 'ເບິ່ງໂປຣໄຟລ໌ສ່ວນຕົວ',
     currencyTooltip: 'ເລືອກ ຫຼື ຕັ້ງຄ່າສະກຸນເງິນ',
@@ -565,7 +566,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     statusContacted: 'ຕິດຕໍ່ແລ້ວ',
     statusTestDrive: 'ນັດທົດລອງຂັບ',
     statusNegotiation: 'ເຈລະຈາ / ສະເໜີລາຄາ',
-    statusDelivered: 'ສົ່ງມອບສຳເລັດ',
+    statusDelivered: 'ຈ່າຍແລ້ວ / ສົ່ງມອບສຳເລັດ',
     statusLost: 'ຍົກເລີກ / ພາດໂອກາດ',
 
     // Inventory & Stock
@@ -614,7 +615,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     buyerIDPassport: 'ເລກບັດປະຊາຊົນ / Passport',
     paymentType: 'ຮູບແບບການຊຳລະເງິນ',
     paymentCash: 'ເງິນສົດ (Cash)',
-    paymentTransfer: 'ໂອນເງິນຜ່ານທະນາຄານ (Bank Transfer)',
+    paymentTransfer: 'ໂອນເງິນ / QR (Transfer / QR)',
     paymentInstallments: 'ຜ່ອນຊຳລະ / ສິນເຊື່ອ (Installments)',
     sellingPrice: 'ລາຄາຂາຍລົດ',
     discountAmount: 'ສ່ວນຫຼຸດ (Discount)',
@@ -628,6 +629,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     billsSubtitle: 'ລວມປະຫວັດໃບຂາຍລົດ (POS Invoices) ແລະ ໃບນຳເຂົ້າລົດ (Stock-In Receipts)',
     filterAllBills: 'ບິນທັງໝົດ',
     filterSaleBills: 'ໃບຂາຍລົດ (Sales)',
+    filterInstallmentBills: 'ບິນຜ່ອນ & ເງິນດາວ (Financing)',
     filterImportBills: 'ໃບຮັບນຳເຂົ້າ (Stock-In)',
     billNumber: 'ເລກທີໃບບິນ',
     billDate: 'ວັນທີ / ເວລາ',
@@ -784,9 +786,9 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     tabStockHistory: 'ປະຫວັດການເຄື່ອນໄຫວ (Stock Movement Logs)',
     filterAllStatus: 'ສະຖານະທັງໝົດ',
     filterAllModels: 'ລຸ້ນລົດທັງໝົດ',
-    filterAllEventPromo: 'ທຸກຮູບແບບ',
-    filterEventOnly: 'ສະເພາະລົດ Event & ໂປຣ',
-    filterStandardOnly: 'ລົດປົກກະຕິ',
+    filterAllEventPromo: 'ລົດທຸກປະເພດ',
+    filterEventOnly: 'ລົດສຳລັບງານສະແດງ ຫຼື ໂປຣໂມຊັນ',
+    filterStandardOnly: 'ລົດທົ່ວໄປໃນໂຊຣູມ',
     btnSellCar: 'ຂາຍລົດ (POS)',
     btnEditPrice: 'ແກ້ໄຂລາຄາ',
     btnDeleteCar: 'ລຶບລົດ',
@@ -837,7 +839,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     bankAccountNumber: 'ເລກບັນຊີ:',
     bankBranch: 'ສາຂາ:',
     cashPaymentDesc: 'ຊຳລະດ້ວຍເງິນສົດເຕັມຈຳນວນທີ່ໂຊຣູມ',
-    installmentLoanDesc: 'ຜ່ອນຊຳລະຜ່ານທະນາຄານຮ່ວມມື (BCEL, JDB, LDB)',
+    installmentLoanDesc: 'ແຜນຜ່ອນຊຳລະຕາມງວດ',
     downPaymentLabel: 'ເງິນດາວน์ (Down Payment)',
     loanTermMonths: 'ໄລຍະເວລາຜ່ອນ (ເດືອນ)',
     monthlyInstallment: 'ຄ່າງວດປະມານການຕໍ່ເດືອນ',
@@ -950,7 +952,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     roleTechnician: 'PDI & CATL Technician',
     roleGeneralUser: 'General User',
     switchRoleBtn: 'Switch Role',
-    supabaseDatabase: 'Supabase Database',
+    supabaseLiveSync: 'Supabase Cloud Sync (Live)',
     offlineSync: 'Offline Persistence',
     profileTooltip: 'View User Profile',
     currencyTooltip: 'Select or configure currencies',
@@ -1054,7 +1056,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     buyerIDPassport: 'National ID / Passport Number',
     paymentType: 'Payment Method',
     paymentCash: 'Cash Payment',
-    paymentTransfer: 'Bank Transfer (QR / Wire)',
+    paymentTransfer: 'Transfer / QR Payment',
     paymentInstallments: 'Financing / Installments',
     sellingPrice: 'Vehicle Selling Price',
     discountAmount: 'Discount Amount',
@@ -1068,6 +1070,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     billsSubtitle: 'Comprehensive archive of POS Sales Invoices and Stock-In Receiving Receipts',
     filterAllBills: 'All Bills',
     filterSaleBills: 'Sales Invoices',
+    filterInstallmentBills: 'Installment & Down Payment Bills',
     filterImportBills: 'Stock-In Receipts',
     billNumber: 'Invoice #',
     billDate: 'Date & Time',
@@ -1275,7 +1278,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     bankAccountNumber: 'Account Number:',
     bankBranch: 'Bank Branch:',
     cashPaymentDesc: 'Full cash payment settlement at showroom cashier',
-    installmentLoanDesc: 'Banking partner auto loan installment (BCEL, JDB, LDB)',
+    installmentLoanDesc: 'Vehicle installment payment plan',
     downPaymentLabel: 'Down Payment',
     loanTermMonths: 'Loan Term (Months)',
     monthlyInstallment: 'Estimated Monthly Payment',
@@ -1390,7 +1393,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     roleTechnician: 'ช่างตรวจ PDI & CATL',
     roleGeneralUser: 'ผู้ใช้งานทั่วไป',
     switchRoleBtn: 'เปลี่ยนสิทธิ์',
-    supabaseDatabase: 'Supabase Database',
+    supabaseLiveSync: 'Supabase Cloud Sync (สด)',
     offlineSync: 'Offline Persistence',
     profileTooltip: 'ดูโปรไฟล์ส่วนตัว',
     currencyTooltip: 'เลือกหรือตั้งค่าสกุลเงิน',
@@ -1498,7 +1501,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     buyerIDPassport: 'เลขบัตรประชาชน / Passport',
     paymentType: 'รูปแบบการชำระเงิน',
     paymentCash: 'เงินสด (Cash)',
-    paymentTransfer: 'โอนเงินผ่านธนาคาร (Bank Transfer)',
+    paymentTransfer: 'โอนเงิน / QR (Transfer / QR)',
     paymentInstallments: 'ผ่อนชำระ / สินเชื่อ (Installments)',
     sellingPrice: 'ราคาขายรถยนต์',
     discountAmount: 'ส่วนลด (Discount)',
@@ -1512,6 +1515,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     billsSubtitle: 'รวมประวัติใบขายรถ (POS Invoices) และใบบันทึกนำเข้ารถ (Stock-In Receipts)',
     filterAllBills: 'บิลทั้งหมด',
     filterSaleBills: 'ใบขายรถยนต์ (Sales)',
+    filterInstallmentBills: 'บิลผ่อนชำระ & เงินดาวน์ (Financing)',
     filterImportBills: 'ใบรับนำเข้า (Stock-In)',
     billNumber: 'เลขที่เอกสาร / บิล',
     billDate: 'วันที่ / เวลา',
@@ -1721,7 +1725,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     bankAccountNumber: 'เลขที่บัญชี:',
     bankBranch: 'สาขา:',
     cashPaymentDesc: 'ชำระด้วยเงินสดเต็มจำนวนที่โชว์รูม',
-    installmentLoanDesc: 'ผ่อนชำระผ่านธนาคารพันธมิตร (BCEL, JDB, LDB)',
+    installmentLoanDesc: 'แผนผ่อนชำระรถยนต์ตามงวด',
     downPaymentLabel: 'เงินดาวน์ (Down Payment)',
     loanTermMonths: 'ระยะเวลาผ่อนชำระ (เดือน)',
     monthlyInstallment: 'ค่างวดประมาณการต่อเดือน',

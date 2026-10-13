@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Lead, 
   ServiceAppointment, 
@@ -6,35 +6,55 @@ import {
   VehicleModel, 
   InventoryItem, 
   SystemUser, 
+  UserRole,
   StockLogRecord, 
   InvoiceBillRecord, 
   Language, 
   ActiveMenu 
 } from './types';
+import { 
+  AVATR_VEHICLES, 
+  INITIAL_LEADS, 
+  INITIAL_SERVICES, 
+  INITIAL_TEST_DRIVES, 
+  INITIAL_INVENTORY, 
+  INITIAL_USERS, 
+  INITIAL_STOCK_LOGS, 
+  INITIAL_BILLS 
+} from './data/mockData';
 import { translations } from './data/translations';
-import { getModelStockCounts, isLowStock, isOutOfStock } from './data/stockSummary';
-import { isSupabaseConfigured, requireSupabase } from './backend/client';
-import { newRecordId } from './backend/ids';
-import {
-  getSignedInStaff,
-  loadBackendData,
-  saveBillRecord,
-  saveInventoryItem as persistInventoryItem,
-  saveLead,
-  saveStaffProfile,
-  saveVehicleModel,
-  saveServiceAppointment,
-  saveTestDriveBooking,
-  updateServiceAppointment,
-  updateTestDriveBooking,
-  linkTestDriveToCustomer,
-  signInStaff,
-  deleteBill,
-  deleteInventoryItem,
-} from './backend/data';
+import { 
+  isSupabaseConfigured, 
+  seedSupabaseIfEmpty, 
+  subscribeToInventory, 
+  subscribeToBills, 
+  subscribeToVehicleModels, 
+  subscribeToUsers, 
+  deleteBillFromSupabase,
+  signOutSupabase
+} from './supabase';
 // Categorized Components & Views
 import { Sidebar } from './components/layout';
 import { LoginView } from './components/auth';
+import {
+  DashboardView,
+  CustomerView,
+  InventoryView,
+  StockInView,
+  POSSalesView,
+  BillsManagementView,
+  StockAlertsView,
+  UserManagementView,
+  ProfileView,
+  InstallmentDashboardView,
+} from './components/views';
+import {
+  NewLeadModal,
+  QuotationModal,
+  ServiceModal,
+  TestDriveModal,
+  VehicleModal,
+} from './components/modals';
 import { 
   Menu, 
   LayoutDashboard, 
@@ -43,34 +63,23 @@ import {
   PackagePlus, 
   ShoppingBag, 
   FileText, 
+  CreditCard,
   AlertTriangle, 
   Key, 
   User as UserIcon, 
   LogOut, 
   DollarSign, 
   Coins, 
-  CalendarDays,
   Plus, 
-  ChevronRight,
+  ChevronRight, 
+  ShieldCheck, 
+  Lock,
+  Cloud,
+  CloudCheck,
+  Radio,
   Sun,
   Moon
 } from 'lucide-react';
-
-const DashboardView = lazy(() => import('./components/views/DashboardView'));
-const CustomerView = lazy(() => import('./components/views/CustomerView'));
-const InventoryView = lazy(() => import('./components/views/InventoryView'));
-const StockInView = lazy(() => import('./components/views/StockInView'));
-const POSSalesView = lazy(() => import('./components/views/POSSalesView'));
-const BillsManagementView = lazy(() => import('./components/views/BillsManagementView'));
-const StockAlertsView = lazy(() => import('./components/views/StockAlertsView'));
-const AppointmentsView = lazy(() => import('./components/views/AppointmentsView'));
-const UserManagementView = lazy(() => import('./components/views/UserManagementView'));
-const ProfileView = lazy(() => import('./components/views/ProfileView'));
-const NewLeadModal = lazy(() => import('./components/modals/NewLeadModal'));
-const QuotationModal = lazy(() => import('./components/modals/QuotationModal'));
-const ServiceModal = lazy(() => import('./components/modals/ServiceModal'));
-const TestDriveModal = lazy(() => import('./components/modals/TestDriveModal'));
-const VehicleModal = lazy(() => import('./components/modals/VehicleModal'));
 
 export default function App() {
   const [currentMenu, setCurrentMenu] = useState<ActiveMenu>('dashboard');
@@ -85,6 +94,8 @@ export default function App() {
     }
     return 'lo';
   });
+
+  const t = translations[lang] || translations.lo;
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
@@ -138,276 +149,252 @@ export default function App() {
     document.documentElement.lang = lang;
   }, [lang]);
 
+  const [activeSection, setActiveSection] = useState('home');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const FALLBACK_EMPTY_USER: SystemUser = {
-    id: '',
-    name: '',
-    email: '',
-    phone: '',
-    role: 'general_user',
-    roleTitleLo: 'General User',
-    department: '',
-    avatarInitials: '',
-    permissions: {
-      canManageUsers: false,
-      canDeleteUsers: false,
-      canGrantRoles: false,
-      canEditInventory: false,
-      canUploadQR: false,
-      canAddModels: false,
-      canDeductPOS: false,
-      canViewFinancials: false,
-      canUpdatePDI: false,
-      canViewVehicles: false,
-    },
-    status: 'suspended',
-    createdAt: '',
-  };
 
-  const [users, setUsers] = useState<SystemUser[]>([]);
-  const [currentUser, setCurrentUser] = useState<SystemUser>(FALLBACK_EMPTY_USER);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [services, setServices] = useState<ServiceAppointment[]>([]);
-  const [testDrives, setTestDrives] = useState<TestDriveBooking[]>([]);
-  const [stockLogs, setStockLogs] = useState<StockLogRecord[]>([]);
-  const [bills, setBills] = useState<InvoiceBillRecord[]>([]);
-  const [vehicles, setVehicles] = useState<VehicleModel[]>([]);
-  const [dealershipSettings, setDealershipSettings] = useState<Record<string, unknown>>({});
-  const [posInitialVin, setPosInitialVin] = useState<string | undefined>();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [backendError, setBackendError] = useState<string | null>(null);
-  const leadsRef = useRef<Lead[]>([]);
-  const databaseWriteQueue = useRef<Promise<void>>(Promise.resolve());
-  const leadWriteQueue = databaseWriteQueue;
-  const inventoryRef = useRef<InventoryItem[]>([]);
-  const inventoryWriteQueue = databaseWriteQueue;
-  const billRef = useRef<InvoiceBillRecord[]>([]);
-  const billWriteQueue = databaseWriteQueue;
-  const modelRef = useRef<VehicleModel[]>([]);
-  const modelWriteQueue = databaseWriteQueue;
-
-  const queueWrite = (queue: React.MutableRefObject<Promise<void>>, operation: () => Promise<void>, fallback: string) => {
-    queue.current = queue.current
-      .catch(() => undefined)
-      .then(operation)
-      .catch((error: unknown) => {
-        const message = error && typeof error === 'object' && 'message' in error
-          ? String(error.message)
-          : fallback;
-        setBackendError((previous) => previous ? `${previous} | ${message || fallback}` : message || fallback);
-      });
-  };
-
-  const setLeadsAndPersist: React.Dispatch<React.SetStateAction<Lead[]>> = (update) => {
-    const previous = leadsRef.current;
-    const requested = typeof update === 'function' ? update(previous) : update;
-    const next = requested.map((lead) => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(lead.id)
-      ? lead
-      : { ...lead, id: newRecordId() });
-    leadsRef.current = next;
-    setLeads(next);
-
-    const oldById = new Map(previous.map((lead) => [lead.id, lead]));
-    const changed = next.filter((lead) => JSON.stringify(oldById.get(lead.id)) !== JSON.stringify(lead));
-    if (changed.length > 0 && currentUser.id) {
-      queueWrite(leadWriteQueue, async () => {
-        try {
-          for (const lead of changed) await saveLead(lead, currentUser.id);
-        } catch (error) {
-          // Drop the unsaved changes from the screen so it matches the database.
-          try {
-            applyBackendData(await loadBackendData());
-          } catch {
-            // Keep the original save error visible if refreshing also fails.
-          }
-          throw error;
-        }
-      }, 'Could not save customer data.');
-    }
-  };
-
-  const setInventoryAndPersist: React.Dispatch<React.SetStateAction<InventoryItem[]>> = (update) => {
-    const previous = inventoryRef.current;
-    const next = typeof update === 'function' ? update(previous) : update;
-    inventoryRef.current = next;
-    setInventory(next);
-    const oldByVin = new Map(previous.map((item) => [item.vin, item]));
-    const newByVin = new Map(next.map((item) => [item.vin, item]));
-    const changed = next.filter((item) => JSON.stringify(oldByVin.get(item.vin)) !== JSON.stringify(item));
-    const removed = previous.filter((item) => !newByVin.has(item.vin));
-    const changedOutsideSale = changed.filter((item) => {
-      const previousItem = oldByVin.get(item.vin);
-      return !(previousItem?.status !== 'sold' && item.status === 'sold');
-    });
-    if ((changedOutsideSale.length || removed.length) && currentUser.id) {
-      queueWrite(inventoryWriteQueue, async () => {
-        try {
-          for (const item of changedOutsideSale) await persistInventoryItem(item);
-          for (const item of removed) await deleteInventoryItem(item.vin);
-        } catch (error) {
-          try {
-            applyBackendData(await loadBackendData());
-          } catch {
-            // Keep the original save error visible if refreshing also fails.
-          }
-          throw error;
-        }
-      }, 'Could not save inventory.');
-    }
-  };
-
-  const setBillsAndPersist: React.Dispatch<React.SetStateAction<InvoiceBillRecord[]>> = (update) => {
-    const previous = billRef.current;
-    const requested = typeof update === 'function' ? update(previous) : update;
-    const next = requested.map((bill) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bill.id)
-      ? bill
-      : { ...bill, id: newRecordId() });
-    billRef.current = next;
-    setBills(next);
-    const oldById = new Map(previous.map((bill) => [bill.id, bill]));
-    const added = next.filter((bill) => !oldById.has(bill.id));
-    if (added.length && currentUser.id) {
-      queueWrite(billWriteQueue, async () => {
-        try {
-          for (const bill of added) await saveBillRecord(bill, currentUser.id);
-        } catch (error) {
-          // A failed sale transaction must restore the current stock view from the database.
-          try {
-            applyBackendData(await loadBackendData());
-          } catch {
-            // Keep the original save error visible if refreshing also fails.
-          }
-          throw error;
-        }
-      }, 'Could not save bill and stock movement.');
-    }
-  };
-
-  const handleRecordStockIn = async (item: InventoryItem, bill: InvoiceBillRecord, log: StockLogRecord) => {
-    await persistInventoryItem(item);
-    try {
-      await saveBillRecord(bill, currentUser.id);
-    } catch (error) {
-      try {
-        await deleteInventoryItem(item.vin);
-      } catch (rollbackError) {
-        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : 'Could not roll back the inventory row.';
-        throw new Error(`${error instanceof Error ? error.message : 'Could not save the stock-in bill.'} Inventory rollback also failed: ${rollbackMessage}`);
-      }
-      throw error;
-    }
-
-    const nextInventory = [item, ...inventoryRef.current.filter((existing) => existing.vin !== item.vin)];
-    inventoryRef.current = nextInventory;
-    setInventory(nextInventory);
-    const nextBills = [bill, ...billRef.current.filter((existing) => existing.id !== bill.id)];
-    billRef.current = nextBills;
-    setBills(nextBills);
-    setStockLogs((previous) => [log, ...previous]);
-  };
-
-  const setVehiclesAndPersist: React.Dispatch<React.SetStateAction<VehicleModel[]>> = (update) => {
-    const previous = modelRef.current;
-    const next = typeof update === 'function' ? update(previous) : update;
-    modelRef.current = next;
-    setVehicles(next);
-    const oldById = new Map(previous.map((model) => [model.id, model]));
-    const changed = next.filter((model) => JSON.stringify(oldById.get(model.id)) !== JSON.stringify(model));
-    if (changed.length && currentUser.id) {
-      queueWrite(modelWriteQueue, async () => {
-        try {
-          for (const model of changed) await saveVehicleModel(model, currentUser.id);
-        } catch (error) {
-          // Drop the unsaved models from the screen so it matches the database.
-          try {
-            applyBackendData(await loadBackendData());
-          } catch {
-            // Keep the original save error visible if refreshing also fails.
-          }
-          throw error;
-        }
-      }, 'Could not save vehicle model.');
-    }
-  };
-
-  const applyBackendData = (data: Awaited<ReturnType<typeof loadBackendData>>) => {
-    setUsers(data.users);
-    setLeads(data.leads);
-    leadsRef.current = data.leads;
-    setInventory(data.inventory);
-    inventoryRef.current = data.inventory;
-    setStockLogs(data.stockLogs);
-    setBills(data.bills);
-    billRef.current = data.bills;
-    setVehicles(data.vehicles);
-    modelRef.current = data.vehicles;
-    setServices(data.services);
-    setTestDrives(data.testDrives);
-    setDealershipSettings(data.settings);
-  };
-
-  const loadDataForUser = async (userId: string) => {
-    const staff = await getSignedInStaff(userId);
-    const data = await loadBackendData();
-    setCurrentUser(staff);
-    applyBackendData(data);
-    setIsLoggedIn(true);
-    setBackendError(data.warnings.length ? data.warnings.join(' | ') : null);
-    return staff;
-  };
-
+  // Automatic clean-up of old mock data & cached users from previous versions
   useEffect(() => {
-    let active = true;
-    if (!isSupabaseConfigured) {
-      setBackendError('ตั้งค่า VITE_SUPABASE_URL และ VITE_SUPABASE_ANON_KEY ก่อนเชื่อมต่อ Supabase');
-      setIsAuthLoading(false);
-      return;
-    }
-
-    const client = requireSupabase();
-    const { data: authListener } = client.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT' && active) {
-        setIsLoggedIn(false);
-        setCurrentUser(FALLBACK_EMPTY_USER);
-        setUsers([]);
-        setLeads([]);
-        setInventory([]);
-        setStockLogs([]);
-        setBills([]);
-        setVehicles([]);
+    try {
+      const isCleaned = localStorage.getItem('avatr_db_clean_init_v2');
+      if (!isCleaned) {
+        localStorage.removeItem('avatr_inventory_v3');
+        localStorage.removeItem('avatr_inventory_v2');
+        localStorage.removeItem('avatr_leads_v2');
+        localStorage.removeItem('avatr_services_v2');
+        localStorage.removeItem('avatr_testdrives_v2');
+        localStorage.removeItem('avatr_stock_logs_v2');
+        localStorage.removeItem('avatr_invoice_bills_v2');
+        localStorage.removeItem('avatr_system_users_v2');
+        localStorage.removeItem('avatr_system_users_prod_v1');
+        localStorage.removeItem('avatr_active_user_id_v1');
+        localStorage.removeItem('avatr_logged_in');
+        localStorage.setItem('avatr_db_clean_init_v2', 'true');
       }
-    });
-
-    void client.auth.getSession().then(async ({ data, error }) => {
-      if (!active) return;
-      if (error) throw error;
-      if (data.session?.user) await loadDataForUser(data.session.user.id);
-    }).catch(async (error: unknown) => {
-      if (!active) return;
-      await client.auth.signOut();
-      setBackendError(error instanceof Error ? error.message : 'Could not restore the Supabase session.');
-    }).finally(() => {
-      if (active) setIsAuthLoading(false);
-    });
-
-    return () => {
-      active = false;
-      authListener.subscription.unsubscribe();
-    };
+    } catch (e) {
+      console.warn('Storage cleanup notice:', e);
+    }
   }, []);
 
-  // Alert counts
-  const modelStockCounts = getModelStockCounts(vehicles, inventory);
-  const lowStockCount = modelStockCounts.filter(({ count }) => isLowStock(count)).length;
-  const outOfStockCount = modelStockCounts.filter(({ count }) => isOutOfStock(count)).length;
+  const FALLBACK_EMPTY_USER: SystemUser = {
+    id: 'USR-ADMIN',
+    name: 'Admin (Super Admin)',
+    email: '',
+    phone: '',
+    role: 'super_admin',
+    roleTitleLo: 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)',
+    department: 'Executive Management & Direction',
+    status: 'active',
+    avatarInitials: 'AD',
+    permissions: {
+      canManageUsers: true,
+      canDeleteUsers: true,
+      canGrantRoles: true,
+      canEditInventory: true,
+      canUploadQR: true,
+      canAddModels: true,
+      canDeductPOS: true,
+      canViewFinancials: true,
+    },
+    createdAt: new Date().toISOString().slice(0, 10),
+  };
+
+  // Users State (with LocalStorage persistence)
+  const [users, setUsers] = useState<SystemUser[]>(() => {
+    try {
+      const saved = localStorage.getItem('avatr_system_users_prod_v1');
+      return saved ? JSON.parse(saved) : INITIAL_USERS;
+    } catch {
+      return INITIAL_USERS;
+    }
+  });
+
+  // Current logged in user
+  const [currentUser, setCurrentUser] = useState<SystemUser>(() => {
+    try {
+      const savedId = localStorage.getItem('avatr_active_user_id_v1');
+      const found = users.find(u => u.id === savedId);
+      return found || users[0] || FALLBACK_EMPTY_USER;
+    } catch {
+      return FALLBACK_EMPTY_USER;
+    }
+  });
+
+  // Leads state with localStorage persistence
+  const [leads, setLeads] = useState<Lead[]>(() => {
+    try {
+      const saved = localStorage.getItem('avatr_leads_prod_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return INITIAL_LEADS;
+    } catch {
+      return INITIAL_LEADS;
+    }
+  });
+
+  // Inventory state with localStorage persistence
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('avatr_inventory_prod_v1');
+      return saved ? JSON.parse(saved) : INITIAL_INVENTORY;
+    } catch {
+      return INITIAL_INVENTORY;
+    }
+  });
+
+  // Services state with localStorage persistence
+  const [services, setServices] = useState<ServiceAppointment[]>(() => {
+    try {
+      const saved = localStorage.getItem('avatr_services_prod_v1');
+      return saved ? JSON.parse(saved) : INITIAL_SERVICES;
+    } catch {
+      return INITIAL_SERVICES;
+    }
+  });
+
+  // Test Drives state with localStorage persistence
+  const [testDrives, setTestDrives] = useState<TestDriveBooking[]>(() => {
+    try {
+      const saved = localStorage.getItem('avatr_testdrives_prod_v1');
+      return saved ? JSON.parse(saved) : INITIAL_TEST_DRIVES;
+    } catch {
+      return INITIAL_TEST_DRIVES;
+    }
+  });
+
+  // Stock Movement & Sales Logs state with localStorage persistence
+  const [stockLogs, setStockLogs] = useState<StockLogRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('avatr_stock_logs_prod_v1');
+      return saved ? JSON.parse(saved) : INITIAL_STOCK_LOGS;
+    } catch {
+      return INITIAL_STOCK_LOGS;
+    }
+  });
+
+  // Official Bills & Invoices state with localStorage persistence
+  const [bills, setBills] = useState<InvoiceBillRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('avatr_invoice_bills_prod_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return INITIAL_BILLS;
+    } catch {
+      return INITIAL_BILLS;
+    }
+  });
+
+  // Vehicle Models State (Admin ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້ບໍ່ຈຳກັດ)
+  const [vehicles, setVehicles] = useState<VehicleModel[]>(() => {
+    try {
+      const isInit = localStorage.getItem('avatr_vehicle_models_v3_init');
+      if (!isInit) {
+        localStorage.setItem('avatr_vehicle_models_v3_init', 'true');
+        localStorage.setItem('avatr_vehicle_models_prod_v1', JSON.stringify(AVATR_VEHICLES));
+        return AVATR_VEHICLES;
+      }
+      const saved = localStorage.getItem('avatr_vehicle_models_prod_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+      return AVATR_VEHICLES;
+    } catch {
+      return AVATR_VEHICLES;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('avatr_vehicle_models_prod_v1', JSON.stringify(vehicles));
+  }, [vehicles]);
+
+  // Sync to local storage
+  useEffect(() => {
+    localStorage.setItem('avatr_system_users_prod_v1', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem('avatr_active_user_id_v1', currentUser.id);
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('avatr_leads_prod_v1', JSON.stringify(leads));
+  }, [leads]);
+
+  useEffect(() => {
+    localStorage.setItem('avatr_inventory_prod_v1', JSON.stringify(inventory));
+  }, [inventory]);
+
+  useEffect(() => {
+    localStorage.setItem('avatr_stock_logs_prod_v1', JSON.stringify(stockLogs));
+  }, [stockLogs]);
+
+  useEffect(() => {
+    localStorage.setItem('avatr_invoice_bills_prod_v1', JSON.stringify(bills));
+  }, [bills]);
+
+  useEffect(() => {
+    localStorage.setItem('avatr_services_prod_v1', JSON.stringify(services));
+  }, [services]);
+
+  useEffect(() => {
+    localStorage.setItem('avatr_testdrives_prod_v1', JSON.stringify(testDrives));
+  }, [testDrives]);
+
+  // Real-time Supabase Cloud Synchronization
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      seedSupabaseIfEmpty();
+
+      const unsubInventory = subscribeToInventory((items) => {
+        setInventory(items || []);
+      });
+
+      const unsubBills = subscribeToBills((bList) => {
+        setBills(bList || []);
+      });
+
+      const unsubVehicles = subscribeToVehicleModels((models) => {
+        if (models && models.length > 0) {
+          setVehicles(models);
+        }
+      });
+
+      const unsubUsers = subscribeToUsers((uList) => {
+        const list = uList || [];
+        setUsers(list);
+        if (list.length > 0) {
+          const savedId = localStorage.getItem('avatr_active_user_id_v1');
+          const activeUpdated = list.find(u => u.id === currentUser.id) || list.find(u => u.id === savedId) || list[0];
+          if (activeUpdated) {
+            setCurrentUser(activeUpdated);
+          }
+        }
+      });
+
+      return () => {
+        unsubInventory();
+        unsubBills();
+        unsubVehicles();
+        unsubUsers();
+      };
+    }
+  }, []);
+
+  // Alert counts (ແຈ້ງເຕືອນສະຕ໋ອກເມື່ອຕ່ຳກວ່າ 5 ຄັນ)
+  const lowStockCount = inventory.filter(i => i.stockQuantity > 0 && i.stockQuantity < 5 && i.status !== 'sold').length;
+  const outOfStockCount = inventory.filter(i => i.stockQuantity === 0).length;
 
   // Modal States
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
   const [isServiceOpen, setIsServiceOpen] = useState(false);
   const [isTestDriveOpen, setIsTestDriveOpen] = useState(false);
-  const [testDriveInitialModel, setTestDriveInitialModel] = useState('');
+  const [testDriveInitialModel, setTestDriveInitialModel] = useState('AVATR 12');
   
   const [selectedVehicleForModal, setSelectedVehicleForModal] = useState<VehicleModel | null>(null);
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
@@ -415,54 +402,56 @@ export default function App() {
   const [quoteVehicle, setQuoteVehicle] = useState<VehicleModel | null>(null);
   const [quoteCustomerName, setQuoteCustomerName] = useState<string | undefined>(undefined);
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
+  const [selectedCustomerForPOS, setSelectedCustomerForPOS] = useState<Lead | null>(null);
 
   // Role & Admin Check
-  const isAdmin = Boolean(currentUser.permissions.canEditInventory);
+  const isAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
 
-  // Keep the selected page inside the signed-in user's current permissions.
+  // Guard admin-only sections (Inventory, Stock-In, Stock Alerts, User Management)
   useEffect(() => {
-    if (!isAdmin && (currentMenu === 'inventory' || currentMenu === 'stock_in' || currentMenu === 'alerts')) {
+    if (!isAdmin && (currentMenu === 'inventory' || currentMenu === 'stock_in' || currentMenu === 'alerts' || currentMenu === 'users')) {
       setCurrentMenu('dashboard');
     }
-    if (currentMenu === 'users' && !currentUser.permissions.canManageUsers) setCurrentMenu('dashboard');
-    if (currentMenu === 'appointments' && !currentUser.permissions.canDeductPOS && !currentUser.permissions.canUpdatePDI && !currentUser.permissions.canManageUsers) setCurrentMenu('dashboard');
-  }, [currentUser.permissions, currentMenu, isAdmin]);
+  }, [currentUser.role, currentMenu, isAdmin]);
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const t = translations[lang] || translations.lo;
-
-  const handleLogout = async () => {
+  // Authentication State
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
-      await requireSupabase().auth.signOut();
-    } catch (error) {
-      setBackendError(error instanceof Error ? error.message : 'Sign-out failed.');
+      const savedLoggedIn = localStorage.getItem('avatr_logged_in');
+      return savedLoggedIn === 'true';
+    } catch {
+      return false;
     }
+  });
+
+
+
+  const handleLogout = () => {
     setIsLoggedIn(false);
-    setCurrentUser(FALLBACK_EMPTY_USER);
-    setUsers([]);
-    setLeads([]);
-    leadsRef.current = [];
-    setInventory([]);
-    setStockLogs([]);
-    setBills([]);
-    setVehicles([]);
+    localStorage.removeItem('avatr_logged_in');
+    localStorage.removeItem('avatr_active_user_id_v1');
+    if (isSupabaseConfigured()) {
+      signOutSupabase().catch((err) => console.warn('Supabase logout notice:', err));
+    }
+    triggerToast('ທ່ານໄດ້ອອກຈາກລະບົບຮຽບຮ້ອຍແລ້ວ');
   };
 
-  // Delete Bill Handler (database policy remains the final permission check)
+  // Delete Bill Handler (Super Admin only - synced to Supabase)
   const handleDeleteBill = async (billId: string) => {
-    if (!currentUser.permissions.canDeleteUsers) {
-      triggerToast('ບໍ່ມີສິດລຶບບິນ');
+    if (currentUser.role !== 'super_admin' && currentUser.role !== 'admin') {
+      triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບບິນ!');
       return;
     }
     try {
-      await deleteBill(billId);
-      applyBackendData(await loadBackendData());
-      triggerToast('ລົບບິນສຳເລັດແລ້ວ!');
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'ລຶບບິນບໍ່ສຳເລັດ');
+      await deleteBillFromSupabase(billId);
+    } catch (e) {
+      console.warn('Supabase delete bill fallback:', e);
     }
+    setBills(prev => prev.filter(b => b.id !== billId));
+    triggerToast('ລົບບິນສຳເລັດແລ້ວ!');
   };
 
   const triggerToast = (msg: string) => {
@@ -473,110 +462,56 @@ export default function App() {
   };
 
   // Handlers
-  const handleAddLead = async (leadData: Omit<Lead, 'id' | 'createdAt'>, rethrow = false) => {
-    const now = new Date().toISOString();
+  const handleAddLead = (leadData: Omit<Lead, 'id' | 'createdAt'> & { createdAt?: string }) => {
+    const newId = `LD-${Math.floor(1000 + Math.random() * 9000)}`;
+    const now = leadData.createdAt || new Date().toISOString().slice(0, 16).replace('T', ' ');
     const newLead: Lead = {
       ...leadData,
-      id: newRecordId(),
+      id: newId,
       createdAt: now,
     };
-    try {
-      await saveLead(newLead, currentUser.id);
-      leadsRef.current = [newLead, ...leadsRef.current];
-      setLeads(leadsRef.current);
-      triggerToast(`ເພີ່ມຂໍ້ມູນລູກຄ້າ ${newLead.customerName} ສຳເລັດ!`);
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'ບັນທຶກລູກຄ້າບໍ່ສຳເລັດ');
-      if (rethrow) throw error;
-    }
+    setLeads(prev => [newLead, ...prev]);
+    triggerToast(`ເພີ່ມຂໍ້ມູນລູກຄ້າ ${newLead.customerName} ເຂົ້າສູ່ລະບົບ CRM ສຳເລັດ!`);
   };
 
-  const handleAddService = async (serviceData: Omit<ServiceAppointment, 'id'>) => {
-    const newId = newRecordId();
+  const handleAddService = (serviceData: Omit<ServiceAppointment, 'id'>) => {
+    const newId = `SRV-${Math.floor(800 + Math.random() * 200)}`;
     const newService: ServiceAppointment = {
       ...serviceData,
       id: newId,
     };
-    try {
-      await saveServiceAppointment(newService, currentUser.id);
-      setServices(prev => [newService, ...prev]);
-      triggerToast(`ນັດໝາຍສ້ອມບຳລຸງລົດ ${newService.model} ບັນທຶກແລ້ວ!`);
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'ບັນທຶກນັດຊ່າງບໍ່ສຳເລັດ');
-    }
+    setServices(prev => [newService, ...prev]);
+    triggerToast(`ນັດໝາຍສ້ອມບຳລຸງລົດ ${newService.model} ບັນທຶກແລ້ວ!`);
   };
 
-  const handleAddTestDrive = async (tdData: Omit<TestDriveBooking, 'id'>) => {
-    const newId = newRecordId();
+  const handleAddTestDrive = (tdData: Omit<TestDriveBooking, 'id'>) => {
+    const newId = `TD-${Math.floor(300 + Math.random() * 700)}`;
     const newTd: TestDriveBooking = {
       ...tdData,
       id: newId,
     };
-    try {
-      await saveTestDriveBooking(newTd, currentUser.id);
-      setTestDrives(prev => [newTd, ...prev]);
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'ບັນທຶກການຈອງບໍ່ສຳເລັດ');
-      return;
-    }
+    setTestDrives(prev => [newTd, ...prev]);
 
-    // Add the lead only after the booking is safely stored, so a failed booking
-    // cannot leave a customer follow-up record behind.
-    const leadExists = leadsRef.current.some(l => l.phone.replace(/\s+/g, '') === tdData.phone.replace(/\s+/g, ''));
+    // Also auto-create a lead for CRM pipeline if not exists
+    const leadExists = leads.some(l => l.phone.replace(/\s+/g, '') === tdData.phone.replace(/\s+/g, ''));
     if (!leadExists) {
-      try {
-        await handleAddLead({
-          customerName: tdData.customerName,
-          phone: tdData.phone,
-          category: 'walk_in',
-          interestedModel: tdData.model as any,
-          status: 'test_drive',
-          priority: 'high',
-          source: 'ໂຊຣູມ',
-          assignedTo: currentUser.name,
-          notes: `ຈອງທົດລອງຂັບ ${tdData.model} ວັນທີ ${tdData.date} @ ${tdData.timeSlot} ທີ່ ${tdData.location}`,
-          testDriveDate: `${tdData.date} ${tdData.timeSlot}`,
-        }, true);
-        // The booking was saved before this customer existed, so link it now.
-        await linkTestDriveToCustomer(newTd.id, tdData.phone);
-      } catch (error) {
-        triggerToast(`ບັນທຶກການຈອງແລ້ວ ແຕ່ບັນທຶກລູກຄ້າບໍ່ສຳເລັດ: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        return;
-      }
+      handleAddLead({
+        customerName: tdData.customerName,
+        phone: tdData.phone,
+        category: 'walk_in',
+        interestedModel: tdData.model as any,
+        status: 'test_drive',
+        priority: 'high',
+        source: 'ໂຊຣູມ',
+        budget: '$45,000',
+        assignedTo: currentUser?.name || 'Admin',
+        notes: `ຈອງທົດລອງຂັບ ${tdData.model} ວັນທີ ${tdData.date} @ ${tdData.timeSlot} ທີ່ ${tdData.location}`,
+        testDriveDate: `${tdData.date} ${tdData.timeSlot}`,
+      });
     }
 
     triggerToast(`ຢືນຢັນການຈອງທົດລອງຂັບ ${tdData.model} ຮຽບຮ້ອຍແລ້ວ!`);
   };
-
-  const handleChangeServiceStatus = async (id: string, status: ServiceAppointment['status']) => {
-    const appointment = services.find((item) => item.id === id);
-    if (!appointment) return;
-    const updated = { ...appointment, status };
-    try {
-      await updateServiceAppointment(updated);
-      setServices((previous) => previous.map((item) => item.id === id ? updated : item));
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'ອັບເດດສະຖານະນັດຊ່າງບໍ່ສຳເລັດ');
-    }
-  };
-
-  const handleChangeTestDriveStatus = async (id: string, status: TestDriveBooking['status']) => {
-    const booking = testDrives.find((item) => item.id === id);
-    if (!booking) return;
-    const updated = { ...booking, status };
-    try {
-      await updateTestDriveBooking(updated);
-      setTestDrives((previous) => previous.map((item) => item.id === id ? updated : item));
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'ອັບເດດສະຖານະການຈອງບໍ່ສຳເລັດ');
-    }
-  };
-
-  useEffect(() => {
-    if (vehicles.length && !vehicles.some((vehicle) => vehicle.name === testDriveInitialModel)) {
-      setTestDriveInitialModel(vehicles[0].name);
-    }
-  }, [vehicles, testDriveInitialModel]);
 
   const handleOpenTestDriveForModel = (modelName: string) => {
     setTestDriveInitialModel(modelName);
@@ -594,51 +529,46 @@ export default function App() {
     setIsVehicleModalOpen(true);
   };
 
-  const handleSubmitWebInquiry = async (name: string, phone: string, model: string, message: string) => {
-    try {
-      await handleAddLead({
-        customerName: name,
-        phone,
-        category: 'online',
-        interestedModel: model as any,
-        status: 'new',
-        priority: 'high',
-        source: 'web',
-        notes: message || 'ສອບຖາມຜ່ານແບບຟອມໜ້າເວັບໄຊທ໌',
-        assignedTo: currentUser?.name || 'Admin',
-      }, true);
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'ບັນທຶກຂໍ້ສອບຖາມບໍ່ສຳເລັດ');
-    }
+  const handleSubmitWebInquiry = (name: string, phone: string, model: string, message: string) => {
+    handleAddLead({
+      customerName: name,
+      phone: phone,
+      category: 'online',
+      interestedModel: model as any,
+      status: 'new',
+      priority: 'high',
+      source: 'web',
+      notes: message || 'ສອບຖາມຜ່ານແບບຟອມໜ້າເວັບໄຊທ໌',
+      assignedTo: currentUser?.name || 'Admin',
+    });
   };
 
   // If user is logged out, show LoginView
   if (!isLoggedIn) {
-    if (isAuthLoading) {
-      return <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center text-sm">Connecting to Supabase…</div>;
-    }
     return (
       <LoginView
-        onLogin={async (email, password) => {
-          const user = await signInStaff(email, password);
-          await loadDataForUser(user.id);
-          return user;
-        }}
-        onLoginSuccess={(user) => {
+        users={users}
+        onLoginSuccess={(user, remember) => {
           setCurrentUser(user);
           setIsLoggedIn(true);
-          triggerToast(`${t.success}: ${user.name}`);
+          localStorage.setItem('avatr_logged_in', 'true');
+          localStorage.setItem('avatr_active_user_id_v1', user.id);
+          const currentT = translations[lang] || translations.lo;
+          triggerToast(`${currentT.success}: ${user.name}`);
+        }}
+        onRegisterUser={(newUser) => {
+          setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)]);
         }}
         lang={lang}
+        setLang={handleSetLang}
         theme={theme}
         onToggleTheme={toggleTheme}
-        setupError={backendError}
       />
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
+    <div className="app-shell min-h-screen bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 right-4 z-50 bg-zinc-900 border border-zinc-600 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
@@ -659,6 +589,11 @@ export default function App() {
         outOfStockCount={outOfStockCount}
         billsCount={bills.length}
         currentUser={currentUser}
+        allUsers={users}
+        onSwitchUser={(u) => {
+          setCurrentUser(u);
+          triggerToast(`User: ${u.name} (${u.role === 'super_admin' ? t.roleSuperAdmin : t.roleGeneralUser})`);
+        }}
         isMobileOpen={isMobileSidebarOpen}
         setIsMobileOpen={setIsMobileSidebarOpen}
         onLogout={handleLogout}
@@ -669,7 +604,7 @@ export default function App() {
       {/* MAIN CONTENT CANVAS */}
       <div className="lg:pl-72 flex-1 flex flex-col min-w-0 min-h-screen">
         {/* Top Header Strip inside Main Area */}
-        <header className="sticky top-0 z-30 bg-black/90 backdrop-blur-md border-b border-zinc-800/80 px-4 sm:px-8 py-3 flex items-center justify-between gap-3">
+        <header className="app-header sticky top-0 z-30 bg-black/90 backdrop-blur-md border-b border-zinc-800/80 px-4 sm:px-8 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setIsMobileSidebarOpen(true)}
@@ -687,8 +622,8 @@ export default function App() {
                 {currentMenu === 'stock_in' && <PackagePlus className="w-4 h-4" />}
                 {currentMenu === 'pos' && <ShoppingBag className="w-4 h-4" />}
                 {currentMenu === 'bills' && <FileText className="w-4 h-4" />}
+                {currentMenu === 'installment_dashboard' && <CreditCard className="w-4 h-4 text-amber-400" />}
                 {currentMenu === 'alerts' && <AlertTriangle className="w-4 h-4" />}
-                {currentMenu === 'appointments' && <CalendarDays className="w-4 h-4" />}
                 {currentMenu === 'users' && <Key className="w-4 h-4" />}
                 {currentMenu === 'profile' && <UserIcon className="w-4 h-4" />}
               </span>
@@ -701,8 +636,8 @@ export default function App() {
                   {currentMenu === 'stock_in' && t.headerStockIn}
                   {currentMenu === 'pos' && t.headerPOS}
                   {currentMenu === 'bills' && t.headerBills}
+                  {currentMenu === 'installment_dashboard' && (lang === 'lo' ? 'Dashboard ຜ່ອນຊຳລະ & ເງິນດາວ (Leasing & Installment Portfolio)' : 'Installment & Down Payment Dashboard')}
                   {currentMenu === 'alerts' && t.headerAlerts}
-                  {currentMenu === 'appointments' && (lang === 'en' ? 'Appointments' : lang === 'th' ? 'นัดหมาย' : 'ນັດໝາຍ')}
                   {currentMenu === 'users' && t.headerUsers}
                   {currentMenu === 'profile' && t.headerProfile}
                 </h2>
@@ -712,6 +647,17 @@ export default function App() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Supabase Cloud Connection Status Indicator */}
+            <div 
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs bg-zinc-900 border border-zinc-800 font-mono text-[11px]"
+              title={isSupabaseConfigured() ? 'Connected to Supabase Cloud with Real-Time Sync' : 'Running in Offline / Local Mode'}
+            >
+              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+              <span className="text-zinc-300">
+                {isSupabaseConfigured() ? 'Supabase Cloud' : 'Local Mode'}
+              </span>
+            </div>
+
             {/* Theme Toggle Button (Light / Night Mode) */}
             <button
               onClick={toggleTheme}
@@ -731,30 +677,74 @@ export default function App() {
               )}
             </button>
 
-            <span className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-200">
-              {currentUser.roleTitleLo}
-            </span>
+            {/* Quick Role Switcher Pill */}
+            <button
+              onClick={() => {
+                const isCurrentlyAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+                const nextRole: UserRole = isCurrentlyAdmin ? 'general_user' : 'admin';
+                const isNextAdmin = nextRole === 'admin';
+                const updated: SystemUser = {
+                  ...currentUser,
+                  role: nextRole,
+                  roleTitleLo: isNextAdmin ? 'Admin' : 'User',
+                  department: isNextAdmin ? 'Executive Management' : 'General Staff',
+                  permissions: {
+                    canManageUsers: isNextAdmin,
+                    canDeleteUsers: isNextAdmin,
+                    canGrantRoles: isNextAdmin,
+                    canEditInventory: isNextAdmin,
+                    canUploadQR: isNextAdmin,
+                    canAddModels: isNextAdmin,
+                    canDeductPOS: true,
+                    canViewFinancials: isNextAdmin,
+                  }
+                };
+                setCurrentUser(updated);
+                setUsers(prev => {
+                  const exists = prev.some(u => u.id === updated.id);
+                  if (exists) {
+                    return prev.map(u => u.id === updated.id ? updated : u);
+                  }
+                  return [updated, ...prev];
+                });
+                triggerToast(`${t.switchRoleBtn}: ${isNextAdmin ? 'Admin' : 'User'}`);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border shadow-sm ${
+                (currentUser.role === 'super_admin' || currentUser.role === 'admin')
+                  ? 'bg-zinc-800 text-white border-zinc-600 hover:bg-zinc-700'
+                  : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
+              }`}
+              title="Switch between Admin and User"
+            >
+              {(currentUser.role === 'super_admin' || currentUser.role === 'admin') ? (
+                <>
+                  <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                  <span className="hidden sm:inline">Admin</span>
+                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-white text-black font-extrabold">{t.switchRoleBtn}</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="w-3.5 h-3.5 text-zinc-400" />
+                  <span className="hidden sm:inline">User</span>
+                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400">{t.switchRoleBtn}</span>
+                </>
+              )}
+            </button>
           </div>
         </header>
 
-        {backendError && (
-          <div role="alert" className="mx-4 mt-4 sm:mx-8 p-3 rounded-xl border border-red-900 bg-red-950/60 text-red-200 text-xs flex items-center justify-between gap-3">
-            <span>{backendError}</span>
-            <button type="button" onClick={() => setBackendError(null)} className="text-red-100 underline">ປິດ</button>
-          </div>
-        )}
-
         {/* Content Views */}
-        <main className="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto">
-          <Suspense fallback={<div role="status" className="py-12 text-center text-sm text-zinc-400">Loading…</div>}>
+        <main className="app-content flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto">
           {currentMenu === 'dashboard' && (
             <DashboardView
               leads={leads}
+              setLeads={setLeads}
               inventory={inventory}
               services={services}
               testDrives={testDrives}
               vehicles={vehicles}
               bills={bills}
+              currentUser={currentUser}
               lang={lang}
               isAdmin={isAdmin}
               onNavigateMenu={(menu) => setCurrentMenu(menu)}
@@ -766,43 +756,46 @@ export default function App() {
           {currentMenu === 'customers' && (
             <CustomerView
               leads={leads}
-              setLeads={setLeadsAndPersist}
+              setLeads={setLeads}
               vehicles={vehicles}
               currentUser={currentUser}
               lang={lang}
               onOpenNewLead={() => setIsNewLeadOpen(true)}
               onOpenQuote={handleOpenQuoteForVehicle}
+              onSelectCustomerForPOS={(cust) => {
+                setSelectedCustomerForPOS(cust);
+                setCurrentMenu('pos');
+              }}
             />
           )}
 
           {currentMenu === 'inventory' && isAdmin && (
             <InventoryView
               inventory={inventory}
-              setInventory={setInventoryAndPersist}
+              setInventory={setInventory}
               stockLogs={stockLogs}
               setStockLogs={setStockLogs}
               vehicles={vehicles}
-              setVehicles={setVehiclesAndPersist}
+              setVehicles={setVehicles}
               currentUser={currentUser}
               isSuperAdmin={isAdmin}
               lang={lang}
               onOpenQuote={handleOpenQuoteForVehicle}
               onNavigateToStockIn={() => setCurrentMenu('stock_in')}
-              onNavigateToPOS={(vin) => {
-                setPosInitialVin(vin);
-                setCurrentMenu('pos');
-              }}
+              onNavigateToPOS={() => setCurrentMenu('pos')}
             />
           )}
 
           {currentMenu === 'stock_in' && isAdmin && (
             <StockInView
               inventory={inventory}
+              setInventory={setInventory}
               bills={bills}
+              setBills={setBills}
               stockLogs={stockLogs}
+              setStockLogs={setStockLogs}
               vehicles={vehicles}
-              setVehicles={setVehiclesAndPersist}
-              onRecordStockIn={handleRecordStockIn}
+              setVehicles={setVehicles}
               isSuperAdmin={isAdmin}
               lang={lang}
               onNavigateToStock={() => setCurrentMenu('inventory')}
@@ -813,25 +806,29 @@ export default function App() {
           {currentMenu === 'pos' && (
             <POSSalesView
               inventory={inventory}
-              setInventory={setInventoryAndPersist}
+              setInventory={setInventory}
               bills={bills}
-              setBills={setBillsAndPersist}
+              setBills={setBills}
+              leads={leads}
               stockLogs={stockLogs}
               setStockLogs={setStockLogs}
               vehicles={vehicles}
               currentUser={currentUser}
-              initialVin={posInitialVin}
-              dealershipSettings={dealershipSettings}
-              onSettingsChange={setDealershipSettings}
               lang={lang}
               onNavigateToBills={() => setCurrentMenu('bills')}
+              prefilledCustomer={selectedCustomerForPOS}
+              onClearPrefilledCustomer={() => setSelectedCustomerForPOS(null)}
             />
           )}
 
           {currentMenu === 'bills' && (
             <BillsManagementView
               bills={bills}
-              dealershipSettings={dealershipSettings}
+              setBills={setBills}
+              leads={leads}
+              setLeads={setLeads}
+              vehicles={vehicles}
+              currentUser={currentUser}
               lang={lang}
               isSuperAdmin={isAdmin}
               onDeleteBill={handleDeleteBill}
@@ -840,100 +837,100 @@ export default function App() {
             />
           )}
 
+          {currentMenu === 'installment_dashboard' && (
+            <InstallmentDashboardView
+              leads={leads}
+              setLeads={setLeads}
+              bills={bills}
+              vehicles={vehicles}
+              currentUser={currentUser}
+              lang={lang}
+              onNavigateMenu={(menu) => setCurrentMenu(menu)}
+            />
+          )}
+
           {currentMenu === 'alerts' && isAdmin && (
             <StockAlertsView
               inventory={inventory}
-              setInventory={setInventoryAndPersist}
+              setInventory={setInventory}
               vehicles={vehicles}
               lang={lang}
               onNavigateToStock={() => setCurrentMenu('inventory')}
             />
           )}
 
-          {currentMenu === 'appointments' && (
-            <AppointmentsView
-              services={services}
-              testDrives={testDrives}
-              lang={lang}
-              onNewService={() => setIsServiceOpen(true)}
-              onNewTestDrive={() => setIsTestDriveOpen(true)}
-              onChangeServiceStatus={handleChangeServiceStatus}
-              onChangeTestDriveStatus={handleChangeTestDriveStatus}
-            />
-          )}
-
-          {currentMenu === 'users' && currentUser.permissions.canManageUsers && (
+          {currentMenu === 'users' && (
             <UserManagementView
               currentUser={currentUser}
               users={users}
               setUsers={setUsers}
               lang={lang}
+              onSwitchUser={(u) => {
+                setCurrentUser(u);
+                triggerToast(`ສະຫຼັບບັນຊີເປັນ: ${u.name}`);
+              }}
             />
           )}
 
           {currentMenu === 'profile' && (
             <ProfileView
               currentUser={currentUser}
-              onUpdateProfile={async (updated) => {
-                try {
-                  const savedUser = await saveStaffProfile(updated);
-                  setCurrentUser(savedUser);
-                  setUsers(prev => prev.map(u => u.id === savedUser.id ? savedUser : u));
-                  triggerToast('ບັນທຶກຂໍ້ມູນໂປຣໄຟລ໌ສຳເລັດ!');
-                } catch (error) {
-                  triggerToast(error instanceof Error ? error.message : 'ບັນທຶກບໍ່ສຳເລັດ');
-                }
+              onUpdateProfile={(updated) => {
+                setCurrentUser(updated);
+                setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+                triggerToast('ບັນທຶກຂໍ້ມູນໂປຣໄຟລ໌ສຳເລັດ!');
               }}
               onLogout={handleLogout}
               lang={lang}
               onClose={() => setCurrentMenu('dashboard')}
               users={users}
               setUsers={setUsers}
+              onSwitchUser={(u) => {
+                setCurrentUser(u);
+                triggerToast(`ສະຫຼັບບັນຊີເປັນ: ${u.name}`);
+              }}
             />
           )}
-          </Suspense>
         </main>
       </div>
 
 
 
       {/* Modals */}
-      <Suspense fallback={null}>
-      {isNewLeadOpen && <NewLeadModal
+      <NewLeadModal
         isOpen={isNewLeadOpen}
         onClose={() => setIsNewLeadOpen(false)}
         onAddLead={handleAddLead}
         vehicles={vehicles}
+        currentUser={currentUser}
         lang={lang}
-      />}
+      />
 
-      {isServiceOpen && <ServiceModal
+      <ServiceModal
         isOpen={isServiceOpen}
         onClose={() => setIsServiceOpen(false)}
         onAddService={handleAddService}
-        vehicles={vehicles}
         lang={lang}
-      />}
+      />
 
-      {isTestDriveOpen && <TestDriveModal
+      <TestDriveModal
         isOpen={isTestDriveOpen}
         onClose={() => setIsTestDriveOpen(false)}
         onAddTestDrive={handleAddTestDrive}
-        vehicles={vehicles}
         initialModel={testDriveInitialModel}
         lang={lang}
-      />}
+      />
 
-      {isVehicleModalOpen && <VehicleModal
+      <VehicleModal
         vehicle={selectedVehicleForModal}
         isOpen={isVehicleModalOpen}
         onClose={() => setIsVehicleModalOpen(false)}
         onOpenQuote={handleOpenQuoteForVehicle}
         onOpenTestDrive={handleOpenTestDriveForModel}
         lang={lang}
-      />}
+      />
 
-      {isQuoteOpen && quoteVehicle && (
+      {quoteVehicle && (
         <QuotationModal
           isOpen={isQuoteOpen}
           onClose={() => setIsQuoteOpen(false)}
@@ -942,7 +939,6 @@ export default function App() {
           lang={lang}
         />
       )}
-      </Suspense>
     </div>
   );
 }

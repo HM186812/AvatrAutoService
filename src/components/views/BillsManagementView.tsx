@@ -1,6 +1,14 @@
-import { useState } from 'react';
-import { InvoiceBillRecord, Language, BillType } from '../../types';
-import { DEFAULT_COMPANY_BANK_INFO } from '../../data/companySettings';
+import { useState, useMemo } from 'react';
+import { 
+  InvoiceBillRecord, 
+  Language, 
+  BillType, 
+  Lead, 
+  VehicleModel, 
+  SystemUser, 
+  InstallmentPaymentRecord 
+} from '../../types';
+import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import { translations } from '../../data/translations';
 import AvatrLogo from '../layout/AvatrLogo';
 import { 
@@ -24,12 +32,31 @@ import {
   Receipt,
   PackagePlus,
   QrCode,
-  Trash2
+  Trash2,
+  Loader2,
+  Coins,
+  BadgePercent,
+  Plus,
+  ChevronRight,
+  TrendingUp,
+  SlidersHorizontal,
+  Clock
 } from 'lucide-react';
+import { exportElementToPdf } from '../../utils/pdfExport';
+import WhatsAppIcon from '../common/WhatsAppIcon';
+import { getWhatsAppUrl } from '../../utils/whatsapp';
+import { saveBillToSupabase } from '../../supabase';
+import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
+import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
+import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 
 interface BillsManagementViewProps {
   bills: InvoiceBillRecord[];
-  dealershipSettings: Record<string, unknown>;
+  setBills?: React.Dispatch<React.SetStateAction<InvoiceBillRecord[]>>;
+  leads?: Lead[];
+  setLeads?: React.Dispatch<React.SetStateAction<Lead[]>>;
+  vehicles?: VehicleModel[];
+  currentUser?: SystemUser | null;
   lang: Language;
   isSuperAdmin?: boolean;
   onDeleteBill?: (billId: string) => void;
@@ -39,7 +66,11 @@ interface BillsManagementViewProps {
 
 export default function BillsManagementView({
   bills,
-  dealershipSettings,
+  setBills,
+  leads = [],
+  setLeads,
+  vehicles = [],
+  currentUser,
   lang,
   isSuperAdmin = false,
   onDeleteBill,
@@ -47,23 +78,78 @@ export default function BillsManagementView({
   onOpenNewImport,
 }: BillsManagementViewProps) {
   const t = translations[lang] || translations.lo;
-  const companyBankInfo = {
-    ...DEFAULT_COMPANY_BANK_INFO,
-    ...dealershipSettings,
-    qrCodeUrl: (dealershipSettings.companyQrImageUrl as string | null) || null,
-  };
-  const [filterType, setFilterType] = useState<'all' | 'sale' | 'import'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'sale' | 'installment' | 'import'>('all');
+  const [installmentSubTab, setInstallmentSubTab] = useState<'bills' | 'contracts'>('bills');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Selected bill for print / view
   const [selectedBillForPrint, setSelectedBillForPrint] = useState<InvoiceBillRecord | null>(null);
+  const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
+  const [isExportingBillPdf, setIsExportingBillPdf] = useState(false);
 
-  const saleBills = bills.filter(b => b.billType === 'sale');
+  // Modal states for Installment Ledger & Documents
+  const [selectedCustomerForLedger, setSelectedCustomerForLedger] = useState<Lead | null>(null);
+  const [selectedCustomerForDocs, setSelectedCustomerForDocs] = useState<{ customer: Lead; docType?: DocumentType } | null>(null);
+
+  // Helper: Detect if a bill belongs to the installment & down payment category
+  const isInstallmentBill = (bill: InvoiceBillRecord) => {
+    return (
+      bill.billType === 'installment' ||
+      bill.type === 'installment' ||
+      bill.paymentMethod === 'finance' ||
+      Boolean(bill.financeCompany) ||
+      Boolean(bill.downPaymentPercent && bill.downPaymentPercent > 0) ||
+      Boolean(bill.installmentPeriod !== undefined)
+    );
+  };
+
+  const saleBills = bills.filter(b => b.billType === 'sale' && !isInstallmentBill(b));
   const importBills = bills.filter(b => b.billType === 'import');
+  const installmentBills = bills.filter(isInstallmentBill);
 
+  // Leads matching installment & down payment category
+  const installmentLeads = useMemo(() => {
+    return leads.filter(lead => 
+      lead.paymentType === 'installment' || 
+      lead.paymentType === 'finance' || 
+      Boolean(lead.downPaymentPercent) || 
+      Boolean(lead.financeCompany) ||
+      Boolean(lead.installmentRecords && lead.installmentRecords.length > 0)
+    );
+  }, [leads]);
+
+  const findLeadForBill = (bill: InvoiceBillRecord) => {
+    const leadById = bill.leadId ? leads.find(lead => lead.id === bill.leadId) : undefined;
+    if (leadById) return leadById;
+
+    const normalizedPhone = (bill.customerPhone || '').replace(/\D/g, '');
+    if (!normalizedPhone) return undefined;
+    const phoneMatches = leads.filter(lead => lead.phone.replace(/\D/g, '') === normalizedPhone);
+    return phoneMatches.length === 1 ? phoneMatches[0] : undefined;
+  };
+
+  // Financial aggregates
   const totalSalesRevenueUSD = saleBills.reduce((acc, curr) => acc + curr.netTotalUSD, 0);
   const totalImportValuationUSD = importBills.reduce((acc, curr) => acc + curr.netTotalUSD, 0);
+  
+  // Total collected from down payments & installment receipts
+  const totalInstallmentCollectionsUSD = installmentBills.reduce((acc, curr) => {
+    return acc + (curr.amountUSD || curr.downPaymentUSD || curr.netTotalUSD || 0);
+  }, 0);
 
+  // Total financed portfolio across installment bills and leads
+  const totalFinancedLoanUSD = useMemo(() => {
+    return installmentBills.reduce((acc, curr) => {
+      const fullPrice = curr.netTotalUSD || curr.unitPriceUSD || 0;
+      const downUSD = curr.downPaymentUSD || Math.round(fullPrice * ((curr.downPaymentPercent || 30) / 100));
+      return acc + Math.max(0, fullPrice - downUSD);
+    }, 0);
+  }, [installmentBills]);
+
+  // Filter bills based on search and selected filterType
   const filteredBills = bills.filter(bill => {
-    if (filterType === 'sale' && bill.billType !== 'sale') return false;
+    if (filterType === 'sale' && (bill.billType !== 'sale' || isInstallmentBill(bill))) return false;
+    if (filterType === 'installment' && !isInstallmentBill(bill)) return false;
     if (filterType === 'import' && bill.billType !== 'import') return false;
 
     if (searchQuery.trim()) {
@@ -80,318 +166,989 @@ export default function BillsManagementView({
     return true;
   });
 
+  // Filtered installment customer contracts
+  const filteredInstallmentContracts = installmentLeads.filter(lead => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return (
+        lead.customerName.toLowerCase().includes(q) ||
+        lead.phone.toLowerCase().includes(q) ||
+        (lead.interestedModel && lead.interestedModel.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
+
+  const toggleSelectBill = (billId: string) => {
+    setSelectedBillIds(prev =>
+      prev.includes(billId) ? prev.filter(id => id !== billId) : [...prev, billId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedBillIds.length === filteredBills.length && filteredBills.length > 0) {
+      setSelectedBillIds([]);
+    } else {
+      setSelectedBillIds(filteredBills.map(b => b.id));
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
 
+  const handleDirectPrintBill = (bill: InvoiceBillRecord) => {
+    setSelectedBillForPrint(bill);
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
+  const handleDirectDownloadBill = (bill: InvoiceBillRecord) => {
+    setSelectedBillForPrint(bill);
+    setTimeout(async () => {
+      try {
+        setIsExportingBillPdf(true);
+        const cleanName = (bill.customerName || bill.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+        const filename = `AVATR_Bill_${bill.billNumber}_${cleanName}.pdf`;
+        await exportElementToPdf('printable-official-bill', {
+          filename,
+          margin: [4, 4, 4, 4],
+          orientation: 'portrait',
+          singlePage: true,
+        });
+      } catch (err) {
+        console.error('Error generating bill PDF:', err);
+      } finally {
+        setIsExportingBillPdf(false);
+      }
+    }, 150);
+  };
+
+  const handleDownloadBillPdf = async () => {
+    if (!selectedBillForPrint) return;
+    try {
+      setIsExportingBillPdf(true);
+      const cleanName = (selectedBillForPrint.customerName || selectedBillForPrint.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+      const filename = `AVATR_Bill_${selectedBillForPrint.billNumber}_${cleanName}.pdf`;
+      await exportElementToPdf('printable-official-bill', {
+        filename,
+        margin: [4, 4, 4, 4],
+        orientation: 'portrait',
+        singlePage: true,
+      });
+    } catch (err) {
+      console.error('Error generating bill PDF:', err);
+      alert('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້. ກະລຸນາລອງໃໝ່ ຫຼື ໃຊ້ປຸ່ມພິມບິນ');
+    } finally {
+      setIsExportingBillPdf(false);
+    }
+  };
+
+  // Helper: Open ledger for an installment bill or lead
+  const handleOpenLedgerForBill = (bill: InvoiceBillRecord) => {
+    const matchedLead = findLeadForBill(bill);
+
+    if (matchedLead) {
+      setSelectedCustomerForLedger(matchedLead);
+    } else {
+      // Dynamic lead fallback so ledger works for every installment record
+      const syntheticLead: Lead = {
+        id: bill.leadId || `SYN-${bill.id}`,
+        customerName: bill.customerName || 'ລູກຄ້າຜ່ອນຊຳລະ',
+        phone: bill.customerPhone || '020-00000000',
+        interestedModel: bill.model || 'AVATR 11',
+        paymentType: 'installment',
+        downPaymentPercent: bill.downPaymentPercent || 30,
+        downPaymentUSD: bill.downPaymentUSD || Math.round((bill.netTotalUSD || 50000) * 0.3),
+        tenureMonths: bill.tenureMonths || 48,
+        monthlyPaymentLAK: bill.monthlyPaymentLAK || 21500000,
+        status: 'delivered',
+        priority: 'normal',
+        notes: '',
+        assignedTo: 'Admin',
+        province: bill.customerProvince || 'ນະຄອນຫຼວງວຽງຈັນ',
+        category: 'walk_in',
+        source: 'Showroom Bills',
+        createdAt: bill.date,
+      };
+      setSelectedCustomerForLedger(syntheticLead);
+    }
+  };
+
+  // Helper: Open official signed documents for an installment bill or lead
+  const handleOpenDocumentsForBill = (bill: InvoiceBillRecord, docType: DocumentType = 'installment_schedule') => {
+    const matchedLead = findLeadForBill(bill);
+
+    if (matchedLead) {
+      setSelectedCustomerForDocs({ customer: matchedLead, docType });
+    } else {
+      const syntheticLead: Lead = {
+        id: bill.leadId || `SYN-${bill.id}`,
+        customerName: bill.customerName || 'ລູກຄ້າຜ່ອນຊຳລະ',
+        phone: bill.customerPhone || '020-00000000',
+        interestedModel: bill.model || 'AVATR 11',
+        paymentType: 'installment',
+        downPaymentPercent: bill.downPaymentPercent || 30,
+        downPaymentUSD: bill.downPaymentUSD || Math.round((bill.netTotalUSD || 50000) * 0.3),
+        tenureMonths: bill.tenureMonths || 48,
+        monthlyPaymentLAK: bill.monthlyPaymentLAK || 21500000,
+        status: 'delivered',
+        priority: 'normal',
+        notes: '',
+        assignedTo: 'Admin',
+        province: bill.customerProvince || 'ນະຄອນຫຼວງວຽງຈັນ',
+        category: 'walk_in',
+        source: 'Showroom Bills',
+        createdAt: bill.date,
+      };
+      setSelectedCustomerForDocs({ customer: syntheticLead, docType });
+    }
+  };
+
+
+
+  // Callback to update customer records from InstallmentLedgerModal
+  const handleUpdateCustomerRecords = (customerId: string, updatedRecords: InstallmentPaymentRecord[]) => {
+    if (setLeads) {
+      setLeads(prev => prev.map(l => {
+        if (l.id === customerId) {
+          const paidRecords = updatedRecords.filter(r => r.status === 'paid');
+          const totalPaidLAK = paidRecords.reduce((sum, r) => sum + r.amountLAK, 0);
+          const totalPaidUSD = paidRecords.reduce((sum, r) => sum + r.amountUSD, 0);
+          return {
+            ...l,
+            installmentRecords: updatedRecords,
+            paidAmountLAK: totalPaidLAK,
+            paidAmountUSD: totalPaidUSD,
+            installmentStatus: paidRecords.length === updatedRecords.length && updatedRecords.length > 0 ? 'completed' : 'active_repaying',
+          };
+        }
+        return l;
+      }));
+    }
+  };
+
+  // Export installment bills or contracts to CSV
+  const handleExportInstallmentCsv = () => {
+    const headers = [
+      'BillNumber',
+      'Type',
+      'Date',
+      'CustomerName',
+      'Phone',
+      'Model',
+      'VIN',
+      'UnitPriceUSD',
+      'DownPaymentUSD',
+      'TenureMonths',
+      'MonthlyPaymentLAK',
+      'BillAmountUSD',
+      'BillAmountLAK',
+      'RecordedBy'
+    ];
+
+    const rows = installmentBills.map(b => [
+      b.billNumber,
+      b.installmentType || 'installment',
+      b.date,
+      `"${b.customerName || ''}"`,
+      b.customerPhone || '',
+      b.model,
+      b.vin,
+      b.unitPriceUSD,
+      b.downPaymentUSD || '',
+      b.tenureMonths || '',
+      b.monthlyPaymentLAK || '',
+      b.amountUSD || '',
+      b.amountLAK || '',
+      `"${b.recordedBy || ''}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `AVATR_Installment_Bills_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
-    <div className="space-y-6 pb-16">
-      {/* Top Header */}
-      <div className="bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="p-1.5 bg-white text-black rounded-lg">
-              <FileText className="w-5 h-5" />
-            </span>
-            <span className="text-xs font-mono uppercase tracking-widest text-zinc-400">
-              OFFICIAL BILL & INVOICE MANAGEMENT
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            {t.billsHeader || t.billsTitle}
-          </h1>
-          <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            {t.billsHeaderSub || t.billsSubtitle}
-          </p>
-        </div>
+    <div className="space-y-6 pb-16 font-sans">
+      {/* WRAPPER FOR MAIN VIEWS - SUPPRESSED DURING PRINT WHEN A BILL IS BEING PRINTED */}
+      <div className={selectedBillForPrint ? "print:hidden hide-on-print-bill space-y-6" : "space-y-6"}>
+        {/* Top Header */}
+        <header className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-7">
+          <div className="pointer-events-none absolute -right-12 -top-16 h-56 w-56 rounded-full bg-amber-400/5 blur-3xl" />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="max-w-2xl">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-300">
+                <FileText className="h-3.5 w-3.5 text-amber-400" />
+                <span>{lang === 'lo' ? 'ສູນລວມເອກະສານການເງິນ' : lang === 'th' ? 'ศูนย์รวมเอกสารการเงิน' : 'Financial records'}</span>
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                {t.billsHeader || t.billsTitle}
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-zinc-400">
+              {lang === 'lo' 
+                ? 'ລວມປະຫວັດໃບຂາຍລົດ, ໃບຮັບເງິນດາວ & ຜ່ອນຊຳລະ ແລະ ໃບນຳເຂົ້າລົດສາງ' 
+                : t.billsHeaderSub || t.billsSubtitle}
+              </p>
+            </div>
 
-        <div className="flex items-center gap-2">
-          {onOpenNewSale && (
-            <button
-              onClick={onOpenNewSale}
-              className="px-4 py-2.5 bg-white text-black hover:bg-zinc-200 text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-1.5"
-            >
-              <span>+ {t.quickPOSBtn}</span>
-            </button>
-          )}
+            <div className="flex flex-wrap items-center gap-2">
 
-          {onOpenNewImport && isSuperAdmin && (
-            <button
-              onClick={onOpenNewImport}
-              className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors flex items-center gap-1.5"
-            >
-              <span>+ {t.quickStockInBtn}</span>
-            </button>
-          )}
-        </div>
-      </div>
 
-      {/* KPI Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Sales Invoices Metric */}
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-2xl">
-          <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-              <Receipt className="w-4 h-4 text-zinc-400" />
-              <span>{t.billTotalSalesRevenue}</span>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
-              REVENUE
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-            ${totalSalesRevenueUSD.toLocaleString()}
-          </div>
-          <div className="mt-2 pt-2 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400 font-mono">
-            <span>{t.filterSaleBills}:</span>
-            <span className="text-white font-bold">{saleBills.length} {t.unitBills}</span>
-          </div>
-        </div>
+              {onOpenNewSale && (
+                <button
+                  type="button"
+                  onClick={onOpenNewSale}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-zinc-950 shadow-sm transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>{t.quickPOSBtn}</span>
+                </button>
+              )}
 
-        {/* Import Bills Metric */}
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-2xl">
-          <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-              <PackagePlus className="w-4 h-4 text-zinc-400" />
-              <span>{t.billTotalImportValuation}</span>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
-              VALUATION
-            </span>
+              {onOpenNewImport && isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={onOpenNewImport}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800/80 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:border-zinc-500 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>{t.quickStockInBtn}</span>
+                </button>
+              )}
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-            ${totalImportValuationUSD.toLocaleString()}
-          </div>
-          <div className="mt-2 pt-2 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400 font-mono">
-            <span>{t.filterImportBills}:</span>
-            <span className="text-white font-bold">{importBills.length} {t.unitBills}</span>
-          </div>
-        </div>
+        </header>
 
-        {/* Total Documents Metric */}
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-2xl">
-          <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-              <FileText className="w-4 h-4 text-zinc-400" />
-              <span>{lang === 'lo' ? 'ເອກະສານບິນທັງໝົດ' : lang === 'th' ? 'เอกสารบิลทั้งหมด' : 'Total Documents'}</span>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
-              TOTAL
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-            {bills.length} <span className="text-sm font-sans text-zinc-400">{t.unitBills}</span>
-          </div>
-          <div className="mt-2 pt-2 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400 font-mono">
-            <span>{t.tableStatus}:</span>
-            <span className="text-zinc-200 font-bold">{t.supabaseDatabase}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder={t.searchPlaceholder}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white"
-            />
+        {/* KPI Overview Cards */}
+        <section aria-label={lang === 'lo' ? 'ສະຫຼຸບບິນ ແລະ ໃບຮັບ' : lang === 'th' ? 'สรุปบิลและใบเสร็จ' : 'Bills and invoices summary'} className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+          {/* Sales Invoices Metric */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                <span className="rounded-lg border border-sky-400/20 bg-sky-400/10 p-2 text-sky-500">
+                  <Receipt className="h-4 w-4" />
+                </span>
+                <span>{t.billTotalSalesRevenue}</span>
+              </span>
+            </div>
+            <div className="text-2xl font-bold tabular-nums text-white sm:text-3xl">
+              ${totalSalesRevenueUSD.toLocaleString()}
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-2 border-t border-zinc-800 pt-3 text-xs text-zinc-400">
+              <span>{t.filterSaleBills}:</span>
+              <span className="font-semibold text-zinc-200">{saleBills.length} {t.unitBills}</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 p-1 rounded-xl">
-            <button
-              onClick={() => setFilterType('all')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                filterType === 'all'
-                  ? 'bg-white text-black font-bold shadow-sm'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              {t.filterAllBills} ({bills.length})
-            </button>
-
-            <button
-              onClick={() => setFilterType('sale')}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                filterType === 'sale'
-                  ? 'bg-white text-black font-bold shadow-sm'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              <Receipt className="w-3.5 h-3.5" />
-              <span>{t.filterSaleBills}</span>
-              <span className="font-mono">({saleBills.length})</span>
-            </button>
-
-            <button
-              onClick={() => setFilterType('import')}
-              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
-                filterType === 'import'
-                  ? 'bg-white text-black font-bold shadow-sm'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              <PackagePlus className="w-3.5 h-3.5" />
-              <span>{t.filterImportBills}</span>
-              <span className="font-mono">({importBills.length})</span>
-            </button>
+          {/* Installment & Down Payments Metric (NEW) */}
+          <div className="rounded-2xl border border-amber-500/30 bg-zinc-950 p-5">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                <span className="rounded-lg border border-amber-400/20 bg-amber-400/10 p-2 text-amber-500">
+                  <CreditCard className="h-4 w-4" />
+                </span>
+                <span>ຍອດເກັບເງິນຜ່ອນ & ດາວ</span>
+              </span>
+            </div>
+            <div className="text-2xl font-bold tabular-nums text-amber-500 sm:text-3xl">
+              ${totalInstallmentCollectionsUSD.toLocaleString()}
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-2 border-t border-zinc-800 pt-3 text-xs text-zinc-400">
+              <span>ບິນຜ່ອນ & ສັນຍາ:</span>
+              <span className="font-semibold text-amber-500">
+                {installmentBills.length} ບິນ • {installmentLeads.length} ສັນຍາ
+              </span>
+            </div>
           </div>
-        </div>
 
-        <span className="text-zinc-400 font-mono text-xs">
-          {lang === 'lo' ? 'ກຳລັງສະແດງ:' : lang === 'th' ? 'กำลังแสดง:' : 'Showing:'} <strong className="text-white">{filteredBills.length}</strong> {t.unitBills}
-        </span>
-      </div>
+          {/* Import Bills Metric */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                <span className="rounded-lg border border-violet-400/20 bg-violet-400/10 p-2 text-violet-500">
+                  <PackagePlus className="h-4 w-4" />
+                </span>
+                <span>{t.billTotalImportValuation}</span>
+              </span>
+            </div>
+            <div className="text-2xl font-bold tabular-nums text-white sm:text-3xl">
+              ${totalImportValuationUSD.toLocaleString()}
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-2 border-t border-zinc-800 pt-3 text-xs text-zinc-400">
+              <span>{t.filterImportBills}:</span>
+              <span className="font-semibold text-zinc-200">{importBills.length} {t.unitBills}</span>
+            </div>
+          </div>
 
-      {/* Bills Cards & Table */}
-      <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden text-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-zinc-900 text-zinc-400 font-medium border-b border-zinc-800">
-              <tr>
-                <th className="py-3.5 px-4">{t.billType}</th>
-                <th className="py-3.5 px-4">{t.billNumber} & {t.billDate}</th>
-                <th className="py-3.5 px-4">{t.tableModel} & {t.vinNumber}</th>
-                <th className="py-3.5 px-4">{t.buyerInfo} / {t.supplierName}</th>
-                <th className="py-3.5 px-4">{t.billAmount}</th>
-                <th className="py-3.5 px-4">{t.paymentType}</th>
-                <th className="py-3.5 px-4">{lang === 'lo' ? 'ຜູ້ອອກບິນ' : lang === 'th' ? 'ผู้ออกบิล' : 'Issued By'}</th>
-                <th className="py-3.5 px-4 text-center">{t.tableActions}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/80 font-mono">
-              {filteredBills.map((bill) => (
-                <tr key={bill.id} className="hover:bg-zinc-900/50 transition-colors">
-                  {/* Bill Type Badge */}
-                  <td className="py-3.5 px-4">
-                    {bill.billType === 'sale' ? (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5 w-max">
-                        <Receipt className="w-3 h-3 text-zinc-300" />
-                        <span>{t.filterSaleBills}</span>
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5 w-max">
-                        <PackagePlus className="w-3 h-3 text-zinc-300" />
-                        <span>{t.filterImportBills}</span>
-                      </span>
-                    )}
-                  </td>
+          {/* Total Documents Metric */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+                <span className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-2 text-emerald-600">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <span>{lang === 'lo' ? 'ເອກະສານບິນທັງໝົດ' : lang === 'th' ? 'เอกสารบิลทั้งหมด' : 'Total Documents'}</span>
+              </span>
+            </div>
+            <div className="text-2xl font-bold tabular-nums text-white sm:text-3xl">
+              {bills.length} <span className="text-sm font-sans font-medium text-zinc-400">{t.unitBills}</span>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-2 border-t border-zinc-800 pt-3 text-xs text-zinc-400">
+              <span>{t.tableStatus}:</span>
+              <span className="font-semibold text-zinc-200">{t.supabaseLiveSync}</span>
+            </div>
+          </div>
+        </section>
 
-                  {/* Bill No & Date */}
-                  <td className="py-3.5 px-4">
-                    <span className="text-white font-bold block">{bill.billNumber}</span>
-                    <span className="text-[11px] text-zinc-500 font-sans">{bill.date}</span>
-                  </td>
+        {/* Filter and Search Bar with Category Separation */}
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:p-5">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-white">
+                  {lang === 'lo' ? 'ຄົ້ນຫາ ແລະ ກັ່ນຕອງເອກະສານ' : lang === 'th' ? 'ค้นหาและกรองเอกสาร' : 'Find a document'}
+                </h2>
+                <p className="mt-0.5 text-xs text-zinc-400">
+                  {lang === 'lo' ? 'ຄົ້ນຫາຕາມເລກບິນ, ລູກຄ້າ ຫຼື ລຸ້ນລົດ' : lang === 'th' ? 'ค้นหาจากเลขที่บิล ลูกค้า หรือรุ่นรถ' : 'Search by bill number, customer, or vehicle model'}
+                </p>
+              </div>
+              <span className="text-xs text-zinc-400">
+                {lang === 'lo' ? 'ສະແດງ' : lang === 'th' ? 'แสดง' : 'Showing'} <strong className="text-zinc-100">{filteredBills.length}</strong> {lang === 'lo' ? 'ຈາກ' : lang === 'th' ? 'จาก' : 'of'} {bills.length} {t.unitBills}
+              </span>
+            </div>
 
-                  {/* Vehicle Details */}
-                  <td className="py-3.5 px-4">
-                    <strong className="text-white font-sans text-xs block">{bill.model}</strong>
-                    <span className="text-zinc-400 text-[11px] block">{bill.vin}</span>
-                    <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-sans mt-0.5">
-                      <span>{bill.color}</span>
-                      {bill.plateNumber && <span>• {bill.plateNumber}</span>}
-                    </div>
-                  </td>
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="relative w-full xl:max-w-sm">
+                <label className="sr-only" htmlFor="bills-search">{t.searchPlaceholder}</label>
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <input
+                  id="bills-search"
+                  type="search"
+                  placeholder={t.searchPlaceholder}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="min-h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-9 pr-3 text-sm font-medium text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-700"
+                />
+              </div>
 
-                  {/* Customer or Supplier */}
-                  <td className="py-3.5 px-4 font-sans text-xs">
-                    {bill.billType === 'sale' ? (
-                      <div>
-                        <span className="text-white font-semibold block">{bill.customerName || 'VIP Customer'}</span>
-                        {bill.customerPhone && (
-                          <span className="text-zinc-400 font-mono text-[11px] flex items-center gap-1 mt-0.5">
-                            <Phone className="w-3 h-3 text-zinc-500" />
-                            <span>{bill.customerPhone}</span>
-                          </span>
-                        )}
-                        {bill.customerProvince && (
-                          <span className="text-[10px] text-zinc-500 block">{bill.customerProvince}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <div>
-                        <span className="text-zinc-200 font-medium block truncate max-w-[180px]">
-                          {bill.supplierName || 'AVATR Technology Co., Ltd.'}
-                        </span>
-                        {bill.importEntryPort && (
-                          <span className="text-zinc-400 text-[10px] block">{bill.importEntryPort}</span>
-                        )}
-                        {bill.customsDocNumber && (
-                          <span className="text-[10px] text-zinc-300 font-mono block">B01: {bill.customsDocNumber}</span>
-                        )}
-                      </div>
-                    )}
-                  </td>
+            {/* Main Tabs */}
+            <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 p-1" role="group" aria-label={lang === 'lo' ? 'ກັ່ນຕອງປະເພດເອກະສານ' : lang === 'th' ? 'กรองประเภทเอกสาร' : 'Filter by document type'}>
+              <button
+                type="button"
+                aria-pressed={filterType === 'all'}
+                onClick={() => setFilterType('all')}
+                className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                  filterType === 'all'
+                    ? 'bg-white text-black font-bold shadow-sm'
+                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                }`}
+              >
+                {t.filterAllBills} ({bills.length})
+              </button>
 
-                  {/* Net Amount */}
-                  <td className="py-3.5 px-4">
-                    <span className="text-sm font-bold block text-white">
-                      ${bill.netTotalUSD.toLocaleString()} USD
+              <button
+                type="button"
+                aria-pressed={filterType === 'sale'}
+                onClick={() => setFilterType('sale')}
+                className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                  filterType === 'sale'
+                    ? 'bg-white text-black font-bold shadow-sm'
+                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                }`}
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>{t.filterSaleBills}</span>
+                <span className="font-mono">({saleBills.length})</span>
+              </button>
+
+              {/* Installment & Down Payment Bills Filter Tab */}
+              <button
+                type="button"
+                aria-pressed={filterType === 'installment'}
+                onClick={() => setFilterType('installment')}
+                className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                  filterType === 'installment'
+                    ? 'bg-amber-400 text-black font-bold shadow-sm'
+                    : 'text-amber-500 hover:bg-zinc-800 hover:text-amber-400'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>{t.filterInstallmentBills || 'ບິນຜ່ອນ & ເງິນດາວ (Financing)'}</span>
+                <span className="font-mono font-bold">({installmentBills.length})</span>
+              </button>
+
+              <button
+                type="button"
+                aria-pressed={filterType === 'import'}
+                onClick={() => setFilterType('import')}
+                className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                  filterType === 'import'
+                    ? 'bg-white text-black font-bold shadow-sm'
+                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                }`}
+              >
+                <PackagePlus className="w-3.5 h-3.5" />
+                <span>{t.filterImportBills}</span>
+                <span className="font-mono">({importBills.length})</span>
+              </button>
+            </div>
+          </div>
+          </div>
+        </section>
+
+        {/* DEDICATED INSTALLMENT MANAGEMENT HUB (When filterType === 'installment') */}
+        {filterType === 'installment' && (
+          <section className="space-y-4 rounded-2xl border border-amber-500/30 bg-zinc-950 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="p-2.5 bg-amber-500 text-black rounded-2xl shadow-lg">
+                  <CreditCard className="w-6 h-6" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                    <span>ສູນຈັດການບິນຜ່ອນຊຳລະ & ເງິນດາວ</span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-400 text-black font-bold">
+                      INSTALLMENT HUB
                     </span>
-                  </td>
+                  </h2>
+                  <p className="text-xs text-zinc-400">
+                    ຈັດການໃບບິນຮັບເງິນດາວ, ໃບບິນຮັບຄ່າງວດ, ຕາຕະລາງຜ່ອນ ແລະ ຕິດຕາມສັນຍາຜ່ອນຊຳລະ
+                  </p>
+                </div>
+              </div>
 
-                  {/* Payment / Destination */}
-                  <td className="py-3.5 px-4 uppercase text-zinc-300 text-[11px]">
-                    {bill.billType === 'sale' ? (
-                      <div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700">
-                          {bill.paymentMethod === 'finance' ? t.paymentInstallments : bill.paymentMethod === 'transfer' ? t.paymentTransfer : t.paymentCash}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Sub Tab Switcher */}
+                <div className="flex items-center bg-zinc-950 border border-zinc-800 p-1 rounded-xl text-xs">
+                  <button
+                    onClick={() => setInstallmentSubTab('bills')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                      installmentSubTab === 'bills'
+                        ? 'bg-amber-400 text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    ໃບບິນຮັບເງິນດາວ & ງວດ ({installmentBills.length})
+                  </button>
+
+                  <button
+                    onClick={() => setInstallmentSubTab('contracts')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                      installmentSubTab === 'contracts'
+                        ? 'bg-amber-400 text-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    ລາຍຊື່ສັນຍາລູກຄ້າຜ່ອນ ({installmentLeads.length})
+                  </button>
+                </div>
+
+                <button
+                  onClick={handleExportInstallmentCsv}
+                  className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Export CSV"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>CSV</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick KPI stats bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-zinc-800/80 text-xs">
+              <div className="bg-zinc-950/80 p-3 rounded-xl border border-zinc-800">
+                <span className="text-[11px] text-zinc-400 block mb-0.5">ຍອດເງິນດາວ & ງວດທີ່ເກັບແລ້ວ:</span>
+                <strong className="text-sm font-mono text-amber-400 block">${totalInstallmentCollectionsUSD.toLocaleString()} USD</strong>
+              </div>
+
+              <div className="bg-zinc-950/80 p-3 rounded-xl border border-zinc-800">
+                <span className="text-[11px] text-zinc-400 block mb-0.5">ຍອດກູ້ຢືມສິນເຊື່ອລວມ (Loan):</span>
+                <strong className="text-sm font-mono text-white block">${totalFinancedLoanUSD.toLocaleString()} USD</strong>
+              </div>
+
+              <div className="bg-zinc-950/80 p-3 rounded-xl border border-zinc-800">
+                <span className="text-[11px] text-zinc-400 block mb-0.5">ຈຳນວນໃບບິນຜ່ອນທັງໝົດ:</span>
+                <strong className="text-sm font-mono text-white block">{installmentBills.length} ໃບບິນ</strong>
+              </div>
+
+              <div className="bg-zinc-950/80 p-3 rounded-xl border border-zinc-800">
+                <span className="text-[11px] text-zinc-400 block mb-0.5">ລູກຄ້າຜ່ອນ-ດາວໃນລະບົບ:</span>
+                <strong className="text-sm font-mono text-amber-400 block">{installmentLeads.length} ຄົນ</strong>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Selected Bills Action Toolbar */}
+        {selectedBillIds.length > 0 && (
+          <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3.5 text-xs shadow-sm sm:p-4">
+            <div className="flex items-center gap-2">
+              <span className="rounded-lg border border-sky-400/20 bg-sky-400/10 p-1.5 text-sky-600">
+                <CheckCircle2 className="h-4 w-4" />
+              </span>
+              <span className="text-sm font-semibold text-zinc-100">
+                {lang === 'lo' ? `ເລືອກແລ້ວ: ${selectedBillIds.length} ບິນ` : `Selected: ${selectedBillIds.length} bills`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (selectedBillIds.length === 0) return;
+                  const target = bills.find(b => b.id === selectedBillIds[0]);
+                  if (target) handleDirectPrintBill(target);
+                }}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-zinc-800 px-3.5 py-1.5 font-semibold text-white transition-colors hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>{lang === 'lo' ? 'ພິມບິນທີ່ເລືອກ' : 'Print Selected'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (selectedBillIds.length === 0) return;
+                  const target = bills.find(b => b.id === selectedBillIds[0]);
+                  if (target) handleDirectDownloadBill(target);
+                }}
+                disabled={isExportingBillPdf}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3.5 py-1.5 font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>{isExportingBillPdf ? 'ກຳລັງສ້າງ PDF...' : (lang === 'lo' ? 'ບັນທຶກເປັນ PDF' : 'Save PDF')}</span>
+              </button>
+
+              <button
+                onClick={() => setSelectedBillIds([])}
+                className="min-h-9 rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+              >
+                {lang === 'lo' ? 'ຍົກເລີກການເລືອກ' : 'Clear'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 1: CONTRACTS VIEW (Only when in Installment tab and Contracts sub-tab) */}
+        {filterType === 'installment' && installmentSubTab === 'contracts' ? (
+          <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/60 p-4">
+              <span className="font-bold text-white text-sm flex items-center gap-2">
+                <User className="w-4 h-4 text-amber-400" />
+                <span>ລາຍຊື່ສັນຍາລູກຄ້າປະເພດຜ່ອນ & ດາວ ({filteredInstallmentContracts.length})</span>
+              </span>
+              <span className="text-zinc-400 text-xs font-mono">
+                ຄລິກເພື່ອອອກໃບບິນ, ເບິ່ງຕາຕະລາງຜ່ອນ ຫຼື ເອກະສານສັນຍາ
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[920px] text-left">
+                <thead className="border-b border-zinc-800 bg-zinc-900 text-xs font-semibold text-zinc-400">
+                  <tr>
+                    <th className="whitespace-nowrap px-4 py-3.5">ລູກຄ້າ & ເບີໂທ</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">ລຸ້ນລົດທີ່ເລືອກ</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">ອັດຕາດາວ & ຍອດດາວ</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">ໄລຍະເວລາຜ່ອນ</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">ຄ່າງວດ/ເດືອນ</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">ສະຖານະສັນຍາ</th>
+                    <th className="whitespace-nowrap px-4 py-3.5 text-center">ການຈັດການບິນ & ຕາຕະລາງ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/80">
+                  {filteredInstallmentContracts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-zinc-500">
+                        ບໍ່ພົບລາຍຊື່ສັນຍາລູກຄ້າຜ່ອນ-ດາວທີ່ກົງກັບເງື່ອນໄຂ
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredInstallmentContracts.map((lead) => {
+                      const matchedVeh = vehicles.find(v => v.name === lead.interestedModel);
+                      const basePrice = matchedVeh?.priceStartingUSD || 50000;
+                      const downUSD = lead.downPaymentUSD || Math.round(basePrice * ((lead.downPaymentPercent || 30) / 100));
+
+                      return (
+                        <tr key={lead.id} className="transition-colors hover:bg-zinc-900/50">
+                          {/* Customer */}
+                          <td className="py-3.5 px-4 font-sans">
+                            <strong className="text-white font-semibold block">{lead.customerName}</strong>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-zinc-400 font-mono text-[11px]">{lead.phone}</span>
+                              <a
+                                href={getWhatsAppUrl(lead.phone, lead.customerName, lead.interestedModel, lang)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white px-1.5 py-0.5 rounded font-sans font-semibold flex items-center gap-1 transition-colors border border-emerald-600/30"
+                              >
+                                <WhatsAppIcon className="w-2.5 h-2.5" />
+                                <span>WA</span>
+                              </a>
+                            </div>
+                            <span className="text-[10px] text-zinc-500 block">{lead.province}</span>
+                          </td>
+
+                          {/* Model */}
+                          <td className="py-3.5 px-4 font-sans">
+                            <strong className="text-white block">{lead.interestedModel}</strong>
+                            <span className="text-zinc-400 text-[11px] font-mono">${basePrice.toLocaleString()} USD</span>
+                          </td>
+
+                          {/* Down payment */}
+                          <td className="py-3.5 px-4">
+                            <strong className="text-amber-400 block">${downUSD.toLocaleString()} USD</strong>
+                            <span className="text-[11px] text-zinc-400 font-sans">ດາວ {lead.downPaymentPercent || 30}%</span>
+                          </td>
+
+                          {/* Tenure */}
+                          <td className="py-3.5 px-4 font-sans">
+                            <span className="text-white font-bold">{lead.tenureMonths || 48} ເດືອນ</span>
+                            <span className="text-zinc-500 text-[10px] block font-mono">({Math.round((lead.tenureMonths || 48) / 12)} ປີ)</span>
+                          </td>
+
+                          {/* Monthly */}
+                          <td className="py-3.5 px-4">
+                            <strong className="text-white block">
+                              ~{(lead.monthlyPaymentLAK || Math.round(((basePrice - downUSD) * DEFAULT_EXCHANGE_RATE_LAK) / (lead.tenureMonths || 48))).toLocaleString()} LAK
+                            </strong>
+                            <span className="text-[10px] text-zinc-400 font-mono">/ເດືອນ</span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-3.5 px-4 font-sans">
+                            {lead.status === 'delivered' ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                <span>ຈ່າຍດາວ & ສົ່ງມອບແລ້ວ</span>
+                              </span>
+                            ) : lead.installmentStatus === 'active_repaying' ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30 inline-flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-blue-400" />
+                                <span>ກຳລັງຜ່ອນຊຳລະ</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 inline-flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-amber-400" />
+                                <span>ລໍຖ້າອະນຸມັດສິນເຊື່ອ</span>
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3.5 px-4 text-center font-sans">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Open Installment Ledger */}
+                              <button
+                                onClick={() => setSelectedCustomerForLedger(lead)}
+                                className="px-2.5 py-1.5 bg-zinc-900 hover:bg-white hover:text-black text-zinc-200 border border-zinc-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                                title="ເບິ່ງຕາຕະລາງຜ່ອນ & ບັນທຶກຮັບເງິນງວດ"
+                              >
+                                <Calendar className="w-3.5 h-3.5" />
+                                <span>ຕາຕະລາງຜ່ອນ</span>
+                              </button>
+
+                              {/* Open Official Documents */}
+                              <button
+                                onClick={() => setSelectedCustomerForDocs({ customer: lead, docType: 'installment_schedule' })}
+                                className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-xl text-xs transition-all flex items-center justify-center cursor-pointer"
+                                title="ເບິ່ງສັນຍາຜ່ອນ & ເອກະສານທາງການ A4"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          /* VIEW 2: BILLS TABLE (Default for all, sale, import, and installment bills sub-tab) */
+          <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/60 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg border border-zinc-700 bg-zinc-800 p-1.5 text-zinc-300">
+                  <Receipt className="h-4 w-4" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-semibold text-white">
+                    {lang === 'lo' ? 'ລາຍການໃບບິນ ແລະ ໃບຮັບ' : lang === 'th' ? 'รายการบิลและใบเสร็จ' : 'Bills and receipts'}
+                  </h2>
+                  <p className="text-xs text-zinc-400">{filteredBills.length} {t.unitBills}</p>
+                </div>
+              </div>
+              <span className="text-xs text-zinc-400">
+                {lang === 'lo' ? 'ເລືອກບິນເພື່ອພິມ ຫຼື ບັນທຶກ PDF' : lang === 'th' ? 'เลือกบิลเพื่อพิมพ์หรือบันทึก PDF' : 'Select a bill to print or save as PDF'}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1280px] text-left text-sm">
+                <thead className="sticky top-0 border-b border-zinc-800 bg-zinc-900 text-xs font-semibold text-zinc-400">
+                  <tr>
+                    <th className="whitespace-nowrap py-3.5 pl-3 pr-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedBillIds.length === filteredBills.length && filteredBills.length > 0}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 rounded cursor-pointer accent-white"
+                        title="ເລືອກທັງໝົດ"
+                      />
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3.5">{t.billType}</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">{t.billNumber} & {t.billDate}</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">{t.tableModel} & {t.vinNumber}</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">{t.buyerInfo} / {t.supplierName}</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">{t.billAmount}</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">{t.paymentType}</th>
+                    <th className="whitespace-nowrap px-4 py-3.5">{lang === 'lo' ? 'ຜູ້ອອກບິນ' : lang === 'th' ? 'ผู้ออกบิล' : 'Issued By'}</th>
+                    <th className="whitespace-nowrap px-4 py-3.5 text-center">{t.tableActions}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/80">
+                  {filteredBills.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-6 py-14 text-center">
+                        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-700 bg-zinc-900 text-zinc-400">
+                          <FileText className="h-6 w-6" />
                         </span>
-                      </div>
-                    ) : (
-                      <span className="text-zinc-400 font-sans text-[11px] truncate max-w-[140px] block">
-                        {bill.destinationWarehouse || 'Showroom Depot'}
-                      </span>
-                    )}
-                  </td>
+                        <span className="mt-4 block font-semibold text-zinc-200">{t.noBillsFound}</span>
+                        <span className="mt-1 block text-xs text-zinc-400">
+                          {searchQuery
+                            ? (lang === 'lo' ? 'ລອງປ່ຽນຄຳຄົ້ນຫາ ຫຼື ເລືອກປະເພດບິນອື່ນ' : lang === 'th' ? 'ลองเปลี่ยนคำค้นหาหรือเลือกประเภทบิลอื่น' : 'Try another search term or document type.')
+                            : (lang === 'lo' ? 'ລາຍການໃໝ່ຈະສະແດງຢູ່ທີ່ນີ້' : lang === 'th' ? 'รายการใหม่จะแสดงที่นี่' : 'New records will appear here.')}
+                        </span>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredBills.map((bill) => {
+                      const isInstallment = isInstallmentBill(bill);
 
-                  {/* Recorder */}
-                  <td className="py-3.5 px-4 font-sans text-zinc-300 text-[11px]">
-                    {bill.recordedBy || 'Admin'}
-                  </td>
-
-                  {/* Action Button */}
-                  <td className="py-3.5 px-4 text-center font-sans">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <button
-                        onClick={() => setSelectedBillForPrint(bill)}
-                        className="px-3 py-1.5 bg-zinc-900 hover:bg-white hover:text-black border border-zinc-700 rounded-xl text-xs font-semibold text-zinc-200 transition-all flex items-center justify-center gap-1.5"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span>{t.printBillBtn}</span>
-                      </button>
-
-                      {isSuperAdmin && onDeleteBill && (
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`${t.confirmDeleteBill} (${bill.billNumber})?`)) {
-                              onDeleteBill(bill.id);
-                            }
-                          }}
-                          className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 rounded-xl transition-colors"
-                          title="Delete Bill"
+                      return (
+                        <tr 
+                          key={bill.id} 
+                          className={`hover:bg-zinc-900/50 transition-colors ${
+                            selectedBillIds.includes(bill.id) ? 'bg-zinc-900/40' : ''
+                          } ${isInstallment ? 'bg-amber-500/[0.02]' : ''}`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                          {/* Selection Checkbox */}
+                          <td className="py-3.5 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedBillIds.includes(bill.id)}
+                              onChange={() => toggleSelectBill(bill.id)}
+                              className="w-4 h-4 rounded cursor-pointer accent-white"
+                            />
+                          </td>
+
+                          {/* Bill Type Badge */}
+                          <td className="py-3.5 px-4">
+                            {isInstallment ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 w-max">
+                                <CreditCard className="w-3 h-3 text-amber-400" />
+                                <span>
+                                  {bill.installmentType === 'monthly_installment' 
+                                    ? `ຄ່າງວດ (${bill.installmentPeriod || 1}/${bill.installmentTotalPeriods || 48})` 
+                                    : `ເງິນດາວ (${bill.downPaymentPercent || 30}%)`}
+                                </span>
+                              </span>
+                            ) : bill.billType === 'sale' ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5 w-max">
+                                <Receipt className="w-3 h-3 text-zinc-300" />
+                                <span>{t.filterSaleBills}</span>
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1.5 w-max">
+                                <PackagePlus className="w-3 h-3 text-zinc-300" />
+                                <span>{t.filterImportBills}</span>
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Bill No & Date */}
+                          <td className="py-3.5 px-4">
+                            <span className="text-white font-bold block">{bill.billNumber}</span>
+                            <span className="text-[11px] text-zinc-500 font-sans">{bill.date}</span>
+                          </td>
+
+                          {/* Vehicle Details */}
+                          <td className="py-3.5 px-4">
+                            <strong className="text-white font-sans text-xs block">{bill.model}</strong>
+                            <span className="text-zinc-400 text-[11px] block">{bill.vin}</span>
+                            <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-sans mt-0.5">
+                              <span>{bill.color || '-'}</span>
+                              {bill.plateNumber && <span>• {bill.plateNumber}</span>}
+                            </div>
+                          </td>
+
+                          {/* Customer or Supplier */}
+                          <td className="py-3.5 px-4 font-sans text-xs">
+                            {bill.billType === 'sale' || isInstallment ? (
+                              <div>
+                                <span className="text-white font-semibold block">{bill.customerName || 'VIP Customer'}</span>
+                                {bill.customerPhone && (
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-zinc-400 font-mono text-[11px] flex items-center gap-1">
+                                      <Phone className="w-3 h-3 text-zinc-500" />
+                                      <span>{bill.customerPhone}</span>
+                                    </span>
+                                    <a
+                                      href={getWhatsAppUrl(bill.customerPhone, bill.customerName, bill.model, lang)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[10px] bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white px-1.5 py-0.5 rounded font-sans font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-emerald-600/30"
+                                      title="ສົນທະນາ WhatsApp ກັບລູກຄ້າ"
+                                    >
+                                      <WhatsAppIcon className="w-2.5 h-2.5" />
+                                      <span>WA</span>
+                                    </a>
+                                  </div>
+                                )}
+                                {bill.customerProvince && (
+                                  <span className="text-[10px] text-zinc-500 block">{bill.customerProvince}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="text-zinc-200 font-medium block truncate max-w-[180px]">
+                                  {bill.supplierName || 'AVATR Technology Co., Ltd.'}
+                                </span>
+                                {bill.importEntryPort && (
+                                  <span className="text-zinc-400 text-[10px] block">{bill.importEntryPort}</span>
+                                )}
+                                {bill.customsDocNumber && (
+                                  <span className="text-[10px] text-zinc-300 font-mono block">B01: {bill.customsDocNumber}</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Net Amount */}
+                          <td className="py-3.5 px-4">
+                            {isInstallment ? (
+                              <div>
+                                <span className="text-sm font-bold block text-amber-400">
+                                  ${(bill.amountUSD || bill.downPaymentUSD || bill.netTotalUSD).toLocaleString()} USD
+                                </span>
+                                {bill.amountLAK ? (
+                                  <span className="text-[10px] text-zinc-400 block font-mono">
+                                    ~{bill.amountLAK.toLocaleString()} LAK
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-zinc-500 block font-sans">
+                                    (ລາຄາລົດ: ${bill.netTotalUSD.toLocaleString()})
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-sm font-bold block text-white">
+                                ${bill.netTotalUSD.toLocaleString()} USD
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Payment / Destination */}
+                          <td className="py-3.5 px-4 uppercase text-zinc-300 text-[11px]">
+                            {isInstallment ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                {bill.installmentType === 'monthly_installment' ? 'ຄ່າງວດ' : 'ເງິນດາວ'} • {bill.tenureMonths || 48}M
+                              </span>
+                            ) : bill.billType === 'sale' ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700">
+                                {bill.paymentMethod === 'transfer' ? t.paymentTransfer : t.paymentCash}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-400 font-sans text-[11px] truncate max-w-[140px] block">
+                                {bill.destinationWarehouse || 'Showroom Depot'}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Recorder */}
+                          <td className="py-3.5 px-4 font-sans text-zinc-300 text-[11px]">
+                            {bill.recordedBy || 'Admin'}
+                          </td>
+
+                          {/* Action Buttons */}
+                          <td className="py-3.5 px-4 text-center font-sans">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Print Official Dealership Bill */}
+                              <button
+                                onClick={() => setSelectedBillForPrint(bill)}
+                                className="px-2.5 py-1.5 bg-zinc-900 hover:bg-white hover:text-black border border-zinc-700 rounded-xl text-xs font-semibold text-zinc-200 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                                title="ເບິ່ງ & ພິມບິນທາງການສະເພາະໃບນີ້"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>{t.printBillBtn}</span>
+                              </button>
+
+                              {/* Installment-Specific Action Buttons */}
+                              {isInstallment && (
+                                <>
+                                  <button
+                                    onClick={() => handleOpenLedgerForBill(bill)}
+                                    className="p-1.5 bg-zinc-900 hover:bg-amber-400 hover:text-black text-amber-400 border border-amber-500/40 rounded-xl text-xs font-semibold transition-all flex items-center justify-center cursor-pointer"
+                                    title="ເປີດຕາຕະລາງຕິດຕາມການເກັບເງິນງວດ"
+                                  >
+                                    <Calendar className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleOpenDocumentsForBill(bill, 'installment_schedule')}
+                                    className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-xl text-xs font-semibold transition-all flex items-center justify-center cursor-pointer"
+                                    title="ເບິ່ງເອກະສານສັນຍາ & ຕາຕະລາງ A4"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+
+                              <button
+                                onClick={() => handleDirectDownloadBill(bill)}
+                                disabled={isExportingBillPdf}
+                                className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-xl text-xs font-semibold transition-all flex items-center justify-center cursor-pointer"
+                                title="ບັນທຶກສະເພາະບິນນີ້ເປັນ PDF"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+
+                              {isSuperAdmin && onDeleteBill && (
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm(`${t.confirmDeleteBill} (${bill.billNumber})?`)) {
+                                      onDeleteBill(bill.id);
+                                    }
+                                  }}
+                                  className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 rounded-xl transition-colors cursor-pointer"
+                                  title="Delete Bill"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* FULL LUXURY PRINTABLE / VIEWABLE OFFICIAL BILL MODAL */}
       {selectedBillForPrint && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 text-white space-y-6 max-h-[95vh] overflow-y-auto shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:max-w-none print:shadow-none">
+          <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 text-white space-y-6 max-h-[95vh] overflow-y-auto shadow-2xl print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0 print:max-h-none print:max-w-none print:w-full print:overflow-visible print-modal-container">
             {/* Modal Actions Header */}
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800 print:hidden">
               <div className="flex items-center gap-2">
@@ -399,14 +1156,37 @@ export default function BillsManagementView({
                   <FileText className="w-4 h-4" />
                 </span>
                 <span className="font-bold text-sm text-white">
-                  {selectedBillForPrint.billType === 'sale' ? 'ໃບບິນຂາຍລົດຍົນທາງການ' : 'ໃບບິນຮັບເຂົ້າສາງທາງການ'}
+                  {isInstallmentBill(selectedBillForPrint)
+                    ? 'ໃບບິນຮັບເງິນດາວ & ຜ່ອນຊຳລະທາງການ'
+                    : selectedBillForPrint.billType === 'sale' 
+                      ? 'ໃບບິນຂາຍລົດຍົນທາງການ' 
+                      : 'ໃບບິນຮັບເຂົ້າສາງທາງການ'}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
+                  onClick={handleDownloadBillPdf}
+                  disabled={isExportingBillPdf}
+                  className="px-3 py-1.5 bg-zinc-100 hover:bg-white text-black rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-zinc-300 disabled:opacity-60 cursor-pointer"
+                  title="ບັນທຶກໃບບິນເປັນ PDF"
+                >
+                  {isExportingBillPdf ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                      <span>ກຳລັງສ້າງ PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5 text-black" />
+                      <span>ບັນທຶກເປັນ PDF (A4)</span>
+                    </>
+                  )}
+                </button>
+
+                <button
                   onClick={handlePrint}
-                  className="px-3 py-1.5 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                  className="px-3 py-1.5 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span>ພິມບິນ (Print)</span>
@@ -414,236 +1194,325 @@ export default function BillsManagementView({
 
                 <button
                   onClick={() => setSelectedBillForPrint(null)}
-                  className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800"
+                  className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* PRINTABLE BILL CANVAS (A4-Style Layout) */}
-            <div className="bg-black border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-6 text-xs text-zinc-300 font-sans selection:bg-white selection:text-black">
-              {/* Bill Header */}
-              <div className="flex flex-wrap items-start justify-between gap-4 pb-6 border-b border-zinc-800">
-                <div className="space-y-1.5">
+            {/* PRINTABLE BILL CANVAS (A4 Dealership Layout) */}
+            <div 
+              id="printable-official-bill"
+              className="official-dealer-document a4-document-canvas w-full max-w-[794px] min-h-[1123px] mx-auto p-7 sm:p-9 bg-white text-black font-sans text-xs leading-normal border border-black rounded-lg shadow-2xl flex flex-col justify-between print:m-0 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0"
+              style={{ backgroundColor: '#ffffff', color: '#000000', borderColor: '#000000' }}
+            >
+              {/* Top Section: National Motto & Header */}
+              <div>
+                {/* National Motto Header */}
+                <div className="text-center space-y-0.5 mb-1.5">
+                  <p className="font-bold text-xs tracking-wide text-black leading-tight">ສາທາລະນະລັດ ປະຊາທິປະໄຕ ປະຊາຊົນລາວ</p>
+                  <p className="font-semibold text-[11px] text-black leading-tight">ສັນຕິພາບ ເອກະລາດ ປະຊາທິປະໄຕ ເອກະພາບ ວັດທະນາຖາວອນ</p>
+                </div>
+
+                {/* Bill Brand & Document Title Header */}
+                <div className="flex items-center justify-between gap-3 pb-2">
                   <div className="flex items-center gap-3">
-                    <AvatrLogo className="w-9 h-9" />
+                    <div className="w-12 h-12 flex items-center justify-center border border-black p-1 bg-white">
+                      <AvatrLogo className="w-10 h-10" />
+                    </div>
                     <div>
-                      <h2 className="text-lg font-black tracking-widest text-white">AVATR AUTO SERVICE</h2>
-                      <p className="text-[10px] text-zinc-400 font-mono">ບໍລິສັດ ຕົວແທນຈຳໜ່າຍ ແລະ ບໍລິການລົດໄຟຟ້າຊັ້ນສູງ</p>
+                      <h2 className="text-sm sm:text-base font-bold text-black leading-tight">ບໍລິສັດ ລາວທານີ ກົນຈັກໜັກ ຈຳກັດຜູ້ດຽວ.</h2>
+                      <p className="text-[11px] font-mono tracking-wider uppercase text-black font-bold">LAOTHANI TRACTOR SOLE CO., LTD</p>
+                      <p className="text-[10px] text-black leading-tight">
+                        Kaysone Phomvihane Road, Ban Sivilay, Vientiane | Tel: (856-20) 58181999
+                      </p>
                     </div>
                   </div>
-                  <p className="text-[11px] text-zinc-400 pt-1">
-                    ໂຊຣູມໃຫຍ່: ຖະໜົນທ່າເດື່ອ ຫຼັກ 3, ເມືອງ ສີສັດຕະນາກ, ນະຄອນຫຼວງວຽງຈັນ<br />
-                    ໂທລະສັບ / Hotline: <strong className="text-white font-mono">+856 21 213555</strong>
-                  </p>
+
+                  <div className="text-right space-y-0.5">
+                    <span className="px-3 py-1 rounded font-bold text-xs border border-black inline-block bg-zinc-100 text-black">
+                      {isInstallmentBill(selectedBillForPrint)
+                        ? (selectedBillForPrint.installmentType === 'monthly_installment'
+                            ? `ໃບບິນຮັບຄ່າງວດ (ງວດທີ ${selectedBillForPrint.installmentPeriod || 1}/${selectedBillForPrint.installmentTotalPeriods || 48})`
+                            : `ໃບບິນຮັບເງິນດາວ (${selectedBillForPrint.downPaymentPercent || 30}%)`)
+                        : selectedBillForPrint.billType === 'sale'
+                          ? 'ໃບບິນຂາຍລົດ (SALES INVOICE)'
+                          : 'ໃບຮັບເຂົ້າສິນຄ້າ (GOODS RECEIPT)'}
+                    </span>
+                    <div className="font-mono text-xs font-black text-black">
+                      ເລກທີ: {selectedBillForPrint.billNumber}
+                    </div>
+                    <div className="text-[11px] text-black font-mono">
+                      ວັນທີ: {selectedBillForPrint.date}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="text-right space-y-1">
-                  <span className="px-3 py-1 rounded-full text-xs font-bold border inline-block bg-zinc-800 text-zinc-200 border-zinc-700">
-                    {selectedBillForPrint.billType === 'sale' ? 'ໃບບິນຂາຍລົດ (SALES INVOICE)' : 'ໃບຮັບເຂົ້າສິນຄ້າ (GOODS RECEIPT)'}
-                  </span>
-                  <div className="font-mono text-sm font-black text-white pt-1">
-                    {selectedBillForPrint.billNumber}
-                  </div>
-                  <div className="text-[11px] text-zinc-400 font-mono">
-                    ວັນທີ: {selectedBillForPrint.date}
-                  </div>
-                </div>
+                {/* Official Divider Line */}
+                <div className="border-t-2 border-b border-black h-1 my-1.5"></div>
               </div>
 
-              {/* Counterparty Details: Customer (Sale) vs Supplier (Import) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-zinc-950 rounded-xl border border-zinc-900">
-                {selectedBillForPrint.billType === 'sale' ? (
-                  <>
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-mono text-zinc-500 uppercase block">ຂໍ້ມູນລູກຄ້າຜູ້ຊື້ (Customer):</span>
-                      <strong className="text-white text-sm block">{selectedBillForPrint.customerName || 'ລູກຄ້າ VIP'}</strong>
-                      <div className="text-zinc-400 font-mono flex items-center gap-1.5">
-                        <Phone className="w-3.5 h-3.5 text-zinc-500" />
-                        <span>{selectedBillForPrint.customerPhone}</span>
-                      </div>
-                      {selectedBillForPrint.customerIDCard && (
-                        <div className="text-zinc-400">ເລກບັດ/ສຳມະໂນ: {selectedBillForPrint.customerIDCard}</div>
-                      )}
-                      {selectedBillForPrint.customerAddress && (
-                        <div className="text-zinc-400">{selectedBillForPrint.customerAddress}, {selectedBillForPrint.customerProvince}</div>
-                      )}
-                    </div>
-
-                    <div className="space-y-1 sm:text-right">
-                      <span className="text-[10px] font-mono text-zinc-500 uppercase block">ການຊຳລະເງິນ (Payment):</span>
-                      <div className="font-bold text-white uppercase text-xs">
-                        {selectedBillForPrint.paymentMethod === 'cash' ? 'ເງິນສົດ (Cash)' : selectedBillForPrint.paymentMethod === 'transfer' ? 'ຊຳລະເງິນຜ່ານ QR (QR Payment)' : 'ໄຟແນນສ໌ (Automotive Loan)'}
-                      </div>
-                      {selectedBillForPrint.bankName && (
-                        <div className="text-zinc-400">{selectedBillForPrint.bankName}</div>
-                      )}
-                      {selectedBillForPrint.transferRef && (
-                        <div className="text-zinc-300 font-mono text-[11px]">Ref: {selectedBillForPrint.transferRef}</div>
-                      )}
-                      {selectedBillForPrint.financeCompany && (
-                        <div className="text-zinc-300 font-mono">
-                          {selectedBillForPrint.financeCompany} (ດາວ {selectedBillForPrint.downPaymentPercent}%, ຜ່ອນ {selectedBillForPrint.tenureMonths} ເດືອນ)
+              {/* Middle Section: Bill Content Details */}
+              <div className="flex-1 flex flex-col justify-between py-2 space-y-2.5">
+                {/* Counterparty Details: Customer (Sale & Installment) vs Supplier (Import) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-zinc-50 rounded border border-black text-xs">
+                  {selectedBillForPrint.billType === 'sale' || isInstallmentBill(selectedBillForPrint) ? (
+                    <>
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-mono text-black uppercase font-bold block">ຂໍ້ມູນລູກຄ້າຜູ້ຊື້ (Customer):</span>
+                        <strong className="text-black text-sm block">{selectedBillForPrint.customerName || 'ລູກຄ້າ VIP'}</strong>
+                        <div className="text-black font-mono flex items-center gap-1">
+                          <Phone className="w-3.5 h-3.5 text-black" />
+                          <span>{selectedBillForPrint.customerPhone}</span>
                         </div>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-mono text-zinc-500 uppercase block">ແຫຼ່ງທີ່ມານຳເຂົ້າ (Supplier / Origin):</span>
-                      <strong className="text-white text-sm block">{selectedBillForPrint.supplierName}</strong>
-                      <div className="text-zinc-400">ດ່ານນຳເຂົ້າ: {selectedBillForPrint.importEntryPort}</div>
-                      {selectedBillForPrint.customsDocNumber && (
-                        <div className="text-zinc-300 font-mono">ໃບແຈ້ງພາສີ B01: {selectedBillForPrint.customsDocNumber}</div>
-                      )}
-                    </div>
+                        {selectedBillForPrint.customerIDCard && (
+                          <div className="text-black">ເລກບັດ/ສຳມະໂນ: {selectedBillForPrint.customerIDCard}</div>
+                        )}
+                        {selectedBillForPrint.customerAddress && (
+                          <div className="text-black">{selectedBillForPrint.customerAddress}, {selectedBillForPrint.customerProvince}</div>
+                        )}
+                      </div>
 
-                    <div className="space-y-1 sm:text-right">
-                      <span className="text-[10px] font-mono text-zinc-500 uppercase block">ສາງເກັບຮັກສາ (Destination Warehouse):</span>
-                      <div className="font-bold text-white text-xs">{selectedBillForPrint.destinationWarehouse}</div>
-                      <div className="text-zinc-400">ຜູ້ກວດຮັບ PDI: {selectedBillForPrint.inspectorName || 'ຊ່າງເຕັກນິກ CATL Master'}</div>
-                      <div className="text-zinc-300 font-mono">ມາດຕະຖານ: ຜ່ານການກວດເຊັກ 100%</div>
-                    </div>
-                  </>
-                )}
-              </div>
+                      <div className="space-y-1 sm:text-right">
+                        <span className="text-[10px] font-mono text-black uppercase font-bold block">ການຊຳລະເງິນ (Payment):</span>
+                        <div className="font-bold text-black uppercase text-xs">
+                          {isInstallmentBill(selectedBillForPrint)
+                            ? 'ຜ່ອນຊຳລະລົດຍົນ (Vehicle Installment Plan)'
+                            : selectedBillForPrint.paymentMethod === 'cash' 
+                              ? 'ເງິນສົດ (Cash)' 
+                              : 'ຊຳລະເງິນຜ່ານ QR (QR Payment)'}
+                        </div>
+                        {selectedBillForPrint.transferRef && (
+                          <div className="text-black font-mono text-[11px]">Ref: {selectedBillForPrint.transferRef}</div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-mono text-black uppercase font-bold block">ແຫຼ່ງທີ່ມານຳເຂົ້າ (Supplier / Origin):</span>
+                        <strong className="text-black text-sm block">{selectedBillForPrint.supplierName}</strong>
+                        <div className="text-black">ດ່ານນຳເຂົ້າ: {selectedBillForPrint.importEntryPort}</div>
+                        {selectedBillForPrint.customsDocNumber && (
+                          <div className="text-black font-mono">ໃບແຈ້ງພາສີ B01: {selectedBillForPrint.customsDocNumber}</div>
+                        )}
+                      </div>
 
-              {/* Vehicle Specifications Table */}
-              <div className="border border-zinc-800 rounded-xl overflow-hidden">
-                <table className="w-full text-left font-mono text-xs">
-                  <thead className="bg-zinc-900/80 text-zinc-400 border-b border-zinc-800">
-                    <tr>
-                      <th className="py-2.5 px-3">ລາຍການ / ລຸ້ນລົດ</th>
-                      <th className="py-2.5 px-3">ເລກຖັງ (VIN) / ປ້າຍ</th>
-                      <th className="py-2.5 px-3 text-center">ຈຳນວນ</th>
-                      <th className="py-2.5 px-3 text-right">ລາຄາຕໍ່ຄັນ</th>
-                      <th className="py-2.5 px-3 text-right">ລວມມູນຄ່າ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-900">
-                    <tr>
-                      <td className="py-3 px-3">
-                        <strong className="text-white font-sans text-xs block">{selectedBillForPrint.model}</strong>
-                        <span className="text-zinc-400 text-[10px] font-sans block">{selectedBillForPrint.trim}</span>
-                        <span className="text-zinc-500 text-[10px] font-sans block">ສີ: {selectedBillForPrint.color}</span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="text-white font-mono block">{selectedBillForPrint.vin}</span>
-                        <span className="text-zinc-400 text-[10px] block">
-                          {selectedBillForPrint.plateNumber || 'ປ້າຍແດງ'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-center text-white font-bold">
-                        {selectedBillForPrint.quantity}
-                      </td>
-                      <td className="py-3 px-3 text-right text-zinc-300">
-                        ${selectedBillForPrint.unitPriceUSD.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-3 text-right text-white font-bold">
-                        ${(selectedBillForPrint.unitPriceUSD * selectedBillForPrint.quantity).toLocaleString()}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Free Gifts & Warranty Terms for Sales */}
-              {selectedBillForPrint.billType === 'sale' && selectedBillForPrint.freeGifts && selectedBillForPrint.freeGifts.length > 0 && (
-                <div className="p-3.5 bg-zinc-950 rounded-xl border border-zinc-900 space-y-1.5 text-[11px]">
-                  <span className="font-bold text-zinc-200 font-mono uppercase block flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-zinc-300" />
-                    <span>ຊຸດຂອງແຖມ & ສິດທິພິເສດ (Dealership Privileges):</span>
-                  </span>
-                  <ul className="list-disc list-inside space-y-0.5 text-zinc-300">
-                    {selectedBillForPrint.freeGifts.map((gift, idx) => (
-                      <li key={idx}>{gift}</li>
-                    ))}
-                  </ul>
-                  {selectedBillForPrint.warrantyTerms && (
-                    <div className="pt-1.5 border-t border-zinc-900 text-zinc-300 font-mono text-[10px] flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-white" />
-                      <span>{selectedBillForPrint.warrantyTerms}</span>
-                    </div>
+                      <div className="space-y-1 sm:text-right">
+                        <span className="text-[10px] font-mono text-black uppercase font-bold block">ສາງເກັບຮັກສາ (Destination Warehouse):</span>
+                        <div className="font-bold text-black text-xs">{selectedBillForPrint.destinationWarehouse}</div>
+                        <div className="text-black">ຜູ້ກວດຮັບ PDI: {selectedBillForPrint.inspectorName || 'ຊ່າງເຕັກນິກ CATL Master'}</div>
+                        <div className="text-black font-mono text-[11px]">ມາດຕະຖານ: ຜ່ານການກວດເຊັກ 100%</div>
+                      </div>
+                    </>
                   )}
                 </div>
-              )}
 
-              {/* Payment Details & Official QR on Bill */}
-              {selectedBillForPrint.billType === 'sale' && (
-                <div className="p-3.5 bg-zinc-950 rounded-xl border border-zinc-900 flex flex-wrap items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-mono text-zinc-500 uppercase block">ຮູບແບບການຊຳລະເງິນ (Payment Method):</span>
-                    <strong className="text-white text-xs block uppercase">
-                      {selectedBillForPrint.paymentMethod === 'transfer' ? 'ຊຳລະເງິນຜ່ານ QR (QR Payment)' : selectedBillForPrint.paymentMethod === 'finance' ? 'ໄຟແນນສ໌ / ຜ່ອນລົດ' : 'ເງິນສົດ (Cash)'}
-                    </strong>
-                    {selectedBillForPrint.bankName && (
-                      <p className="text-[10px] text-zinc-400">{selectedBillForPrint.bankName}</p>
-                    )}
-                    {selectedBillForPrint.transferRef && (
-                      <p className="text-[10px] text-zinc-300 font-mono">Ref: {selectedBillForPrint.transferRef}</p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="text-right text-[10px] font-mono">
-                      <span className="text-zinc-400 block">ບັນຊີທາງການບໍລິສັດ</span>
-                      <strong className="text-white block">{companyBankInfo.usdAccount} (USD)</strong>
-                      <span className="text-zinc-300 block">{companyBankInfo.lakAccount} (LAK)</span>
-                    </div>
-                    <div className="w-14 h-14 bg-white p-1 rounded-lg border border-black flex items-center justify-center">
-                      {companyBankInfo.qrCodeUrl ? (
-                        <img src={companyBankInfo.qrCodeUrl} alt="QR" className="w-full h-full object-contain" />
-                      ) : (
-                        <QrCode className="w-10 h-10 text-black" />
-                      )}
-                    </div>
-                  </div>
+                {/* Vehicle Specifications Table */}
+                <div className="border border-black rounded overflow-hidden">
+                  <table className="w-full text-left font-sans text-xs">
+                    <thead className="bg-zinc-100 text-black border-b border-black font-bold">
+                      <tr>
+                        <th className="py-2 px-3 border-r border-black">ລາຍການ / ລຸ້ນລົດ</th>
+                        <th className="py-2 px-3 border-r border-black">ເລກຖັງ (VIN) / ປ້າຍ</th>
+                        <th className="py-2 px-3 text-center border-r border-black w-16">ຈຳນວນ</th>
+                        <th className="py-2 px-3 text-right border-r border-black w-28">ລາຄາຕໍ່ຄັນ</th>
+                        <th className="py-2 px-3 text-right w-28">ລວມມູນຄ່າ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black">
+                      <tr>
+                        <td className="py-2.5 px-3 border-r border-black">
+                          <strong className="text-black font-sans text-xs block">{selectedBillForPrint.model}</strong>
+                          <span className="text-black text-[11px] block">{selectedBillForPrint.trim}</span>
+                          <span className="text-black text-[11px] block">ສີ: {selectedBillForPrint.color || '-'}</span>
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-black font-mono">
+                          <span className="text-black block font-bold">{selectedBillForPrint.vin}</span>
+                          <span className="text-black text-[11px] block">
+                            {selectedBillForPrint.plateNumber || 'ປ້າຍແດງ'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-black font-bold font-mono border-r border-black">
+                          {selectedBillForPrint.quantity}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-black font-mono border-r border-black">
+                          ${selectedBillForPrint.unitPriceUSD.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-black font-bold font-mono">
+                          ${(selectedBillForPrint.unitPriceUSD * selectedBillForPrint.quantity).toLocaleString()}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-              )}
 
-              {/* Financial Calculation Summary */}
-              <div className="flex flex-col items-end space-y-1.5 pt-2 text-xs font-mono">
-                <div className="flex justify-between w-64 text-zinc-400">
-                  <span>ຍອດລວມກ່ອນຫຼຸດ:</span>
-                  <span>${(selectedBillForPrint.unitPriceUSD * selectedBillForPrint.quantity).toLocaleString()}</span>
-                </div>
-                {selectedBillForPrint.discountUSD > 0 && (
-                  <div className="flex justify-between w-64 text-zinc-400">
-                    <span>ສ່ວນຫຼຸດພິເສດ:</span>
-                    <span>-${selectedBillForPrint.discountUSD.toLocaleString()}</span>
+                {/* Free Gifts & Warranty Terms for Sales */}
+                {selectedBillForPrint.freeGifts && selectedBillForPrint.freeGifts.length > 0 && (
+                  <div className="p-2.5 bg-zinc-50 rounded border border-black space-y-1 text-[11px]">
+                    <span className="font-bold text-black uppercase block flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-black" />
+                      <span>ຊຸດຂອງແຖມ & ສິດທິພິເສດ (Dealership Privileges):</span>
+                    </span>
+                    <p className="text-black leading-relaxed">
+                      {selectedBillForPrint.freeGifts.join(' • ')}
+                    </p>
+                    {selectedBillForPrint.warrantyTerms && (
+                      <div className="pt-1 border-t border-black/40 text-black text-[11px] flex items-center gap-1.5 font-semibold">
+                        <ShieldCheck className="w-3.5 h-3.5 text-black" />
+                        <span>{selectedBillForPrint.warrantyTerms}</span>
+                      </div>
+                    )}
                   </div>
                 )}
-                <div className="flex justify-between w-64 pt-2 border-t border-zinc-800 text-white font-bold text-sm">
-                  <span>ຍອດສຸທິ (Net Total):</span>
-                  <span className="text-white font-black">${selectedBillForPrint.netTotalUSD.toLocaleString()} USD</span>
+
+                {/* Payment Details & Official QR + Financial Summary */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Left: Official Company Bank Accounts & QR */}
+                  {selectedBillForPrint.billType !== 'import' ? (
+                    <div className="p-2.5 bg-zinc-50 rounded border border-black flex items-center justify-between gap-3">
+                      <div className="space-y-1 text-[11px]">
+                        <span className="font-bold text-black uppercase block">ຊ່ອງທາງຊຳລະເງິນທາງການ:</span>
+                        <p className="text-black font-mono">USD: <strong>{getStoredCompanyBankInfo().usdAccount}</strong></p>
+                        <p className="text-black font-mono">LAK: <strong>{getStoredCompanyBankInfo().lakAccount}</strong></p>
+                        <p className="text-[10px] text-black">LAO THANI TRACTOR SOLE CO., LTD</p>
+                      </div>
+
+                      <div className="w-14 h-14 bg-white p-0.5 rounded border border-black flex items-center justify-center flex-shrink-0">
+                        {getStoredCompanyBankInfo().qrCodeUrl ? (
+                          <img src={getStoredCompanyBankInfo().qrCodeUrl!} alt="QR" className="w-full h-full object-contain" />
+                        ) : (
+                          <QrCode className="w-9 h-9 text-black" />
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-zinc-50 rounded border border-black text-[11px] space-y-1">
+                      <span className="font-bold text-black uppercase block">ການຢັ້ງຢືນຮັບສາງ:</span>
+                      <p className="text-black">ສາງ: {selectedBillForPrint.destinationWarehouse}</p>
+                      <p className="text-black font-semibold">ມາດຕະຖານການກວດຮັບ PDI 100%</p>
+                    </div>
+                  )}
+
+                  {/* Right: Financial Calculation Summary */}
+                  <div className="flex flex-col justify-center space-y-1 text-xs font-mono border border-black rounded p-2.5 bg-zinc-50">
+                    <div className="flex justify-between text-black">
+                      <span>ຍອດລວມກ່ອນຫຼຸດ:</span>
+                      <span>${(selectedBillForPrint.unitPriceUSD * selectedBillForPrint.quantity).toLocaleString()}</span>
+                    </div>
+                    {selectedBillForPrint.discountUSD > 0 && (
+                      <div className="flex justify-between text-black">
+                        <span>ສ່ວນຫຼຸດພິເສດ:</span>
+                        <span>-${selectedBillForPrint.discountUSD.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between pt-1 border-t border-black text-black font-black text-xs">
+                      <span>ລາຄາລົດສຸດທິ (Net Price):</span>
+                      <span>${selectedBillForPrint.netTotalUSD.toLocaleString()} USD</span>
+                    </div>
+
+                    {/* Dedicated Installment / Financing Breakdown */}
+                    {isInstallmentBill(selectedBillForPrint) && (
+                      <div className="pt-1 mt-1 border-t border-black/60 text-[11px] font-sans space-y-1 bg-amber-500/10 p-2 rounded border border-amber-500/30">
+                        <div className="flex justify-between font-mono font-bold text-black">
+                          <span>ເງິນດາວ ({selectedBillForPrint.downPaymentPercent || 30}%):</span>
+                          <span>${(selectedBillForPrint.downPaymentUSD || Math.round(selectedBillForPrint.netTotalUSD * ((selectedBillForPrint.downPaymentPercent || 30) / 100))).toLocaleString()} USD</span>
+                        </div>
+                        <div className="flex justify-between font-mono text-black">
+                          <span>ຍອດກູ້ຢືມສິນເຊື່ອ:</span>
+                          <span>${(selectedBillForPrint.netTotalUSD - (selectedBillForPrint.downPaymentUSD || Math.round(selectedBillForPrint.netTotalUSD * ((selectedBillForPrint.downPaymentPercent || 30) / 100)))).toLocaleString()} USD</span>
+                        </div>
+                        <div className="flex justify-between font-mono text-black">
+                          <span>ໄລຍະເວລາຜ່ອນ:</span>
+                          <span>{selectedBillForPrint.tenureMonths || 48} ເດືອນ</span>
+                        </div>
+                        {selectedBillForPrint.monthlyPaymentLAK && (
+                          <div className="flex justify-between font-mono text-black">
+                            <span>ຄ່າງວດຕໍ່ເດືອນ:</span>
+                            <span>~{selectedBillForPrint.monthlyPaymentLAK.toLocaleString()} LAK/ເດືອນ</span>
+                          </div>
+                        )}
+                        <div className="pt-1 mt-1 border-t border-black/30 flex justify-between font-mono font-black text-black">
+                          <span>
+                            {selectedBillForPrint.installmentType === 'monthly_installment' 
+                              ? `ຊຳລະຄ່າງວດ (ງວດທີ ${selectedBillForPrint.installmentPeriod}):` 
+                              : 'ຊຳລະເງິນດາວໃນໃບບິນນີ້:'}
+                          </span>
+                          <span className="text-black font-extrabold">
+                            ${(selectedBillForPrint.amountUSD || selectedBillForPrint.downPaymentUSD || selectedBillForPrint.netTotalUSD).toLocaleString()} USD
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Signatures & Seal Section */}
-              <div className="pt-8 border-t border-zinc-800 grid grid-cols-2 gap-8 text-center text-xs">
-                <div className="space-y-12">
-                  <span className="text-zinc-500 font-mono uppercase block text-[10px]">
-                    {selectedBillForPrint.billType === 'sale' ? 'ລາຍເຊັນລູກຄ້າຜູ້ຊື້ (Customer)' : 'ລາຍເຊັນຜູ້ຈັດສົ່ງ (Supplier / Carrier)'}
+              {/* Bottom Section: Signatures & Seal Section */}
+              <div className="pt-3 border-t border-black grid grid-cols-2 gap-8 text-center text-xs">
+                <div>
+                  <span className="font-bold block mb-10">
+                    {isInstallmentBill(selectedBillForPrint)
+                      ? 'ລາຍເຊັນລູກຄ້າຜູ້ຊື້ / ຜູ້ກູ້ຢືມ (Borrower)'
+                      : selectedBillForPrint.billType === 'sale' 
+                        ? 'ລາຍເຊັນລູກຄ້າຜູ້ຊື້ (Customer)' 
+                        : 'ລາຍເຊັນຜູ້ຈັດສົ່ງ (Supplier)'}
                   </span>
-                  <div className="border-t border-dashed border-zinc-700 w-44 mx-auto pt-1 text-zinc-400">
-                    {selectedBillForPrint.customerName || selectedBillForPrint.supplierName || 'ລາຍເຊັນ'}
+                  <div className="border-b border-dashed border-black w-40 mx-auto mb-1.5"></div>
+                  <div className="text-black font-semibold">
+                    {selectedBillForPrint.customerName || selectedBillForPrint.supplierName || 'ລູກຄ້າ'}
                   </div>
                 </div>
 
-                <div className="space-y-12">
-                  <span className="text-zinc-500 font-mono uppercase block text-[10px]">
-                    ຜູ້ມີອຳນາດລົງນາມ / ຕາປະທັບບໍລິສັດ (Authorized Director)
+                <div>
+                  <span className="font-bold block mb-10">
+                    {isInstallmentBill(selectedBillForPrint)
+                      ? 'ພະນັກງານສິນເຊື່ອ & ການເງິນ / ຕາປະທັບ'
+                      : 'ຜູ້ຮັບຜິດຊອບອອກບິນ / ຕາປະທັບບໍລິສັດ'}
                   </span>
-                  <div className="border-t border-dashed border-zinc-700 w-44 mx-auto pt-1 text-white font-bold">
-                    {selectedBillForPrint.recordedBy || 'Admin'}
+                  <div className="border-b border-dashed border-black w-40 mx-auto mb-1.5"></div>
+                  <div className="text-black font-bold">
+                    {selectedBillForPrint.recordedBy || selectedBillForPrint.salesRep || 'Laothani Authorized'}
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+
+
+      {/* MODAL 2: INSTALLMENT LEDGER MODAL */}
+      {selectedCustomerForLedger && (
+        <InstallmentLedgerModal
+          isOpen={Boolean(selectedCustomerForLedger)}
+          onClose={() => setSelectedCustomerForLedger(null)}
+          customer={selectedCustomerForLedger}
+          vehicles={vehicles}
+          currentUser={currentUser || undefined}
+          lang={lang}
+          onUpdateCustomerRecords={handleUpdateCustomerRecords}
+        />
+      )}
+
+      {/* MODAL 3: CUSTOMER DOCUMENTS MODAL */}
+      {selectedCustomerForDocs && (
+        <CustomerDocumentsModal
+          isOpen={Boolean(selectedCustomerForDocs)}
+          onClose={() => setSelectedCustomerForDocs(null)}
+          customer={selectedCustomerForDocs.customer}
+          vehicles={vehicles}
+          currentUser={currentUser || undefined}
+          lang={lang}
+          initialDoc={selectedCustomerForDocs.docType || 'installment_schedule'}
+          onConfirmPayment={(updatedCust) => {
+            if (setLeads) {
+              setLeads(prev => prev.map(l => l.id === updatedCust.id ? updatedCust : l));
+            }
+          }}
+        />
       )}
     </div>
   );
