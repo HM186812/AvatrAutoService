@@ -135,28 +135,20 @@ export default function LoginView({
     try {
       // Try Supabase Authentication if configured
       if (isSupabaseConfigured() && password) {
-        const emailAttempts: string[] = [];
-        if (cleanId.includes('@')) {
-          emailAttempts.push(cleanId);
-        } else {
+        let authEmail = cleanId;
+        if (!cleanId.includes('@')) {
           const rawDigits = cleanId.replace(/\D/g, '') || cleanId.replace(/\s+/g, '');
-          emailAttempts.push(`${rawDigits}@avatr.phone.la`);
-          emailAttempts.push(`${rawDigits}@avatr-member.la`);
-          emailAttempts.push(`${rawDigits}@laos-ev.la`);
-          emailAttempts.push(`${cleanId}@avatr.phone.la`);
+          authEmail = `${rawDigits}@avatr.phone.la`;
         }
 
         let authUser: any = null;
-        for (const attemptEmail of emailAttempts) {
-          try {
-            const res = await signInWithSupabase(attemptEmail, password);
-            if (res?.data?.user) {
-              authUser = res.data.user;
-              break;
-            }
-          } catch {
-            // continue
+        try {
+          const res = await signInWithSupabase(authEmail, password);
+          if (res?.data?.user) {
+            authUser = res.data.user;
           }
+        } catch {
+          // Fall through to the generic invalid-credentials message below.
         }
 
         if (authUser) {

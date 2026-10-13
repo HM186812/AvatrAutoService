@@ -297,6 +297,7 @@ export async function loadBackendData(): Promise<BackendData> {
   const models = (modelsResult.data || []).map(mapVehicleModel);
   const modelById = new Map(models.map((model) => [model.id, model]));
   const inventory = (inventoryResult.data || []).map((row: DbRow) => mapInventoryItem(row, modelById));
+  const inventoryByVin = new Map((inventoryResult.data || []).map((row: DbRow) => [row.vin, row]));
   const leads = (customersResult.data || []).map((row: DbRow) => mapLead(row, modelById, staffById));
   const itemsByBill = new Map<string, DbRow[]>();
   for (const item of itemsResult.data || []) {
@@ -335,7 +336,7 @@ export async function loadBackendData(): Promise<BackendData> {
   const stockLogs = (movementsResult.data || []).map((movement: DbRow): StockLogRecord => {
     const bill = billById.get(movement.bill_id) as DbRow | undefined;
     const item = (itemsByBill.get(movement.bill_id) || [])[0];
-    const vehicle = (inventoryResult.data || []).find((row: DbRow) => row.vin === movement.vehicle_vin);
+    const vehicle = inventoryByVin.get(movement.vehicle_vin);
     const model = vehicle ? modelById.get(vehicle.model_id)?.name : item?.model_name;
     const staff = staffById.get(movement.recorded_by);
     return {
