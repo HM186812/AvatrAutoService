@@ -30,7 +30,7 @@ interface CustomerDocumentsModalProps {
   vehicles: VehicleModel[];
   currentUser?: SystemUser;
   lang?: Language;
-  onConfirmPayment?: (updatedCustomer: Lead) => void;
+  onConfirmPayment?: (updatedCustomer: Lead) => Promise<void> | void;
   initialDoc?: DocumentType;
 }
 
@@ -180,7 +180,7 @@ export default function CustomerDocumentsModal({
   };
 
   // Confirm Payment directly from inside the document modal
-  const handleConfirmPaymentFromDoc = () => {
+  const handleConfirmPaymentFromDoc = async () => {
     const updated: Lead = {
       ...customer,
       status: 'delivered', // Moves customer to "ຈ່າຍແລ້ວ"
@@ -195,9 +195,13 @@ export default function CustomerDocumentsModal({
       lastFollowUp: new Date().toISOString().slice(0, 16).replace('T', ' '),
     };
 
-    setIsPaymentConfirmedNow(true);
-    if (onConfirmPayment) {
-      onConfirmPayment(updated);
+    try {
+      if (onConfirmPayment) {
+        await onConfirmPayment(updated);
+      }
+      setIsPaymentConfirmedNow(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not save payment to database.');
     }
   };
 

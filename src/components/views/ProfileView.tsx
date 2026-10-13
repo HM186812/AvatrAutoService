@@ -26,6 +26,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { saveUserToSupabase } from '../../supabase';
+import { supabase } from '../../backend/client';
 
 interface ProfileViewProps {
   currentUser: SystemUser;
@@ -112,10 +113,14 @@ export default function ProfileView({
       avatarUrl,
     };
 
-    onUpdateProfile(updatedUser);
-    await saveUserToSupabase(updatedUser);
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+    try {
+      await saveUserToSupabase(updatedUser);
+      onUpdateProfile(updatedUser);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : 'Profile could not be saved.');
+    }
   };
 
   const handleAvatarChange = (file?: File) => {
@@ -162,12 +167,11 @@ export default function ProfileView({
     image.src = objectUrl;
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
 
-    // Verify current password if user already had a password set
-    if (currentUser.password && currentUser.password !== currentPassword) {
+    if (!currentPassword) {
       setPasswordError(
         lang === 'lo'
           ? 'ລະຫັດຜ່ານປັດຈຸບັນບໍ່ຖືກຕ້ອງ!'
@@ -178,13 +182,13 @@ export default function ProfileView({
       return;
     }
 
-    if (!newPassword || newPassword.length < 4) {
+    if (!newPassword || newPassword.length < 8) {
       setPasswordError(
         lang === 'lo'
-          ? 'ລະຫັດຜ່ານໃໝ່ຕ້ອງມີຢ່າງໜ້ອຍ 4 ຕົວອັກສອນ!'
+          ? 'ລະຫັດຜ່ານໃໝ່ຕ້ອງມີ 8 ຕົວຂຶ້ນໄປ!'
           : lang === 'th'
-          ? 'รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร!'
-          : 'New password must be at least 4 characters!'
+          ? 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร!'
+          : 'New password must be at least 8 characters!'
       );
       return;
     }
@@ -194,13 +198,17 @@ export default function ProfileView({
       return;
     }
 
-    const updatedUser: SystemUser = {
-      ...currentUser,
-      password: newPassword,
-    };
-
-    onUpdateProfile(updatedUser);
-    setPasswordSuccess(t.passwordSuccessMsg || 'ປ່ຽນລະຫັດຜ່ານສຳເລັດແລ້ວ!');
+    try {
+      if (!supabase) throw new Error('Supabase is not configured.');
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: currentUser.email, password: currentPassword });
+      if (signInError) throw signInError;
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setPasswordSuccess(t.passwordSuccessMsg || 'ປ່ຽນລະຫັດຜ່ານສຳເລັດແລ້ວ!');
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : 'Password could not be changed.');
+      return;
+    }
     
     setTimeout(() => {
       setPasswordSuccess(null);

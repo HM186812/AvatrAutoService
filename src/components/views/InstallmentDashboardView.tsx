@@ -36,6 +36,7 @@ import { getWhatsAppUrl } from '../../utils/whatsapp';
 import { DEFAULT_EXCHANGE_RATE_LAK, generateInstallmentSchedule, calculateInstallmentSummary } from '../../utils/installment';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
+import { saveLead } from '../../backend/data';
 
 interface InstallmentDashboardViewProps {
   leads: Lead[];
@@ -226,23 +227,26 @@ export default function InstallmentDashboardView({
   };
 
   // Update customer records from ledger
-  const handleUpdateCustomerRecords = (customerId: string, updatedRecords: InstallmentPaymentRecord[]) => {
+  const handleUpdateCustomerRecords = async (customerId: string, updatedRecords: InstallmentPaymentRecord[]) => {
+    const targetLead = leads.find(l => l.id === customerId);
+    if (!targetLead) throw new Error('Customer record not found.');
+    const paidRecords = updatedRecords.filter(r => r.status === 'paid');
+    const totalPaidLAK = paidRecords.reduce((sum, r) => sum + r.amountLAK, 0);
+    const totalPaidUSD = paidRecords.reduce((sum, r) => sum + r.amountUSD, 0);
+    const updatedCust: Lead = {
+      ...targetLead,
+      installmentRecords: updatedRecords,
+      paidAmountLAK: totalPaidLAK,
+      paidAmountUSD: totalPaidUSD,
+      installmentStatus: paidRecords.length === updatedRecords.length && updatedRecords.length > 0 ? 'completed' : 'active_repaying',
+      lastFollowUp: new Date().toISOString(),
+    };
+    if (!currentUser?.id) {
+      throw new Error('Sign in again before saving installment ledger.');
+    }
+    await saveLead(updatedCust, currentUser.id);
     if (setLeads) {
-      setLeads(prev => prev.map(l => {
-        if (l.id === customerId) {
-          const paidRecords = updatedRecords.filter(r => r.status === 'paid');
-          const totalPaidLAK = paidRecords.reduce((sum, r) => sum + r.amountLAK, 0);
-          const totalPaidUSD = paidRecords.reduce((sum, r) => sum + r.amountUSD, 0);
-          return {
-            ...l,
-            installmentRecords: updatedRecords,
-            paidAmountLAK: totalPaidLAK,
-            paidAmountUSD: totalPaidUSD,
-            installmentStatus: paidRecords.length === updatedRecords.length && updatedRecords.length > 0 ? 'completed' : 'active_repaying',
-          };
-        }
-        return l;
-      }));
+      setLeads(prev => prev.map(l => l.id === customerId ? updatedCust : l));
     }
   };
 
@@ -695,7 +699,11 @@ export default function InstallmentDashboardView({
           currentUser={currentUser || undefined}
           lang={lang}
           initialDoc="installment_schedule"
-          onConfirmPayment={(updatedCust) => {
+          onConfirmPayment={async (updatedCust) => {
+            if (!currentUser?.id) {
+              throw new Error('Sign in again before confirming payment.');
+            }
+            await saveLead(updatedCust, currentUser.id);
             if (setLeads) {
               setLeads(prev => prev.map(l => l.id === updatedCust.id ? updatedCust : l));
             }

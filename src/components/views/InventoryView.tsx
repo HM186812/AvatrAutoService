@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SaleLogRecord, SystemUser } from '../../types';
+import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SaleLogRecord, SystemUser, InvoiceBillRecord } from '../../types';
 import { translations } from '../../data/translations';
 import { 
   saveInventoryItemToSupabase, 
@@ -39,10 +39,13 @@ import {
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
+import { newRecordId } from '../../backend/ids';
+import { saveBillRecord } from '../../backend/data';
 
 interface InventoryViewProps {
   inventory: InventoryItem[];
   setInventory: React.Dispatch<React.SetStateAction<InventoryItem[]>>;
+  setBills: React.Dispatch<React.SetStateAction<InvoiceBillRecord[]>>;
   stockLogs: StockLogRecord[];
   setStockLogs: React.Dispatch<React.SetStateAction<StockLogRecord[]>>;
   vehicles: VehicleModel[];
@@ -58,6 +61,7 @@ interface InventoryViewProps {
 export default function InventoryView({
   inventory,
   setInventory,
+  setBills,
   stockLogs,
   setStockLogs,
   vehicles,
@@ -109,7 +113,7 @@ export default function InventoryView({
   };
 
   // SELL CAR HANDLER (ເມື່ອຂາຍອອກ ບັນທຶກຂໍ້ມູນ & ຕັດສະຕ໋ອກ)
-  const handleConfirmSale = (e: React.FormEvent) => {
+  const handleConfirmSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sellingItem) return;
     if (!buyerName.trim() || !buyerPhone.trim()) {
@@ -121,7 +125,6 @@ export default function InventoryView({
     const remaining = Math.max(0, currentQty - 1);
     const finalPriceUSD = soldPriceUSD || sellingItem.priceUSD;
 
-    // 1) Update inventory stock
     const updatedInventoryItem: InventoryItem = {
       ...sellingItem,
       stockQuantity: remaining,
@@ -129,18 +132,39 @@ export default function InventoryView({
       reservedForCustomer: undefined,
     };
 
-    setInventory(prev => prev.map(item => {
-      if (item.vin === sellingItem.vin) {
-        return updatedInventoryItem;
-      }
-      return item;
-    }));
-
+    const billNumber = `INV-AVATR-${Date.now()}`;
+    const bill: InvoiceBillRecord = {
+      id: newRecordId(),
+      billType: 'sale',
+      billNumber,
+      date: saleDate,
+      vin: sellingItem.vin,
+      model: sellingItem.model,
+      quantity: 1,
+      unitPriceUSD: finalPriceUSD,
+      unitPriceLAK: sellingItem.priceLAK,
+      discountUSD: 0,
+      discountLAK: 0,
+      netTotalUSD: finalPriceUSD,
+      netTotalLAK: sellingItem.priceLAK,
+      amountUSD: finalPriceUSD,
+      amountLAK: sellingItem.priceLAK,
+      customerName: buyerName.trim(),
+      customerPhone: buyerPhone.trim(),
+      paymentMethod,
+      salesRep: currentUser?.name || '',
+      recordedBy: currentUser?.name || '',
+      notes: saleNotes,
+    };
     try {
-      saveInventoryItemToSupabase(updatedInventoryItem);
-    } catch (e) {
-      console.warn('Supabase inventory deduction fallback:', e);
+      if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
+      await saveBillRecord(bill, currentUser.id);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Sale could not be saved.');
+      return;
     }
+    setInventory(prev => prev.map(item => item.vin === sellingItem.vin ? updatedInventoryItem : item));
+    setBills(prev => [bill, ...prev]);
 
     // 2) Record into persistent Stock Log (Stock-Out / ຂາຍອອກ)
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -165,7 +189,7 @@ export default function InventoryView({
     };
 
     setStockLogs(prev => [stockOutLog, ...prev]);
-    triggerToast(`ຂາຍອອກ ແລະ ບັນທຶກການຂາຍລົດ ${sellingItem.model} (VIN: ${sellingItem.vin}) ສຳເລັດແລ້ວ! ເຫຼືອໃນສາງ: ${remaining} ຄັນ`);
+    triggerToast(`ຂາຍອອກ ແລະ ບັນທຶກບິນ ${billNumber} ສຳເລັດ`);
 
     // Reset selling modal
     setSellingItem(null);
@@ -187,13 +211,13 @@ export default function InventoryView({
       priceLAK: editingItem.priceUSD * 22000,
     };
 
-    setInventory(prev => prev.map(item => item.vin === editingItem.vin ? updatedItem : item));
-
     try {
       await saveInventoryItemToSupabase(updatedItem);
     } catch (err) {
-      console.warn('Supabase edit item save fallback:', err);
+      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be saved.');
+      return;
     }
+    setInventory(prev => prev.map(item => item.vin === editingItem.vin ? updatedItem : item));
 
     triggerToast(`ອັບເດດຂໍ້ມູນລົດ ${editingItem.model} (VIN: ${editingItem.vin}) ສຳເລັດ! (Cloud Synced)`);
     setEditingItem(null);
@@ -219,7 +243,9 @@ export default function InventoryView({
     try {
       await deleteInventoryItemFromSupabase(target.vin);
     } catch (err) {
-      console.warn('Supabase delete item fallback:', err);
+      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be deleted.');
+      setIsDeletingInventory(false);
+      return;
     }
     setInventory(prev => prev.filter(item => item.vin !== target.vin));
     if (editingItem?.vin === target.vin) {

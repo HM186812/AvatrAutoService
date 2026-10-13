@@ -33,7 +33,7 @@ interface InstallmentLedgerModalProps {
   vehicles: VehicleModel[];
   currentUser?: SystemUser;
   lang?: Language;
-  onUpdateCustomerRecords: (customerId: string, records: InstallmentPaymentRecord[]) => void;
+  onUpdateCustomerRecords: (customerId: string, records: InstallmentPaymentRecord[]) => Promise<void> | void;
 }
 
 export default function InstallmentLedgerModal({
@@ -57,6 +57,8 @@ export default function InstallmentLedgerModal({
 
   const [filterTab, setFilterTab] = useState<'all' | 'due' | 'paid' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
 
   // Selected period to record payment
   const [recordingPeriod, setRecordingPeriod] = useState<InstallmentPaymentRecord | null>(null);
@@ -76,11 +78,14 @@ export default function InstallmentLedgerModal({
     setPayDate(new Date().toISOString().slice(0, 10));
     setPayRef(`TRF-${Math.floor(100000 + Math.random() * 900000)}`);
     setPayNotes(`ຊຳລະງວດທີ ${record.period} - ${customer.customerName}`);
+    setLedgerError(null);
   };
 
   // Submit payment for period
-  const handleSavePayment = () => {
+  const handleSavePayment = async () => {
     if (!recordingPeriod) return;
+    setIsSaving(true);
+    setLedgerError(null);
 
     const receiptNumber = `REC-INS-${customer.id.replace(/\D/g, '') || '01'}-${String(recordingPeriod.period).padStart(2, '0')}`;
     const updatedRecords = records.map(r => {
@@ -102,14 +107,22 @@ export default function InstallmentLedgerModal({
       return r;
     });
 
-    setRecords(updatedRecords);
-    onUpdateCustomerRecords(customer.id, updatedRecords);
-    setRecordingPeriod(null);
+    try {
+      await onUpdateCustomerRecords(customer.id, updatedRecords);
+      setRecords(updatedRecords);
+      setRecordingPeriod(null);
+    } catch (err) {
+      setLedgerError(err instanceof Error ? err.message : 'Could not save installment record to database.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Revert payment back to due/pending
-  const handleRevertPayment = (period: number) => {
+  const handleRevertPayment = async (period: number) => {
     if (!confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການຍົກເລີກການບັນທຶກຊຳລະງວດທີ ${period}?`)) return;
+    setIsSaving(true);
+    setLedgerError(null);
 
     const updatedRecords = records.map(r => {
       if (r.period === period) {
@@ -133,8 +146,14 @@ export default function InstallmentLedgerModal({
       return r;
     });
 
-    setRecords(updatedRecords);
-    onUpdateCustomerRecords(customer.id, updatedRecords);
+    try {
+      await onUpdateCustomerRecords(customer.id, updatedRecords);
+      setRecords(updatedRecords);
+    } catch (err) {
+      setLedgerError(err instanceof Error ? err.message : 'Could not revert installment record.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Filter records
@@ -580,21 +599,29 @@ export default function InstallmentLedgerModal({
                 </div>
               </div>
 
+              {ledgerError && (
+                <div className="p-2.5 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs font-medium">
+                  {ledgerError}
+                </div>
+              )}
+
               <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={() => setRecordingPeriod(null)}
-                  className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-medium rounded-xl text-xs transition-colors"
+                  className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-medium rounded-xl text-xs transition-colors disabled:opacity-50"
                 >
                   ຍົກເລີກ
                 </button>
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={handleSavePayment}
-                  className="flex-1 py-2 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl text-xs transition-colors shadow flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl text-xs transition-colors shadow flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>ບັນທຶກຮັບເງິນ</span>
+                  <span>{isSaving ? 'ກຳລັງບັນທຶກ...' : 'ບັນທຶກຮັບເງິນ'}</span>
                 </button>
               </div>
             </div>

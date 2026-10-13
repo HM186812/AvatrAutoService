@@ -34,6 +34,8 @@ export interface UserPermissions {
   canGrantRoles?: boolean;
   canDeductPOS?: boolean;
   canViewFinancials?: boolean;
+  canUpdatePDI?: boolean;
+  canViewVehicles?: boolean;
 }
 
 export interface SystemUser {
@@ -50,7 +52,6 @@ export interface SystemUser {
   status?: 'active' | 'suspended';
   createdAt: string;
   lastLogin?: string;
-  password?: string;
 }
 
 export type CustomerCategory = 'walk_in' | 'online' | 'event';
@@ -195,6 +196,7 @@ export interface InvoiceBillRecord {
   eventLocation?: string;
 
   // Operational Metadata
+  paymentSlipPath?: string;
   recordedBy?: string;
   notes?: string;
 }

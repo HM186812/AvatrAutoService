@@ -62,3 +62,7 @@ supabase-service-key*
 firebase.json
 firestore.rules
 firestore.indexes.json
+
+# Local agent reviewer skill
+.agents/skills/enterprise-reviewer/
+

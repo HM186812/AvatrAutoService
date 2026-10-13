@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceBillRecord, StockLogRecord } from '../../types';
 import { translations } from '../../data/translations';
+import { newRecordId } from '../../backend/ids';
 import { 
-  saveInventoryItemToSupabase, 
   saveBillToSupabase, 
   saveVehicleModelToSupabase,
   deleteVehicleModelFromSupabase
@@ -75,7 +75,7 @@ export default function StockInView({
   const [interiorColor, setInteriorColor] = useState('');
   const [trim, setTrim] = useState('');
   const [battery, setBattery] = useState('');
-  const [quantity, setQuantity] = useState<number | ''>('');
+  const [quantity] = useState<number>(1);
   const [priceValue, setPriceValue] = useState<number | ''>('');
   const [status, setStatus] = useState<StockStatus>('ready');
   const [customImage, setCustomImage] = useState<string>('');
@@ -161,7 +161,7 @@ export default function StockInView({
   const [newModelPowertrain, setNewModelPowertrain] = useState('Dual-Motor AWD (578 hp)');
   const [newModelImage, setNewModelImage] = useState('');
 
-  const handleAddNewVehicleModel = (e: React.FormEvent) => {
+  const handleAddNewVehicleModel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isSuperAdmin) {
       triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໄດ້!');
@@ -212,16 +212,17 @@ export default function StockInView({
       isCustom: true,
     };
 
+    try {
+      await saveVehicleModelToSupabase(newVehicle);
+    } catch (e) {
+      triggerToast(e instanceof Error ? e.message : 'Vehicle model could not be saved.');
+      return;
+    }
     if (setVehicles) {
       setVehicles(prev => {
         const filtered = prev.filter(v => v.id !== newVehicle.id && v.name.toLowerCase() !== cleanName.toLowerCase());
         return [...filtered, newVehicle];
       });
-    }
-    try {
-      saveVehicleModelToSupabase(newVehicle);
-    } catch (e) {
-      console.warn('Supabase save model fallback:', e);
     }
     setModel(cleanName);
     setIsAddModelOpen(false);
@@ -255,14 +256,15 @@ export default function StockInView({
     const target = modelToDelete;
     const modelId = target.id || `avatr-${target.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
     
-    if (setVehicles) {
-      setVehicles(prev => prev.filter(v => (v.id || v.name) !== (target.id || target.name)));
-    }
-
     try {
       await deleteVehicleModelFromSupabase(modelId);
     } catch (err) {
-      console.warn('Supabase delete model fallback:', err);
+      triggerToast(err instanceof Error ? err.message : 'Vehicle model could not be deleted.');
+      setIsDeletingModel(false);
+      return;
+    }
+    if (setVehicles) {
+      setVehicles(prev => prev.filter(v => (v.id || v.name) !== (target.id || target.name)));
     }
 
     if (model === target.name) {
@@ -278,7 +280,7 @@ export default function StockInView({
   };
 
   // SUBMIT IMPORT & GENERATE INBOUND BILL
-  const handleSubmitStockIn = (e: React.FormEvent) => {
+  const handleSubmitStockIn = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!vin.trim()) {
@@ -301,7 +303,11 @@ export default function StockInView({
 
     const finalImage = customImage || heroFallback;
     const cleanVin = vin.toUpperCase().trim();
-    const qty = Number(quantity) || 1;
+    const qty = 1;
+    if (inventory.some(item => item.vin.toUpperCase() === vin.trim().toUpperCase())) {
+      triggerToast('VIN ນີ້ມີໃນສາງແລ້ວ');
+      return;
+    }
 
     // Validate Event / Promotion Timeframe
     if (status === 'event' || status === 'promotion') {
@@ -351,32 +357,9 @@ export default function StockInView({
       eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
     };
 
-    // 1. ADD / UPDATE INVENTORY
-    setInventory(prev => {
-      const cleanUpper = cleanVin.toUpperCase().trim();
-      const existingIdx = prev.findIndex(item => item.vin.toUpperCase() === cleanUpper);
-      if (existingIdx >= 0) {
-        const updated = [...prev];
-        const existing = updated[existingIdx];
-        updated[existingIdx] = {
-          ...existing,
-          ...newItem,
-          stockQuantity: (existing.stockQuantity || 0) + qty,
-        };
-        return updated;
-      }
-      return [newItem, ...prev];
-    });
-
-    try {
-      saveInventoryItemToSupabase(newItem);
-    } catch (e) {
-      console.warn('Supabase stock in save item fallback:', e);
-    }
-
-    // 2. CREATE OFFICIAL INBOUND BILL (GOODS RECEIPT NOTE - ບັນທຶກບິນ ແລະ ໃບຮັບ)
+    // Create official inbound bill (goods receipt note).
     const newBill: InvoiceBillRecord = {
-      id: grnNumber,
+      id: newRecordId(),
       billType: 'import',
       billNumber: grnNumber,
       date: importDateTime,
@@ -412,13 +395,14 @@ export default function StockInView({
       notes: notes || 'ຮັບເຂົ້າສາງທາງການ ຜ່ານດ່ານສາກົນບໍ່ເຕັນ ກວດສອບສະພາບ 100%',
     };
 
-    setBills(prev => [newBill, ...prev]);
-
     try {
-      saveBillToSupabase(newBill);
-    } catch (e) {
-      console.warn('Supabase bill save fallback:', e);
+      await saveBillToSupabase(newBill, newItem);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Stock-in could not be saved.');
+      return;
     }
+    setInventory(prev => [newItem, ...prev]);
+    setBills(prev => [newBill, ...prev]);
 
     // 3. RECORD TRANSACTION LOG
     const newStockLog: StockLogRecord = {
@@ -1048,18 +1032,13 @@ export default function StockInView({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-zinc-400 font-medium">{t.quantityUnits} <span className="text-red-500">*</span></label>
-                <span className="text-[10px] text-zinc-400 font-mono">ບໍ່ຈຳກັດຈຳນວນ (Unlimited)</span>
+                <span className="text-[10px] text-zinc-400 font-mono">1 VIN = 1 vehicle</span>
               </div>
               <input
                 type="number"
-                required
                 min="1"
-                placeholder="1"
                 value={quantity}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setQuantity(val === '' ? '' : Math.max(1, parseInt(val, 10) || 1));
-                }}
+                readOnly
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-white"
               />
             </div>

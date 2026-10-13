@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Lead, 
   ServiceAppointment, 
@@ -6,33 +6,22 @@ import {
   VehicleModel, 
   InventoryItem, 
   SystemUser, 
-  UserRole,
   StockLogRecord, 
   InvoiceBillRecord, 
   Language, 
   ActiveMenu 
 } from './types';
-import { 
-  AVATR_VEHICLES, 
-  INITIAL_LEADS, 
-  INITIAL_SERVICES, 
-  INITIAL_TEST_DRIVES, 
-  INITIAL_INVENTORY, 
-  INITIAL_USERS, 
-  INITIAL_STOCK_LOGS, 
-  INITIAL_BILLS 
-} from './data/mockData';
 import { translations } from './data/translations';
-import { 
-  isSupabaseConfigured, 
-  seedSupabaseIfEmpty, 
-  subscribeToInventory, 
-  subscribeToBills, 
-  subscribeToVehicleModels, 
-  subscribeToUsers, 
-  deleteBillFromSupabase,
-  signOutSupabase
-} from './supabase';
+import { isSupabaseConfigured, supabase } from './backend/client';
+import {
+  deleteBill,
+  getSignedInStaff,
+  loadBackendData,
+  saveLead,
+  saveServiceAppointment,
+  saveTestDriveBooking,
+} from './backend/data';
+import { newRecordId } from './backend/ids';
 // Categorized Components & Views
 import { Sidebar } from './components/layout';
 import { LoginView } from './components/auth';
@@ -152,239 +141,119 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('home');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Automatic clean-up of old mock data & cached users from previous versions
-  useEffect(() => {
-    try {
-      const isCleaned = localStorage.getItem('avatr_db_clean_init_v2');
-      if (!isCleaned) {
-        localStorage.removeItem('avatr_inventory_v3');
-        localStorage.removeItem('avatr_inventory_v2');
-        localStorage.removeItem('avatr_leads_v2');
-        localStorage.removeItem('avatr_services_v2');
-        localStorage.removeItem('avatr_testdrives_v2');
-        localStorage.removeItem('avatr_stock_logs_v2');
-        localStorage.removeItem('avatr_invoice_bills_v2');
-        localStorage.removeItem('avatr_system_users_v2');
-        localStorage.removeItem('avatr_system_users_prod_v1');
-        localStorage.removeItem('avatr_active_user_id_v1');
-        localStorage.removeItem('avatr_logged_in');
-        localStorage.setItem('avatr_db_clean_init_v2', 'true');
-      }
-    } catch (e) {
-      console.warn('Storage cleanup notice:', e);
-    }
-  }, []);
-
   const FALLBACK_EMPTY_USER: SystemUser = {
-    id: 'USR-ADMIN',
-    name: 'Admin (Super Admin)',
+    id: '',
+    name: '',
     email: '',
     phone: '',
-    role: 'super_admin',
-    roleTitleLo: 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)',
-    department: 'Executive Management & Direction',
-    status: 'active',
-    avatarInitials: 'AD',
+    role: 'general_user',
+    roleTitleLo: 'General User',
+    department: '',
+    status: 'suspended',
+    avatarInitials: '',
     permissions: {
-      canManageUsers: true,
-      canDeleteUsers: true,
-      canGrantRoles: true,
-      canEditInventory: true,
-      canUploadQR: true,
-      canAddModels: true,
-      canDeductPOS: true,
-      canViewFinancials: true,
+      canManageUsers: false,
+      canDeleteUsers: false,
+      canGrantRoles: false,
+      canEditInventory: false,
+      canUploadQR: false,
+      canAddModels: false,
+      canDeductPOS: false,
+      canViewFinancials: false,
     },
-    createdAt: new Date().toISOString().slice(0, 10),
+    createdAt: '',
   };
 
-  // Users State (with LocalStorage persistence)
-  const [users, setUsers] = useState<SystemUser[]>(() => {
-    try {
-      const saved = localStorage.getItem('avatr_system_users_prod_v1');
-      return saved ? JSON.parse(saved) : INITIAL_USERS;
-    } catch {
-      return INITIAL_USERS;
-    }
-  });
+  const [users, setUsers] = useState<SystemUser[]>([]);
+  const [currentUser, setCurrentUser] = useState<SystemUser>(FALLBACK_EMPTY_USER);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [services, setServices] = useState<ServiceAppointment[]>([]);
+  const [testDrives, setTestDrives] = useState<TestDriveBooking[]>([]);
+  const [stockLogs, setStockLogs] = useState<StockLogRecord[]>([]);
+  const [bills, setBills] = useState<InvoiceBillRecord[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleModel[]>([]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [backendError, setBackendError] = useState<string | null>(null);
 
-  // Current logged in user
-  const [currentUser, setCurrentUser] = useState<SystemUser>(() => {
-    try {
-      const savedId = localStorage.getItem('avatr_active_user_id_v1');
-      const found = users.find(u => u.id === savedId);
-      return found || users[0] || FALLBACK_EMPTY_USER;
-    } catch {
-      return FALLBACK_EMPTY_USER;
-    }
-  });
-
-  // Leads state with localStorage persistence
-  const [leads, setLeads] = useState<Lead[]>(() => {
-    try {
-      const saved = localStorage.getItem('avatr_leads_prod_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      return INITIAL_LEADS;
-    } catch {
-      return INITIAL_LEADS;
-    }
-  });
-
-  // Inventory state with localStorage persistence
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('avatr_inventory_prod_v1');
-      return saved ? JSON.parse(saved) : INITIAL_INVENTORY;
-    } catch {
-      return INITIAL_INVENTORY;
-    }
-  });
-
-  // Services state with localStorage persistence
-  const [services, setServices] = useState<ServiceAppointment[]>(() => {
-    try {
-      const saved = localStorage.getItem('avatr_services_prod_v1');
-      return saved ? JSON.parse(saved) : INITIAL_SERVICES;
-    } catch {
-      return INITIAL_SERVICES;
-    }
-  });
-
-  // Test Drives state with localStorage persistence
-  const [testDrives, setTestDrives] = useState<TestDriveBooking[]>(() => {
-    try {
-      const saved = localStorage.getItem('avatr_testdrives_prod_v1');
-      return saved ? JSON.parse(saved) : INITIAL_TEST_DRIVES;
-    } catch {
-      return INITIAL_TEST_DRIVES;
-    }
-  });
-
-  // Stock Movement & Sales Logs state with localStorage persistence
-  const [stockLogs, setStockLogs] = useState<StockLogRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('avatr_stock_logs_prod_v1');
-      return saved ? JSON.parse(saved) : INITIAL_STOCK_LOGS;
-    } catch {
-      return INITIAL_STOCK_LOGS;
-    }
-  });
-
-  // Official Bills & Invoices state with localStorage persistence
-  const [bills, setBills] = useState<InvoiceBillRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('avatr_invoice_bills_prod_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      return INITIAL_BILLS;
-    } catch {
-      return INITIAL_BILLS;
-    }
-  });
-
-  // Vehicle Models State (Admin ສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນຂຶ້ນມາໄດ້ບໍ່ຈຳກັດ)
-  const [vehicles, setVehicles] = useState<VehicleModel[]>(() => {
-    try {
-      const isInit = localStorage.getItem('avatr_vehicle_models_v3_init');
-      if (!isInit) {
-        localStorage.setItem('avatr_vehicle_models_v3_init', 'true');
-        localStorage.setItem('avatr_vehicle_models_prod_v1', JSON.stringify(AVATR_VEHICLES));
-        return AVATR_VEHICLES;
-      }
-      const saved = localStorage.getItem('avatr_vehicle_models_prod_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+  const refreshBackendData = useCallback(async () => {
+    const data = await loadBackendData();
+    setUsers(data.users);
+    setLeads(data.leads);
+    setInventory(data.inventory);
+    setServices(data.services);
+    setTestDrives(data.testDrives);
+    setStockLogs(data.stockLogs);
+    setBills(data.bills);
+    setVehicles(data.vehicles);
+    if (data.settings && typeof data.settings === 'object') {
+      const settings = data.settings as Record<string, unknown>;
+      if (settings.companyBankInfo) {
+        try {
+          localStorage.setItem('avatr_company_bank_info_v2', JSON.stringify(settings.companyBankInfo));
+        } catch {
+          // ignore
         }
       }
-      return AVATR_VEHICLES;
-    } catch {
-      return AVATR_VEHICLES;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('avatr_vehicle_models_prod_v1', JSON.stringify(vehicles));
-  }, [vehicles]);
-
-  // Sync to local storage
-  useEffect(() => {
-    localStorage.setItem('avatr_system_users_prod_v1', JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    localStorage.setItem('avatr_active_user_id_v1', currentUser.id);
-  }, [currentUser]);
-
-  useEffect(() => {
-    localStorage.setItem('avatr_leads_prod_v1', JSON.stringify(leads));
-  }, [leads]);
-
-  useEffect(() => {
-    localStorage.setItem('avatr_inventory_prod_v1', JSON.stringify(inventory));
-  }, [inventory]);
-
-  useEffect(() => {
-    localStorage.setItem('avatr_stock_logs_prod_v1', JSON.stringify(stockLogs));
-  }, [stockLogs]);
-
-  useEffect(() => {
-    localStorage.setItem('avatr_invoice_bills_prod_v1', JSON.stringify(bills));
-  }, [bills]);
-
-  useEffect(() => {
-    localStorage.setItem('avatr_services_prod_v1', JSON.stringify(services));
-  }, [services]);
-
-  useEffect(() => {
-    localStorage.setItem('avatr_testdrives_prod_v1', JSON.stringify(testDrives));
-  }, [testDrives]);
-
-  // Real-time Supabase Cloud Synchronization
-  useEffect(() => {
-    if (isSupabaseConfigured()) {
-      seedSupabaseIfEmpty();
-
-      const unsubInventory = subscribeToInventory((items) => {
-        setInventory(items || []);
-      });
-
-      const unsubBills = subscribeToBills((bList) => {
-        setBills(bList || []);
-      });
-
-      const unsubVehicles = subscribeToVehicleModels((models) => {
-        if (models && models.length > 0) {
-          setVehicles(models);
+      if (Array.isArray(settings.currencies)) {
+        try {
+          localStorage.setItem('avatr_custom_currencies_v1', JSON.stringify(settings.currencies));
+        } catch {
+          // ignore
         }
-      });
-
-      const unsubUsers = subscribeToUsers((uList) => {
-        const list = uList || [];
-        setUsers(list);
-        if (list.length > 0) {
-          const savedId = localStorage.getItem('avatr_active_user_id_v1');
-          const activeUpdated = list.find(u => u.id === currentUser.id) || list.find(u => u.id === savedId) || list[0];
-          if (activeUpdated) {
-            setCurrentUser(activeUpdated);
-          }
-        }
-      });
-
-      return () => {
-        unsubInventory();
-        unsubBills();
-        unsubVehicles();
-        unsubUsers();
-      };
+      }
     }
+    setBackendError(data.warnings.length ? data.warnings.join(' ') : null);
   }, []);
+
+  useEffect(() => {
+    if (!supabase || !isSupabaseConfigured) {
+      setBackendError('Supabase is not configured.');
+      setIsAuthLoading(false);
+      return;
+    }
+
+    let active = true;
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!active) return;
+
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        setIsLoggedIn(false);
+        setCurrentUser(FALLBACK_EMPTY_USER);
+        setUsers([]);
+        setLeads([]);
+        setInventory([]);
+        setServices([]);
+        setTestDrives([]);
+        setStockLogs([]);
+        setBills([]);
+        setVehicles([]);
+        setIsAuthLoading(false);
+        return;
+      }
+
+      try {
+        const user = await getSignedInStaff(session.user.id);
+        await refreshBackendData();
+        if (!active) return;
+        setCurrentUser(user);
+        setIsLoggedIn(true);
+        setBackendError(null);
+      } catch (error: unknown) {
+        if (!active) return;
+        setBackendError(error instanceof Error ? error.message : 'Could not load Supabase session.');
+        void supabase?.auth.signOut();
+      } finally {
+        if (active) setIsAuthLoading(false);
+      }
+    });
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [refreshBackendData]);
 
   // Alert counts (ແຈ້ງເຕືອນສະຕ໋ອກເມື່ອຕ່ຳກວ່າ 5 ຄັນ)
   const lowStockCount = inventory.filter(i => i.stockQuantity > 0 && i.stockQuantity < 5 && i.status !== 'sold').length;
@@ -417,24 +286,12 @@ export default function App() {
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Authentication State
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    try {
-      const savedLoggedIn = localStorage.getItem('avatr_logged_in');
-      return savedLoggedIn === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-
-
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsLoggedIn(false);
-    localStorage.removeItem('avatr_logged_in');
-    localStorage.removeItem('avatr_active_user_id_v1');
-    if (isSupabaseConfigured()) {
-      signOutSupabase().catch((err) => console.warn('Supabase logout notice:', err));
+    try {
+      await supabase?.auth.signOut();
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Sign-out failed.');
     }
     triggerToast('ທ່ານໄດ້ອອກຈາກລະບົບຮຽບຮ້ອຍແລ້ວ');
   };
@@ -446,12 +303,12 @@ export default function App() {
       return;
     }
     try {
-      await deleteBillFromSupabase(billId);
-    } catch (e) {
-      console.warn('Supabase delete bill fallback:', e);
+      await deleteBill(billId);
+      setBills(prev => prev.filter(b => b.id !== billId));
+      triggerToast('ລົບບິນສຳເລັດແລ້ວ!');
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Bill could not be deleted.');
     }
-    setBills(prev => prev.filter(b => b.id !== billId));
-    triggerToast('ລົບບິນສຳເລັດແລ້ວ!');
   };
 
   const triggerToast = (msg: string) => {
@@ -462,55 +319,37 @@ export default function App() {
   };
 
   // Handlers
-  const handleAddLead = (leadData: Omit<Lead, 'id' | 'createdAt'> & { createdAt?: string }) => {
-    const newId = `LD-${Math.floor(1000 + Math.random() * 9000)}`;
-    const now = leadData.createdAt || new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const newLead: Lead = {
-      ...leadData,
-      id: newId,
-      createdAt: now,
-    };
-    setLeads(prev => [newLead, ...prev]);
-    triggerToast(`ເພີ່ມຂໍ້ມູນລູກຄ້າ ${newLead.customerName} ເຂົ້າສູ່ລະບົບ CRM ສຳເລັດ!`);
-  };
-
-  const handleAddService = (serviceData: Omit<ServiceAppointment, 'id'>) => {
-    const newId = `SRV-${Math.floor(800 + Math.random() * 200)}`;
-    const newService: ServiceAppointment = {
-      ...serviceData,
-      id: newId,
-    };
-    setServices(prev => [newService, ...prev]);
-    triggerToast(`ນັດໝາຍສ້ອມບຳລຸງລົດ ${newService.model} ບັນທຶກແລ້ວ!`);
-  };
-
-  const handleAddTestDrive = (tdData: Omit<TestDriveBooking, 'id'>) => {
-    const newId = `TD-${Math.floor(300 + Math.random() * 700)}`;
-    const newTd: TestDriveBooking = {
-      ...tdData,
-      id: newId,
-    };
-    setTestDrives(prev => [newTd, ...prev]);
-
-    // Also auto-create a lead for CRM pipeline if not exists
-    const leadExists = leads.some(l => l.phone.replace(/\s+/g, '') === tdData.phone.replace(/\s+/g, ''));
-    if (!leadExists) {
-      handleAddLead({
-        customerName: tdData.customerName,
-        phone: tdData.phone,
-        category: 'walk_in',
-        interestedModel: tdData.model as any,
-        status: 'test_drive',
-        priority: 'high',
-        source: 'ໂຊຣູມ',
-        budget: '$45,000',
-        assignedTo: currentUser?.name || 'Admin',
-        notes: `ຈອງທົດລອງຂັບ ${tdData.model} ວັນທີ ${tdData.date} @ ${tdData.timeSlot} ທີ່ ${tdData.location}`,
-        testDriveDate: `${tdData.date} ${tdData.timeSlot}`,
-      });
+  const handleAddLead = async (leadData: Omit<Lead, 'id' | 'createdAt'> & { createdAt?: string }) => {
+    const newLead: Lead = { ...leadData, id: newRecordId(), createdAt: leadData.createdAt || new Date().toISOString() };
+    try {
+      await saveLead(newLead, currentUser.id);
+      setLeads(prev => [newLead, ...prev]);
+      triggerToast(`ເພີ່ມຂໍ້ມູນລູກຄ້າ ${newLead.customerName} ສຳເລັດ`);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Customer could not be saved.');
     }
+  };
 
-    triggerToast(`ຢືນຢັນການຈອງທົດລອງຂັບ ${tdData.model} ຮຽບຮ້ອຍແລ້ວ!`);
+  const handleAddService = async (serviceData: Omit<ServiceAppointment, 'id'>) => {
+    const newService: ServiceAppointment = { ...serviceData, id: newRecordId() };
+    try {
+      await saveServiceAppointment(newService, currentUser.id);
+      setServices(prev => [newService, ...prev]);
+      triggerToast(`ນັດບໍລິການ ${newService.model} ບັນທຶກແລ້ວ`);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Appointment could not be saved.');
+    }
+  };
+
+  const handleAddTestDrive = async (tdData: Omit<TestDriveBooking, 'id'>) => {
+    const newTd: TestDriveBooking = { ...tdData, id: newRecordId() };
+    try {
+      await saveTestDriveBooking(newTd, currentUser.id);
+      setTestDrives(prev => [newTd, ...prev]);
+      triggerToast(`ຈອງທົດລອງຂັບ ${tdData.model} ສຳເລັດ`);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Test drive could not be saved.');
+    }
   };
 
   const handleOpenTestDriveForModel = (modelName: string) => {
@@ -529,8 +368,8 @@ export default function App() {
     setIsVehicleModalOpen(true);
   };
 
-  const handleSubmitWebInquiry = (name: string, phone: string, model: string, message: string) => {
-    handleAddLead({
+  const handleSubmitWebInquiry = async (name: string, phone: string, model: string, message: string) => {
+    await handleAddLead({
       customerName: name,
       phone: phone,
       category: 'online',
@@ -543,22 +382,21 @@ export default function App() {
     });
   };
 
+  if (isAuthLoading) {
+    return <div className="min-h-screen bg-black text-white grid place-items-center">Loading…</div>;
+  }
+
   // If user is logged out, show LoginView
   if (!isLoggedIn) {
     return (
       <LoginView
         users={users}
-        onLoginSuccess={(user, remember) => {
+        onLoginSuccess={(user) => {
           setCurrentUser(user);
           setIsLoggedIn(true);
-          localStorage.setItem('avatr_logged_in', 'true');
-          localStorage.setItem('avatr_active_user_id_v1', user.id);
-          const currentT = translations[lang] || translations.lo;
-          triggerToast(`${currentT.success}: ${user.name}`);
+          setBackendError(null);
         }}
-        onRegisterUser={(newUser) => {
-          setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)]);
-        }}
+        onRegisterUser={(newUser) => setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)])}
         lang={lang}
         setLang={handleSetLang}
         theme={theme}
@@ -650,11 +488,11 @@ export default function App() {
             {/* Supabase Cloud Connection Status Indicator */}
             <div 
               className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs bg-zinc-900 border border-zinc-800 font-mono text-[11px]"
-              title={isSupabaseConfigured() ? 'Connected to Supabase Cloud with Real-Time Sync' : 'Running in Offline / Local Mode'}
+              title={backendError || (isSupabaseConfigured ? 'Supabase configured' : 'Supabase is not configured')}
             >
-              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured() ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured && !backendError ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
               <span className="text-zinc-300">
-                {isSupabaseConfigured() ? 'Supabase Cloud' : 'Local Mode'}
+                {backendError ? 'DB Error' : isSupabaseConfigured ? 'Supabase Cloud' : 'Not Connected'}
               </span>
             </div>
 
@@ -677,59 +515,7 @@ export default function App() {
               )}
             </button>
 
-            {/* Quick Role Switcher Pill */}
-            <button
-              onClick={() => {
-                const isCurrentlyAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
-                const nextRole: UserRole = isCurrentlyAdmin ? 'general_user' : 'admin';
-                const isNextAdmin = nextRole === 'admin';
-                const updated: SystemUser = {
-                  ...currentUser,
-                  role: nextRole,
-                  roleTitleLo: isNextAdmin ? 'Admin' : 'User',
-                  department: isNextAdmin ? 'Executive Management' : 'General Staff',
-                  permissions: {
-                    canManageUsers: isNextAdmin,
-                    canDeleteUsers: isNextAdmin,
-                    canGrantRoles: isNextAdmin,
-                    canEditInventory: isNextAdmin,
-                    canUploadQR: isNextAdmin,
-                    canAddModels: isNextAdmin,
-                    canDeductPOS: true,
-                    canViewFinancials: isNextAdmin,
-                  }
-                };
-                setCurrentUser(updated);
-                setUsers(prev => {
-                  const exists = prev.some(u => u.id === updated.id);
-                  if (exists) {
-                    return prev.map(u => u.id === updated.id ? updated : u);
-                  }
-                  return [updated, ...prev];
-                });
-                triggerToast(`${t.switchRoleBtn}: ${isNextAdmin ? 'Admin' : 'User'}`);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border shadow-sm ${
-                (currentUser.role === 'super_admin' || currentUser.role === 'admin')
-                  ? 'bg-zinc-800 text-white border-zinc-600 hover:bg-zinc-700'
-                  : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:bg-zinc-800'
-              }`}
-              title="Switch between Admin and User"
-            >
-              {(currentUser.role === 'super_admin' || currentUser.role === 'admin') ? (
-                <>
-                  <ShieldCheck className="w-3.5 h-3.5 text-white" />
-                  <span className="hidden sm:inline">Admin</span>
-                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-white text-black font-extrabold">{t.switchRoleBtn}</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="w-3.5 h-3.5 text-zinc-400" />
-                  <span className="hidden sm:inline">User</span>
-                  <span className="text-[10px] font-sans px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400">{t.switchRoleBtn}</span>
-                </>
-              )}
-            </button>
+            <span className="px-3 py-1.5 rounded-xl text-xs font-bold border border-zinc-700 bg-zinc-900 text-zinc-200">{currentUser.roleTitleLo}</span>
           </div>
         </header>
 
@@ -773,6 +559,7 @@ export default function App() {
             <InventoryView
               inventory={inventory}
               setInventory={setInventory}
+              setBills={setBills}
               stockLogs={stockLogs}
               setStockLogs={setStockLogs}
               vehicles={vehicles}

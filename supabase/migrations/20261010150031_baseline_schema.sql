@@ -346,7 +346,10 @@ BEGIN
   -- Update Vehicle status if sold
   IF p_movement_type = 'stock_out' THEN
     UPDATE public.vehicles SET status = 'sold', updated_at = NOW()
-    WHERE vin = v_vin;
+    WHERE vin = v_vin AND status != 'sold';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Vehicle VIN % already sold or not in stock', v_vin;
+    END IF;
   END IF;
 END;
 $$;

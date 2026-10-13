@@ -99,9 +99,13 @@ export async function getSignedInStaff(userId: string): Promise<SystemUser> {
   return mapStaffProfile(profile, roleRow?.permissions);
 }
 
-export async function signInStaff(email: string, password: string): Promise<SystemUser> {
+export async function signInStaff(email: string, password: string, captchaToken?: string): Promise<SystemUser> {
   const client = requireSupabase();
-  const { data, error } = await client.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+  const { data, error } = await client.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+    options: captchaToken ? { captchaToken } : undefined,
+  });
   if (error) throw error;
   if (!data.user) throw new Error('Authentication did not return a user.');
 
@@ -111,6 +115,28 @@ export async function signInStaff(email: string, password: string): Promise<Syst
     await client.auth.signOut();
     throw profileError;
   }
+}
+
+export async function signUpStaff(
+  email: string,
+  password: string,
+  name: string,
+  phone: string,
+  captchaToken?: string
+): Promise<SystemUser> {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+    options: {
+      data: { name: sanitizeText(name, 120), phone: sanitizePhone(phone, 30) },
+      captchaToken,
+    },
+  });
+  if (error) throw error;
+  if (!data.user) throw new Error('Sign-up did not return a user.');
+  if (!data.session) throw new Error('Account created. Confirm the email, then sign in.');
+  return getSignedInStaff(data.user.id);
 }
 
 export async function createStaffAccount(input: {
@@ -195,6 +221,10 @@ function mapLead(row: DbRow, modelById: Map<string, VehicleModel>, staffById: Ma
     customerName: row.name || '',
     phone: row.phone || '',
     email: row.email || undefined,
+    idCardNumber: row.id_card_number || undefined,
+    province: row.province || undefined,
+    district: row.district || undefined,
+    village: row.village || undefined,
     category: row.category || 'walk_in',
     source: row.source || undefined,
     interestedModel: modelById.get(row.interested_model_id)?.name || row.interested_model_id || '',
@@ -202,6 +232,22 @@ function mapLead(row: DbRow, modelById: Map<string, VehicleModel>, staffById: Ma
     priority: row.priority || 'normal',
     notes: row.notes || '',
     budget: row.budget || undefined,
+    paymentType: row.payment_type || undefined,
+    downPaymentPercent: row.down_payment_percent == null ? undefined : Number(row.down_payment_percent),
+    downPaymentUSD: row.down_payment_usd == null ? undefined : Number(row.down_payment_usd),
+    financeCompany: row.finance_company || undefined,
+    tenureMonths: row.tenure_months == null ? undefined : Number(row.tenure_months),
+    monthlyPaymentLAK: row.monthly_payment_lak == null ? undefined : Number(row.monthly_payment_lak),
+    installmentStatus: row.installment_status || undefined,
+    paidAmountUSD: row.paid_amount_usd == null ? undefined : Number(row.paid_amount_usd),
+    paidAmountLAK: row.paid_amount_lak == null ? undefined : Number(row.paid_amount_lak),
+    paymentDate: row.payment_date || undefined,
+    paymentMethodRef: row.payment_method_ref || undefined,
+    paymentBank: row.payment_bank || undefined,
+    paymentReceiptNo: row.payment_receipt_no || undefined,
+    paymentConfirmedBy: row.payment_confirmed_by || undefined,
+    paymentTypeConfirmed: row.payment_type_confirmed || undefined,
+    installmentRecords: Array.isArray(row.installment_records) ? row.installment_records : undefined,
     assignedTo: staffById.get(row.assigned_to)?.name || '',
     createdAt: row.created_at || '',
     lastFollowUp: row.last_follow_up || undefined,
@@ -494,6 +540,45 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
     throw new Error('ตรวจพบอักขระหรือรูปแบบคำสั่งที่ไม่อนุญาตในข้อมูลลูกค้า');
   }
 
+  let finalAssignedStaffId: string | null = null;
+  let isExistingCustomer = false;
+
+  if (lead.id) {
+    const { data: existingLead, error: existingError } = await client
+      .from('customers')
+      .select('assigned_to')
+      .eq('id', lead.id)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existingLead !== null) {
+      isExistingCustomer = true;
+      finalAssignedStaffId = existingLead.assigned_to ?? null;
+    }
+  }
+
+  if (!isExistingCustomer) {
+    if (lead.assignedTo) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(lead.assignedTo);
+      if (isUuid) {
+        finalAssignedStaffId = lead.assignedTo;
+      } else {
+        const { data: matchedStaff, error: matchError } = await client
+          .from('staff_profiles')
+          .select('id')
+          .eq('name', lead.assignedTo)
+          .maybeSingle();
+        if (matchError) throw matchError;
+        if (matchedStaff?.id) {
+          finalAssignedStaffId = matchedStaff.id;
+        }
+      }
+    }
+
+    if (!finalAssignedStaffId) {
+      finalAssignedStaffId = assignedStaffId || null;
+    }
+  }
+
   const { error } = await client.from('customers').upsert({
     id: lead.id,
     name: safeName,
@@ -505,12 +590,55 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
     status: lead.status,
     priority: lead.priority,
     budget: safeBudget || null,
-    assigned_to: assignedStaffId || null,
+    assigned_to: finalAssignedStaffId,
     notes: safeNotes || null,
     last_follow_up: lead.lastFollowUp || null,
     next_test_drive_at: lead.testDriveDate || null,
+    id_card_number: sanitizeText(lead.idCardNumber, 60) || null,
+    province: sanitizeText(lead.province, 100) || null,
+    district: sanitizeText(lead.district, 100) || null,
+    village: sanitizeText(lead.village, 120) || null,
+    payment_type: lead.paymentType || null,
+    down_payment_percent: lead.downPaymentPercent != null ? sanitizeNumber(lead.downPaymentPercent, 0, 0, 100) : null,
+    down_payment_usd: lead.downPaymentUSD != null ? sanitizeNumber(lead.downPaymentUSD, 0) : null,
+    finance_company: sanitizeText(lead.financeCompany, 120) || null,
+    tenure_months: lead.tenureMonths != null ? sanitizeNumber(lead.tenureMonths, 0, 1, 120) : null,
+    monthly_payment_lak: lead.monthlyPaymentLAK != null ? sanitizeNumber(lead.monthlyPaymentLAK, 0) : null,
+    installment_status: lead.installmentStatus || null,
+    paid_amount_usd: lead.paidAmountUSD != null ? sanitizeNumber(lead.paidAmountUSD, 0) : null,
+    paid_amount_lak: lead.paidAmountLAK != null ? sanitizeNumber(lead.paidAmountLAK, 0) : null,
+    payment_date: lead.paymentDate || null,
+    payment_method_ref: sanitizeText(lead.paymentMethodRef, 120) || null,
+    payment_bank: sanitizeText(lead.paymentBank, 100) || null,
+    payment_receipt_no: sanitizeText(lead.paymentReceiptNo, 100) || null,
+    payment_confirmed_by: sanitizeText(lead.paymentConfirmedBy, 120) || null,
+    payment_type_confirmed: lead.paymentTypeConfirmed || null,
+    installment_records: Array.isArray(lead.installmentRecords) ? lead.installmentRecords : [],
+    created_at: lead.createdAt ? new Date(lead.createdAt).toISOString() : undefined,
   });
   if (error) throw error;
+}
+
+export async function updateLeadStatus(id: string, status: Lead['status']) {
+  const { data, error } = await requireSupabase()
+    .from('customers')
+    .update({ status, last_follow_up: new Date().toISOString() })
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Customer was not updated. Check your access and try again.');
+}
+
+export async function deleteLead(id: string) {
+  const { data, error } = await requireSupabase()
+    .from('customers')
+    .delete()
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Customer was not deleted. Check your access and try again.');
 }
 
 export async function saveInventoryItem(item: InventoryItem) {
@@ -554,9 +682,14 @@ export async function saveInventoryItem(item: InventoryItem) {
 }
 
 export async function deleteInventoryItem(vin: string) {
-  const client = requireSupabase();
-  const { error } = await client.from('vehicles').delete().eq('vin', vin);
+  const { data, error } = await requireSupabase()
+    .from('vehicles')
+    .delete()
+    .eq('vin', vin)
+    .select('vin')
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error('Vehicle was not deleted. Check your access and try again.');
 }
 
 export async function saveVehicleModel(model: VehicleModel, createdBy: string) {
@@ -588,7 +721,18 @@ export async function saveVehicleModel(model: VehicleModel, createdBy: string) {
   if (error) throw error;
 }
 
-export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string) {
+export async function deleteVehicleModel(id: string) {
+  const { data, error } = await requireSupabase()
+    .from('vehicle_models')
+    .delete()
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Vehicle model was not deleted. Check your access and try again.');
+}
+
+export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, vehicle?: InventoryItem) {
   const client = requireSupabase();
   const type = bill.billType || bill.type;
   if (!type) throw new Error('Bill type is required.');
@@ -598,6 +742,60 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string) {
   const customerId = type === 'sale' && bill.customerPhone
     ? await findCustomerId(bill.customerPhone)
     : null;
+
+  let vehiclePayload: Record<string, unknown> | null = null;
+  if (vehicle) {
+    const { data: model, error: modelError } = await client
+      .from('vehicle_models')
+      .select('id')
+      .eq('name', vehicle.model)
+      .maybeSingle();
+    if (modelError) throw modelError;
+    if (!model) throw new Error(`Vehicle model "${vehicle.model}" does not exist in vehicle_models.`);
+
+    let arrivalDateIso: string | null = null;
+    if (vehicle.arrivalDate) {
+      const parsed = new Date(vehicle.arrivalDate);
+      arrivalDateIso = isNaN(parsed.getTime()) ? null : parsed.toISOString();
+    }
+    let eventStartIso: string | null = null;
+    if (vehicle.eventStartDate) {
+      const parsed = new Date(vehicle.eventStartDate);
+      eventStartIso = isNaN(parsed.getTime()) ? null : parsed.toISOString();
+    }
+    let eventEndIso: string | null = null;
+    if (vehicle.eventEndDate) {
+      const parsed = new Date(vehicle.eventEndDate);
+      eventEndIso = isNaN(parsed.getTime()) ? null : parsed.toISOString();
+    }
+
+    vehiclePayload = {
+      model_id: model.id,
+      plate_number: sanitizeText(vehicle.plateNumber, 30) || null,
+      color: sanitizeText(vehicle.color, 60) || null,
+      color_hex: sanitizeText(vehicle.colorHex, 20) || null,
+      interior_color: sanitizeText(vehicle.interiorColor, 60) || null,
+      trim: sanitizeText(vehicle.trim, 60) || null,
+      battery: sanitizeText(vehicle.battery, 60) || null,
+      price_usd: sanitizeNumber(vehicle.priceUSD, 0),
+      price_lak: sanitizeNumber(vehicle.priceLAK, 0),
+      status: vehicle.status || 'ready',
+      pdi_status: vehicle.pdiStatus || 'pending',
+      pdi_inspector: sanitizeText(vehicle.pdiInspector, 100) || null,
+      pdi_notes: sanitizeText(vehicle.pdiNotes, 1000) || null,
+      location: sanitizeText(vehicle.location, 100) || null,
+      image_url: sanitizeText(vehicle.imageUrl || vehicle.image, 500) || null,
+      reserved_for_customer: vehicle.reservedForCustomer || null,
+      arrival_date: arrivalDateIso,
+      mileage_km: sanitizeNumber(vehicle.mileageKm, 0),
+      event_campaign: sanitizeText(vehicle.eventCampaign, 100) || null,
+      event_start_date: eventStartIso,
+      event_end_date: eventEndIso,
+      event_location: sanitizeText(vehicle.eventLocation, 100) || null,
+      promotion_discount_usd: sanitizeNumber(vehicle.promotionDiscountUSD, 0),
+      promotion_notes: sanitizeText(vehicle.promotionNotes, 500) || null,
+    };
+  }
 
   const billRow = {
     id: bill.id,
@@ -660,6 +858,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string) {
     p_bill: billRow,
     p_item: billItem,
     p_movement_type: type === 'import' ? 'stock_in' : 'stock_out',
+    p_vehicle: vehiclePayload,
   });
   if (error) throw error;
 }

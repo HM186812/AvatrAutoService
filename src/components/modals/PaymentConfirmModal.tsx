@@ -22,7 +22,7 @@ interface PaymentConfirmModalProps {
   vehicles: VehicleModel[];
   currentUser?: SystemUser;
   lang?: Language;
-  onConfirmPayment: (updatedCustomer: Lead) => void;
+  onConfirmPayment: (updatedCustomer: Lead) => Promise<void> | void;
 }
 
 export default function PaymentConfirmModal({
@@ -43,6 +43,8 @@ export default function PaymentConfirmModal({
   const defaultPayType: 'deposit' | 'down_payment' | 'full' = isInstallment ? 'down_payment' : 'full';
 
   const [paymentTypeConfirmed, setPaymentTypeConfirmed] = useState<'deposit' | 'down_payment' | 'full' | 'installment'>(defaultPayType);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   
   // Intelligent pre-filled default amount
   const initialAmountUSD = isInstallment 
@@ -79,8 +81,10 @@ export default function PaymentConfirmModal({
     }
   };
 
-  const handleConfirmSubmit = (e: React.FormEvent) => {
+  const handleConfirmSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setSubmitError(null);
 
     const updatedLead: Lead = {
       ...customer,
@@ -99,8 +103,14 @@ export default function PaymentConfirmModal({
       notes: notes.trim() ? `${customer.notes ? customer.notes + ' | ' : ''}[ຢືນຢັນຊຳລະແລ້ວ: $${amountUSD.toLocaleString()} USD]: ${notes.trim()}` : customer.notes,
     };
 
-    onConfirmPayment(updatedLead);
-    onClose();
+    try {
+      await onConfirmPayment(updatedLead);
+      onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Could not save payment confirmation to database.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -333,22 +343,30 @@ export default function PaymentConfirmModal({
             />
           </div>
 
+          {submitError && (
+            <div className="p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs font-medium">
+              {submitError}
+            </div>
+          )}
+
           {/* Submit Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center gap-3 pt-3 border-t border-zinc-800">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={onClose}
-              className="w-full sm:w-auto px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              className="w-full sm:w-auto px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-semibold rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
             >
               ຍົກເລີກ
             </button>
 
             <button
               type="submit"
-              className="w-full sm:flex-1 py-3 bg-white hover:bg-zinc-200 text-black font-extrabold rounded-xl text-xs transition-all shadow-xl flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+              disabled={isSubmitting}
+              className="w-full sm:flex-1 py-3 bg-white hover:bg-zinc-200 text-black font-extrabold rounded-xl text-xs transition-all shadow-xl flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
             >
               <CheckCircle2 className="w-4 h-4 text-black" />
-              <span>ຢືນຢັນການຊຳລະເງິນ & ຍ້າຍໄປຊ່ອງ "ຈ່າຍແລ້ວ"</span>
+              <span>{isSubmitting ? 'ກຳລັງບັນທຶກລົງຖານຂໍ້ມູນ...' : 'ຢືນຢັນການຊຳລະເງິນ & ຍ້າຍໄປຊ່ອງ "ຈ່າຍແລ້ວ"'}</span>
             </button>
           </div>
         </form>

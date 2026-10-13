@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SystemUser, UserRole, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { saveUserToSupabase, deleteUserFromSupabase } from '../../supabase';
+import { createStaffAccount, deactivateStaffProfile, saveStaffProfile } from '../../backend/data';
 import { 
   UserPlus, 
   Trash2, 
@@ -14,8 +14,6 @@ import {
   X,
   UserX, 
   Check, 
-  Eye, 
-  EyeOff,
   Crown,
   UserCheck,
   Shield,
@@ -53,19 +51,15 @@ export default function UserManagementView({
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
-  const [newPassword, setNewPassword] = useState('avatr1234');
   const [newDepartment, setNewDepartment] = useState('ຝ່າຍຂາຍ ແລະ ບໍລິການລູກຄ້າ');
-  const [newStartDate, setNewStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [newRole, setNewRole] = useState<UserRole>('admin');
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showEditingPassword, setShowEditingPassword] = useState(false);
 
   const triggerFeedback = (msg: string) => {
     setActionSuccessMsg(msg);
     setTimeout(() => setActionSuccessMsg(null), 4000);
   };
 
-  const isSuperAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin' || Boolean(currentUser.permissions?.canManageUsers) || users.length <= 1 || !users.some(u => u.role === 'super_admin' || u.role === 'admin');
+  const isSuperAdmin = currentUser.role === 'super_admin';
 
   // Toggle user active / suspended status
   const handleToggleUserStatus = async (userToToggle: SystemUser) => {
@@ -74,14 +68,19 @@ export default function UserManagementView({
       return;
     }
     const newStatus = userToToggle.status === 'suspended' ? 'active' : 'suspended';
+    if (newStatus === 'active') {
+      alert('Reactivation is not available here. Ask the super admin to restore this account.');
+      return;
+    }
     const updated: SystemUser = { ...userToToggle, status: newStatus as any };
     try {
-      await saveUserToSupabase(updated);
-    } catch (e) {
-      console.warn('Status toggle fallback:', e);
+      await deactivateStaffProfile(updated.id);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not suspend this account.');
+      return;
     }
     setUsers(prev => prev.map(u => u.id === userToToggle.id ? updated : u));
-    triggerFeedback(`ປ່ຽນສະຖານະ "${userToToggle.name}" ເປັນ ${newStatus === 'active' ? 'ເປີດໃຊ້ງານ' : 'ລະງັບຊົ່ວຄາວ'} ສຳເລັດ!`);
+    triggerFeedback(`ລະງັບບັນຊີ "${userToToggle.name}" ສຳເລັດ`);
   };
 
   // 1. DELETE USER HANDLER
@@ -94,13 +93,14 @@ export default function UserManagementView({
     }
 
     try {
-      await deleteUserFromSupabase(deletingUser.id);
-    } catch (e) {
-      console.warn('Supabase user delete fallback:', e);
+      await deactivateStaffProfile(deletingUser.id);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not suspend this account.');
+      return;
     }
 
-    setUsers(prev => prev.filter(u => u.id !== deletingUser.id));
-    triggerFeedback(`ລົບຜູ້ໃຊ້ "${deletingUser.name}" ອອກຈາກລະບົບສຳເລັດແລ້ວ!`);
+    setUsers(prev => prev.map(user => user.id === deletingUser.id ? { ...user, status: 'suspended' } : user));
+    triggerFeedback(`ລະງັບບັນຊີ "${deletingUser.name}" ສຳເລັດ`);
     setDeletingUser(null);
   };
 
@@ -117,9 +117,10 @@ export default function UserManagementView({
     };
 
     try {
-      await saveUserToSupabase(updatedUser);
-    } catch (e) {
-      console.warn('Supabase user update fallback:', e);
+      await saveStaffProfile(updatedUser);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not update this account.');
+      return;
     }
 
     setUsers(prev => prev.map(u => (u.id === updatedUser.id ? updatedUser : u)));
@@ -130,50 +131,24 @@ export default function UserManagementView({
   // 3. CREATE NEW USER HANDLER
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newPhone.trim()) return;
-
-    const initials = newName.trim().slice(0, 2);
-    const isAdminRole = newRole === 'admin' || newRole === 'super_admin';
-
-    const newUser: SystemUser = {
-      id: `USR-${Math.floor(100 + Math.random() * 900)}`,
-      name: newName.trim(),
-      email: newEmail.trim() || `${newName.toLowerCase().replace(/\s+/g, '')}@laos-ev.la`,
-      phone: newPhone.trim(),
-      role: isAdminRole ? 'admin' : 'general_user',
-      roleTitleLo: isAdminRole ? 'Admin' : 'User',
-      department: newDepartment.trim() || (isAdminRole ? 'Management' : 'Staff'),
-      status: 'active',
-      avatarInitials: initials,
-      password: newPassword.trim() || 'avatr1234',
-      permissions: {
-        canManageUsers: isAdminRole,
-        canDeleteUsers: isAdminRole,
-        canGrantRoles: isAdminRole,
-        canEditInventory: isAdminRole,
-        canUploadQR: isAdminRole,
-        canAddModels: isAdminRole,
-        canDeductPOS: true,
-        canViewFinancials: isAdminRole,
-      },
-      createdAt: newStartDate || new Date().toISOString().slice(0, 10),
-      lastLogin: 'ຍັງບໍ່ເຄີຍເຂົ້າສູ່ລະບົບ',
-    };
-
+    if (!newName.trim() || !newEmail.trim()) return;
     try {
-      await saveUserToSupabase(newUser);
-    } catch (e) {
-      console.warn('Supabase new user save fallback:', e);
+      const newUser = await createStaffAccount({
+        name: newName.trim(),
+        email: newEmail.trim().toLowerCase(),
+        phone: newPhone.trim(),
+        department: newDepartment.trim(),
+        role: newRole === 'super_admin' ? 'admin' : newRole,
+      });
+      setUsers(prev => [newUser, ...prev]);
+      setIsAddUserOpen(false);
+      triggerFeedback(`${t.success}: ${newUser.name}`);
+      setNewName('');
+      setNewEmail('');
+      setNewPhone('');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not create this account.');
     }
-
-    setUsers(prev => [newUser, ...prev]);
-    setIsAddUserOpen(false);
-    triggerFeedback(`${t.success}: ${newUser.name}`);
-
-    setNewName('');
-    setNewEmail('');
-    setNewPhone('');
-    setNewPassword('avatr1234');
   };
 
   // Distinct Avatar Color Gradients per Role
@@ -540,7 +515,6 @@ export default function UserManagementView({
                   {/* Grant / Change Role Button */}
                   <button
                     onClick={() => {
-                      setShowEditingPassword(false);
                       setEditingUser(user);
                     }}
                     className="user-management-grant-button px-3.5 py-2 rounded-xl border font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -756,41 +730,6 @@ export default function UserManagementView({
                 </label>
               </div>
 
-              {/* Password & Account Status */}
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-800">
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ປ່ຽນລະຫັດຜ່ານ (Reset Password)</label>
-                  <div className="relative">
-                    <input
-                      type={showEditingPassword ? 'text' : 'password'}
-                      value={editingUser.password || ''}
-                      onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
-                      placeholder="ຕັ້ງລະຫັດໃໝ່..."
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 pr-10 text-white font-mono focus:outline-none focus:border-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowEditingPassword(visible => !visible)}
-                      aria-label={showEditingPassword ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
-                    >
-                      {showEditingPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">ສະຖານະບັນຊີ (Status)</label>
-                  <select
-                    value={editingUser.status || 'active'}
-                    onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value as any })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white cursor-pointer"
-                  >
-                    <option value="active" className="bg-zinc-900 text-white">ເປີດໃຊ້ງານ (Active)</option>
-                    <option value="suspended" className="bg-zinc-900 text-white">ລະງັບຊົ່ວຄາວ (Suspended)</option>
-                  </select>
-                </div>
-              </div>
-
               <div className="pt-4 border-t border-zinc-800 flex justify-end gap-3">
                 <button
                   type="button"
@@ -930,52 +869,6 @@ export default function UserManagementView({
                   />
                 </div>
 
-                <div>
-                  <label className="text-zinc-300 mb-1 font-medium flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-white" />
-                    <span>ວັນເດືອນປີເລີ່ມງານ <span className="text-red-500">*</span></span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={newStartDate}
-                    onChange={(e) => setNewStartDate(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-zinc-300 mb-1 font-medium flex items-center justify-between">
-                  <span>ລະຫັດຜ່ານບັນຊີ (Password) <span className="text-red-500">*</span></span>
-                  <button
-                    type="button"
-                    onClick={() => setNewPassword(`av${Math.floor(1000 + Math.random() * 9000)}`)}
-                    className="text-[10px] text-amber-400 hover:text-amber-300 underline font-mono cursor-pointer"
-                  >
-                    ສຸ່ມລະຫັດອັດຕະໂນມັດ
-                  </button>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showNewPassword ? 'text' : 'password'}
-                    required
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="ຕັ້ງລະຫັດຜ່ານ e.g. avatr1234"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 pr-10 text-white font-mono focus:outline-none focus:border-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white cursor-pointer"
-                  >
-                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-[10px] text-zinc-500 mt-1">
-                  ສະມາຊິກສາມາດໃຊ້ລະຫັດຜ່ານນີ້ ຫຼື ເບີໂທລະສັບ ເພື່ອເຂົ້າສູ່ລະບົບໄດ້ທັນທີ
-                </p>
               </div>
 
               <div className="pt-3 border-t border-zinc-800 flex justify-end gap-3">

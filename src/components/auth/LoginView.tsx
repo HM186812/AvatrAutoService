@@ -1,14 +1,9 @@
 import { useState, useEffect } from 'react';
-import { SystemUser, Language, UserRole } from '../../types';
+import { SystemUser, Language } from '../../types';
 import { translations } from '../../data/translations';
-import {
-  isSupabaseConfigured,
-  signInWithSupabase,
-  signUpWithSupabase,
-  getUserFromSupabase,
-  saveUserToSupabase
-} from '../../supabase';
+import { signInStaff, signUpStaff } from '../../backend/data';
 import AvatrLogo from '../layout/AvatrLogo';
+import TurnstileWidget from '../common/TurnstileWidget';
 import {
   Lock,
   Mail,
@@ -111,324 +106,70 @@ export default function LoginView({
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
-  // 1. Password Login Handler
+  useEffect(() => {
+    setTurnstileToken(null);
+  }, [mainTab]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
-
-    const cleanId = identifier.trim().toLowerCase();
-    if (!cleanId) {
-      setErrorMessage(
-        lang === 'lo'
-          ? 'ກະລຸນາປ້ອນ ອີເມວ ຫຼື ເບີໂທລະສັບ'
-          : lang === 'th'
-          ? 'กรุณากรอก อีเมล หรือ เบอร์โทรศัพท์'
-          : 'Please enter Email or Phone number'
-      );
+    if (!identifier.trim() || !password) {
+      setErrorMessage(lang === 'th' ? 'กรอกอีเมลและรหัสผ่าน' : lang === 'lo' ? 'ປ້ອນອີເມວ ແລະ ລະຫັດຜ່ານ' : 'Enter email and password.');
       return;
     }
-
+    const isTurnstileConfigured = Boolean((import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim());
+    if (isTurnstileConfigured && !turnstileToken) {
+      setErrorMessage(lang === 'th' ? 'กรุณายืนยันการตรวจสอบความปลอดภัย (Cloudflare Turnstile)' : lang === 'lo' ? 'ກະລຸນາກວດສອບຄວາມປອດໄພ (Cloudflare Turnstile)' : 'Please complete the security check.');
+      return;
+    }
     setIsLoading(true);
-
     try {
-      // Try Supabase Authentication if configured
-      if (isSupabaseConfigured() && password) {
-        let authEmail = cleanId;
-        if (!cleanId.includes('@')) {
-          const rawDigits = cleanId.replace(/\D/g, '') || cleanId.replace(/\s+/g, '');
-          authEmail = `${rawDigits}@avatr.phone.la`;
-        }
-
-        let authUser: any = null;
-        try {
-          const res = await signInWithSupabase(authEmail, password);
-          if (res?.data?.user) {
-            authUser = res.data.user;
-          }
-        } catch {
-          // Fall through to the generic invalid-credentials message below.
-        }
-
-        if (authUser) {
-          const supaUid = authUser.id;
-
-          // 1. Search in current memory state
-          let matchedUser = users.find(
-            u =>
-              u.id === supaUid ||
-              (u.email && u.email.toLowerCase() === cleanId) ||
-              (u.phone && u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, ''))
-          );
-
-          // 2. If not found in memory, try fetching directly from Supabase
-          if (!matchedUser) {
-            try {
-              const supaProfile = await getUserFromSupabase(supaUid);
-              if (supaProfile) {
-                matchedUser = supaProfile;
-              }
-            } catch (fetchErr) {
-              console.warn('Supabase user fetch notice:', fetchErr);
-            }
-          }
-
-          // 3. If authenticated in Supabase but no profile exists yet, auto-create
-          if (!matchedUser) {
-            const isSuperAdmin = !users || users.length === 0 || !users.some(u => u.role === 'super_admin');
-            matchedUser = {
-              id: supaUid,
-              name: authUser.user_metadata?.name || (cleanId.includes('@') ? cleanId.split('@')[0] : `User-${cleanId.slice(-4)}`),
-              email: cleanId.includes('@') ? cleanId : `${cleanId.replace(/\s+/g, '')}@avatr.phone.la`,
-              phone: cleanId.includes('@') ? '' : cleanId,
-              role: isSuperAdmin ? 'super_admin' : 'general_user',
-              roleTitleLo: isSuperAdmin ? 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)' : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)',
-              department: isSuperAdmin ? 'Executive Management & Direction' : 'General Staff',
-              status: 'active',
-              avatarInitials: 'AD',
-              permissions: {
-                canManageUsers: isSuperAdmin,
-                canDeleteUsers: isSuperAdmin,
-                canGrantRoles: isSuperAdmin,
-                canEditInventory: isSuperAdmin,
-                canUploadQR: isSuperAdmin,
-                canAddModels: isSuperAdmin,
-                canDeductPOS: isSuperAdmin,
-                canViewFinancials: isSuperAdmin,
-              },
-              createdAt: new Date().toISOString().slice(0, 10),
-              lastLogin: new Date().toISOString().slice(0, 16).replace('T', ' '),
-            };
-            try {
-              await saveUserToSupabase(matchedUser);
-            } catch {}
-          } else {
-            const hasAnySuperAdmin = users.some(u => u.role === 'super_admin' && u.id !== matchedUser!.id);
-            if (!hasAnySuperAdmin) {
-              matchedUser.role = 'super_admin';
-              matchedUser.roleTitleLo = 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)';
-              matchedUser.department = 'Executive Management & Direction';
-              matchedUser.permissions = {
-                canManageUsers: true,
-                canDeleteUsers: true,
-                canGrantRoles: true,
-                canEditInventory: true,
-                canUploadQR: true,
-                canAddModels: true,
-                canDeductPOS: true,
-                canViewFinancials: true,
-              };
-              try {
-                await saveUserToSupabase(matchedUser);
-              } catch {}
-            }
-          }
-
-          if (matchedUser) {
-            if (onRegisterUser) onRegisterUser(matchedUser);
-            setSuccessMessage(
-              lang === 'lo'
-                ? `ເຂົ້າສູ່ລະບົບ Cloud Supabase ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${matchedUser.name}`
-                : lang === 'th'
-                ? `เข้าสู่ระบบสำเร็จ! ยินดีต้อนรับ ${matchedUser.name}`
-                : `Welcome ${matchedUser.name}`
-            );
-            setTimeout(() => {
-              onLoginSuccess(matchedUser!, rememberMe);
-            }, 300);
-            return;
-          }
-        }
-      }
-
-      // Memory or Mock Users check
-      const matched = users.find(
-        u =>
-          (u.email && u.email.toLowerCase() === cleanId) ||
-          (u.phone && u.phone.replace(/\s+/g, '') === cleanId.replace(/\s+/g, '')) ||
-          (u.name && u.name.toLowerCase().includes(cleanId))
-      );
-
-      if (matched) {
-        setSuccessMessage(
-          lang === 'lo'
-            ? `ເຂົ້າສູ່ລະບົບສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${matched.name}`
-            : lang === 'th'
-            ? `เข้าสู่ระบบสำเร็จ! ยินดีต้อนรับ ${matched.name}`
-            : `Welcome ${matched.name}`
-        );
-        setTimeout(() => {
-          onLoginSuccess(matched, rememberMe);
-        }, 300);
-      } else {
-        setErrorMessage(
-          lang === 'lo'
-            ? 'ບໍ່ພົບບັນຊີນີ້ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ'
-            : lang === 'th'
-            ? 'ไม่พบบัญชีนี้ หรือรหัสผ่านไม่ถูกต้อง'
-            : 'Invalid credentials or account not found'
-        );
-      }
+      const user = await signInStaff(identifier, password, turnstileToken || undefined);
+      setSuccessMessage(`${lang === 'th' ? 'เข้าสู่ระบบสำเร็จ' : lang === 'lo' ? 'ເຂົ້າລະບົບສຳເລັດ' : 'Signed in'}: ${user.name}`);
+      onLoginSuccess(user, rememberMe);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : (lang === 'th' ? 'เข้าสู่ระบบไม่สำเร็จ' : lang === 'lo' ? 'ເຂົ້າລະບົບບໍ່ສຳເລັດ' : 'Sign-in failed.'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 2. Sign Up / Register Handler
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
-
     const cleanName = regName.trim();
     const cleanEmail = regEmail.trim().toLowerCase();
     const cleanPhone = regPhone.trim();
 
-    if (!cleanName) {
-      setErrorMessage(
-        lang === 'lo'
-          ? 'ກະລຸນາປ້ອນ ຊື່ ແລະ ນາມສະກຸນ'
-          : lang === 'th'
-          ? 'กรุณากรอก ชื่อ-นามสกุล'
-          : 'Please enter Full Name'
-      );
+    if (!cleanName || !cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMessage(lang === 'th' ? 'กรอกชื่อและอีเมลให้ถูกต้อง' : lang === 'lo' ? 'ປ້ອນຊື່ ແລະ ອີເມວໃຫ້ຖືກຕ້ອງ' : 'Enter a name and valid email.');
+      return;
+    }
+    if (regPassword.length < 8 || regPassword !== regConfirmPassword) {
+      setErrorMessage(regPassword.length < 8
+        ? (lang === 'th' ? 'รหัสผ่านต้องมีอย่างน้อย 8 ตัว' : lang === 'lo' ? 'ລະຫັດຜ່ານຕ້ອງມີ 8 ຕົວຂຶ້ນໄປ' : 'Password must be at least 8 characters.')
+        : (lang === 'th' ? 'รหัสผ่านไม่ตรงกัน' : lang === 'lo' ? 'ລະຫັດຜ່ານບໍ່ກົງກັນ' : 'Passwords do not match.'));
       return;
     }
 
-    if (!cleanEmail && !cleanPhone) {
-      setErrorMessage(
-        lang === 'lo'
-          ? 'ກະລຸນາປ້ອນ ອີເມວ ຫຼື ເບີໂທລະສັບ (ເລືອກໃສ່ຢ່າງໜ້ອຍ 1 ຢ່າງ)'
-          : lang === 'th'
-          ? 'กรุณากรอก อีเมล หรือ เบอร์โทรศัพท์'
-          : 'Please enter Email or Phone'
-      );
-      return;
-    }
-
-    if (cleanEmail && (!cleanEmail.includes('@') || !cleanEmail.includes('.'))) {
-      setErrorMessage(
-        lang === 'lo'
-          ? 'ກະລຸນາປ້ອນອີເມວໃຫ້ຖືກຕ້ອງຕາມຮູບແບບ'
-          : lang === 'th'
-          ? 'กรุณากรอกรูปแบบอีเมลให้ถูกต้อง'
-          : 'Please enter a valid email'
-      );
-      return;
-    }
-
-    if (!regPassword || regPassword.length < 4) {
-      setErrorMessage(
-        lang === 'lo'
-          ? 'ລະຫັດຜ່ານຕ້ອງມີຢ່າງໜ້ອຍ 4 ຕົວອັກສອນ'
-          : lang === 'th'
-          ? 'รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร'
-          : 'Password must be at least 4 characters'
-      );
-      return;
-    }
-
-    if (regPassword !== regConfirmPassword) {
-      setErrorMessage(
-        lang === 'lo'
-          ? 'ລະຫັດຜ່ານ ແລະ ຢືນຢັນລະຫັດຜ່ານ ບໍ່ຕົງກັນ'
-          : lang === 'th'
-          ? 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน'
-          : 'Passwords do not match'
-      );
+    const isTurnstileConfigured = Boolean((import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim());
+    if (isTurnstileConfigured && !turnstileToken) {
+      setErrorMessage(lang === 'th' ? 'กรุณายืนยันการตรวจสอบความปลอดภัย (Cloudflare Turnstile)' : lang === 'lo' ? 'ກະລຸນາກວດສອບຄວາມປອດໄພ (Cloudflare Turnstile)' : 'Please complete the security check.');
       return;
     }
 
     setIsLoading(true);
-
     try {
-      const isFirstUser = !users || users.length === 0 || !users.some(u => u.role === 'super_admin');
-      const assignedRole: UserRole = isFirstUser ? 'super_admin' : 'general_user';
-      const roleTitleLo = isFirstUser
-        ? 'Admin (Super Admin & ຜູ້ອຳນວຍການສູນ)'
-        : 'ຜູ້ໃຊ້ທົ່ວໄປ (General User)';
-      const department = isFirstUser
-        ? 'Executive Management & Direction'
-        : 'General Staff';
-
-      const initials = cleanName.slice(0, 2);
-      let newUserId = `USR-${Math.floor(100 + Math.random() * 900)}`;
-      const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
-      const authEmail = cleanEmail || `${cleanPhone.replace(/\D/g, '') || cleanPhone.replace(/\s+/g, '')}@avatr.phone.la`;
-
-      // Attempt Supabase Auth user creation
-      if (isSupabaseConfigured()) {
-        try {
-          const res = await signUpWithSupabase(authEmail, regPassword, { name: cleanName, phone: cleanPhone });
-          if (res?.data?.user) {
-            newUserId = res.data.user.id;
-          }
-        } catch (err: any) {
-          console.warn('Supabase Auth user creation notice:', err?.message || err);
-          try {
-            const loginRes = await signInWithSupabase(authEmail, regPassword);
-            if (loginRes?.data?.user) {
-              newUserId = loginRes.data.user.id;
-            }
-          } catch (loginErr) {
-            console.warn('Existing account signin notice:', loginErr);
-          }
-        }
-      }
-
-      const newUser: SystemUser = {
-        id: newUserId,
-        name: cleanName,
-        email: cleanEmail || `${cleanPhone.replace(/\s+/g, '')}@avatr.phone.la`,
-        phone: cleanPhone,
-        role: assignedRole,
-        roleTitleLo: roleTitleLo,
-        department: department,
-        status: 'active',
-        avatarInitials: initials,
-        permissions: {
-          canManageUsers: isFirstUser,
-          canDeleteUsers: isFirstUser,
-          canGrantRoles: isFirstUser,
-          canEditInventory: isFirstUser,
-          canUploadQR: isFirstUser,
-          canAddModels: isFirstUser,
-          canDeductPOS: isFirstUser,
-          canViewFinancials: isFirstUser,
-        },
-        createdAt: now,
-        lastLogin: now,
-        password: regPassword,
-      };
-
-      try {
-        await saveUserToSupabase(newUser);
-      } catch (err) {
-        console.warn('Supabase user save fallback:', err);
-      }
-
-      setSuccessMessage(
-        isFirstUser
-          ? lang === 'lo'
-            ? 'ສ້າງບັນຊີທຳອິດສຳເລັດ! ທ່ານໄດ້ຮັບສິດ Admin (Super Admin)'
-            : lang === 'th'
-            ? 'สร้างบัญชีแรกสำเร็จ! คุณได้รับสิทธิ์ Admin (Super Admin)'
-            : 'First account created! Super Admin privileges granted.'
-          : lang === 'lo'
-          ? `ສ້າງບັນຊີໃໝ່ສຳເລັດ! ຍິນດີຕ້ອນຮັບ ${newUser.name}`
-          : lang === 'th'
-          ? `สร้างบัญชีใหม่สำเร็จ! ยินดีต้อนรับ ${newUser.name}`
-          : `Account created! Welcome ${newUser.name}`
-      );
-
-      if (onRegisterUser) {
-        onRegisterUser(newUser);
-      }
-
-      setTimeout(() => {
-        onLoginSuccess(newUser, rememberMe);
-      }, 500);
+      const user = await signUpStaff(cleanEmail, regPassword, cleanName, cleanPhone, turnstileToken || undefined);
+      setSuccessMessage(lang === 'th' ? 'สร้างบัญชี General User สำเร็จ' : lang === 'lo' ? 'ສ້າງບັນຊີ General User ສຳເລັດ' : 'General User account created.');
+      onRegisterUser?.(user);
+      onLoginSuccess(user, rememberMe);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : (lang === 'th' ? 'สมัครบัญชีไม่สำเร็จ' : lang === 'lo' ? 'ສ້າງບັນຊີບໍ່ສຳເລັດ' : 'Sign-up failed.'));
     } finally {
       setIsLoading(false);
     }
@@ -771,6 +512,14 @@ export default function LoginView({
               </button>
             </div>
 
+            <TurnstileWidget
+              action="login"
+              theme={isDark ? 'dark' : 'light'}
+              onVerify={(token) => setTurnstileToken(token)}
+              onExpire={() => setTurnstileToken(null)}
+              onError={() => setTurnstileToken(null)}
+            />
+
             <button
               type="submit"
               disabled={isLoading}
@@ -1027,6 +776,14 @@ export default function LoginView({
                 {t.authHaveAccount}
               </button>
             </div>
+
+            <TurnstileWidget
+              action="signup"
+              theme={isDark ? 'dark' : 'light'}
+              onVerify={(token) => setTurnstileToken(token)}
+              onExpire={() => setTurnstileToken(null)}
+              onError={() => setTurnstileToken(null)}
+            />
 
             <button
               type="submit"

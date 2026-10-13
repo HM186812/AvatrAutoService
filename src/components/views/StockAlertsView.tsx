@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { InventoryItem, VehicleModel, Language, PDIStatus, StockStatus } from '../../types';
 import { translations } from '../../data/translations';
+import { saveInventoryItem } from '../../backend/data';
 import { 
   AlertTriangle, 
   ShieldAlert, 
@@ -106,7 +107,7 @@ export default function StockAlertsView({
   };
 
   // Submit the restock with validated inputs
-  const handleConfirmRestock = (e: React.FormEvent) => {
+  const handleConfirmRestock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRestockItem) return;
     if (restockQty <= 0) {
@@ -126,39 +127,40 @@ export default function StockAlertsView({
       }
     }
 
-    setInventory(prev => prev.map(item => {
-      if (item.vin === selectedRestockItem.vin) {
-        const updatedQty = item.stockQuantity + restockQty;
-        return {
-          ...item,
-          stockQuantity: updatedQty,
-          location: restockWarehouse,
-          pdiStatus: restockPdiStatus,
-          status: restockStatus,
-          arrivalDate: restockDate ? `${restockDate} ${new Date().toTimeString().slice(0, 8)}` : item.arrivalDate,
-          pdiNotes: restockNotes ? `[${restockDocNo}] ${restockNotes}` : item.pdiNotes,
-          pdiInspector: restockOfficer || item.pdiInspector,
-          eventCampaign: (restockStatus === 'event' || restockStatus === 'promotion')
-            ? (restockEventCampaign.trim() || (restockStatus === 'event' ? (lang === 'lo' ? 'ງານ Event ພິເສດ' : 'งาน Event พิเศษ') : (lang === 'lo' ? 'ໂປຣໂມຊັນພິເສດ' : 'โปรโมชั่นพิเศษ')))
-            : item.eventCampaign,
-          eventStartDate: (restockStatus === 'event' || restockStatus === 'promotion') ? restockEventStartDate : undefined,
-          eventEndDate: (restockStatus === 'event' || restockStatus === 'promotion') ? restockEventEndDate : undefined,
-          eventLocation: (restockStatus === 'event' || restockStatus === 'promotion') ? restockEventLocation : undefined,
-          promotionDiscountUSD: (restockStatus === 'event' || restockStatus === 'promotion') ? restockPromoDiscountUSD : undefined,
-          promotionNotes: (restockStatus === 'event' || restockStatus === 'promotion') ? restockPromoNotes : undefined,
-        };
-      }
-      return item;
-    }));
+    const updatedQty = selectedRestockItem.stockQuantity + restockQty;
+    const updatedItem: InventoryItem = {
+      ...selectedRestockItem,
+      stockQuantity: updatedQty,
+      location: restockWarehouse,
+      pdiStatus: restockPdiStatus,
+      status: restockStatus,
+      arrivalDate: restockDate ? `${restockDate} ${new Date().toTimeString().slice(0, 8)}` : selectedRestockItem.arrivalDate,
+      pdiNotes: restockNotes ? `[${restockDocNo}] ${restockNotes}` : selectedRestockItem.pdiNotes,
+      pdiInspector: restockOfficer || selectedRestockItem.pdiInspector,
+      eventCampaign: (restockStatus === 'event' || restockStatus === 'promotion')
+        ? (restockEventCampaign.trim() || (restockStatus === 'event' ? (lang === 'lo' ? 'ງານ Event ພິເສດ' : 'งาน Event พิเศษ') : (lang === 'lo' ? 'ໂປຣໂມຊັນພິເສດ' : 'โปรโมชั่นพิเศษ')))
+        : selectedRestockItem.eventCampaign,
+      eventStartDate: (restockStatus === 'event' || restockStatus === 'promotion') ? restockEventStartDate : undefined,
+      eventEndDate: (restockStatus === 'event' || restockStatus === 'promotion') ? restockEventEndDate : undefined,
+      eventLocation: (restockStatus === 'event' || restockStatus === 'promotion') ? restockEventLocation : undefined,
+      promotionDiscountUSD: (restockStatus === 'event' || restockStatus === 'promotion') ? restockPromoDiscountUSD : undefined,
+      promotionNotes: (restockStatus === 'event' || restockStatus === 'promotion') ? restockPromoNotes : undefined,
+    };
 
-    triggerToast(
-      lang === 'lo'
-        ? `ເພີ່ມສະຕ໋ອກ ${selectedRestockItem.model} (+${restockQty} ຄັນ) ສຳເລັດແລ້ວ!`
-        : lang === 'th'
-        ? `เพิ่มสต็อก ${selectedRestockItem.model} (+${restockQty} คัน) สำเร็จแล้ว!`
-        : `Restocked ${selectedRestockItem.model} (+${restockQty} units) successfully!`
-    );
-    setSelectedRestockItem(null);
+    try {
+      await saveInventoryItem(updatedItem);
+      setInventory(prev => prev.map(item => item.vin === selectedRestockItem.vin ? updatedItem : item));
+      triggerToast(
+        lang === 'lo'
+          ? `ເພີ່ມສະຕ໋ອກ ${selectedRestockItem.model} (+${restockQty} ຄັນ) ສຳເລັດແລ້ວ!`
+          : lang === 'th'
+          ? `เพิ่มสต็อก ${selectedRestockItem.model} (+${restockQty} คัน) สำเร็จแล้ว!`
+          : `Restocked ${selectedRestockItem.model} (+${restockQty} units) successfully!`
+      );
+      setSelectedRestockItem(null);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Restock could not be saved to database.');
+    }
   };
 
   // Filter out of stock (0) & low stock (< 5 units) items

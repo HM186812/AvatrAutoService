@@ -5,10 +5,10 @@ import { translations } from '../../data/translations';
 import { LAO_PROVINCES } from '../../data/laoProvinces';
 import { 
   uploadCompanyQrCodeToStorage, 
-  saveInventoryItemToSupabase, 
-  saveBillToSupabase, 
   saveDealershipConfigToSupabase 
 } from '../../supabase';
+import { newRecordId } from '../../backend/ids';
+import { saveBillRecord } from '../../backend/data';
 import AvatrLogo from '../layout/AvatrLogo';
 import { ConfirmDeleteModal } from '../modals';
 import { 
@@ -364,7 +364,7 @@ export default function POSSalesView({
   });
 
   // CONFIRM SALE & DEDUCT STOCK
-  const handleProcessSale = (e: React.FormEvent) => {
+  const handleProcessSale = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedVehicle) {
@@ -399,19 +399,6 @@ export default function POSSalesView({
       reservedForCustomer: undefined,
     };
 
-    setInventory(prev => prev.map(item => {
-      if (item.vin === selectedVehicle.vin) {
-        return updatedInventoryItem;
-      }
-      return item;
-    }));
-
-    try {
-      saveInventoryItemToSupabase(updatedInventoryItem);
-    } catch (e) {
-      console.warn('Supabase inventory deduction fallback:', e);
-    }
-
     const linkedLead = prefilledCustomer
       ? leads.find(lead => lead.id === prefilledCustomer.id) || prefilledCustomer
       : (() => {
@@ -423,7 +410,7 @@ export default function POSSalesView({
 
     // 2. CREATE OFFICIAL INVOICE BILL RECORD
     const newBill: InvoiceBillRecord = {
-      id: invoiceNum,
+      id: newRecordId(),
       billType: 'sale',
       billNumber: invoiceNum,
       date: saleDateTime,
@@ -465,13 +452,15 @@ export default function POSSalesView({
       notes: saleNotes || 'ຂາຍອອກຜ່ານລະບົບ POS ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ ພ້ອມຕັດສະຕ໋ອກອັດຕະໂນມັດ',
     };
 
-    setBills(prev => [newBill, ...prev]);
-
     try {
-      saveBillToSupabase(newBill);
-    } catch (e) {
-      console.warn('Supabase bill save fallback:', e);
+      if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
+      await saveBillRecord(newBill, currentUser.id);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Sale could not be saved.');
+      return;
     }
+    setInventory(prev => prev.map(item => item.vin === selectedVehicle.vin ? updatedInventoryItem : item));
+    setBills(prev => [newBill, ...prev]);
 
     // 3. RECORD STOCK-OUT TRANSACTION LOG
     const newStockLog: StockLogRecord = {

@@ -42,6 +42,8 @@ import {
 } from '../modals';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
+import { deleteLead, saveLead, updateLeadStatus } from '../../backend/data';
+import { newRecordId } from '../../backend/ids';
 
 interface CustomerViewProps {
   leads: Lead[];
@@ -180,7 +182,7 @@ export default function CustomerView({
     delivered: leads.filter(l => l.status === 'delivered').length, // ຊ່ອງ "ຈ່າຍແລ້ວ"
   };
 
-  const handleCreateCustomerFromLeftForm = (e: React.FormEvent) => {
+  const handleCreateCustomerFromLeftForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formPhone.trim()) return;
 
@@ -188,7 +190,7 @@ export default function CustomerView({
     const effectiveVillage = formVillage === '__custom__' ? formCustomVillage.trim() : formVillage;
 
     const newLead: Lead = {
-      id: `LD-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: newRecordId(),
       customerName: formName.trim(),
       phone: formPhone.trim(),
       email: formEmail.trim() || undefined,
@@ -210,67 +212,111 @@ export default function CustomerView({
       installmentStatus: formPaymentType === 'installment' ? 'pending_approval' : undefined,
       // Responsible officer: ALWAYS from active logged-in user account!
       assignedTo: currentUser?.name || 'Admin',
-      createdAt: formDate ? `${formDate} ${new Date().toTimeString().slice(0, 5)}` : new Date().toISOString().slice(0, 16).replace('T', ' '),
+      createdAt: formDate ? `${formDate}T${new Date().toTimeString().slice(0, 8)}` : new Date().toISOString(),
     };
 
-    setLeads(prev => [newLead, ...prev]);
-    setFormSuccess(true);
-    setTimeout(() => setFormSuccess(false), 4000);
+    try {
+      if (!currentUser?.id) throw new Error('Sign in again before saving a customer.');
+      await saveLead(newLead, currentUser.id);
+      setLeads(prev => [newLead, ...prev]);
+      setFormSuccess(true);
+      setTimeout(() => setFormSuccess(false), 4000);
 
-    // Reset Form
-    setFormName('');
-    setFormPhone('');
-    setFormEmail('');
-    setFormIdCard('');
-    setFormNotes('');
+      // Reset Form
+      setFormName('');
+      setFormPhone('');
+      setFormEmail('');
+      setFormIdCard('');
+      setFormNotes('');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Customer could not be saved.');
+    }
   };
 
   // Modal delete state for modern confirmation popup
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
 
-  const handleConfirmDeleteCustomer = () => {
+  const handleConfirmDeleteCustomer = async () => {
     if (!leadToDelete) return;
-    setLeads(prev => prev.filter(l => l.id !== leadToDelete.id));
-    setLeadToDelete(null);
+    try {
+      await deleteLead(leadToDelete.id);
+      setLeads(prev => prev.filter(l => l.id !== leadToDelete.id));
+      setLeadToDelete(null);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Customer could not be deleted.');
+    }
   };
 
-  const handleUpdateStatus = (leadId: string, newStatus: LeadStatus) => {
-    setLeads(prev => prev.map(l => l.id === leadId ? {
-      ...l,
-      status: newStatus,
-      lastFollowUp: new Date().toISOString().slice(0, 16).replace('T', ' ')
-    } : l));
+  const handleUpdateStatus = async (leadId: string, newStatus: LeadStatus) => {
+    try {
+      await updateLeadStatus(leadId, newStatus);
+      setLeads(prev => prev.map(l => l.id === leadId ? {
+        ...l,
+        status: newStatus,
+        lastFollowUp: new Date().toISOString()
+      } : l));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Customer status could not be updated.');
+    }
   };
 
-  const handleUpdateInstallmentStatus = (leadId: string, newStatus: any) => {
-    setLeads(prev => prev.map(l => l.id === leadId ? {
-      ...l,
-      installmentStatus: newStatus
-    } : l));
+  const handleUpdateInstallmentStatus = async (leadId: string, newStatus: any) => {
+    const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) throw new Error('Customer record not found.');
+    const updatedLead: Lead = {
+      ...targetLead,
+      installmentStatus: newStatus,
+      lastFollowUp: new Date().toISOString(),
+    };
+    try {
+      if (!currentUser?.id) throw new Error('Sign in again before updating installment status.');
+      await saveLead(updatedLead, currentUser.id);
+      setLeads(prev => prev.map(l => l.id === leadId ? updatedLead : l));
+      showToast('ອັບເດດສະຖານະການຜ່ອນຊຳລະສຳເລັດແລ້ວ');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Installment status could not be updated.');
+      throw error;
+    }
   };
 
-  const handleUpdateCustomerRecords = (customerId: string, newRecords: InstallmentPaymentRecord[]) => {
-    setLeads(prev => prev.map(l => {
-      if (l.id === customerId) {
-        return {
-          ...l,
-          installmentRecords: newRecords,
-        };
+  const handleUpdateCustomerRecords = async (customerId: string, newRecords: InstallmentPaymentRecord[]) => {
+    const targetLead = leads.find(l => l.id === customerId);
+    if (!targetLead) throw new Error('Customer record not found.');
+    const updatedLead: Lead = {
+      ...targetLead,
+      installmentRecords: newRecords,
+      lastFollowUp: new Date().toISOString(),
+    };
+    try {
+      if (!currentUser?.id) throw new Error('Sign in again before saving installment ledger.');
+      await saveLead(updatedLead, currentUser.id);
+      setLeads(prev => prev.map(l => l.id === customerId ? updatedLead : l));
+      if (selectedCustomerForInstallments?.id === customerId) {
+        setSelectedCustomerForInstallments(updatedLead);
       }
-      return l;
-    }));
-    showToast('ບັນທຶກ ແລະ ອັບເດດຕາຕະລາງເກັບເງິນງວດຮຽບຮ້ອຍແລ້ວ');
+      showToast('ບັນທຶກ ແລະ ອັບເດດຕາຕະລາງເກັບເງິນງວດຮຽບຮ້ອຍແລ້ວ');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Installment ledger could not be saved.');
+      throw error;
+    }
   };
 
-  const handleConfirmCustomerPayment = (updatedLead: Lead) => {
-    setLeads(prev => prev.map(l => l.id === updatedLead.id ? updatedLead : l));
-    if (selectedCustomerForDocs?.id === updatedLead.id) {
-      setSelectedCustomerForDocs(updatedLead);
+  const handleConfirmCustomerPayment = async (updatedLead: Lead) => {
+    try {
+      if (!currentUser?.id) throw new Error('Sign in again before confirming payment.');
+      await saveLead(updatedLead, currentUser.id);
+      setLeads(prev => prev.map(l => l.id === updatedLead.id ? updatedLead : l));
+      if (selectedCustomerForDocs?.id === updatedLead.id) {
+        setSelectedCustomerForDocs(updatedLead);
+      }
+      if (selectedCustomerForInstallments?.id === updatedLead.id) {
+        setSelectedCustomerForInstallments(updatedLead);
+      }
+      showToast(`ຢືນຢັນການຊຳລະເງິນ "${updatedLead.customerName}" ສຳເລັດແລ້ວ! ຍ້າຍໄປຊ່ອງ "ຈ່າຍແລ້ວ" ຮຽບຮ້ອຍ.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Payment confirmation could not be saved.');
+      throw error;
     }
-    if (selectedCustomerForInstallments?.id === updatedLead.id) {
-      setSelectedCustomerForInstallments(updatedLead);
-    }
-    showToast(`ຢືນຢັນການຊຳລະເງິນ "${updatedLead.customerName}" ສຳເລັດແລ້ວ! ຍ້າຍໄປຊ່ອງ "ຈ່າຍແລ້ວ" ຮຽບຮ້ອຍ.`);
   };
 
   // Filtered Leads
