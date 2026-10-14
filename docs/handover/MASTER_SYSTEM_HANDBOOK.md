@@ -298,10 +298,10 @@ sequenceDiagram
 | **Build output directory** | `dist` |
 | **Root directory** | `/` (ຫຼື ປະວ່າງ) |
 
-#### ຕົວແປສະພາບແວດລ້ອມ (Environment Variables):
+#### ຕົວແປສະພາບແວດລ້ອມຕົວຈິງຂອງລະບົບ (Environment Variables):
 - `NODE_VERSION` = `20`
-- `VITE_SUPABASE_URL` = `<URL ຖານຂໍ້ມູນ Supabase Cloud>`
-- `VITE_SUPABASE_ANON_KEY` = `<Anon Public Key>`
+- `VITE_SUPABASE_URL` = `https://ybzylmboyqqnvtzdkpkg.supabase.co`
+- `VITE_SUPABASE_ANON_KEY` = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlienlsbWJveXFxbnZ0emRrcGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTkwOTUsImV4cCI6MjEwNzAzNTA5NX0.Evq06RRu_AVZieRfWJjSFHqQcTjUkuCCJrsyzAY5Opc`
 - `VITE_TURNSTILE_SITE_KEY` = `<Site Key ຈາກ Cloudflare Turnstile>`
 - `VITE_APP_ENV` = `production`
 

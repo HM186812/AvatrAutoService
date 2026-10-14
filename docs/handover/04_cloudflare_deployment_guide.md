@@ -45,20 +45,23 @@ flowchart LR
 
 - [x] **ບັນຊີ Cloudflare:** ມີບັນຊີ [Cloudflare Dashboard](https://dash.cloudflare.com/) ຂອງບໍລິສັດ
 - [x] **Git Repository:** Source code ຖືກ Push ຂຶ້ນ GitHub Branch `main` ຮຽບຮ້ອຍແລ້ວ
-- [x] **Supabase Project Credentials (ຂໍ້ມູນເຊື່ອມຕໍ່ຖານຂໍ້ມູນ ແລະ ຫຼັງບ້ານ):**
+- [x] **Supabase Project Credentials (ຂໍ້ມູນເຊື່ອມຕໍ່ຖານຂໍ້ມູນ ແລະ ຫຼັງບ້ານຕົວຈິງຂອງລະບົບ):**
   - **`VITE_SUPABASE_URL`:** URL ຫຼັກສຳລັບເຊື່ອມຕໍ່ລະບົບໜ້າເວັບ (Frontend) ເຂົ້າກັບ Supabase API Gateway ທັງໝົດ ເຊິ່ງຄວບຄຸມ:
     - ຖານຂໍ້ມູນຫຼັກ **PostgreSQL 15+ Core Tables**
     - ລະບົບຢັ້ງຢືນຕົວຕົນ **Supabase Auth (JWT)**
     - ລະບົບ Cloud Storage (**dealership-assets** & **payment-slips**)
     - ຟັງຊັນຫຼັງບ້ານ **Supabase Edge Functions** (`create-staff`, `manage-staff`)
+    - 👉 **ຄ່າຕົວຈິງຂອງລະບົບ (Official Value):** `https://ybzylmboyqqnvtzdkpkg.supabase.co`
   - **`VITE_SUPABASE_ANON_KEY`:** Public Anon Key ສຳລັບ Frontend ໃຊ້ຮຽກ API ຢ່າງປອດໄພ ພາຍໃຕ້ການຄວບຄຸມຂອງ **Row-Level Security (RLS)**
-  - *ວິທີເອົາຄ່າຈາກ Supabase:*
+    - 👉 **ຄ່າຕົວຈິງຂອງລະບົບ (Official Value):**  
+      `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlienlsbWJveXFxbnZ0emRrcGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTkwOTUsImV4cCI6MjEwNzAzNTA5NX0.Evq06RRu_AVZieRfWJjSFHqQcTjUkuCCJrsyzAY5Opc`
+  - *ວິທີກວດສອບຄ່າໃນ Supabase:*
     ```text
     Supabase Dashboard (https://supabase.com/dashboard)
      └── Project Settings (ໄອຄອນຟັນເຟືອງມຸມລຸ່ມຊ້າຍ)
           └── API
-               ├── Project URL (ຄັດລອກໃສ່ VITE_SUPABASE_URL)
-               └── Project API keys -> anon public (ຄັດລອກໃສ່ VITE_SUPABASE_ANON_KEY)
+               ├── Project URL ➔ https://ybzylmboyqqnvtzdkpkg.supabase.co
+               └── Project API keys -> anon public ➔ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     ```
 - [x] **Cloudflare Turnstile Site Key (ບັອດກາດໜ້າ Login):**
   - **`VITE_TURNSTILE_SITE_KEY`:** Site Key ສຳລັບປ້ອງກັນ Brute-force ທີ່ໜ້າ Login
@@ -109,10 +112,10 @@ flowchart LR
                           └── ຂັ້ນທີ 6: ຫົວຂໍ້ Production ➔ ກົດປຸ່ມ "Add variable" (ຫຼື "Edit variables")
                                 │
                                 ├── ຊ່ອງ Variable name: VITE_SUPABASE_URL
-                                │   ຊ່ອງ Value: [ວາງ Project URL ທີ່ກັອບມາຈາກ Supabase]
+                                │   ຊ່ອງ Value: https://ybzylmboyqqnvtzdkpkg.supabase.co
                                 │
                                 └── ຊ່ອງ Variable name: VITE_SUPABASE_ANON_KEY
-                                    ຊ່ອງ Value: [ວາງ anon public key ທີ່ກັອບມາຈາກ Supabase]
+                                    ຊ່ອງ Value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlienlsbWJveXFxbnZ0emRrcGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTkwOTUsImV4cCI6MjEwNzAzNTA5NX0.Evq06RRu_AVZieRfWJjSFHqQcTjUkuCCJrsyzAY5Opc
                                 │
                                 └── ກົດປຸ່ມ "Save" (ບັນທຶກ) ➔ ສຳເລັດຮຽບຮ້ອຍ!
 ```
@@ -156,12 +159,12 @@ flowchart LR
 | **Root directory** | *(ປະວ່າງ ຫຼື ໃສ່ `/`)* | ໂຟລເດີຮາກຂອງໂຄງການ |
 
 ### ขັ້ນຕອນທີ 4: ຕັ້ງຄ່າ Environment Variables
-ກົດຂະຫຍາຍຫົວຂໍ້ **Environment variables (advanced)** ແລ້ວເພີ່ມຕົວແປດັ່ງນີ້:
+ກົດຂະຫຍາຍຫົວຂໍ້ **Environment variables (advanced)** ແລ້ວເພີ່ມຕົວແປຕົວຈິງຂອງລະບົບດັ່ງນີ້:
 
 ```env
 NODE_VERSION = 20
-VITE_SUPABASE_URL = https://your-project-id.supabase.co
-VITE_SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+VITE_SUPABASE_URL = https://ybzylmboyqqnvtzdkpkg.supabase.co
+VITE_SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlienlsbWJveXFxbnZ0emRrcGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTkwOTUsImV4cCI6MjEwNzAzNTA5NX0.Evq06RRu_AVZieRfWJjSFHqQcTjUkuCCJrsyzAY5Opc
 VITE_TURNSTILE_SITE_KEY = 0x4AAAAAAA... (Site Key ຈາກ Cloudflare Turnstile)
 VITE_APP_ENV = production
 ```
