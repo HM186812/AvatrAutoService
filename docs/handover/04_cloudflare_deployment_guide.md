@@ -71,6 +71,54 @@ flowchart LR
 
 ---
 
+### 3.1 ຄູ່ມືດ່ວນສຳລັບຜູ້ທີ່ບໍ່ຊຳນານເມນູໄອທີ: "ຫຼັງບ້ານ (Backend) ຢູ່ໃສ ແລະ ເອົາຄ່າແນວໃດບໍ່ໃຫ້ຫຼົງ?"
+
+> [!NOTE]
+> **ຄຳຖາມທີ່ພົບເລື້ອຍ:** *"ຫຼັງບ້ານ (Backend) ຢູ່ໃສ? ຕ້ອງໄປເປີດ Server Node.js / Express ແຍກອີກບໍ່? ເປັນຫຍັງຫາເມນູ Backend ໃນ Supabase ບໍ່ເຫັນ?"*  
+> **ຄຳຕອບ:** ລະບົບນີ້ໃຊ້ສະຖາປັດຕະຍະກຳ Cloud BaaS **ບໍ່ຕ້ອງມີ Server ຫຼັງບ້ານແຍກຕ່າງຫາກແມ່ນແຕ່ເຄື່ອງດຽວ!** ລະບົບຫຼັງບ້ານ (Backend API, Login, Auth, Edge Functions) ແລະ ຖານຂໍ້ມູນ (Database) **ລວມຢູ່ໃນ Supabase Cloud ທັງໝົດແລ້ວ**.
+
+#### ຂັ້ນຕອນການຄລິກເອົາຄ່າໃນ Supabase ແບບຈັບມືເຮັດ (Click-by-Click Guide):
+
+```text
+ຂັ້ນທີ 1: ເປີດເວັບ https://supabase.com/dashboard ແລ້ວຄລິກເຂົ້າ Project ຂອງທ່ານ
+  │
+  └── ຂັ້ນທີ 2: ແນມເບິ່ງເມນູ "ຊ້າຍລຸ່ມສຸດ" ຫາໄອຄອນ ⚙️ Project Settings (ຮູບຟັນເຟືອງ) ➔ ຄລິກເລີຍ!
+        │
+        └── ຂັ້ນທີ 3: ໃນເມນູຍ່ອຍດ້ານຊ້າຍ ພາຍໃຕ້ໝວດ Configuration ➔ ຄລິກເລືອກ "API"
+              │
+              ├── 📋 ຈຸດທີ 1: ແນມຫາກ່ອງ "Project URL" ➔ ກົດປຸ່ມ Copy 
+              │    (ນີ້ຄື URL ຫຼັງບ້ານ & ຖານຂໍ້ມູນ ➔ ນຳໄປໃສ່ VITE_SUPABASE_URL)
+              │
+              └── 📋 ຈຸດທີ 2: ເລື່ອນລົງມາກ່ອງ "Project API keys" ➔ ແນມຫາແຖວ "anon" "public" ➔ ກົດປຸ່ມ Copy
+                   (ນີ້ຄື ກຸນແຈເຊື່ອມຕໍ່ຫຼັງບ້ານ ➔ ນຳໄປໃສ່ VITE_SUPABASE_ANON_KEY)
+```
+
+#### ຂັ້ນຕອນການເອົາຄ່າໄປວາງໃນ Cloudflare Pages ແບບຈັບມືເຮັດ:
+
+```text
+ຂັ້ນທີ 1: ເປີດເວັບ https://dash.cloudflare.com/
+  │
+  └── ຂັ້ນທີ 2: ເມນູດ້ານຊ້າຍ ➔ ຄລິກ "Workers & Pages"
+        │
+        └── ຂັ້ນທີ 3: ຄລິກເລືອກ Project "avatr-auto-service"
+              │
+              └── ຂັ້ນທີ 4: ແຖບເມນູດ້ານເທິງ ➔ ຄລິກ "Settings"
+                    │
+                    └── ຂັ້ນທີ 5: ເມນູດ້ານຊ້າຍ ➔ ຄລິກ "Environment variables"
+                          │
+                          └── ຂັ້ນທີ 6: ຫົວຂໍ້ Production ➔ ກົດປຸ່ມ "Add variable" (ຫຼື "Edit variables")
+                                │
+                                ├── ຊ່ອງ Variable name: VITE_SUPABASE_URL
+                                │   ຊ່ອງ Value: [ວາງ Project URL ທີ່ກັອບມາຈາກ Supabase]
+                                │
+                                └── ຊ່ອງ Variable name: VITE_SUPABASE_ANON_KEY
+                                    ຊ່ອງ Value: [ວາງ anon public key ທີ່ກັອບມາຈາກ Supabase]
+                                │
+                                └── ກົດປຸ່ມ "Save" (ບັນທຶກ) ➔ ສຳເລັດຮຽບຮ້ອຍ!
+```
+
+---
+
 ## 4. ວິທີທີ 1: ການ Deploy ຜ່ານ Cloudflare Dashboard GUI (ແນະນຳສຳລັບ Production)
 
 ວິທີນີ້ເປັນວິທີມາດຕະຖານທີ່ສະດວກທີ່ສຸດ ເພາະ Cloudflare ຈະເຊື່ອມຕໍ່ກັບ Git ແລະ ເຮັດການ Auto-Deploy ທຸກຄັ້ງທີ່ມີການ Commit ໃໝ່.
