@@ -45,11 +45,25 @@ flowchart LR
 
 - [x] **ບັນຊີ Cloudflare:** ມີບັນຊີ [Cloudflare Dashboard](https://dash.cloudflare.com/) ຂອງບໍລິສັດ
 - [x] **Git Repository:** Source code ຖືກ Push ຂຶ້ນ GitHub Branch `main` ຮຽບຮ້ອຍແລ້ວ
-- [x] **Supabase Project Credentials:**
-  - `VITE_SUPABASE_URL` (ຕົວຢ່າງ: `https://xyzcompany.supabase.co`)
-  - `VITE_SUPABASE_ANON_KEY` (Public Anon Key ຂຶ້ນຕົ້ນດ້ວຍ `eyJhbGci...`)
-- [x] **Cloudflare Turnstile Site Key:**
-  - `VITE_TURNSTILE_SITE_KEY` (ສ້າງໄດ້ຟຣີຈາກ Cloudflare Dashboard)
+- [x] **Supabase Project Credentials (ຂໍ້ມູນເຊື່ອມຕໍ່ຖານຂໍ້ມູນ ແລະ ຫຼັງບ້ານ):**
+  - **`VITE_SUPABASE_URL`:** URL ຫຼັກສຳລັບເຊື່ອມຕໍ່ລະບົບໜ້າເວັບ (Frontend) ເຂົ້າກັບ Supabase API Gateway ທັງໝົດ ເຊິ່ງຄວບຄຸມ:
+    - ຖານຂໍ້ມູນຫຼັກ **PostgreSQL 15+ Core Tables**
+    - ລະບົບຢັ້ງຢືນຕົວຕົນ **Supabase Auth (JWT)**
+    - ລະບົບ Cloud Storage (**dealership-assets** & **payment-slips**)
+    - ຟັງຊັນຫຼັງບ້ານ **Supabase Edge Functions** (`create-staff`, `manage-staff`)
+  - **`VITE_SUPABASE_ANON_KEY`:** Public Anon Key ສຳລັບ Frontend ໃຊ້ຮຽກ API ຢ່າງປອດໄພ ພາຍໃຕ້ການຄວບຄຸມຂອງ **Row-Level Security (RLS)**
+  - *ວິທີເອົາຄ່າຈາກ Supabase:*
+    ```text
+    Supabase Dashboard (https://supabase.com/dashboard)
+     └── Project Settings (ໄອຄອນຟັນເຟືອງມຸມລຸ່ມຊ້າຍ)
+          └── API
+               ├── Project URL (ຄັດລອກໃສ່ VITE_SUPABASE_URL)
+               └── Project API keys -> anon public (ຄັດລອກໃສ່ VITE_SUPABASE_ANON_KEY)
+    ```
+- [x] **Cloudflare Turnstile Site Key (ບັອດກາດໜ້າ Login):**
+  - **`VITE_TURNSTILE_SITE_KEY`:** Site Key ສຳລັບປ້ອງກັນ Brute-force ທີ່ໜ້າ Login
+- [x] **ການເຊື່ອມຕໍ່ລະບົບຫຼັງບ້ານ Edge Functions:**
+  - ໂມດູນຈັດການຜູ້ໃຊ້ງານລະດັບ Admin (`supabase/functions/create-staff` ແລະ `manage-staff`) ເຮັດວຽກເທິງ Supabase Deno Edge Runtime ຝັ່ງ Server ເຊິ່ງໄດ້ຮັບ `SUPABASE_SERVICE_ROLE_KEY` ຈາກລະບົບພາຍໃນ Supabase ໂດຍກົງຢູ່ແລ້ວ ຈຶ່ງ**ບໍ່ຈຳເປັນ ແລະ ຫ້າມ**ເອົາ Service Role Key ມາໃສ່ໃນ `.env` ຂອງໜ້າເວັບ.
 
 > [!CAUTION]
 > **ຂໍ້ຄວນລະວັງລະດັບສູງສຸດ (Zero-Leak Policy):**
