@@ -3,8 +3,8 @@
 
 ---
 
-### 1. ບົດນຳສະເໜີ ແລະ ຈຸດປະສົງ (Project Overview & Purpose)
-ເອກະສານສະບັບນີ້ ຖືກຈັດທຳຂຶ້ນເພື່ອເປັນ **ເອກະສານມອບ-ຮັບງານທາງການ (Official Technical Handover Documentation)** ສຳລັບໂຄງການ **AvatrAutoService Laos** ໂດຍແບ່ງອອກເປັນ **3 ພາກສ່ວນຫຼັກ (Three Core Parts)** ຕາມມາດຕະຖານວິສະວະກຳຊອບແວລະດັບ Enterprise:
+#### 1. ບົດນຳສະເໜີ ແລະ ຈຸດປະສົງ (Project Overview & Purpose)
+ເອກະສານສະບັບນີ້ ຖືກຈັດທຳຂຶ້ນເພື່ອເປັນ **ເອກະສານມອບ-ຮັບງານທາງການ (Official Technical Handover Documentation)** ສຳລັບໂຄງການ **AvatrAutoService Laos** ໂດຍແບ່ງອອກເປັນ **4 ພາກສ່ວນຫຼັກ (Four Core Parts)** ຕາມມາດຕະຖານວິສະວະກຳຊອບແວລະດັບ Enterprise:
 
 1. **[ສ່ວນທີ 1: ລະບົບເວັບແອັບພລິເຄຊັນ ແລະ ການມອບ-ຮັບງານ (Part 1: Web Application & Deliverables)](./01_web_deliverables.md)**
    - ສະຖາປັດຕະຍະກຳ Frontend (React 19, TypeScript, Vite, Tailwind CSS)
@@ -18,6 +18,9 @@
    - ຫຼັກການ Zero-Leak Architecture (ປ້ອງກັນ Service Role Key ຮົ່ວໄຫຼ)
    - ຕາຕະລາງ Row-Level Security (RLS Matrix) ແລະ ການຄວບຄຸມສິດ (RBAC Matrix)
    - Cloudflare Turnstile Bot Defense, HTTP Security Headers, ແລະ ການປ້ອງກັນຊ່ອງໂຫວ່ຕາມມາດຕະຖານ OWASP Top 10
+4. **[ສ່ວນທີ 4: ຄູ່ມືການຕິດຕັ້ງ ແລະ Deploy ເທິງ Cloudflare Pages (Part 4: Cloudflare Pages Deployment & Edge Infrastructure)](./04_cloudflare_deployment_guide.md)**
+   - ຂັ້ນຕອນການ Deploy ຜ່ານ Cloudflare Dashboard (GUI) ແລະ Wrangler CLI
+   - ການຕັ້ງຄ່າ Environment Variables, Turnstile Bot Defense, CSP Headers, ແລະ SPA Fallback
 
 ---
 
@@ -54,13 +57,14 @@ flowchart TB
 
 ---
 
-### 3. ສາລະບານເອກະສານ 3 ພາກສ່ວນ (Table of Contents & Navigation)
+### 3. ສາລະບານເອກະສານ 4 ພາກສ່ວນ (Table of Contents & Navigation)
 
 | ພາກສ່ວນ (Part) | ເອກະສານ (Document) | ເນື້ອໃນຫຼັກ (Core Contents) | ສະຖານະ (Status) |
-| :--- | :--- | :--- | :---: |
+| :--- | :--- | :--- | :--- : |
 | **ສ່ວນທີ 1 (Part 1)** | [01_web_deliverables.md](./01_web_deliverables.md) | ສະຖາປັດຕະຍະກຳເວັບ, ໂມດູນທັງໝົດ, ການອອກແບບ A4, ຄູ່ມືການ Deploy, ລາຍການກວດຮັບ | ✅ ສຳເລັດ (Ready) |
 | **ສ່ວນທີ 2 (Part 2)** | [02_database_schema.md](./02_database_schema.md) | PostgreSQL Schema, ERD, Data Dictionary, Stored Procedures, Migrations, Backup SOP | ✅ ສຳເລັດ (Ready) |
 | **ສ່ວນທີ 3 (Part 3)** | [03_cybersecurity.md](./03_cybersecurity.md) | Zero-Leak Guard, RLS Matrix, RBAC, Definer Hardening, Turnstile, OWASP Top 10 | ✅ ສຳເລັດ (Ready) |
+| **ສ່ວນທີ 4 (Part 4)** | [04_cloudflare_deployment_guide.md](./04_cloudflare_deployment_guide.md) | ຄູ່ມື Deploy Cloudflare Pages (GUI + CLI), Turnstile Setup, Path ສຳຄັນ, ແກ້ໄຂ Error | ✅ ສຳເລັດ (Ready) |
 
 ---
 

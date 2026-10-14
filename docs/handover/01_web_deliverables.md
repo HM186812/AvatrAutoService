@@ -84,15 +84,25 @@ flowchart TD
 
 ### 4. ສະເປັກການ Deploy ແລະ Hosting (Deployment Specifications)
 
+> [!NOTE]
+> ລາຍລະອຽດຂັ້ນຕອນການ Deploy ຢ່າງລະອຽດທັງແບບ Cloudflare Dashboard GUI ແລະ Wrangler CLI ສາມາດເບິ່ງໄດ້ທີ່ **[`04_cloudflare_deployment_guide.md`](file:///home/pheuang01/Projects/AvatrAutoService/docs/handover/04_cloudflare_deployment_guide.md)**.
+
 - **Platform:** Cloudflare Pages (Global Edge Network)
+- **Subdomain:** `https://avatr-auto-service.pages.dev`
 - **Build Environment:** Node.js version `20+` ຫຼື `24`
 - **Build Command:** `npm run build`
-- **Output Directory:** `dist`
-- **Single Page Redirect:** `public/_redirects` (`/* /index.html 200`)
-- **Security & Cache Headers:** `public/_headers` (Content-Security-Policy, HSTS, X-Frame-Options: DENY, Cache-Control)
+- **Output Directory:** [`dist/`](file:///home/pheuang01/Projects/AvatrAutoService/dist)
+- **Single Page Redirect:** [`public/_redirects`](file:///home/pheuang01/Projects/AvatrAutoService/public/_redirects) (`/* /index.html 200`)
+- **Security & Cache Headers:** [`public/_headers`](file:///home/pheuang01/Projects/AvatrAutoService/public/_headers) (Content-Security-Policy, HSTS, X-Frame-Options: DENY, Cache-Control)
 - **Static Asset Optimization:**
   - Font ໄຟລ໌ພາສາລາວ WOFF2 ຝັງຢູ່ໃນ `public/fonts/` ພ້ອມ HTTP Header: `Cache-Control: public, max-age=31536000, immutable`
-  - Vendor Chunk Splitting ໃນ `vite.config.ts` (ແຍກ React, Supabase, Lucide ອອກຈາກ bundle ຫຼັກ)
+  - Vendor Chunk Splitting ໃນ [`vite.config.ts`](file:///home/pheuang01/Projects/AvatrAutoService/vite.config.ts) (ແຍກ React, Supabase, Lucide ອອກຈາກ bundle ຫຼັກ)
+- **Required Environment Variables:**
+  - `NODE_VERSION` = `20`
+  - `VITE_SUPABASE_URL` = `<Supabase Project URL>`
+  - `VITE_SUPABASE_ANON_KEY` = `<Supabase Anon Public Key>`
+  - `VITE_TURNSTILE_SITE_KEY` = `<Cloudflare Turnstile Site Key>`
+  - `VITE_APP_ENV` = `production`
 
 ---
 

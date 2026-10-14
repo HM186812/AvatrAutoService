@@ -8,11 +8,12 @@
 
 ## 1. ບົດສະຫຼຸບພາບລວມ ແລະ ຂໍ້ມູນໂຄງການ (Executive Summary)
 
-ເອກະສານສະບັບນີ້ຄື **ຄູ່ມືແມ່ບົດ (Master Handbook)** ທີ່ລວບລວມທັງ **ຄູ່ມືການໃຊ້ງານລະບົບ (Operational User Guide)** ສຳລັບຜູ້ບໍລິຫານ ແລະ ພະນັກງານ ພ້ອມທັງ **ສະເປັກເຊີງວິສະວະກຳ (Technical Architecture Specification)** ສຳລັບຝ່າຍ IT ແລະ Cyber Security ໂດຍແບ່ງອອກເປັນ **3 ພາກສ່ວນຫຼັກ (Three Core Pillars)** ຢ່າງຄົບຖ້ວນ:
+ເອກະສານສະບັບນີ້ຄື **ຄູ່ມືແມ່ບົດ (Master Handbook)** ທີ່ລວບລວມທັງ **ຄູ່ມືການໃຊ້ງານລະບົບ (Operational User Guide)** ສຳລັບຜູ້ບໍລິຫານ ແລະ ພະນັກງານ ພ້ອມທັງ **ສະເປັກເຊີງວິສະວະກຳ (Technical Architecture Specification)** ສຳລັບຝ່າຍ IT ແລະ Cyber Security ໂດຍແບ່ງອອກເປັນ **4 ພາກສ່ວນຫຼັກ (Four Core Pillars)** ຢ່າງຄົບຖ້ວນ:
 
 1. **ສ່ວນທີ 1: ລະບົບເວັບແອັບພລິເຄຊັນ (Web Application & Functional Modules)**
 2. **ສ່ວນທີ 2: ສະຖາປັດຕະຍະກຳຖານຂໍ້ມູນ (Database Architecture & Data Dictionary)**
 3. **ສ່ວນທີ 3: ຄວາມປອດໄພທາງໄຊເບີ (Cybersecurity, Hardening & Zero-Leak Defense)**
+4. **ສ່ວນທີ 4: ການ Deploy ແລະ ໂຄງສ້າງພື້ນຖານ Cloudflare Pages (Cloudflare Pages Edge Deployment & Infrastructure)**
 
 ### ຂໍ້ມູນສະເພາະໂຄງການ (Project Metadata)
 - **ຊື່ລະບົບ:** AVATR Dealership CRM, POS & Auto Service Management
@@ -253,21 +254,101 @@ erDiagram
 
 ---
 
-## 6. ລາຍການກວດຮັບງານ ແລະ ໃບມອບ-ຮັບ (Acceptance Testing & Sign-Off)
+---
 
-### 6.1 ລາຍການກວດສອບການທົດສອບ (User Acceptance Testing Checklist)
+## 6. ສ່ວນທີ 4: ຄູ່ມືການ Deploy ຜ່ານ Cloudflare Pages (Part 4: Cloudflare Pages Edge Deployment)
+
+ເບິ່ງຄູ່ມືສະບັບເຕັມລະອຽດໄດ້ທີ່: **[`docs/handover/04_cloudflare_deployment_guide.md`](file:///home/pheuang01/Projects/AvatrAutoService/docs/handover/04_cloudflare_deployment_guide.md)**
+
+### 6.1 ຕຳແໜ່ງໄຟລ໌ ແລະ Path ສຳຄັນໃນລະບົບ (Key Configuration Paths)
+
+- **HTTP Security Headers:** [`public/_headers`](file:///home/pheuang01/Projects/AvatrAutoService/public/_headers) (ກຳນົດ CSP, HSTS, X-Frame-Options: DENY)
+- **SPA Fallback Redirects:** [`public/_redirects`](file:///home/pheuang01/Projects/AvatrAutoService/public/_redirects) (ກຳນົດ `/* /index.html 200` ປ້ອງກັນ 404 ເມື່ອ Refresh ໜ້າ)
+- **Environment Template:** [`.env.example`](file:///home/pheuang01/Projects/AvatrAutoService/.env.example) (ແມ່ແບບຕົວແປສະພາບແວດລ້ອມສຳລັບ Cloudflare Pages)
+- **Output Build Directory:** [`dist/`](file:///home/pheuang01/Projects/AvatrAutoService/dist) (ໄຟລ໌ Production Bundle ຫຼັງ Build)
+- **Bot Guard Integration:** [`src/components/common/TurnstileWidget.tsx`](file:///home/pheuang01/Projects/AvatrAutoService/src/components/common/TurnstileWidget.tsx)
+
+### 6.2 ຂັ້ນຕອນການ Deploy ຜ່ານ Cloudflare Dashboard (GUI Step-by-Step)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as ວິສະວະກອນ (IT/DevOps)
+    participant CF as Cloudflare Pages Dashboard
+    participant Git as GitHub (main branch)
+    participant Edge as Cloudflare Global CDN
+
+    Admin->>CF: ເຂົ້າ Workers & Pages > Create > Pages > Connect to Git
+    Admin->>CF: ເລືອກ Repository "AvatrAutoService" & Branch "main"
+    Admin->>CF: ຕັ້ງຄ່າ Preset: Vite, Command: npm run build, Output: dist
+    Admin->>CF: ເພີ່ມຕົວແປ NODE_VERSION=20, VITE_SUPABASE_*, VITE_TURNSTILE_*
+    Admin->>CF: ກົດ Save and Deploy
+    CF->>Git: ດຶງ Source Code & ຮັນ Build
+    CF->>Edge: ກະຈາຍ Static Assets ສູ່ 330+ ຕົວເມືອງທົ່ວໂລກ
+    Edge-->>Admin: ສຳເລັດ! ພ້ອມໃຊ້ງານທີ່ https://avatr-auto-service.pages.dev
+```
+
+#### ຄ່າຕັ້ງຄ່າ Build Settings:
+| ຊ່ອງຕັ້ງຄ່າ (Field) | ຄ່າທີ່ຕ້ອງປ້ອນ (Value) |
+| :--- | :--- |
+| **Project name** | `avatr-auto-service` |
+| **Production branch** | `main` |
+| **Framework preset** | `Vite` |
+| **Build command** | `npm run build` |
+| **Build output directory** | `dist` |
+| **Root directory** | `/` (ຫຼື ປະວ່າງ) |
+
+#### ຕົວແປສະພາບແວດລ້ອມ (Environment Variables):
+- `NODE_VERSION` = `20`
+- `VITE_SUPABASE_URL` = `<URL ຖານຂໍ້ມູນ Supabase Cloud>`
+- `VITE_SUPABASE_ANON_KEY` = `<Anon Public Key>`
+- `VITE_TURNSTILE_SITE_KEY` = `<Site Key ຈາກ Cloudflare Turnstile>`
+- `VITE_APP_ENV` = `production`
+
+> [!CAUTION]
+> ຫ້າມໃສ່ `SUPABASE_SERVICE_ROLE_KEY` ໃນ Cloudflare Pages Environment Variables ເດັດຂາດ ເພື່ອຮັກສາຫຼັກການ Zero-Leak Architecture!
+
+### 6.3 ຂັ້ນຕອນການ Deploy ຜ່ານ Wrangler CLI
+
+ວິທີການສັ່ງ Deploy ຜ່ານ Terminal ໂດຍກົງ:
+```bash
+# 1. ກວດສອບ Lint ແລະ ສ້າງ Build
+npm run lint
+npm run build
+
+# 2. ເຂົ້າສູ່ລະບົບ Cloudflare
+npx wrangler login
+
+# 3. Deploy ໂຟລເດີ dist ຂຶ້ນ Cloudflare Pages
+npx wrangler pages deploy dist --project-name=avatr-auto-service --branch=main
+```
+
+### 6.4 ການຕັ້ງຄ່າ Cloudflare Turnstile Bot Defense
+1. ໄປທີ່ Cloudflare Dashboard > **Turnstile** > **Add site**
+2. ຕັ້ງຊື່: `AvatrAutoService Login Guard`
+3. Domain: ໃສ່ `avatr-auto-service.pages.dev` ແລະ `localhost`
+4. Mode: ເລືອກ **Managed**
+5. ນຳເອົາ **Site Key** ໄປໃສ່ໃນຕົວແປ `VITE_TURNSTILE_SITE_KEY` ໃນ Cloudflare Pages
+
+---
+
+## 7. ລາຍການກວດຮັບງານ ແລະ ໃບມອບ-ຮັບ (Acceptance Testing & Sign-Off)
+
+### 7.1 ລາຍການກວດສອບການທົດສອບ (User Acceptance Testing Checklist)
 
 | ລ/ດ | ຫົວຂໍ້ການທົດສອບ | ວິທີການທົດສອບ | ຜົນການທົດສອບຕົວຈິງ | ສະຖານະ |
 | :---: | :--- | :--- | :--- | :---: |
-| 1 | **Frontend Build** | ຮັນ `npm run build` | ສຳເລັດໃນ 3 ວິນາທີ ໄຮ້ Error | ✅ ຜ່ານ |
+| 1 | **Frontend Build** | ຮັນ `npm run build` | ສຳເລັດໃນ 1.65 ວິນາທີ ໄຮ້ Error | ✅ ຜ່ານ |
 | 2 | **Cloudflare Headers** | ກວດສອບໄຟລ໌ `public/_headers` | ມີ CSP, HSTS, XFO ຄົບຖ້ວນ | ✅ ຜ່ານ |
 | 3 | **Cloudflare Redirects**| ກວດສອບ `public/_redirects` | ມີ SPA fallback `/* /index.html 200` | ✅ ຜ່ານ |
 | 4 | **Database Connectivity**| ທົດສອບ Query Supabase Cloud | Latency ສະເລ່ຍ 160-360ms ເຊື່ອມຕໍ່ປົກກະຕິ | ✅ ຜ່ານ |
 | 5 | **RLS Security Policy** | ທົດສອບ Query ແບບ Anonymous | ລະບົບບຼັອກຕາຕະລາງພາຍໃນ (401) ຕາມສິດ | ✅ ຜ່ານ |
 | 6 | **A4 Documents Suite** | ທົດສອບພິມເອກະສານ 5 ສະບັບ | ສະແດງ Preview A4 ໜ້າດຽວຄົມຊັດ ສົ່ງອອກ PDF ໄດ້ | ✅ ຜ່ານ |
 | 7 | **Zero-Leak Validation** | ກວດສອບ Git Tracking | `.agents/`, `.env`, keys ບໍ່ຫຼຸດຂຶ້ນ Git | ✅ ຜ່ານ |
+| 8 | **Edge Deployment SOP** | ກວດສອບຄູ່ມື `04_cloudflare_deployment_guide.md` | ມີຂັ້ນຕອນ GUI/CLI ແລະ Path ຊັດເຈນ | ✅ ຜ່ານ |
+| 9 | **Turnstile Bot Guard** | ທົດສອບ Widget ໜ້າ Login | ກວດສອບມະນຸດອັດຕະໂນມັດ ປ້ອງກັນ Brute Force | ✅ ຜ່ານ |
 
-### 6.2 ໃບຢັ້ງຢືນການມອບ-ຮັບງານທາງການ (Official Sign-Off Form)
+### 7.2 ໃບຢັ້ງຢືນການມອບ-ຮັບງານທາງການ (Official Sign-Off Form)
 
 | ຝ່າຍມອບງານ (System Development & Architecture Team) | ຝ່າຍກວດຮັບງານ (Laothani Tractor Sole Co., Ltd) |
 | :--- | :--- |
