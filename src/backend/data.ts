@@ -904,6 +904,39 @@ export async function deactivateStaffProfile(id: string) {
   if (error) throw error;
 }
 
+export async function deleteStaffProfile(id: string) {
+  const client = requireSupabase();
+  // 1. Try edge function first (handles auth.admin.deleteUser + staff_profiles)
+  const { error: edgeError } = await client.functions.invoke('manage-staff', {
+    body: { action: 'delete', userId: id },
+  });
+  if (!edgeError) return;
+
+  // Extract actual error message from response context if available
+  let detailedMessage = edgeError.message;
+  if ('context' in edgeError && typeof (edgeError as any).context?.json === 'function') {
+    try {
+      const errBody = await (edgeError as any).context.json();
+      if (errBody?.error) detailedMessage = errBody.error;
+    } catch {
+      // ignore json parse fallback
+    }
+  }
+
+  // Do NOT fallback to RPC if the error was a deliberate 4xx client/business rejection
+  const status = (edgeError as any)?.context?.status;
+  if (status && status >= 400 && status < 500) {
+    throw new Error(detailedMessage);
+  }
+
+  // 2. Fall back to RPC delete_staff_profile if edge function is unreachable or not yet deployed
+  const { error: rpcError } = await client.rpc('delete_staff_profile', { p_user_id: id });
+  if (!rpcError) return;
+
+  // If both failed, throw informative error
+  throw new Error(detailedMessage || rpcError.message || 'Could not delete this staff profile.');
+}
+
 export async function updateServiceAppointment(appointment: ServiceAppointment) {
   const client = requireSupabase();
   const { error } = await client.from('service_appointments').update({

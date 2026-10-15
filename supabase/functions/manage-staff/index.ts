@@ -15,12 +15,19 @@ Deno.serve(async (req) => {
     const action = body.action;
     const userId = typeof body.userId === 'string' ? body.userId : '';
     if (!uuidPattern.test(userId)) return jsonResponse({ error: 'A valid staff user ID is required.' }, 400);
-    if (action !== 'update' && action !== 'suspend') return jsonResponse({ error: 'Unsupported staff action.' }, 400);
+    if (action !== 'update' && action !== 'suspend' && action !== 'delete') return jsonResponse({ error: 'Unsupported staff action.' }, 400);
 
     const isSuperAdmin = access.actorProfile.role === 'super_admin';
     const isSelf = userId === access.actor.id;
 
-    if (action === 'suspend') {
+    if (action === 'delete') {
+      if (!isSuperAdmin) {
+        return jsonResponse({ error: 'Only an active super admin can delete staff accounts.' }, 403);
+      }
+      if (isSelf) {
+        return jsonResponse({ error: 'You cannot delete your own account.' }, 400);
+      }
+    } else if (action === 'suspend') {
       if (!isSuperAdmin) {
         return jsonResponse({ error: 'Only an active super admin can suspend staff accounts.' }, 403);
       }
@@ -38,6 +45,32 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (targetError) throw targetError;
     if (!target) return jsonResponse({ error: 'Staff profile was not found.' }, 404);
+
+    if (action === 'delete') {
+      if (target.role === 'super_admin' && target.status === 'active') {
+        const { count, error: countError } = await access.admin
+          .from('staff_profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'super_admin')
+          .eq('status', 'active');
+        if (countError) throw countError;
+        if ((count || 0) <= 1) return jsonResponse({ error: 'The last active super admin cannot be deleted.' }, 409);
+      }
+
+      // Delete from auth.admin first; Postgres ON DELETE CASCADE will clean up staff_profiles
+      const { error: authError } = await access.admin.auth.admin.deleteUser(userId);
+      if (authError) {
+        return jsonResponse({ error: `Auth deletion failed: ${authError.message}` }, 500);
+      }
+
+      const { error: profileError } = await access.admin
+        .from('staff_profiles')
+        .delete()
+        .eq('id', userId);
+      if (profileError) throw profileError;
+
+      return jsonResponse({ success: true });
+    }
 
     if (action === 'suspend') {
       if (target.role === 'super_admin' && target.status === 'active') {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SystemUser, UserRole, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { createStaffAccount, deactivateStaffProfile, saveStaffProfile } from '../../backend/data';
+import { createStaffAccount, deactivateStaffProfile, deleteStaffProfile, saveStaffProfile } from '../../backend/data';
 import { 
   UserPlus, 
   Trash2, 
@@ -45,6 +45,7 @@ export default function UserManagementView({
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
   const [deletingUser, setDeletingUser] = useState<SystemUser | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
   // New user form state
@@ -85,23 +86,24 @@ export default function UserManagementView({
 
   // 1. DELETE USER HANDLER
   const handleConfirmDelete = async () => {
-    if (!deletingUser) return;
+    if (!deletingUser || isDeleting) return;
     if (deletingUser.id === currentUser.id) {
       alert('ບໍ່ສາມາດລົບຕົນເອງ (Admin ປະຈຸບັນ) ອອກຈາກລະບົບໄດ້!');
       setDeletingUser(null);
       return;
     }
 
+    setIsDeleting(true);
     try {
-      await deactivateStaffProfile(deletingUser.id);
+      await deleteStaffProfile(deletingUser.id);
+      setUsers(prev => prev.filter(user => user.id !== deletingUser.id));
+      triggerFeedback(`ລົບຜູ້ໃຊ້ "${deletingUser.name}" ອອກຈາກລະບົບສຳເລັດ`);
+      setDeletingUser(null);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not suspend this account.');
-      return;
+      alert(error instanceof Error ? error.message : 'Could not delete this account.');
+    } finally {
+      setIsDeleting(false);
     }
-
-    setUsers(prev => prev.map(user => user.id === deletingUser.id ? { ...user, status: 'suspended' } : user));
-    triggerFeedback(`ລະງັບບັນຊີ "${deletingUser.name}" ສຳເລັດ`);
-    setDeletingUser(null);
   };
 
   // 2. GRANT ROLE & PERMISSIONS HANDLER
@@ -773,17 +775,19 @@ export default function UserManagementView({
               <button
                 type="button"
                 onClick={() => setDeletingUser(null)}
-                className="user-management-modal-cancel px-5 py-2.5 rounded-xl border text-xs font-semibold cursor-pointer"
+                disabled={isDeleting}
+                className="user-management-modal-cancel px-5 py-2.5 rounded-xl border text-xs font-semibold cursor-pointer disabled:opacity-50"
               >
                 ຍົກເລີກ
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="user-management-danger-action px-5 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                disabled={isDeleting}
+                className="user-management-danger-action px-5 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>ຢືນຢັນການລົບຜູ້ໃຊ້</span>
+                <span>{isDeleting ? 'ກຳລັງລົບ...' : 'ຢືນຢັນການລົບຜູ້ໃຊ້'}</span>
               </button>
             </div>
           </div>
