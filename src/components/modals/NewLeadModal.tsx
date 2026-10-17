@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, UserPlus, MapPin, CreditCard, DollarSign, Calendar } from 'lucide-react';
+import { X, UserPlus, MapPin, CreditCard, DollarSign, Calendar, Loader2 } from 'lucide-react';
 import { Lead, CustomerCategory, Language, VehicleModel, SystemUser } from '../../types';
 import { translations } from '../../data/translations';
 import { LAO_PROVINCES } from '../../data/laoProvinces';
@@ -9,7 +9,7 @@ import { formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
 interface NewLeadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddLead: (lead: Omit<Lead, 'id' | 'createdAt'> & { createdAt?: string }) => void;
+  onAddLead: (lead: Omit<Lead, 'id' | 'createdAt'> & { createdAt?: string }) => Promise<void> | void;
   vehicles?: VehicleModel[];
   currentUser?: SystemUser;
   lang?: Language;
@@ -45,6 +45,7 @@ export default function NewLeadModal({
   const [downPaymentPercent, setDownPaymentPercent] = useState<number>(30);
   const [tenureMonths, setTenureMonths] = useState<number>(48);
   const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
@@ -59,37 +60,42 @@ export default function NewLeadModal({
 
   const officerInCharge = currentUser?.name || 'ທີມງານຂາຍ AVATR';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName.trim() || !phone.trim()) return;
+    if (isSubmitting || !customerName.trim() || !phone.trim()) return;
 
-    const effectiveVillage = village === '__custom__' ? customVillage.trim() : village;
+    setIsSubmitting(true);
+    try {
+      const effectiveVillage = village === '__custom__' ? customVillage.trim() : village;
 
-    onAddLead({
-      customerName: customerName.trim(),
-      createdAt: recordDate ? `${recordDate} ${new Date().toTimeString().slice(0, 5)}` : undefined,
-      phone: phone.trim(),
-      email: email.trim() || undefined,
-      idCardNumber: idCardNumber.trim() || undefined, // Optional
-      province,
-      district,
-      village: effectiveVillage,
-      category,
-      source: category === 'walk_in' ? 'Walk-in Showroom' : category === 'online' ? 'Online Social' : 'Motor Show Event',
-      interestedModel,
-      status: 'new',
-      priority,
-      notes: notes || `ລູກຄ້າສົນໃຈ ${interestedModel} ໝວດ ${category}`,
-      paymentType,
-      downPaymentPercent: paymentType === 'installment' ? Number(downPaymentPercent) || 0 : undefined,
-      downPaymentUSD: paymentType === 'installment' ? downPaymentUSD : undefined,
-      tenureMonths: paymentType === 'installment' ? Number(tenureMonths) || 0 : undefined,
-      monthlyPaymentLAK: paymentType === 'installment' ? monthlyPaymentLAK : undefined,
-      installmentStatus: paymentType === 'installment' ? 'pending_approval' : undefined,
-      assignedTo: officerInCharge,
-    });
+      await onAddLead({
+        customerName: customerName.trim(),
+        createdAt: recordDate ? `${recordDate} ${new Date().toTimeString().slice(0, 5)}` : undefined,
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        idCardNumber: idCardNumber.trim() || undefined, // Optional
+        province,
+        district,
+        village: effectiveVillage,
+        category,
+        source: category === 'walk_in' ? 'Walk-in Showroom' : category === 'online' ? 'Online Social' : 'Motor Show Event',
+        interestedModel,
+        status: 'new',
+        priority,
+        notes: notes || `ລູກຄ້າສົນໃຈ ${interestedModel} ໝວດ ${category}`,
+        paymentType,
+        downPaymentPercent: paymentType === 'installment' ? Number(downPaymentPercent) || 0 : undefined,
+        downPaymentUSD: paymentType === 'installment' ? downPaymentUSD : undefined,
+        tenureMonths: paymentType === 'installment' ? Number(tenureMonths) || 0 : undefined,
+        monthlyPaymentLAK: paymentType === 'installment' ? monthlyPaymentLAK : undefined,
+        installmentStatus: paymentType === 'installment' ? 'pending_approval' : undefined,
+        assignedTo: officerInCharge,
+      });
 
-    onClose();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -447,6 +453,7 @@ export default function NewLeadModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="ສີດຳ, ນັດທົດລອງຂັບ, ຂໍ້ສະເໜີພິເສດ..."
+              maxLength={2000}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors resize-none"
             />
           </div>
@@ -455,15 +462,18 @@ export default function NewLeadModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 border border-zinc-800 hover:bg-zinc-900 text-zinc-300 hover:text-white rounded-xl transition-colors cursor-pointer text-xs font-semibold"
+              disabled={isSubmitting}
+              className="px-4 py-2.5 border border-zinc-800 hover:bg-zinc-900 text-zinc-300 hover:text-white rounded-xl transition-colors cursor-pointer text-xs font-semibold disabled:opacity-50"
             >
               {lang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all shadow-md cursor-pointer text-xs active:scale-98"
+              disabled={isSubmitting}
+              className="px-6 py-2.5 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all shadow-md cursor-pointer text-xs active:scale-98 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {lang === 'lo' ? 'ບັນທຶກລູກຄ້າໃໝ່' : 'Save Lead'}
+              {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{lang === 'lo' ? 'ບັນທຶກລູກຄ້າໃໝ່' : 'Save Lead'}</span>
             </button>
           </div>
         </form>

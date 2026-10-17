@@ -33,6 +33,7 @@ import {
   Clock,
   AlertCircle,
   Check,
+  Loader2,
   LayoutGrid,
   List,
   X
@@ -191,9 +192,11 @@ export default function CustomerView({
     delivered: leads.filter(l => l.status === 'delivered').length, // ຊ່ອງ "ຈ່າຍແລ້ວ"
   };
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleCreateCustomerFromLeftForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName.trim() || !formPhone.trim()) return;
+    if (isSubmitting || !formName.trim() || !formPhone.trim()) return;
 
     const selectedCar = formModel || vehicles[0]?.name || 'AVATR 12';
     const effectiveVillage = formVillage === '__custom__' ? formCustomVillage.trim() : formVillage;
@@ -224,6 +227,7 @@ export default function CustomerView({
       createdAt: formDate ? `${formDate}T${new Date().toTimeString().slice(0, 8)}` : new Date().toISOString(),
     };
 
+    setIsSubmitting(true);
     try {
       if (!currentUser?.id) throw new Error('Sign in again before saving a customer.');
       await saveLead(newLead, currentUser.id);
@@ -239,6 +243,8 @@ export default function CustomerView({
       setFormNotes('');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Customer could not be saved.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1062,15 +1068,17 @@ export default function CustomerView({
                 value={formNotes}
                 onChange={(e) => setFormNotes(e.target.value)}
                 placeholder="ສີດຳ, ນັດທົດລອງຂັບ, ຂໍ້ສະເໜີດອກເບ້ຍ..."
+                maxLength={2000}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white resize-none"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-white text-black font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-zinc-200 transition-colors shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
+              disabled={isSubmitting}
+              className="w-full py-2.5 bg-white text-black font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-zinc-200 transition-colors shadow-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Plus className="w-4 h-4" />
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               <span>{t.saveCustomerBtn}</span>
             </button>
           </form>

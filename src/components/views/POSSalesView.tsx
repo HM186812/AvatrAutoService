@@ -363,9 +363,12 @@ export default function POSSalesView({
     );
   });
 
+  const [isProcessingSale, setIsProcessingSale] = useState(false);
+
   // CONFIRM SALE & DEDUCT STOCK
   const handleProcessSale = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isProcessingSale) return;
 
     if (!selectedVehicle) {
       triggerToast('ກະລຸນາເລືອກລົດຍົນທີ່ຕ້ອງການຂາຍກ່ອນ!');
@@ -452,13 +455,22 @@ export default function POSSalesView({
       notes: saleNotes || 'ຂາຍອອກຜ່ານລະບົບ POS ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ ພ້ອມຕັດສະຕ໋ອກອັດຕະໂນມັດ',
     };
 
+    setIsProcessingSale(true);
     try {
       if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
       await saveBillRecord(newBill, currentUser.id);
     } catch (error) {
       const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Sale could not be saved.';
+      if (msg.includes('already has a stock-out movement') || msg.includes('already sold') || msg.includes('not available')) {
+        const soldVin = selectedVehicle.vin;
+        setInventory(prev => prev.map(item => item.vin === soldVin ? { ...item, stockQuantity: 0, status: 'sold', reservedForCustomer: undefined } : item));
+        const nextCar = availableVehicles.find(v => v.vin !== soldVin);
+        setSelectedVin(nextCar?.vin || '');
+      }
       triggerToast(msg);
       return;
+    } finally {
+      setIsProcessingSale(false);
     }
     setInventory(prev => prev.map(item => item.vin === selectedVehicle.vin ? updatedInventoryItem : item));
     setBills(prev => [newBill, ...prev]);
@@ -1479,9 +1491,10 @@ export default function POSSalesView({
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="pos-confirm-sale-button w-full min-h-14 py-3.5 bg-white hover:bg-zinc-200 active:scale-[0.99] text-black font-extrabold text-sm rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/30"
+                  disabled={isProcessingSale}
+                  className="pos-confirm-sale-button w-full min-h-14 py-3.5 bg-white hover:bg-zinc-200 active:scale-[0.99] text-black font-extrabold text-sm rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/30 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <ShoppingBag className="w-5 h-5 fill-black" />
+                  {isProcessingSale ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : <ShoppingBag className="w-5 h-5 fill-black" />}
                   <span>{t.confirmSaleAndDeduct}</span>
                 </button>
               </div>

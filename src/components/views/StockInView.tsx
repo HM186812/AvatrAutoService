@@ -32,7 +32,8 @@ import {
   Flame,
   Plus,
   Lock,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react';
 
 interface StockInViewProps {
@@ -310,9 +311,12 @@ export default function StockInView({
     triggerToast(`ລົບລຸ້ນ "${target.name}" ອອກຈາກລະບົບສຳເລັດແລ້ວ!`);
   };
 
+  const [isSubmittingStockIn, setIsSubmittingStockIn] = useState(false);
+
   // SUBMIT IMPORT & GENERATE INBOUND BILL
   const handleSubmitStockIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingStockIn) return;
 
     if (!vin.trim()) {
       triggerToast('ກະລຸນາປ້ອນເລກຖັງ (VIN) ກ່ອນ!');
@@ -443,11 +447,14 @@ export default function StockInView({
       notes: notes || 'ຮັບເຂົ້າສາງທາງການ ຜ່ານດ່ານສາກົນບໍ່ເຕັນ ກວດສອບສະພາບ 100%',
     };
 
+    setIsSubmittingStockIn(true);
     try {
       await saveBillToSupabase(newBill, newItem);
     } catch (error) {
       triggerToast(error instanceof Error ? error.message : 'Stock-in could not be saved.');
       return;
+    } finally {
+      setIsSubmittingStockIn(false);
     }
     setInventory(prev => [newItem, ...prev]);
     setBills(prev => [newBill, ...prev]);
@@ -1235,9 +1242,10 @@ export default function StockInView({
 
               <button
                 type="submit"
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-sm font-extrabold text-black shadow-xl transition-all hover:scale-[1.01] hover:bg-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:w-auto sm:px-8"
+                disabled={isSubmittingStockIn}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-sm font-extrabold text-black shadow-xl transition-all hover:scale-[1.01] hover:bg-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 sm:w-auto sm:px-8 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <PackagePlus className="w-5 h-5" />
+                {isSubmittingStockIn ? <Loader2 className="w-5 h-5 animate-spin text-black" /> : <PackagePlus className="w-5 h-5" />}
                 <span>
                   {lang === 'lo' 
                     ? 'ບັນທຶກສະຕ໋ອກ & ອອກໃບຮັບ (Dual Save)' 

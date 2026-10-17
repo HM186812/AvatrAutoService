@@ -33,7 +33,7 @@ test.describe('Point of Sale (POS)', () => {
     await vehicleCard.click();
 
     // Fill customer details
-    const nameInput = page.locator('input[placeholder*="ສົມຊາຍ"], input[placeholder*="สมชาย"]').first();
+    const nameInput = page.locator('input[placeholder*="ບຸນມີ"], input[placeholder*="ສົມຊາຍ"], input[placeholder*="สมชาย"]').first();
     const phoneInput = page.locator('input[placeholder*="020"]').first();
 
     await nameInput.fill(TEST_BUYER_NAME);
