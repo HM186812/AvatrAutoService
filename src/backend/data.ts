@@ -437,6 +437,35 @@ async function findCustomerId(phone: string): Promise<string | null> {
   return data?.[0]?.id || null;
 }
 
+async function findOrCreateSaleCustomer(bill: InvoiceBillRecord, actorId: string): Promise<string | null> {
+  const client = requireSupabase();
+  const phone = sanitizePhone(bill.customerPhone, 30);
+  if (!phone) return null;
+
+  const existingId = await findCustomerId(phone);
+  if (existingId) return existingId;
+
+  const name = sanitizeText(bill.customerName, 120);
+  if (!name) return null;
+
+  const { data, error } = await client
+    .from('customers')
+    .insert({
+      name,
+      phone,
+      category: 'walk_in',
+      source: 'POS sale',
+      status: 'delivered',
+      priority: 'normal',
+      assigned_to: actorId,
+      notes: sanitizeText(bill.notes, 1000) || null,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data?.id || null;
+}
+
 export async function uploadDealershipAsset(file: File, folder: 'vehicles' | 'qr') {
   if (!file.type.startsWith('image/')) throw new Error('Choose a valid image file.');
   if (file.size > 5 * 1024 * 1024) throw new Error('Image files must be 5 MB or smaller.');
@@ -739,8 +768,8 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bill.id)) {
     throw new Error('Bill ID must be a UUID before it is saved.');
   }
-  const customerId = type === 'sale' && bill.customerPhone
-    ? await findCustomerId(bill.customerPhone)
+  const customerId = type === 'sale'
+    ? await findOrCreateSaleCustomer(bill, actorId)
     : null;
 
   let vehiclePayload: Record<string, unknown> | null = null;
