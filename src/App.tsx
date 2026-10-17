@@ -348,8 +348,23 @@ export default function App() {
       return;
     }
     try {
+      const targetBill = bills.find(b => b.id === billId);
       await deleteBill(billId);
       setBills(prev => prev.filter(b => b.id !== billId));
+      if (targetBill?.vin) {
+        const billType = targetBill.billType || targetBill.type;
+        if (billType === 'sale') {
+          setInventory(prev => prev.map(item =>
+            item.vin === targetBill.vin ? { ...item, status: 'ready', stockQuantity: 1 } : item
+          ));
+        } else if (billType === 'import') {
+          const hasOtherBills = bills.some(b => b.id !== billId && b.vin === targetBill.vin);
+          if (!hasOtherBills) {
+            setInventory(prev => prev.filter(item => item.vin !== targetBill.vin));
+          }
+        }
+        setStockLogs(prev => prev.filter(log => !(log.vin === targetBill.vin && log.type === (billType === 'import' ? 'stock_in' : 'stock_out'))));
+      }
       triggerToast('ລົບບິນສຳເລັດແລ້ວ!');
     } catch (error) {
       triggerToast(error instanceof Error ? error.message : 'Bill could not be deleted.');

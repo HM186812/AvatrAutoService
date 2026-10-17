@@ -49,6 +49,11 @@ function formatAuthError(error: unknown, lang: Language): string {
     if (lang === 'th') return 'ยังไม่ได้กำหนดค่า Supabase ในไฟล์ .env (โปรดระบุ Project URL และ Anon Key จริง)';
     return 'Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.';
   }
+  if (msg.includes('pending administrator approval') || msg.includes('active staff profile')) {
+    if (lang === 'lo') return 'ບັນຊີຖືກສ້າງແລ້ວ ກະລຸນາລໍຖ້າຜູ້ດູແລລະບົບອະນຸມັດການໃຊ້ງານ.';
+    if (lang === 'th') return 'สร้างบัญชีสำเร็จ กรุณารอผู้ดูแลระบบอนุมัติการใช้งาน';
+    return 'Account created and pending administrator approval.';
+  }
   return msg;
 }
 

@@ -126,8 +126,8 @@ export default function InstallmentDashboardView({
       : 30;
 
     const healthRate = totalInstallmentsChecked > 0
-      ? Math.min(100, Math.round((onTimeInstallments / totalInstallmentsChecked) * 100) + 70) // Weighted positive health index
-      : 98;
+      ? Math.min(100, Math.round((onTimeInstallments / totalInstallmentsChecked) * 100))
+      : 100;
 
     return {
       totalCustomers: installmentLeads.length,

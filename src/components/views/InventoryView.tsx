@@ -90,15 +90,6 @@ export default function InventoryView({
     return modelSummaries.filter(m => m.isLowStock || m.isOutOfStock);
   }, [modelSummaries]);
 
-  // SELL CAR MODAL STATES (ເມື່ອຂາຍອອກກໍເຊັ່ນກັນ)
-  const [sellingItem, setSellingItem] = useState<InventoryItem | null>(null);
-  const [buyerName, setBuyerName] = useState('');
-  const [buyerPhone, setBuyerPhone] = useState('');
-  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [soldPriceUSD, setSoldPriceUSD] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'finance'>('transfer');
-  const [saleNotes, setSaleNotes] = useState('');
-
   // EDIT VEHICLE MODAL STATE (USD Only)
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [editPriceValue, setEditPriceValue] = useState<number>(0);
@@ -118,93 +109,6 @@ export default function InventoryView({
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3800);
-  };
-
-  // SELL CAR HANDLER (ເມື່ອຂາຍອອກ ບັນທຶກຂໍ້ມູນ & ຕັດສະຕ໋ອກ)
-  const handleConfirmSale = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!sellingItem) return;
-    if (!buyerName.trim() || !buyerPhone.trim()) {
-      alert('ກະລຸນາປ້ອນຊື່ ແລະ ເບີໂທລູກຄ້າຜູ້ຊື້!');
-      return;
-    }
-
-    const currentQty = sellingItem.stockQuantity;
-    const remaining = Math.max(0, currentQty - 1);
-    const finalPriceUSD = soldPriceUSD || sellingItem.priceUSD;
-
-    const updatedInventoryItem: InventoryItem = {
-      ...sellingItem,
-      stockQuantity: remaining,
-      status: remaining === 0 ? 'sold' : sellingItem.status,
-      reservedForCustomer: undefined,
-    };
-
-    const billNumber = `INV-AVATR-${Date.now()}`;
-    const bill: InvoiceBillRecord = {
-      id: newRecordId(),
-      billType: 'sale',
-      billNumber,
-      date: saleDate,
-      vin: sellingItem.vin,
-      model: sellingItem.model,
-      quantity: 1,
-      unitPriceUSD: finalPriceUSD,
-      unitPriceLAK: sellingItem.priceLAK,
-      discountUSD: 0,
-      discountLAK: 0,
-      netTotalUSD: finalPriceUSD,
-      netTotalLAK: sellingItem.priceLAK,
-      amountUSD: finalPriceUSD,
-      amountLAK: sellingItem.priceLAK,
-      customerName: buyerName.trim(),
-      customerPhone: buyerPhone.trim(),
-      paymentMethod,
-      salesRep: currentUser?.name || '',
-      recordedBy: currentUser?.name || '',
-      notes: saleNotes,
-    };
-    try {
-      if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
-      await saveBillRecord(bill, currentUser.id);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Sale could not be saved.';
-      triggerToast(msg);
-      return;
-    }
-    setInventory(prev => prev.map(item => item.vin === sellingItem.vin ? updatedInventoryItem : item));
-    setBills(prev => [bill, ...prev]);
-
-    // 2) Record into persistent Stock Log (Stock-Out / ຂາຍອອກ)
-    const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const saleDateTime = saleDate ? `${saleDate} ${new Date().toTimeString().slice(0, 5)}` : now;
-    const stockOutLog: StockLogRecord = {
-      id: `LOG-OUT-${Date.now().toString().slice(-6)}`,
-      type: 'stock_out',
-      vin: sellingItem.vin,
-      model: sellingItem.model,
-      plateNumber: sellingItem.plateNumber,
-      color: sellingItem.color,
-      quantity: 1,
-      priceUSD: finalPriceUSD,
-      priceLAK: finalPriceUSD * 22000,
-      timestamp: saleDateTime,
-      recordedBy: currentUser?.name || 'Admin',
-      customerName: buyerName.trim(),
-      customerPhone: buyerPhone.trim(),
-      paymentMethod,
-      remainingStock: remaining,
-      notes: saleNotes || 'ຂາຍອອກ ແລະ ສົ່ງມອບລົດໃຫ້ລູກຄ້າຮຽບຮ້ອຍ',
-    };
-
-    setStockLogs(prev => [stockOutLog, ...prev]);
-    triggerToast(`ຂາຍອອກ ແລະ ບັນທຶກບິນ ${billNumber} ສຳເລັດ`);
-
-    // Reset selling modal
-    setSellingItem(null);
-    setBuyerName('');
-    setBuyerPhone('');
-    setSaleNotes('');
   };
 
   // 3. EDIT CAR HANDLER
@@ -241,6 +145,10 @@ export default function InventoryView({
       triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!');
       return;
     }
+    if (item.status === 'sold') {
+      triggerToast('ລົດຄັນນີ້ຂາຍອອກແລ້ວ! ກະລຸນາລົບບິນຂາຍໃນໜ້າຈັດການບິນກ່ອນ.');
+      return;
+    }
     setInventoryToDelete(item);
   };
 
@@ -257,6 +165,8 @@ export default function InventoryView({
       return;
     }
     setInventory(prev => prev.filter(item => item.vin !== target.vin));
+    setBills(prev => prev.filter(bill => bill.vin !== target.vin));
+    setStockLogs(prev => prev.filter(log => log.vin !== target.vin));
     if (editingItem?.vin === target.vin) {
       setEditingItem(null);
     }
@@ -1140,155 +1050,6 @@ export default function InventoryView({
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: SELL CAR CONFIRMATION */}
-      {sellingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white space-y-4 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <div className="flex items-center gap-2 text-white">
-                <ShoppingBag className="w-5 h-5" />
-                <h3 className="font-bold text-base text-white">{t.sellModalTitle}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSellingItem(null)}
-                className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmSale} className="space-y-4 text-xs">
-              {/* Vehicle Selected Box */}
-              <div className="p-3.5 bg-zinc-900/90 rounded-2xl border border-zinc-800 space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="font-extrabold text-white text-sm">{sellingItem.model}</span>
-                  <span className="font-mono text-white font-bold">${sellingItem.priceUSD.toLocaleString()}</span>
-                </div>
-                <div className="text-[11px] text-zinc-400 font-mono">
-                  <span>VIN: {sellingItem.vin} | {sellingItem.plateNumber} | {t.tableStock}: {sellingItem.stockQuantity} {t.unitCars}</span>
-                </div>
-              </div>
-
-              {/* Customer Inputs */}
-              <div>
-                <label className="block text-zinc-400 mb-1 font-medium">{t.buyerName}</label>
-                <input
-                  type="text"
-                  required
-                  value={buyerName}
-                  onChange={(e) => setBuyerName(e.target.value)}
-                  placeholder="e.g. Somxay Vongvilay"
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-zinc-400 font-medium">{t.buyerPhone}</label>
-                  {buyerPhone && (
-                    <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                      <span>WA: {formatWhatsAppDisplay(buyerPhone)}</span>
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    value={buyerPhone}
-                    onChange={(e) => setBuyerPhone(e.target.value)}
-                    placeholder="020 5xxxxxxx"
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => openWhatsApp(buyerPhone, buyerName, sellingItem?.model, 'lo')}
-                    className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
-                      buyerPhone.trim()
-                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95'
-                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-60'
-                    }`}
-                    title="ກົດເພື່ອເປີດ WhatsApp ຕາມເບີໂທທີ່ປ້ອນເຂົ້າໄປ"
-                  >
-                    <WhatsAppIcon className="w-4 h-4" />
-                    <span>WhatsApp</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">{t.sellingPrice} (USD)</label>
-                  <input
-                    type="number"
-                    value={soldPriceUSD}
-                    onChange={(e) => setSoldPriceUSD(Number(e.target.value))}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-zinc-400 mb-1 font-medium flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-white" />
-                    <span>ວັນທີຂາຍອອກ (ວັນ/ເດືອນ/ປີ) <span className="text-red-500">*</span></span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={saleDate}
-                    onChange={(e) => setSaleDate(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">{t.paymentType}</label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as any)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-white focus:outline-none"
-                  >
-                    <option value="transfer">{t.paymentTransfer}</option>
-                    <option value="cash">{t.paymentCash}</option>
-                    <option value="finance">{t.paymentInstallments}</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 mb-1 font-medium">{t.notesLabel}</label>
-                <textarea
-                  rows={2}
-                  value={saleNotes}
-                  onChange={(e) => setSaleNotes(e.target.value)}
-                  placeholder="Notes & Perks..."
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none resize-none"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-zinc-800 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSellingItem(null)}
-                  className="px-4 py-2 border border-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-900"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl shadow-lg transition-colors flex items-center gap-1.5 border border-zinc-300"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>{t.confirmSaleAndDeduct}</span>
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
     const action = body.action;
     const userId = typeof body.userId === 'string' ? body.userId : '';
     if (!uuidPattern.test(userId)) return jsonResponse({ error: 'A valid staff user ID is required.' }, 400);
-    if (action !== 'update' && action !== 'suspend' && action !== 'delete') return jsonResponse({ error: 'Unsupported staff action.' }, 400);
+    if (action !== 'update' && action !== 'suspend' && action !== 'reactivate' && action !== 'delete') return jsonResponse({ error: 'Unsupported staff action.' }, 400);
 
     const isAdmin = access.actorProfile.role === 'super_admin' || access.actorProfile.role === 'admin';
     const isSelf = userId === access.actor.id;
@@ -27,11 +27,11 @@ Deno.serve(async (req) => {
       if (isSelf) {
         return jsonResponse({ error: 'You cannot delete your own account.' }, 400);
       }
-    } else if (action === 'suspend') {
+    } else if (action === 'suspend' || action === 'reactivate') {
       if (!isAdmin) {
-        return jsonResponse({ error: 'Only an active admin can suspend staff accounts.' }, 403);
+        return jsonResponse({ error: 'Only an active admin can change staff account status.' }, 403);
       }
-      if (isSelf) {
+      if (action === 'suspend' && isSelf) {
         return jsonResponse({ error: 'You cannot suspend your own account.' }, 400);
       }
     } else if (action === 'update' && !isAdmin && !isSelf) {
@@ -47,6 +47,9 @@ Deno.serve(async (req) => {
     if (!target) return jsonResponse({ error: 'Staff profile was not found.' }, 404);
 
     const isTargetAdmin = target.role === 'super_admin' || target.role === 'admin';
+    if (target.role === 'super_admin' && access.actorProfile.role !== 'super_admin') {
+      return jsonResponse({ error: 'Only a super_admin can modify or delete a super_admin account.' }, 403);
+    }
 
     if (action === 'delete') {
       if (isTargetAdmin && target.status === 'active') {
@@ -95,6 +98,17 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true });
     }
 
+    if (action === 'reactivate') {
+      const { error } = await access.admin
+        .from('staff_profiles')
+        .update({ status: 'active', updated_at: new Date().toISOString() })
+        .eq('id', userId);
+      if (error) throw error;
+      const { error: unbanError } = await access.admin.auth.admin.updateUserById(userId, { ban_duration: 'none' });
+      if (unbanError) throw unbanError;
+      return jsonResponse({ success: true });
+    }
+
     const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '';
     const phone = typeof body.phone === 'string' ? body.phone.trim().slice(0, 30) : '';
     const department = typeof body.department === 'string' ? body.department.trim().slice(0, 100) : '';
@@ -104,6 +118,9 @@ Deno.serve(async (req) => {
     const role = isAdmin ? (requestedRole || target.role) : target.role;
 
     if (!name || !allowedRoles.has(role)) return jsonResponse({ error: 'Name and a valid staff role are required.' }, 400);
+    if (role === 'super_admin' && access.actorProfile.role !== 'super_admin') {
+      return jsonResponse({ error: 'Only a super_admin can grant the super_admin role.' }, 403);
+    }
     const isNewRoleAdmin = role === 'super_admin' || role === 'admin';
     if (isTargetAdmin && target.status === 'active' && !isNewRoleAdmin) {
       const { count, error: countError } = await access.admin

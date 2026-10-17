@@ -341,8 +341,8 @@ export default function StockInView({
     const cleanEngine = engineNumber.toUpperCase().trim();
     const qty = 1;
 
-    if (!cleanVin) {
-      triggerToast('ກະລຸນາປ້ອນເລກຖັງ (VIN / Chassis Number) ກ່ອນ!');
+    if (!cleanVin || !/^[A-Z0-9]{17}$/.test(cleanVin)) {
+      triggerToast('ເລກຕົວຖັງ (VIN) ຕ້ອງເປັນຕົວອັກສອນ A-Z, 0-9 ຄວາມຍາວ 17 ຫຼັກພໍດີ!');
       return;
     }
 
@@ -728,8 +728,9 @@ export default function StockInView({
               <input
                 type="text"
                 required
+                maxLength={17}
                 value={vin}
-                onChange={(e) => setVin(e.target.value)}
+                onChange={(e) => setVin(e.target.value.toUpperCase())}
                 placeholder="e.g. LVV9C12E7RA008812"
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-white"
               />

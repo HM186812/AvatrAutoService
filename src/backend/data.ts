@@ -166,7 +166,12 @@ export async function signUpStaff(
   if (error) throw error;
   if (!data.user) throw new Error('Sign-up did not return a user.');
   if (!data.session) throw new Error('Account created. Confirm the email, then sign in.');
-  return getSignedInStaff(data.user.id);
+  try {
+    return await getSignedInStaff(data.user.id);
+  } catch (profileError) {
+    await client.auth.signOut();
+    throw new Error('Account created and pending administrator approval.');
+  }
 }
 
 export async function createStaffAccount(input: {
@@ -175,6 +180,7 @@ export async function createStaffAccount(input: {
   phone: string;
   department: string;
   role: UserRole;
+  password?: string;
 }): Promise<SystemUser> {
   if (!isSupabaseConfigured) {
     const isAdmin = input.role === 'admin' || input.role === 'super_admin';
@@ -183,20 +189,20 @@ export async function createStaffAccount(input: {
       name: input.name,
       email: input.email.toLowerCase(),
       phone: input.phone,
-      role: isAdmin ? 'admin' : 'general_user',
-      roleTitleLo: isAdmin ? 'Admin' : 'General User',
+      role: input.role,
+      roleTitleLo: roleLabels[input.role] || 'General User',
       department: input.department,
       avatarInitials: (input.name || 'US').slice(0, 2).toUpperCase(),
       permissions: {
         canManageUsers: isAdmin,
         canDeleteUsers: isAdmin,
         canGrantRoles: isAdmin,
-        canEditInventory: isAdmin,
+        canEditInventory: isAdmin || input.role === 'technician',
         canUploadQR: isAdmin,
         canAddModels: isAdmin,
-        canDeductPOS: true,
-        canViewFinancials: isAdmin,
-        canUpdatePDI: isAdmin,
+        canDeductPOS: isAdmin || input.role === 'sales',
+        canViewFinancials: isAdmin || input.role === 'sales',
+        canUpdatePDI: isAdmin || input.role === 'technician',
         canViewVehicles: true,
       },
       status: 'active',
@@ -208,8 +214,19 @@ export async function createStaffAccount(input: {
 
   const client = requireSupabase();
   const { data, error } = await client.functions.invoke('create-staff', { body: input });
-  if (error) throw error;
-  if (!data?.profile) throw new Error('The account was invited, but no staff profile was returned.');
+  if (error) {
+    let errMsg = error.message || 'Could not create the staff account.';
+    if ('context' in error && typeof (error as any).context?.json === 'function') {
+      try {
+        const body = await (error as any).context.json();
+        if (body?.error) errMsg = body.error;
+      } catch {}
+    }
+    throw new Error(errMsg);
+  }
+  if (!data?.profile) {
+    throw new Error(data?.error || 'Could not create the staff account.');
+  }
   const mapped = mapStaffProfile(data.profile, data.permissions);
   offlineSaveUser(mapped);
   return mapped;
@@ -247,6 +264,7 @@ function mapInventoryItem(row: DbRow, modelById: Map<string, VehicleModel>): Inv
   const status = row.status || 'ready';
   return {
     vin: row.vin,
+    engineNumber: row.engine_number || undefined,
     model: model?.name || row.model_id || '',
     plateNumber: row.plate_number || '',
     color: row.color || '',
@@ -328,6 +346,7 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
     billNumber: row.bill_number,
     date: row.bill_date || row.created_at || '',
     vin: item?.vehicle_vin || '',
+    engineNumber: item?.engine_number || undefined,
     model: item?.model_name || '',
     trim: item?.trim || undefined,
     plateNumber: item?.plate_number || undefined,
@@ -500,35 +519,6 @@ async function findCustomerId(phone: string): Promise<string | null> {
     .limit(1);
   if (error) throw error;
   return data?.[0]?.id || null;
-}
-
-async function findOrCreateSaleCustomer(bill: InvoiceBillRecord, actorId: string): Promise<string | null> {
-  const client = requireSupabase();
-  const phone = sanitizePhone(bill.customerPhone, 30);
-  if (!phone) return null;
-
-  const existingId = await findCustomerId(phone);
-  if (existingId) return existingId;
-
-  const name = sanitizeText(bill.customerName, 120);
-  if (!name) return null;
-
-  const { data, error } = await client
-    .from('customers')
-    .insert({
-      name,
-      phone,
-      category: 'walk_in',
-      source: 'POS sale',
-      status: 'delivered',
-      priority: 'normal',
-      assigned_to: actorId,
-      notes: sanitizeText(bill.notes, 1000) || null,
-    })
-    .select('id')
-    .single();
-  if (error) throw error;
-  return data?.id || null;
 }
 
 export async function uploadDealershipAsset(file: File, folder: 'vehicles' | 'qr') {
@@ -774,8 +764,9 @@ export async function saveInventoryItem(item: InventoryItem) {
     throw new Error('เลขตัวถัง (VIN) ต้องเป็นตัวพิมพ์ใหญ่ A-Z, 0-9 ความยาว 17 หลักพอดี');
   }
 
-  const { error } = await client.from('vehicles').upsert({
+  const payload: Record<string, unknown> = {
     vin: safeVin,
+    engine_number: sanitizeText(item.engineNumber, 60) || null,
     model_id: model.id,
     plate_number: sanitizeText(item.plateNumber, 30) || null,
     color: sanitizeText(item.color, 60) || null,
@@ -800,7 +791,13 @@ export async function saveInventoryItem(item: InventoryItem) {
     event_location: sanitizeText(item.eventLocation, 100) || null,
     promotion_discount_usd: sanitizeNumber(item.promotionDiscountUSD, 0),
     promotion_notes: sanitizeText(item.promotionNotes, 500) || null,
-  }, { onConflict: 'vin' });
+  };
+  let { error } = await client.from('vehicles').upsert(payload, { onConflict: 'vin' });
+  if (error && error.message?.includes('engine_number')) {
+    delete payload.engine_number;
+    const retry = await client.from('vehicles').upsert(payload, { onConflict: 'vin' });
+    error = retry.error;
+  }
   if (error) throw error;
 }
 
@@ -809,7 +806,22 @@ export async function deleteInventoryItem(vin: string) {
     offlineDeleteInventoryItem(vin);
     return;
   }
-  const { data, error } = await requireSupabase()
+  const client = requireSupabase();
+  const { error: rpcError } = await client.rpc('delete_vehicle_from_inventory', { p_vin: vin });
+  if (!rpcError) return;
+  if (rpcError.code !== 'PGRST202' && !rpcError.message?.includes('delete_vehicle_from_inventory')) {
+    throw new Error(rpcError.message);
+  }
+
+  // Fallback if RPC is not deployed yet
+  const { data: items } = await client.from('bill_items').select('bill_id').eq('vehicle_vin', vin);
+  const billIds = Array.from(new Set((items || []).map((i: DbRow) => i.bill_id).filter(Boolean)));
+  for (const billId of billIds) {
+    const { error: billErr } = await client.rpc('delete_vehicle_bill', { p_bill_id: billId });
+    if (!billErr) return;
+  }
+
+  const { data, error } = await client
     .from('vehicles')
     .delete()
     .eq('vin', vin)
@@ -878,8 +890,8 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bill.id)) {
     throw new Error('Bill ID must be a UUID before it is saved.');
   }
-  const customerId = type === 'sale'
-    ? await findOrCreateSaleCustomer(bill, actorId)
+  const customerId = type === 'sale' && bill.leadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bill.leadId)
+    ? bill.leadId
     : null;
 
   let vehiclePayload: Record<string, unknown> | null = null;
@@ -910,6 +922,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
 
     vehiclePayload = {
       model_id: model.id,
+      engine_number: sanitizeText(vehicle.engineNumber, 60) || null,
       plate_number: sanitizeText(vehicle.plateNumber, 30) || null,
       color: sanitizeText(vehicle.color, 60) || null,
       color_hex: sanitizeText(vehicle.colorHex, 20) || null,
@@ -975,6 +988,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     bill_id: bill.id,
     line_number: 1,
     vehicle_vin: sanitizeVIN(bill.vin),
+    engine_number: sanitizeText(bill.engineNumber || vehicle?.engineNumber, 60) || null,
     model_name: sanitizeText(bill.model, 100),
     trim: sanitizeText(bill.trim, 60) || null,
     plate_number: sanitizeText(bill.plateNumber, 30) || null,
@@ -1073,7 +1087,7 @@ export async function saveStaffProfile(user: SystemUser) {
       .maybeSingle();
 
     if (!updateError && updatedProfile) {
-      const mapped = mapStaffProfile(updatedProfile);
+      const mapped = mapStaffProfile(updatedProfile, user.permissions);
       offlineSaveUser(mapped);
       return mapped;
     }
@@ -1107,6 +1121,30 @@ export async function deactivateStaffProfile(id: string) {
   } catch {}
 
   offlineDeactivateUser(id);
+}
+
+export async function reactivateStaffProfile(id: string) {
+  if (!isSupabaseConfigured) {
+    return;
+  }
+  const client = requireSupabase();
+  try {
+    const { error } = await client.functions.invoke('manage-staff', {
+      body: { action: 'reactivate', userId: id },
+    });
+    if (!error) return;
+  } catch {}
+
+  try {
+    const { error: rpcError } = await client.rpc('reactivate_staff_profile', { p_user_id: id });
+    if (!rpcError) return;
+  } catch {}
+
+  const { error } = await client
+    .from('staff_profiles')
+    .update({ status: 'active', updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
 }
 
 export async function deleteStaffProfile(id: string) {

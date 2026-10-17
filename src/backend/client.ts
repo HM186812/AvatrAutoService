@@ -27,3 +27,16 @@ export function requireSupabase() {
   }
   return supabase;
 }
+
+export function createStatelessSupabaseClient() {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured.');
+  }
+  return createClient(supabaseUrl, supabasePublishableKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
