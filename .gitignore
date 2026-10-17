@@ -11,6 +11,8 @@ out/
 # Testing & Coverage
 coverage/
 *.lcov
+test-results/
+playwright-report/
 
 # System Files
 .DS_Store

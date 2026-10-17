@@ -854,13 +854,25 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     event_end_date: sanitizeText(bill.eventEndDate, 30) || null,
     event_location: sanitizeText(bill.eventLocation, 100) || null,
   };
-  const { error } = await client.rpc('record_vehicle_bill', {
+
+  const rpcParams: Record<string, unknown> = {
     p_bill: billRow,
     p_item: billItem,
     p_movement_type: type === 'import' ? 'stock_in' : 'stock_out',
-    p_vehicle: vehiclePayload,
-  });
-  if (error) throw error;
+  };
+  if (vehiclePayload) {
+    rpcParams.p_vehicle = vehiclePayload;
+  }
+  let { error } = await client.rpc('record_vehicle_bill', rpcParams);
+  if (error && error.code === 'PGRST202' && vehiclePayload) {
+    await saveInventoryItem(vehicle!);
+    delete rpcParams.p_vehicle;
+    const retry = await client.rpc('record_vehicle_bill', rpcParams);
+    error = retry.error;
+  }
+  if (error) {
+    throw new Error(error.message || 'Sale could not be saved.');
+  }
 }
 
 export async function uploadPaymentSlip(file: File) {

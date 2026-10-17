@@ -160,7 +160,8 @@ export default function InventoryView({
       if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
       await saveBillRecord(bill, currentUser.id);
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Sale could not be saved.');
+      const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Sale could not be saved.';
+      triggerToast(msg);
       return;
     }
     setInventory(prev => prev.map(item => item.vin === sellingItem.vin ? updatedInventoryItem : item));

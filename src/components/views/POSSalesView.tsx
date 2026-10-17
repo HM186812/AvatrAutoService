@@ -456,7 +456,8 @@ export default function POSSalesView({
       if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
       await saveBillRecord(newBill, currentUser.id);
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Sale could not be saved.');
+      const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Sale could not be saved.';
+      triggerToast(msg);
       return;
     }
     setInventory(prev => prev.map(item => item.vin === selectedVehicle.vin ? updatedInventoryItem : item));
