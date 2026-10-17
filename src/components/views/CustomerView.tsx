@@ -32,7 +32,10 @@ import {
   Banknote,
   Clock,
   AlertCircle,
-  Check
+  Check,
+  LayoutGrid,
+  List,
+  X
 } from 'lucide-react';
 import { 
   ConfirmDeleteModal, 
@@ -53,7 +56,7 @@ interface CustomerViewProps {
   lang: Language;
   onOpenNewLead: () => void;
   onOpenQuote: (vehicle: VehicleModel, customerName?: string) => void;
-  onSelectCustomerForPOS?: (lead: Lead) => void;
+  onSelectCustomerForPOS?: (lead?: Lead) => void;
 }
 
 export default function CustomerView({
@@ -67,6 +70,9 @@ export default function CustomerView({
   onSelectCustomerForPOS,
 }: CustomerViewProps) {
   const t = translations[lang] || translations.lo;
+
+  // View Mode: Cards vs Table
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
   // Separated Category Filters as requested:
   // 1. Channel Filter (ໝວດຊ່ອງທາງລູກຄ້າ: ທັງໝົດ, Walk-in, Online, Event)
@@ -150,11 +156,14 @@ export default function CustomerView({
   const vehiclePriceLAK = vehiclePriceUSD * 22000;
 
   // Calculated down payment amount based on vehicle price and %
-  const calculatedDownUSD = Math.round(vehiclePriceUSD * (formDownPaymentPercent / 100));
+  const safeDownPaymentPercent = Number(formDownPaymentPercent) || 0;
+  const calculatedDownUSD = Math.round(vehiclePriceUSD * (safeDownPaymentPercent / 100));
   const calculatedDownLAK = calculatedDownUSD * 22000;
   const calculatedRemainingUSD = Math.max(0, vehiclePriceUSD - calculatedDownUSD);
   const calculatedRemainingLAK = calculatedRemainingUSD * 22000;
-  const calculatedMonthlyLAK = Math.round(((calculatedRemainingUSD * (1 + 0.075 * (formTenureMonths / 12))) / formTenureMonths) * 22000);
+  const calculatedMonthlyLAK = formTenureMonths > 0
+    ? Math.round(((calculatedRemainingUSD * (1 + 0.075 * (formTenureMonths / 12))) / formTenureMonths) * 22000)
+    : 0;
 
   // Separated Counts:
   // 1. Acquisition Channel counts
@@ -446,11 +455,24 @@ export default function CustomerView({
                 <span className="min-w-0">
                   <span className="officer-indicator-label block text-[10px]">{t.assignedOfficer || 'ຜູ້ຮັບຜິດຊອບ'}</span>
                   <span className="officer-indicator-name block truncate font-semibold">
-                    {currentUser?.name || t.roleSuperAdmin}
+                    {currentUser?.name || t.roleAdmin || 'Admin'}
                     <span className="officer-indicator-role ml-1 font-mono text-[10px]">({currentUser?.roleTitleLo?.split(' ')[0] || 'Staff'})</span>
                   </span>
                 </span>
               </div>
+
+          {/* Quick POS Sales Button */}
+          {onSelectCustomerForPOS && (
+            <button
+              type="button"
+              onClick={() => onSelectCustomerForPOS()}
+              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-600/40 bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all sm:flex-none cursor-pointer active:scale-95"
+              title="ເປີດໜ້າຈໍ POS ຂາຍລົດຍົນ"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-white" />
+              <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'POS Sales'}</span>
+            </button>
+          )}
 
           {/* Export CSV Button (ນຳອອກ) */}
           <button
@@ -681,7 +703,7 @@ export default function CustomerView({
 
               <div>
                 <label className="block text-zinc-400 mb-1 font-medium">
-                  {lang === 'lo' ? 'ເລກບັດປະຊາຊົນ / Passport (ຈະໃສ່ ຫຼື ບໍ່ໃສ່ກໍໄດ້)' : 'ID Card / Passport (Optional)'}
+                  {lang === 'lo' ? 'ເລກບັດປະຊາຊົນ / Passport' : 'ID Card / Passport'}
                 </label>
                 <input
                   type="text"
@@ -941,11 +963,31 @@ export default function CustomerView({
                     <strong className="text-white">${vehiclePriceUSD.toLocaleString()} USD</strong>
                   </div>
 
-                  {/* Down Payment % Selection */}
+                  {/* Down Payment % Input & Quick Presets */}
                   <div>
                     <div className="flex justify-between items-center mb-1 text-[11px]">
-                      <span className="text-zinc-400">ອັດຕາວາງດາວ (%):</span>
+                      <label htmlFor="customer-down-payment-input" className="text-zinc-400 font-medium">
+                        ອັດຕາວາງດາວ (%):
+                      </label>
                       <strong className="text-white font-mono">{formDownPaymentPercent}%</strong>
+                    </div>
+                    <div className="relative mb-2">
+                      <input
+                        id="customer-down-payment-input"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={formDownPaymentPercent === 0 ? '' : formDownPaymentPercent}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : Number(e.target.value);
+                          setFormDownPaymentPercent(Math.min(100, Math.max(0, val)));
+                        }}
+                        placeholder="30"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 pr-8 text-white font-mono text-xs focus:outline-none focus:border-white transition-colors"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 font-mono text-xs pointer-events-none">
+                        %
+                      </span>
                     </div>
                     <div className="grid grid-cols-5 gap-1 mb-2">
                       {[15, 20, 30, 40, 50].map((pct) => (
@@ -1034,317 +1076,507 @@ export default function CustomerView({
           </form>
         </div>
 
-        {/* RIGHT COLUMN (8 cols): SEPARATED PAYMENT FILTER, CHANNEL FILTER & CUSTOMER LIST */}
+        {/* RIGHT COLUMN (8 cols): UNIFIED FILTER DASHBOARD, STRUCTURED CUSTOMER CARDS & TABLE VIEW */}
         <div className="min-w-0 space-y-4 xl:col-span-8">
           
-          {/* 1. SEPARATE PAYMENT MODE CATEGORY FILTER (ໝວດຮູບແບບການຊຳລະ: ສົດ/ໂອນ ແລະ ຜ່ອນ/ດາວ) */}
-          <div className="bg-zinc-950 border border-zinc-800 p-3 sm:p-3.5 rounded-2xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-zinc-300 flex items-center gap-1.5 uppercase tracking-wide">
-                <CreditCard className="w-3.5 h-3.5 text-zinc-300" />
-                <span>ໝວດຮູບແບບການຊຳລະ (Payment Mode Filter)</span>
-              </span>
-              <span className="text-[10px] text-zinc-500 font-mono">
-                ແຍກຕາມຮູບແບບຊຳລະເງິນ
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { key: 'all' as const, label: 'ທັງໝົດ (All)', count: paymentCounts.all, icon: Users },
-                { key: 'cash_transfer' as const, label: 'ສົດ / ໂອນ', count: paymentCounts.cash_transfer, icon: Banknote },
-                { key: 'installment' as const, label: 'ຜ່ອນ / ດາວ', count: paymentCounts.installment, icon: CreditCard },
-              ].map((tab) => {
-                const Icon = tab.icon;
-                const isSelected = paymentFilter === tab.key;
-
-                return (
+          {/* UNIFIED FILTER, SEARCH & VIEW MODE CONTROL PANEL */}
+          <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl space-y-3.5 shadow-sm">
+            {/* Row 1: Search Bar, Status Filter, Quick Shortcut & View Switcher */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+              {/* Search Bar */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="ຄົ້ນຫາຊື່, ເບີໂທ, ເລກບັດ, ທີ່ຢູ່, ລຸ້ນລົດ, ເລກບິນ..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/10"
+                />
+                {searchQuery && (
                   <button
-                    key={tab.key}
                     type="button"
-                    onClick={() => setPaymentFilter(tab.key)}
-                    aria-pressed={isSelected}
-                    className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-1 min-w-0 cursor-pointer ${
-                      isSelected
-                        ? 'bg-white text-black border-white shadow-lg font-bold'
-                        : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-white'
-                    }`}
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-white"
                   >
-                    <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-                      <Icon className="w-3.5 h-3.5 shrink-0" />
-                      <span className="text-xs font-semibold truncate">{tab.label}</span>
-                    </div>
-                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold shrink-0 ${
-                      isSelected ? 'bg-zinc-200 text-black' : 'bg-zinc-950 text-zinc-300 border border-zinc-800'
-                    }`}>
-                      {tab.count}
-                    </span>
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                );
-              })}
-            </div>
-          </div>
+                )}
+              </div>
 
-          {/* 2. CUSTOMER CHANNEL CATEGORY FILTER (ໝວດຊ່ອງທາງລູກຄ້າ: Walk-in, Online, Event) */}
-          <div className="bg-zinc-950 border border-zinc-800 p-3 sm:p-3.5 rounded-2xl space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-zinc-400 flex items-center gap-1.5 uppercase tracking-wide">
-                <Store className="w-3.5 h-3.5 text-zinc-300" />
-                <span>ໝວດຊ່ອງທາງລູກຄ້າ (Channel Filter)</span>
-              </span>
-              <span className="text-[10px] text-zinc-500 font-mono">
-                ແຍກຕາມແຫຼ່ງທີ່ມາຂອງລູກຄ້າ
-              </span>
-            </div>
+              {/* Status & Action Controls */}
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+                {/* Shortcut Button to jump straight to "ຊ່ອງຈ່າຍແລ້ວ" */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatus(selectedStatus === 'delivered' ? 'all' : 'delivered')}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                    selectedStatus === 'delivered'
+                      ? 'bg-emerald-500 text-black shadow-lg font-black'
+                      : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40 hover:bg-emerald-900/50'
+                  }`}
+                  title="ກົດເພື່ອເບິ່ງລູກຄ້າທີ່ຊຳລະເງິນແລ້ວທັງໝົດ"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>ຊ່ອງຈ່າຍແລ້ວ</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                    selectedStatus === 'delivered' ? 'bg-black text-emerald-400' : 'bg-emerald-900 text-emerald-200'
+                  }`}>
+                    {statusCounts.delivered}
+                  </span>
+                </button>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { key: 'all' as const, label: 'ທຸກຊ່ອງທາງ', count: channelCounts.all, icon: Users },
-                { key: 'walk_in' as const, label: 'Walk-in ໜ້າໂຊຣູມ', count: channelCounts.walk_in, icon: Store },
-                { key: 'online' as const, label: 'Online ໂຊຊຽວ', count: channelCounts.online, icon: Globe },
-                { key: 'event' as const, label: 'Event ມໍເຕີໂຊ', count: channelCounts.event, icon: CalendarCheck },
-              ].map((tab) => {
-                const Icon = tab.icon;
-                const isSelected = channelFilter === tab.key;
-
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setChannelFilter(tab.key)}
-                    aria-pressed={isSelected}
-                    className={`p-2 rounded-xl border text-left transition-all flex items-center justify-between gap-1 min-w-0 cursor-pointer ${
-                      isSelected
-                        ? 'bg-zinc-200 text-black border-white shadow font-bold'
-                        : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1 min-w-0 overflow-hidden">
-                      <Icon className="w-3.5 h-3.5 shrink-0" />
-                      <span className="text-[11px] font-medium truncate">{tab.label}</span>
-                    </div>
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold shrink-0 ${
-                      isSelected ? 'bg-zinc-300 text-black' : 'bg-zinc-950 text-zinc-400'
-                    }`}>
-                      {tab.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 3. SEARCH & LIFECYCLE STATUS (Including dedicated "ຊ່ອງຈ່າຍແລ້ວ" shortcut!) */}
-          <div className="bg-zinc-950 border border-zinc-800 p-3.5 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs shadow-sm">
-            <div className="relative min-w-45 flex-1">
-              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="ຄົ້ນຫາຊື່, ເບີໂທ, ເລກບັດ, ທີ່ຢູ່, ລຸ້ນລົດ, ເລກບິນ..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/10"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-              {/* Shortcut Button to jump straight to "ຊ່ອງຈ່າຍແລ້ວ" */}
-              <button
-                type="button"
-                onClick={() => setSelectedStatus(selectedStatus === 'delivered' ? 'all' : 'delivered')}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  selectedStatus === 'delivered'
-                    ? 'bg-emerald-500 text-black shadow-lg font-black'
-                    : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40 hover:bg-emerald-900/50'
-                }`}
-                title="ກົດເພື່ອເບິ່ງລູກຄ້າທີ່ຊຳລະເງິນແລ້ວທັງໝົດ"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>ຊ່ອງຈ່າຍແລ້ວ</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                  selectedStatus === 'delivered' ? 'bg-black text-emerald-400' : 'bg-emerald-900 text-emerald-200'
-                }`}>
-                  {statusCounts.delivered}
-                </span>
-              </button>
-
-              <div className="flex items-center gap-1.5">
+                {/* Status Dropdown Filter */}
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  aria-label={lang === 'lo' ? 'ກັ່ນຕອງຕາມສະຖານະ' : lang === 'th' ? 'กรองตามสถานะ' : 'Filter by status'}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white focus:ring-2 focus:ring-white/10 w-full sm:w-auto"
+                  aria-label={lang === 'lo' ? 'ກັ່ນຕອງຕາມສະຖານະ' : 'Filter by status'}
+                  className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
                 >
                   <option value="all">{t.statusAll} ({statusCounts.all})</option>
                   <option value="new">{t.statusNew} ({statusCounts.new})</option>
                   <option value="contacted">{t.statusContacted} ({statusCounts.contacted})</option>
                   <option value="test_drive">{t.statusTestDrive} ({statusCounts.test_drive})</option>
                   <option value="negotiation">{t.statusNegotiation} ({statusCounts.negotiation})</option>
-                  <option value="delivered">{t.statusDelivered || 'ຈ່າຍແລ້ວ / ສົ່ງມອບສຳເລັດ'} ({statusCounts.delivered})</option>
+                  <option value="delivered">{t.statusDelivered || 'ຈ່າຍແລ້ວ'} ({statusCounts.delivered})</option>
                 </select>
+
+                {/* View Mode Toggle: Cards vs Table */}
+                <div className="flex items-center bg-zinc-900 p-1 rounded-xl border border-zinc-800 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('cards')}
+                    className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer ${
+                      viewMode === 'cards'
+                        ? 'bg-white text-black font-bold shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="ມຸມມອງບັດຂໍ້ມູນ (Card View)"
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline text-[11px]">ບັດ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('table')}
+                    className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer ${
+                      viewMode === 'table'
+                        ? 'bg-white text-black font-bold shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                    title="ມຸມມອງຕາຕະລາງ (Table View)"
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline text-[11px]">ຕາຕະລາງ</span>
+                  </button>
+                </div>
               </div>
+            </div>
+
+            {/* Row 2: Dual Segmented Filter Pills (Payment Mode & Customer Channel) */}
+            <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Payment Mode Pills */}
+                <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800/80">
+                  <span className="text-[10px] text-zinc-400 font-bold px-1.5 uppercase">ຊຳລະ:</span>
+                  {[
+                    { key: 'all' as const, label: 'ທັງໝົດ', count: paymentCounts.all },
+                    { key: 'cash_transfer' as const, label: 'ສົດ/ໂອນ', count: paymentCounts.cash_transfer },
+                    { key: 'installment' as const, label: 'ຜ່ອນ/ດາວ', count: paymentCounts.installment },
+                  ].map((tab) => {
+                    const isSelected = paymentFilter === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setPaymentFilter(tab.key)}
+                        className={`px-2 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer ${
+                          isSelected
+                            ? 'bg-white text-black font-bold shadow-sm'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span className={`text-[10px] font-mono px-1 rounded-full ${isSelected ? 'bg-zinc-200 text-black' : 'text-zinc-500'}`}>
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Customer Channel Pills */}
+                <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800/80">
+                  <span className="text-[10px] text-zinc-400 font-bold px-1.5 uppercase">ຊ່ອງທາງ:</span>
+                  {[
+                    { key: 'all' as const, label: 'ທັງໝົດ', count: channelCounts.all },
+                    { key: 'walk_in' as const, label: 'Walk-in', count: channelCounts.walk_in },
+                    { key: 'online' as const, label: 'Online', count: channelCounts.online },
+                    { key: 'event' as const, label: 'Event', count: channelCounts.event },
+                  ].map((tab) => {
+                    const isSelected = channelFilter === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setChannelFilter(tab.key)}
+                        className={`px-2 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer ${
+                          isSelected
+                            ? 'bg-zinc-200 text-black font-bold shadow-sm'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span className={`text-[10px] font-mono px-1 rounded-full ${isSelected ? 'bg-zinc-300 text-black' : 'text-zinc-500'}`}>
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Clear Filters Button */}
+              {(paymentFilter !== 'all' || channelFilter !== 'all' || selectedStatus !== 'all' || searchQuery.trim() !== '') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentFilter('all');
+                    setChannelFilter('all');
+                    setSelectedStatus('all');
+                    setSearchQuery('');
+                  }}
+                  className="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
+                >
+                  {lang === 'lo' ? '✕ ລ້າງຕົວກອງ' : '✕ Clear filters'}
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          {/* LIST HEADER & COUNT */}
+          <div className="flex items-center justify-between px-1 text-xs">
             <div className="flex items-baseline gap-2">
               <h2 className="text-sm font-bold text-white">
-                {lang === 'lo' ? 'ລາຍຊື່ລູກຄ້າ' : lang === 'th' ? 'รายชื่อลูกค้า' : 'Customer list'}
+                {lang === 'lo' ? 'ລາຍຊື່ລູກຄ້າ' : 'Customer list'}
               </h2>
               <span className="text-xs font-mono text-zinc-400">
-                {filteredLeads.length.toLocaleString()} / {leads.length.toLocaleString()}
+                ສະແດງ {filteredLeads.length.toLocaleString()} ຈາກທັງໝົດ {leads.length.toLocaleString()} ຄົນ
               </span>
             </div>
-            {(paymentFilter !== 'all' || channelFilter !== 'all' || selectedStatus !== 'all' || searchQuery.trim() !== '') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentFilter('all');
-                  setChannelFilter('all');
-                  setSelectedStatus('all');
-                  setSearchQuery('');
-                }}
-                className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/20"
-              >
-                {lang === 'lo' ? 'ລ້າງຕົວກອງ' : lang === 'th' ? 'ล้างตัวกรอง' : 'Clear filters'}
-              </button>
-            )}
           </div>
 
-          {/* Customer Cards List */}
-          <div className="space-y-3.5">
-            {filteredLeads.length === 0 ? (
-              <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-12 text-center text-zinc-500">
-                <Users className="w-10 h-10 mx-auto text-zinc-600 mb-2" />
-                <p className="text-xs">{t.noCustomersFound}</p>
-              </div>
-            ) : (
-              filteredLeads.map((lead) => {
+          {/* CUSTOMER LIST: EMPTY STATE */}
+          {filteredLeads.length === 0 ? (
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-12 text-center text-zinc-500 space-y-2">
+              <Users className="w-10 h-10 mx-auto text-zinc-600 mb-2" />
+              <p className="text-xs">{t.noCustomersFound}</p>
+              {(paymentFilter !== 'all' || channelFilter !== 'all' || selectedStatus !== 'all' || searchQuery.trim() !== '') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentFilter('all');
+                    setChannelFilter('all');
+                    setSelectedStatus('all');
+                    setSearchQuery('');
+                  }}
+                  className="mt-2 text-xs text-zinc-400 underline hover:text-white"
+                >
+                  ລ້າງຕົວກອງເພື່ອສະແດງທັງໝົດ
+                </button>
+              )}
+            </div>
+          ) : viewMode === 'table' ? (
+            /* VIEW MODE 1: MODERN STRUCTURED TABLE VIEW */
+            <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-sm">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-zinc-900/90 text-zinc-400 border-b border-zinc-800 font-mono uppercase text-[10px]">
+                  <tr>
+                    <th className="py-3 px-3.5">ລູກຄ້າ & ຕົວຕົນ</th>
+                    <th className="py-3 px-3.5">ຕິດຕໍ່ & ທີ່ຢູ່</th>
+                    <th className="py-3 px-3.5">ລຸ້ນລົດທີ່ສົນໃຈ</th>
+                    <th className="py-3 px-3.5">ຮູບແບບການຊຳລະ</th>
+                    <th className="py-3 px-3.5">ສະຖານະ CRM</th>
+                    <th className="py-3 px-3.5">ຜູ້ຮັບຜິດຊອບ</th>
+                    <th className="py-3 px-3.5 text-right">ຈັດການ & ເອກະສານ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {filteredLeads.map((lead) => {
+                    const isInstallmentLead = lead.paymentType === 'installment' || lead.paymentType === 'finance';
+                    const isPaidCustomer = lead.status === 'delivered';
+
+                    return (
+                      <tr
+                        key={lead.id}
+                        className={`transition-colors hover:bg-zinc-900/60 ${
+                          isPaidCustomer ? 'bg-emerald-950/10' : ''
+                        }`}
+                      >
+                        {/* Customer & Identity */}
+                        <td className="py-3 px-3.5 align-top">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <strong className="text-white text-xs block">{lead.customerName}</strong>
+                              {lead.priority === 'vip' && (
+                                <span className="text-[9px] font-mono px-1.5 py-0.2 bg-amber-400 text-black rounded font-bold">
+                                  VIP
+                                </span>
+                              )}
+                            </div>
+                            {lead.idCardNumber && (
+                              <span className="text-[10px] text-zinc-400 font-mono block">
+                                ບັດ: {lead.idCardNumber}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-zinc-500 font-mono block">
+                              {lead.category === 'walk_in' ? 'Walk-in' : lead.category === 'online' ? 'Online' : 'Event'} • {lead.createdAt?.slice(0, 10)}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Contact & Location */}
+                        <td className="py-3 px-3.5 align-top">
+                          <div className="space-y-0.5 font-mono">
+                            <button
+                              type="button"
+                              onClick={() => openWhatsApp(lead.phone, lead.customerName, lead.interestedModel, lang)}
+                              className="text-white hover:text-emerald-400 transition-colors flex items-center gap-1 text-xs font-bold"
+                            >
+                              <span>{lead.phone}</span>
+                              <WhatsAppIcon className="w-3 h-3 text-emerald-400" />
+                            </button>
+                            <span className="text-[10px] text-zinc-400 font-sans block truncate max-w-[160px]" title={[lead.village, lead.district, lead.province].filter(Boolean).join(', ')}>
+                              {[lead.village, lead.district, lead.province].filter(Boolean).join(', ') || '-'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Interested Model */}
+                        <td className="py-3 px-3.5 align-top">
+                          <div className="flex items-center gap-1.5 text-zinc-200 font-bold">
+                            <Car className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                            <span>{lead.interestedModel || 'AVATR'}</span>
+                          </div>
+                        </td>
+
+                        {/* Payment Mode */}
+                        <td className="py-3 px-3.5 align-top font-mono">
+                          {isInstallmentLead ? (
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] text-blue-400 font-bold bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/40 inline-flex items-center gap-1">
+                                <CreditCard className="w-2.5 h-2.5" />
+                                <span>ຜ່ອນ (ດາວ {lead.downPaymentPercent || 30}%)</span>
+                              </span>
+                              <span className="text-[10px] text-zinc-400 block font-sans">
+                                {lead.tenureMonths || 48} ເດືອນ
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800 inline-block">
+                              ສົດ / ໂອນ
+                            </span>
+                          )}
+                          {isPaidCustomer && (
+                            <span className="mt-1 text-[9.5px] text-emerald-400 font-bold block">
+                              ✓ ຈ່າຍແລ້ວ {lead.paidAmountUSD ? `($${lead.paidAmountUSD.toLocaleString()})` : ''}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Status Dropdown */}
+                        <td className="py-3 px-3.5 align-top">
+                          <select
+                            value={lead.status}
+                            onChange={(e) => handleUpdateStatus(lead.id, e.target.value as LeadStatus)}
+                            className={`text-[11px] rounded-lg px-2 py-1 font-semibold focus:outline-none cursor-pointer ${
+                              isPaidCustomer
+                                ? 'bg-emerald-950/80 border border-emerald-700 text-emerald-300'
+                                : 'bg-zinc-900 border border-zinc-700 text-zinc-300'
+                            }`}
+                          >
+                            <option value="new">{t.statusNew}</option>
+                            <option value="contacted">{t.statusContacted}</option>
+                            <option value="test_drive">{t.statusTestDrive}</option>
+                            <option value="negotiation">{t.statusNegotiation}</option>
+                            <option value="delivered">{t.statusDelivered || 'ຈ່າຍແລ້ວ'}</option>
+                          </select>
+                        </td>
+
+                        {/* Staff */}
+                        <td className="py-3 px-3.5 align-top">
+                          <span className="text-[11px] text-zinc-300 font-medium">
+                            {lead.assignedTo || currentUser?.name || 'Admin'}
+                          </span>
+                        </td>
+
+                        {/* Table Actions */}
+                        <td className="py-3 px-3.5 align-top text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* POS Sale Button */}
+                            {onSelectCustomerForPOS && (
+                              <button
+                                type="button"
+                                onClick={() => onSelectCustomerForPOS(lead)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] flex items-center gap-1 transition-colors cursor-pointer shadow-sm active:scale-95"
+                                title="ເປີດບິນຂາຍ POS ສຳລັບລູກຄ້ານີ້"
+                              >
+                                <ShoppingBag className="w-3 h-3" />
+                                <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'POS'}</span>
+                              </button>
+                            )}
+
+                            {/* Document Suite Modal */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCustomerForDocs(lead)}
+                              className="px-2.5 py-1 bg-white hover:bg-zinc-200 text-black font-bold rounded-lg text-[10px] flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+                              title="ອອກເອກະສານ & ພິມບິນ"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span>ເອກະສານ</span>
+                            </button>
+
+                            {/* Payment Status Confirm */}
+                            {!isPaidCustomer ? (
+                              <button
+                                type="button"
+                                onClick={() => setCustomerToConfirmPayment(lead)}
+                                className="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-lg text-[10px] font-bold border border-emerald-600/40 transition-colors cursor-pointer"
+                                title="ຢືນຢັນການຊຳລະ"
+                              >
+                                ຢືນຢັນຊຳລະ
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setCustomerToConfirmPayment(lead)}
+                                className="px-1.5 py-1 bg-emerald-950/60 text-emerald-400 rounded-lg text-[10px] font-bold border border-emerald-800/40"
+                                title="ແກ້ໄຂການຊຳລະ"
+                              >
+                                ✓
+                              </button>
+                            )}
+
+                            {/* WhatsApp link */}
+                            <a
+                              href={getWhatsAppUrl(lead.phone, lead.customerName, lead.interestedModel, lang)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1 bg-emerald-950/60 text-emerald-400 hover:text-white hover:bg-emerald-700 rounded-lg border border-emerald-800/40 transition-colors"
+                              title="ສົນທະນາ WhatsApp"
+                            >
+                              <WhatsAppIcon className="w-3 h-3" />
+                            </a>
+
+                            {/* Delete Button */}
+                            <button
+                              type="button"
+                              onClick={() => setLeadToDelete(lead)}
+                              className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                              title="ລົບລູກຄ້າ"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* VIEW MODE 2: MODERN HIGH-AESTHETIC STRUCTURED CARD VIEW */
+            <div className="space-y-3.5">
+              {filteredLeads.map((lead) => {
                 const vehicle = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
+                const leadVehiclePriceUSD = vehicle?.priceStartingUSD || (vehicle as any)?.price || 45000;
                 const isInstallmentLead = lead.paymentType === 'installment' || lead.paymentType === 'finance';
                 const isPaidCustomer = lead.status === 'delivered';
+                const leadDownUSD = lead.downPaymentUSD || Math.round(leadVehiclePriceUSD * ((lead.downPaymentPercent || 30) / 100));
+                const leadTenure = lead.tenureMonths || 48;
+                const leadLoanUSD = Math.max(0, leadVehiclePriceUSD - leadDownUSD);
+                const leadMonthlyLAK = lead.monthlyPaymentLAK || Math.round(((leadLoanUSD * (1 + 0.075 * (leadTenure / 12))) / leadTenure) * 22000);
 
                 return (
                   <div
                     key={lead.id}
-                    className={`border rounded-2xl p-4 sm:p-5 space-y-3 transition-all hover:shadow-lg ${
+                    className={`rounded-2xl border p-4 sm:p-5 space-y-3.5 transition-all shadow-sm ${
                       isPaidCustomer
-                        ? 'bg-zinc-950/90 border-emerald-900/60 hover:border-emerald-700/80'
+                        ? 'bg-zinc-950/90 border-emerald-900/50 hover:border-emerald-700/70'
                         : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'
                     }`}
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-bold text-base text-white truncate max-w-full">{lead.customerName}</h3>
-                          
-                          {/* Payment Mode Badge */}
-                          {isInstallmentLead ? (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-white border border-zinc-700 rounded-full font-bold flex items-center gap-1">
-                              <CreditCard className="w-3 h-3 text-zinc-300" />
-                              <span>ຜ່ອນ & ດາວ ({lead.downPaymentPercent || 30}%)</span>
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-full font-medium flex items-center gap-1">
-                              <Banknote className="w-3 h-3 text-zinc-400" />
-                              <span>ສົດ / ໂອນ</span>
-                            </span>
-                          )}
-
-                          {/* "ຈ່າຍແລ້ວ" Verified Badge */}
-                          {isPaidCustomer && (
-                            <span className="text-[10px] font-mono px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full font-bold flex items-center gap-1 shadow-sm">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                              <span>ຈ່າຍແລ້ວ</span>
-                              {lead.paidAmountUSD ? ` ($${lead.paidAmountUSD.toLocaleString()})` : ''}
-                            </span>
-                          )}
-
-                          {lead.category === 'walk_in' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-full">
-                              Walk-in
-                            </span>
-                          )}
-                          {lead.category === 'online' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-full">
-                              Online
-                            </span>
-                          )}
-                          {lead.category === 'event' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-full">
-                              Event
-                            </span>
-                          )}
-                          {lead.priority === 'vip' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-white text-black border border-zinc-300 rounded-full font-bold flex items-center gap-1 shadow-sm">
-                              <Star className="w-2.5 h-2.5 fill-black text-black" />
-                              <span>VIP</span>
-                            </span>
-                          )}
+                    {/* 1. Card Top Header: Customer Identity, Badges, Status Switcher & Delete */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Customer Initials Avatar */}
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 border ${
+                          isPaidCustomer
+                            ? 'bg-emerald-950/80 text-emerald-400 border-emerald-700/60'
+                            : 'bg-zinc-900 text-white border-zinc-700'
+                        }`}>
+                          {lead.customerName ? lead.customerName.slice(0, 2).toUpperCase() : 'CU'}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400 font-mono">
-                          <button
-                            type="button"
-                            onClick={() => openWhatsApp(lead.phone, lead.customerName, lead.interestedModel, lang)}
-                            className="flex items-center gap-1 hover:text-emerald-400 transition-colors cursor-pointer group"
-                            title={`ກົດເພື່ອເປີດ WhatsApp ສົນທະນາ: ${formatWhatsAppDisplay(lead.phone)}`}
-                          >
-                            <Phone className="w-3 h-3 text-zinc-500 group-hover:text-emerald-400 shrink-0" />
-                            <span>{lead.phone}</span>
-                            <span className="text-[9px] bg-emerald-950/60 text-emerald-400 px-1 py-0.5 rounded border border-emerald-800/40 ml-0.5 font-bold flex items-center gap-0.5">
-                              <WhatsAppIcon className="w-2.5 h-2.5" />
-                              <span>WA</span>
-                            </span>
-                          </button>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-bold text-base text-white truncate max-w-full">
+                              {lead.customerName}
+                            </h3>
 
-                          {lead.idCardNumber && (
-                            <span className="text-zinc-300">
-                              • ບັດ/Passport: <strong className="text-white">{lead.idCardNumber}</strong>
-                            </span>
-                          )}
+                            {/* VIP Priority Badge */}
+                            {lead.priority === 'vip' && (
+                              <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-400 text-black rounded-full font-bold flex items-center gap-1 shadow-sm">
+                                <Star className="w-2.5 h-2.5 fill-black text-black" />
+                                <span>VIP</span>
+                              </span>
+                            )}
 
-                          <span>• {lead.interestedModel}</span>
+                            {/* Acquisition Channel Badge */}
+                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-full">
+                              {lead.category === 'walk_in' ? 'Walk-in' : lead.category === 'online' ? 'Online' : 'Event'}
+                            </span>
 
-                          {/* Location Badge */}
-                          {(lead.province || lead.district || lead.village) && (
-                            <span className="text-zinc-400 flex items-center gap-1 font-sans">
-                              <MapPin className="w-3 h-3 text-zinc-500" />
-                              <span>{[lead.village, lead.district, lead.province].filter(Boolean).join(', ')}</span>
-                            </span>
-                          )}
-                        </div>
+                            {/* Payment Mode Badge */}
+                            {isInstallmentLead ? (
+                              <span className="text-[10px] font-mono px-2 py-0.5 bg-blue-950/70 text-blue-300 border border-blue-800/60 rounded-full font-bold flex items-center gap-1">
+                                <CreditCard className="w-3 h-3 text-blue-300" />
+                                <span>ຜ່ອນ & ດາວ ({lead.downPaymentPercent || 30}%)</span>
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-full font-medium flex items-center gap-1">
+                                <Banknote className="w-3 h-3 text-zinc-400" />
+                                <span>ສົດ / ໂອນ</span>
+                              </span>
+                            )}
 
-                        {/* Responsible officer & Payment reference info */}
-                        <div className="text-[11px] text-zinc-400 font-sans pt-0.5 flex flex-wrap items-center gap-2">
-                          <span className="flex items-center gap-1">
-                            <span>ຜູ້ຮັບຜິດຊອບ:</span>
-                            <strong className="text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
-                              {lead.assignedTo || currentUser?.name || 'Admin'}
-                            </strong>
-                          </span>
-                          {lead.paymentReceiptNo && (
-                            <span className="text-emerald-400 font-mono text-[10px] bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
-                              ໃບຮັບເງິນ: {lead.paymentReceiptNo}
-                            </span>
-                          )}
-                          {lead.paymentDate && (
-                            <span className="text-zinc-400 font-mono text-[10px]">
-                              ວັນທີຊຳລະ: {lead.paymentDate}
-                            </span>
-                          )}
+                            {/* "ຈ່າຍແລ້ວ" Verified Badge */}
+                            {isPaidCustomer && (
+                              <span className="text-[10px] font-mono px-2.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full font-bold flex items-center gap-1 shadow-sm">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                <span>ຈ່າຍແລ້ວ</span>
+                                {lead.paidAmountUSD ? ` ($${lead.paidAmountUSD.toLocaleString()})` : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                            ID: {lead.id.slice(0, 8)} • ວັນທີສ້າງ: {lead.createdAt?.slice(0, 10)}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Status switcher */}
-                      <div className="shrink-0 self-start sm:self-auto">
+                      {/* Status Switcher & Delete Action */}
+                      <div className="flex items-center gap-2 self-start sm:self-center">
                         <select
                           value={lead.status}
                           onChange={(e) => handleUpdateStatus(lead.id, e.target.value as LeadStatus)}
-                          className={`text-xs rounded-xl px-2.5 py-1.5 focus:outline-none ${
+                          className={`text-xs rounded-xl px-2.5 py-1.5 focus:outline-none font-semibold cursor-pointer ${
                             isPaidCustomer
                               ? 'bg-emerald-950/80 border border-emerald-700 text-emerald-300 font-bold'
-                              : 'bg-zinc-900 border border-zinc-700 text-zinc-300'
+                              : 'bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-zinc-500'
                           }`}
                         >
                           <option value="new">{t.statusNew}</option>
@@ -1353,20 +1585,118 @@ export default function CustomerView({
                           <option value="negotiation">{t.statusNegotiation}</option>
                           <option value="delivered">{t.statusDelivered || 'ຈ່າຍແລ້ວ / ສົ່ງມອບສຳເລັດ'}</option>
                         </select>
+
+                        <button
+                          type="button"
+                          onClick={() => setLeadToDelete(lead)}
+                          className="p-1.5 bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 rounded-xl border border-zinc-800 hover:border-red-800 transition-colors cursor-pointer shrink-0"
+                          title="ລົບລູກຄ້າ"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
 
-                    {/* Dedicated Installment / Financing Details Box */}
+                    {/* 2. Structured Information Grid (3 Clean Distinct Panels) */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {/* Panel A: ຂໍ້ມູນຕິດຕໍ່ & ຕົວຕົນ */}
+                      <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800/80 space-y-1.5 text-xs">
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-zinc-400" />
+                          <span>ຂໍ້ມູນຕິດຕໍ່ & ທີ່ຢູ່</span>
+                        </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-zinc-400 text-[11px]">ເບີໂທ:</span>
+                            <button
+                              type="button"
+                              onClick={() => openWhatsApp(lead.phone, lead.customerName, lead.interestedModel, lang)}
+                              className="font-mono font-bold text-white hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
+                              title="ສົນທະນາ WhatsApp"
+                            >
+                              <span>{lead.phone}</span>
+                              <span className="text-[9px] bg-emerald-950/80 text-emerald-400 px-1 py-0.2 rounded border border-emerald-800/40 ml-0.5 font-bold flex items-center gap-0.5">
+                                <WhatsAppIcon className="w-2.5 h-2.5" />
+                                <span>WA</span>
+                              </span>
+                            </button>
+                          </div>
+                          {lead.idCardNumber && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-zinc-400 text-[11px]">ບັດ/Passport:</span>
+                              <span className="font-mono text-zinc-200 font-semibold">{lead.idCardNumber}</span>
+                            </div>
+                          )}
+                          <div className="flex items-start justify-between gap-1 pt-0.5">
+                            <span className="text-zinc-400 text-[11px] shrink-0">ທີ່ຢູ່:</span>
+                            <span className="text-zinc-300 text-right truncate text-[11px]" title={[lead.village, lead.district, lead.province].filter(Boolean).join(', ')}>
+                              {[lead.village, lead.district, lead.province].filter(Boolean).join(', ') || '-'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Panel B: ລົດ & ຮູບແບບການຊຳລະ */}
+                      <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800/80 space-y-1.5 text-xs">
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1">
+                          <Car className="w-3 h-3 text-zinc-400" />
+                          <span>ລຸ້ນລົດ & ການຊຳລະ</span>
+                        </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-zinc-400 text-[11px]">ລຸ້ນທີ່ສົນໃຈ:</span>
+                            <span className="font-bold text-white">{lead.interestedModel || 'AVATR'}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-zinc-400 text-[11px]">ຮູບແບບຊຳລະ:</span>
+                            <span className="font-semibold text-zinc-200">
+                              {isInstallmentLead ? `ຜ່ອນຊຳລະ (ດາວ ${lead.downPaymentPercent || 30}%)` : 'ເງິນສົດ / ໂອນ'}
+                            </span>
+                          </div>
+                          {lead.paymentReceiptNo && (
+                            <div className="flex items-center justify-between text-emerald-400 font-mono text-[11px]">
+                              <span>ໃບຮັບເງິນ:</span>
+                              <span className="font-bold">{lead.paymentReceiptNo}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Panel C: ຜູ້ຮັບຜິດຊອບ & ໝາຍເຫດ */}
+                      <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800/80 space-y-1.5 text-xs">
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1">
+                          <UserIcon className="w-3 h-3 text-zinc-400" />
+                          <span>ຜູ້ຮັບຜິດຊອບ & ໝາຍເຫດ</span>
+                        </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-zinc-400 text-[11px]">ພະນັກງານ:</span>
+                            <span className="font-semibold text-white bg-zinc-800 px-2 py-0.5 rounded text-[11px]">
+                              {lead.assignedTo || currentUser?.name || 'Admin'}
+                            </span>
+                          </div>
+                          {lead.notes ? (
+                            <p className="text-[11px] text-zinc-300 italic truncate pt-0.5" title={lead.notes}>
+                              "{lead.notes}"
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-zinc-500 italic pt-0.5">ບໍ່ມີໝາຍເຫດເພີ່ມເຕີມ</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dedicated Installment / Financing Details Box (if installment) */}
                     {isInstallmentLead && (
-                      <div className="p-3 bg-zinc-900/90 border border-zinc-800 rounded-xl space-y-2">
+                      <div className="p-3 bg-blue-950/20 border border-blue-900/40 rounded-xl space-y-2">
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                          <span className="font-bold text-white flex items-center gap-1.5">
-                            <CreditCard className="w-3.5 h-3.5 text-zinc-300" />
+                          <span className="font-bold text-blue-200 flex items-center gap-1.5">
+                            <CreditCard className="w-3.5 h-3.5 text-blue-400" />
                             <span>ແຜນຜ່ອນຊຳລະ & ດາວ (Installment Financing Plan)</span>
                           </span>
 
                           <div className="flex items-center gap-2">
-                            {/* ປຸ່ມເປີດຕາຕະລາງຕິດຕາມການເກັບເງິນງວດ */}
+                            {/* Open Installment Ledger */}
                             <button
                               type="button"
                               onClick={() => setSelectedCustomerForInstallments(lead)}
@@ -1377,7 +1707,7 @@ export default function CustomerView({
                               <span>ຕາຕະລາງເກັບເງິນງວດ</span>
                             </button>
 
-                            {/* Installment Credit Approval Status Switcher */}
+                            {/* Credit Status Switcher */}
                             <select
                               value={lead.installmentStatus || 'pending_approval'}
                               onChange={(e) => handleUpdateInstallmentStatus(lead.id, e.target.value)}
@@ -1392,45 +1722,71 @@ export default function CustomerView({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono text-zinc-400 pt-1.5 border-t border-zinc-800">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono text-zinc-400 pt-1.5 border-t border-blue-900/40">
                           <div>
                             <span className="block text-zinc-500 text-[10px] font-sans">ເງິນວາງດາວ ({lead.downPaymentPercent || 30}%)</span>
                             <span className="text-white font-bold">
-                              ${(lead.downPaymentUSD || Math.round(vehiclePriceUSD * ((lead.downPaymentPercent || 30) / 100))).toLocaleString()} USD
+                              ${leadDownUSD.toLocaleString()} USD
                             </span>
                           </div>
                           <div>
                             <span className="block text-zinc-500 text-[10px] font-sans">ໄລຍະຜ່ອນ</span>
-                            <span className="text-zinc-200 font-bold">{lead.tenureMonths || 48} ເດືອນ</span>
+                            <span className="text-zinc-200 font-bold">{leadTenure} ເດືອນ</span>
                           </div>
                           <div>
                             <span className="block text-zinc-500 text-[10px] font-sans">ຄ່າງວດປະມານການ</span>
                             <span className="text-emerald-400 font-bold">
-                              ~{((lead.monthlyPaymentLAK || calculatedMonthlyLAK)).toLocaleString()} LAK
+                              ~{leadMonthlyLAK.toLocaleString()} LAK
                             </span>
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {lead.notes && (
-                      <p className="text-xs text-zinc-300 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800 leading-relaxed wrap-break-word">
-                        {lead.notes}
-                      </p>
-                    )}
+                    {/* 3. Card Bottom Actions Toolbar */}
+                    <div className="pt-2.5 border-t border-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs">
+                      {/* Left: Quick Direct Contact */}
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`tel:${lead.phone.replace(/\s+/g, '')}`}
+                          className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-xl border border-zinc-800 font-medium flex items-center gap-1.5 transition-colors text-[11px]"
+                        >
+                          <Phone className="w-3 h-3 text-zinc-400" />
+                          <span>{t.callNow}</span>
+                        </a>
 
-                    <div className="pt-2 border-t border-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-                      <span className="text-zinc-500 font-mono text-[11px] truncate">
-                        {lead.source || lead.category} | {lead.createdAt.slice(0, 10)}
-                      </span>
+                        <a
+                          href={getWhatsAppUrl(lead.phone, lead.customerName, lead.interestedModel, lang)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1.5 bg-emerald-950/60 hover:bg-emerald-800 text-emerald-400 hover:text-white rounded-xl border border-emerald-800/50 font-semibold flex items-center gap-1.5 transition-all text-[11px] cursor-pointer"
+                          title={`ເປີດ WhatsApp: ${formatWhatsAppDisplay(lead.phone)}`}
+                        >
+                          <WhatsAppIcon className="w-3 h-3" />
+                          <span>WhatsApp</span>
+                        </a>
+                      </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-                        {/* Confirm Payment button: Moves customer to Paid */}
+                      {/* Right: Dealership Actions (Confirm Payment & Document Suite & POS) */}
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        {/* POS Sale Button */}
+                        {onSelectCustomerForPOS && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectCustomerForPOS(lead)}
+                            className="flex-1 sm:flex-initial px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 text-xs"
+                            title="ເປີດບິນຂາຍລົດ (POS) ແລະ ຕັດສະຕ໋ອກສຳລັບລູກຄ້ານີ້"
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'Sell POS'}</span>
+                          </button>
+                        )}
+
                         {!isPaidCustomer ? (
                           <button
                             type="button"
                             onClick={() => setCustomerToConfirmPayment(lead)}
-                            className="flex-1 sm:flex-initial px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white font-bold rounded-xl border border-emerald-600/40 hover:border-emerald-500 flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-98"
+                            className="flex-1 sm:flex-initial px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white font-bold rounded-xl border border-emerald-600/40 hover:border-emerald-500 flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-98 text-xs"
                             title="ຢືນຢັນການຊຳລະເງິນ ແລະ ຍ້າຍລູກຄ້າໄປຊ່ອງ 'ຈ່າຍແລ້ວ'"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1448,62 +1804,23 @@ export default function CustomerView({
                           </button>
                         )}
 
-                        {/* Documents & Printing suite */}
+                        {/* Customer Documents Suite Modal */}
                         <button
                           type="button"
                           onClick={() => setSelectedCustomerForDocs(lead)}
-                          className="flex-1 sm:flex-initial px-3.5 py-1.5 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98"
+                          className="flex-1 sm:flex-initial px-3.5 py-1.5 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 text-xs"
                           title="ອອກໃບຮັບເງິນ, ໃບມອບສິດ, ໃບຂອງ/ມອບ-ຮັບລົດ, ຕາຕະລາງຜ່ອນ ແລະ ການພິມບິນ"
                         >
                           <FileText className="w-3.5 h-3.5" />
                           <span>ອອກເອກະສານ & ພິມບິນ</span>
                         </button>
-
-                        {/* ຂາຍລົດ (POS) */}
-                        <button
-                          type="button"
-                          onClick={() => onSelectCustomerForPOS?.(lead)}
-                          className="flex-1 sm:flex-initial px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-semibold rounded-xl border border-zinc-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                          title="ນຳຂໍ້ມູນລູກຄ້ານີ້ໄປອອກໃບບິນຂາຍລົດ (POS)"
-                        >
-                          <ShoppingBag className="w-3.5 h-3.5" />
-                          <span>ຂາຍລົດ (POS)</span>
-                        </button>
-
-                        <a
-                          href={`tel:${lead.phone.replace(/\s+/g, '')}`}
-                          className="flex-1 sm:flex-initial px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white rounded-xl border border-zinc-700 font-medium flex items-center justify-center gap-1 transition-colors"
-                        >
-                          <Phone className="w-3.5 h-3.5 text-zinc-400" />
-                          <span>{t.callNow}</span>
-                        </a>
-
-                        <a
-                          href={getWhatsAppUrl(lead.phone, lead.customerName, lead.interestedModel, lang)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 sm:flex-initial px-3 py-1.5 bg-emerald-600/15 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-xl border border-emerald-600/30 hover:border-emerald-500 font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
-                          title={`ເປີດ WhatsApp ສົນທະນາກັບ ${lead.customerName} (${formatWhatsAppDisplay(lead.phone)})`}
-                        >
-                          <WhatsAppIcon className="w-3.5 h-3.5" />
-                          <span>WhatsApp</span>
-                        </a>
-
-                        <button
-                          type="button"
-                          onClick={() => setLeadToDelete(lead)}
-                          className="p-1.5 bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 rounded-xl border border-zinc-700 transition-colors flex items-center justify-center cursor-pointer shrink-0"
-                          title="ລົບລູກຄ້າ"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </div>
                   </div>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

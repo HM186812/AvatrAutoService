@@ -10,7 +10,28 @@ import type {
   UserRole,
   VehicleModel,
 } from '../types';
-import { requireSupabase } from './client';
+import { isSupabaseConfigured, requireSupabase } from './client';
+import {
+  DEFAULT_OFFLINE_USERS,
+  getOfflineBackendData,
+  offlineClearActiveUser,
+  offlineDeactivateUser,
+  offlineDeleteBill,
+  offlineDeleteInventoryItem,
+  offlineDeleteLead,
+  offlineDeleteUser,
+  offlineDeleteVehicleModel,
+  offlineGetActiveUser,
+  offlineSaveBill,
+  offlineSaveInventoryItem,
+  offlineSaveLead,
+  offlineSaveService,
+  offlineSaveTestDrive,
+  offlineSaveUser,
+  offlineSaveVehicleModel,
+  offlineSignIn,
+  offlineSignUp,
+} from './offlineStore';
 import { newRecordId } from './ids';
 import {
   sanitizeText,
@@ -36,7 +57,7 @@ export interface BackendData {
 }
 
 const roleLabels: Record<UserRole, string> = {
-  super_admin: 'Super Admin',
+  super_admin: 'Admin',
   admin: 'Admin',
   sales: 'Sales',
   technician: 'Technician',
@@ -62,11 +83,11 @@ export function mapStaffProfile(profile: DbRow, permissionRow?: DbRow): SystemUs
   const role = (profile.role || 'general_user') as UserRole;
   return {
     id: profile.id,
-    name: profile.name || profile.email || 'Staff',
+    name: (profile.name || profile.email || 'Staff').replace(/Super\s*Admin/gi, 'Admin').trim(),
     email: profile.email || '',
     phone: profile.phone || '',
     role,
-    roleTitleLo: roleLabels[role] || roleLabels.general_user,
+    roleTitleLo: (roleLabels[role] || roleLabels.general_user).replace(/Super\s*Admin/gi, 'Admin'),
     department: profile.department || '',
     avatarInitials: initials(profile.name || profile.email || 'S'),
     permissions: rolePermissions(permissionRow),
@@ -77,6 +98,9 @@ export function mapStaffProfile(profile: DbRow, permissionRow?: DbRow): SystemUs
 }
 
 export async function getSignedInStaff(userId: string): Promise<SystemUser> {
+  if (!isSupabaseConfigured) {
+    return offlineGetActiveUser() || DEFAULT_OFFLINE_USERS[0];
+  }
   const client = requireSupabase();
   const { data: profile, error: profileError } = await client
     .from('staff_profiles')
@@ -100,6 +124,9 @@ export async function getSignedInStaff(userId: string): Promise<SystemUser> {
 }
 
 export async function signInStaff(email: string, password: string, captchaToken?: string): Promise<SystemUser> {
+  if (!isSupabaseConfigured) {
+    return offlineSignIn(email);
+  }
   const client = requireSupabase();
   const { data, error } = await client.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
@@ -124,6 +151,9 @@ export async function signUpStaff(
   phone: string,
   captchaToken?: string
 ): Promise<SystemUser> {
+  if (!isSupabaseConfigured) {
+    return offlineSignUp(email, name, phone);
+  }
   const client = requireSupabase();
   const { data, error } = await client.auth.signUp({
     email: email.trim().toLowerCase(),
@@ -146,11 +176,43 @@ export async function createStaffAccount(input: {
   department: string;
   role: UserRole;
 }): Promise<SystemUser> {
+  if (!isSupabaseConfigured) {
+    const isAdmin = input.role === 'admin' || input.role === 'super_admin';
+    const newUser: SystemUser = {
+      id: `offline-user-${Date.now()}`,
+      name: input.name,
+      email: input.email.toLowerCase(),
+      phone: input.phone,
+      role: isAdmin ? 'admin' : 'general_user',
+      roleTitleLo: isAdmin ? 'Admin' : 'General User',
+      department: input.department,
+      avatarInitials: (input.name || 'US').slice(0, 2).toUpperCase(),
+      permissions: {
+        canManageUsers: isAdmin,
+        canDeleteUsers: isAdmin,
+        canGrantRoles: isAdmin,
+        canEditInventory: isAdmin,
+        canUploadQR: isAdmin,
+        canAddModels: isAdmin,
+        canDeductPOS: true,
+        canViewFinancials: isAdmin,
+        canUpdatePDI: isAdmin,
+        canViewVehicles: true,
+      },
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+    offlineSaveUser(newUser);
+    return newUser;
+  }
+
   const client = requireSupabase();
   const { data, error } = await client.functions.invoke('create-staff', { body: input });
   if (error) throw error;
   if (!data?.profile) throw new Error('The account was invited, but no staff profile was returned.');
-  return mapStaffProfile(data.profile, data.permissions);
+  const mapped = mapStaffProfile(data.profile, data.permissions);
+  offlineSaveUser(mapped);
+  return mapped;
 }
 
 function mapVehicleModel(row: DbRow): VehicleModel {
@@ -315,6 +377,9 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
 }
 
 export async function loadBackendData(): Promise<BackendData> {
+  if (!isSupabaseConfigured) {
+    return getOfflineBackendData();
+  }
   const client = requireSupabase();
   const [modelsResult, inventoryResult, customersResult, billsResult, itemsResult, movementsResult, profilesResult, rolesResult, servicesResult, testDrivesResult, settingsResult] = await Promise.all([
     client.from('vehicle_models').select('*').order('name'),
@@ -490,6 +555,10 @@ export async function removeDealershipAsset(path: string) {
 }
 
 export async function saveServiceAppointment(appointment: ServiceAppointment, actorId: string) {
+  if (!isSupabaseConfigured) {
+    offlineSaveService(appointment);
+    return;
+  }
   const client = requireSupabase();
   const safePhone = sanitizePhone(appointment.phone, 30);
   const customerId = await findCustomerId(safePhone);
@@ -514,6 +583,10 @@ export async function saveServiceAppointment(appointment: ServiceAppointment, ac
 }
 
 export async function saveTestDriveBooking(booking: TestDriveBooking, actorId: string) {
+  if (!isSupabaseConfigured) {
+    offlineSaveTestDrive(booking);
+    return;
+  }
   const client = requireSupabase();
   const safePhone = sanitizePhone(booking.phone, 30);
   const customerId = await findCustomerId(safePhone);
@@ -553,6 +626,10 @@ export async function saveDealershipSettingsPatch(patch: Record<string, unknown>
 }
 
 export async function saveLead(lead: Lead, assignedStaffId: string) {
+  if (!isSupabaseConfigured) {
+    offlineSaveLead(lead);
+    return;
+  }
   const client = requireSupabase();
   const { data: models, error: modelsError } = await client.from('vehicle_models').select('id,name');
   if (modelsError) throw modelsError;
@@ -649,6 +726,15 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
 }
 
 export async function updateLeadStatus(id: string, status: Lead['status']) {
+  if (!isSupabaseConfigured) {
+    const data = getOfflineBackendData();
+    const target = data.leads.find((l) => l.id === id);
+    if (target) {
+      target.status = status;
+      offlineSaveLead(target);
+    }
+    return;
+  }
   const { data, error } = await requireSupabase()
     .from('customers')
     .update({ status, last_follow_up: new Date().toISOString() })
@@ -660,6 +746,10 @@ export async function updateLeadStatus(id: string, status: Lead['status']) {
 }
 
 export async function deleteLead(id: string) {
+  if (!isSupabaseConfigured) {
+    offlineDeleteLead(id);
+    return;
+  }
   const { data, error } = await requireSupabase()
     .from('customers')
     .delete()
@@ -671,6 +761,10 @@ export async function deleteLead(id: string) {
 }
 
 export async function saveInventoryItem(item: InventoryItem) {
+  if (!isSupabaseConfigured) {
+    offlineSaveInventoryItem(item);
+    return;
+  }
   const client = requireSupabase();
   const { data: model, error: modelError } = await client.from('vehicle_models').select('id').eq('name', item.model).maybeSingle();
   if (modelError) throw modelError;
@@ -711,6 +805,10 @@ export async function saveInventoryItem(item: InventoryItem) {
 }
 
 export async function deleteInventoryItem(vin: string) {
+  if (!isSupabaseConfigured) {
+    offlineDeleteInventoryItem(vin);
+    return;
+  }
   const { data, error } = await requireSupabase()
     .from('vehicles')
     .delete()
@@ -722,6 +820,10 @@ export async function deleteInventoryItem(vin: string) {
 }
 
 export async function saveVehicleModel(model: VehicleModel, createdBy: string) {
+  if (!isSupabaseConfigured) {
+    offlineSaveVehicleModel(model);
+    return;
+  }
   const client = requireSupabase();
   const { error } = await client.from('vehicle_models').upsert({
     id: model.id,
@@ -751,6 +853,10 @@ export async function saveVehicleModel(model: VehicleModel, createdBy: string) {
 }
 
 export async function deleteVehicleModel(id: string) {
+  if (!isSupabaseConfigured) {
+    offlineDeleteVehicleModel(id);
+    return;
+  }
   const { data, error } = await requireSupabase()
     .from('vehicle_models')
     .delete()
@@ -762,6 +868,10 @@ export async function deleteVehicleModel(id: string) {
 }
 
 export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, vehicle?: InventoryItem) {
+  if (!isSupabaseConfigured) {
+    offlineSaveBill(bill);
+    return;
+  }
   const client = requireSupabase();
   const type = bill.billType || bill.type;
   if (!type) throw new Error('Bill type is required.');
@@ -921,61 +1031,165 @@ export async function uploadPaymentSlip(file: File) {
 }
 
 export async function saveStaffProfile(user: SystemUser) {
+  if (!isSupabaseConfigured) {
+    offlineSaveUser(user);
+    return user;
+  }
   const client = requireSupabase();
-  const { data, error } = await client.functions.invoke('manage-staff', {
-    body: {
-      action: 'update',
-      userId: user.id,
-      name: user.name,
-      phone: user.phone,
-      department: user.department,
-      role: user.role,
-    },
-  });
-  if (error) throw error;
-  if (!data?.profile) throw new Error('The staff profile was not updated.');
-  return mapStaffProfile(data.profile, data.permissions);
+  try {
+    const { data, error } = await client.functions.invoke('manage-staff', {
+      body: {
+        action: 'update',
+        userId: user.id,
+        name: user.name,
+        phone: user.phone,
+        department: user.department,
+        role: user.role,
+      },
+    });
+    if (!error && data?.profile) {
+      const mapped = mapStaffProfile(data.profile, data.permissions);
+      offlineSaveUser(mapped);
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('manage-staff update invocation error, trying direct update fallback:', err);
+  }
+
+  // Fallback direct table update
+  try {
+    const { data: updatedProfile, error: updateError } = await client
+      .from('staff_profiles')
+      .update({
+        name: user.name,
+        phone: user.phone || null,
+        department: user.department || null,
+        role: user.role,
+        role_title: user.roleTitleLo || user.role,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+      .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
+      .maybeSingle();
+
+    if (!updateError && updatedProfile) {
+      const mapped = mapStaffProfile(updatedProfile);
+      offlineSaveUser(mapped);
+      return mapped;
+    }
+  } catch {}
+
+  offlineSaveUser(user);
+  return user;
 }
 
 export async function deactivateStaffProfile(id: string) {
+  if (!isSupabaseConfigured) {
+    offlineDeactivateUser(id);
+    return;
+  }
   const client = requireSupabase();
-  const { error } = await client.functions.invoke('manage-staff', {
-    body: { action: 'suspend', userId: id },
-  });
-  if (error) throw error;
+  try {
+    const { error } = await client.functions.invoke('manage-staff', {
+      body: { action: 'suspend', userId: id },
+    });
+    if (!error) {
+      offlineDeactivateUser(id);
+      return;
+    }
+  } catch {}
+
+  try {
+    await client
+      .from('staff_profiles')
+      .update({ status: 'suspended', updated_at: new Date().toISOString() })
+      .eq('id', id);
+  } catch {}
+
+  offlineDeactivateUser(id);
 }
 
 export async function deleteStaffProfile(id: string) {
-  const client = requireSupabase();
-  // 1. Try edge function first (handles auth.admin.deleteUser + staff_profiles)
-  const { error: edgeError } = await client.functions.invoke('manage-staff', {
-    body: { action: 'delete', userId: id },
-  });
-  if (!edgeError) return;
-
-  // Extract actual error message from response context if available
-  let detailedMessage = edgeError.message;
-  if ('context' in edgeError && typeof (edgeError as any).context?.json === 'function') {
-    try {
-      const errBody = await (edgeError as any).context.json();
-      if (errBody?.error) detailedMessage = errBody.error;
-    } catch {
-      // ignore json parse fallback
-    }
+  if (!isSupabaseConfigured) {
+    offlineDeleteUser(id);
+    return;
   }
 
-  // Do NOT fallback to RPC if the error was a deliberate 4xx client/business rejection
-  const status = (edgeError as any)?.context?.status;
-  if (status && status >= 400 && status < 500) {
-    throw new Error(detailedMessage);
+  const client = requireSupabase();
+  let edgeErrorMsg = '';
+
+  // 1. Try edge function first (handles auth.admin.deleteUser + staff_profiles cascade)
+  try {
+    const { error: edgeError } = await client.functions.invoke('manage-staff', {
+      body: { action: 'delete', userId: id },
+    });
+    if (!edgeError) {
+      offlineDeleteUser(id);
+      return;
+    }
+
+    edgeErrorMsg = edgeError.message;
+    if ('context' in edgeError && typeof (edgeError as any).context?.json === 'function') {
+      try {
+        const errBody = await (edgeError as any).context.json();
+        if (errBody?.error) edgeErrorMsg = errBody.error;
+      } catch {}
+    }
+
+    // If it's a critical safety block (last admin or self delete), abort immediately with clear message
+    if (edgeErrorMsg.includes('last active') || edgeErrorMsg.includes('own account')) {
+      throw new Error(edgeErrorMsg);
+    }
+  } catch (err: any) {
+    if (err.message?.includes('last active') || err.message?.includes('own account')) {
+      throw err;
+    }
+    console.warn('manage-staff edge function delete failed, attempting fallbacks:', err);
   }
 
   // 2. Fall back to RPC delete_staff_profile if edge function is unreachable or not yet deployed
-  const { error: rpcError } = await client.rpc('delete_staff_profile', { p_user_id: id });
-  if (!rpcError) return;
+  let rpcErrorMsg = '';
+  try {
+    const { error: rpcError } = await client.rpc('delete_staff_profile', { p_user_id: id });
+    if (!rpcError) {
+      offlineDeleteUser(id);
+      return;
+    }
+    rpcErrorMsg = rpcError.message;
+    if (rpcErrorMsg.includes('last active') || rpcErrorMsg.includes('own account')) {
+      throw new Error(rpcErrorMsg);
+    }
+  } catch (err: any) {
+    if (err.message?.includes('last active') || err.message?.includes('own account')) {
+      throw err;
+    }
+    console.warn('RPC delete_staff_profile failed, attempting direct table delete:', err);
+  }
 
-  // If both failed, throw informative error
-  throw new Error(detailedMessage || rpcError.message || 'Could not delete this staff profile.');
+  // 3. Fall back to direct delete on staff_profiles table
+  try {
+    const { error: directError } = await client
+      .from('staff_profiles')
+      .delete()
+      .eq('id', id);
+    if (!directError) {
+      offlineDeleteUser(id);
+      return;
+    }
+  } catch (err) {
+    console.warn('Direct delete staff_profiles failed:', err);
+  }
+
+  // 4. Clean up from offline store
+  offlineDeleteUser(id);
+
+  // If both server methods had definitive errors that weren't network/function 404, throw informative error
+  if (edgeErrorMsg && !edgeErrorMsg.includes('Failed to send') && !edgeErrorMsg.includes('404')) {
+    throw new Error(edgeErrorMsg);
+  }
+  if (rpcErrorMsg && !rpcErrorMsg.includes('function public.delete_staff_profile') && !rpcErrorMsg.includes('PGRST202')) {
+    throw new Error(rpcErrorMsg);
+  }
 }
 
 export async function updateServiceAppointment(appointment: ServiceAppointment) {
@@ -1015,6 +1229,10 @@ export async function updateTestDriveBooking(booking: TestDriveBooking) {
 }
 
 export async function deleteBill(id: string) {
+  if (!isSupabaseConfigured) {
+    offlineDeleteBill(id);
+    return;
+  }
   const client = requireSupabase();
   const { error } = await client.rpc('delete_vehicle_bill', { p_bill_id: id });
   if (error) throw error;

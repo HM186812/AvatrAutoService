@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Lead, 
   ServiceAppointment, 
@@ -12,6 +12,7 @@ import {
   ActiveMenu 
 } from './types';
 import { translations } from './data/translations';
+import { getModelStockSummaries } from './data/stockSummary';
 import { isSupabaseConfigured, supabase } from './backend/client';
 import {
   deleteBill,
@@ -21,6 +22,7 @@ import {
   saveServiceAppointment,
   saveTestDriveBooking,
 } from './backend/data';
+import { DEFAULT_OFFLINE_USERS } from './backend/offlineStore';
 import { newRecordId } from './backend/ids';
 // Categorized Components & Views
 import { Sidebar } from './components/layout';
@@ -50,9 +52,9 @@ import {
   Users, 
   Car, 
   PackagePlus, 
-  ShoppingBag, 
   FileText, 
   CreditCard,
+  ShoppingBag,
   AlertTriangle, 
   Key, 
   User as UserIcon, 
@@ -208,8 +210,40 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Automatically clean any legacy "Super Admin" strings from localStorage
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('avatr_') || key.startsWith('offline_'))) {
+          const val = localStorage.getItem(key);
+          if (val && /Super\s*Admin/gi.test(val)) {
+            localStorage.setItem(key, val.replace(/Super\s*Admin/gi, 'Admin'));
+          }
+        }
+      }
+    } catch {}
+
     if (!supabase || !isSupabaseConfigured) {
-      setBackendError('Supabase is not configured.');
+      setBackendError(null);
+      void refreshBackendData();
+      const savedOfflineUser = localStorage.getItem('avatr_offline_active_user');
+      if (savedOfflineUser) {
+        try {
+          const user = JSON.parse(savedOfflineUser);
+          if (user && user.id && user.id !== 'user-tech-01' && !user.name?.includes('ຊ່າງເຕັກນິກ')) {
+            const cleanUser = {
+              ...user,
+              name: (user.name || '').replace(/Super\s*Admin/gi, 'Admin').trim(),
+              roleTitleLo: user.roleTitleLo === 'Super Admin' ? 'Admin' : (user.roleTitleLo || 'Admin').replace(/Super\s*Admin/gi, 'Admin'),
+            };
+            setCurrentUser(cleanUser);
+            setIsLoggedIn(true);
+          } else if (user && (user.id === 'user-tech-01' || user.name?.includes('ຊ່າງເຕັກນິກ'))) {
+            setCurrentUser(DEFAULT_OFFLINE_USERS[0]);
+            setIsLoggedIn(true);
+          }
+        } catch {}
+      }
       setIsAuthLoading(false);
       return;
     }
@@ -255,9 +289,10 @@ export default function App() {
     };
   }, [refreshBackendData]);
 
-  // Alert counts (ແຈ້ງເຕືອນສະຕ໋ອກເມື່ອຕ່ຳກວ່າ 5 ຄັນ)
-  const lowStockCount = inventory.filter(i => i.stockQuantity > 0 && i.stockQuantity < 5 && i.status !== 'sold').length;
-  const outOfStockCount = inventory.filter(i => i.stockQuantity === 0).length;
+  // Alert counts: Grouped by vehicle model (ໝວດ/ລຸ້ນລົດ). If available units in stock < 5, trigger low stock alert!
+  const modelStockSummaries = useMemo(() => getModelStockSummaries(vehicles, inventory), [vehicles, inventory]);
+  const lowStockCount = modelStockSummaries.filter(m => m.isLowStock).length;
+  const outOfStockCount = modelStockSummaries.filter(m => m.isOutOfStock).length;
 
   // Modal States
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
@@ -271,7 +306,13 @@ export default function App() {
   const [quoteVehicle, setQuoteVehicle] = useState<VehicleModel | null>(null);
   const [quoteCustomerName, setQuoteCustomerName] = useState<string | undefined>(undefined);
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
-  const [selectedCustomerForPOS, setSelectedCustomerForPOS] = useState<Lead | null>(null);
+
+  const [prefilledCustomerForPOS, setPrefilledCustomerForPOS] = useState<Lead | null>(null);
+
+  const handleSelectCustomerForPOS = (lead?: Lead | null) => {
+    setPrefilledCustomerForPOS(lead || null);
+    setCurrentMenu('pos_sales');
+  };
 
   // Role & Admin Check
   const isAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
@@ -288,6 +329,10 @@ export default function App() {
 
   const handleLogout = async () => {
     setIsLoggedIn(false);
+    setCurrentUser(FALLBACK_EMPTY_USER);
+    try {
+      localStorage.removeItem('avatr_offline_active_user');
+    } catch {}
     try {
       await supabase?.auth.signOut();
     } catch (error) {
@@ -296,7 +341,7 @@ export default function App() {
     triggerToast('ທ່ານໄດ້ອອກຈາກລະບົບຮຽບຮ້ອຍແລ້ວ');
   };
 
-  // Delete Bill Handler (Super Admin only - synced to Supabase)
+  // Delete Bill Handler (Admin only - synced to Supabase)
   const handleDeleteBill = async (billId: string) => {
     if (currentUser.role !== 'super_admin' && currentUser.role !== 'admin') {
       triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບບິນ!');
@@ -430,7 +475,7 @@ export default function App() {
         allUsers={users}
         onSwitchUser={(u) => {
           setCurrentUser(u);
-          triggerToast(`User: ${u.name} (${u.role === 'super_admin' ? t.roleSuperAdmin : t.roleGeneralUser})`);
+          triggerToast(`User: ${u.name} (${(u.role === 'super_admin' || u.role === 'admin') ? (t.roleAdmin || 'Admin') : t.roleGeneralUser})`);
         }}
         isMobileOpen={isMobileSidebarOpen}
         setIsMobileOpen={setIsMobileSidebarOpen}
@@ -455,10 +500,10 @@ export default function App() {
             <div className="flex items-center gap-2 min-w-0">
               <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-white flex-shrink-0">
                 {currentMenu === 'dashboard' && <LayoutDashboard className="w-4 h-4" />}
+                {currentMenu === 'pos_sales' && <ShoppingBag className="w-4 h-4 text-emerald-400" />}
                 {currentMenu === 'customers' && <Users className="w-4 h-4" />}
                 {currentMenu === 'inventory' && <Car className="w-4 h-4" />}
                 {currentMenu === 'stock_in' && <PackagePlus className="w-4 h-4" />}
-                {currentMenu === 'pos' && <ShoppingBag className="w-4 h-4" />}
                 {currentMenu === 'bills' && <FileText className="w-4 h-4" />}
                 {currentMenu === 'installment_dashboard' && <CreditCard className="w-4 h-4 text-amber-400" />}
                 {currentMenu === 'alerts' && <AlertTriangle className="w-4 h-4" />}
@@ -469,10 +514,10 @@ export default function App() {
               <div className="min-w-0">
                 <h2 className="text-xs sm:text-sm font-bold text-white truncate leading-tight">
                   {currentMenu === 'dashboard' && t.headerDashboard}
+                  {currentMenu === 'pos_sales' && (t.headerPOS || 'POS ຂາຍລົດຍົນ • ອອກໃບບິນ & ຕັດສະຕ໋ອກ')}
                   {currentMenu === 'customers' && t.headerCustomers}
                   {currentMenu === 'inventory' && t.headerInventory}
                   {currentMenu === 'stock_in' && t.headerStockIn}
-                  {currentMenu === 'pos' && t.headerPOS}
                   {currentMenu === 'bills' && t.headerBills}
                   {currentMenu === 'installment_dashboard' && (lang === 'lo' ? 'Dashboard ຜ່ອນຊຳລະ & ເງິນດາວ (Leasing & Installment Portfolio)' : 'Installment & Down Payment Dashboard')}
                   {currentMenu === 'alerts' && t.headerAlerts}
@@ -539,6 +584,24 @@ export default function App() {
             />
           )}
 
+          {currentMenu === 'pos_sales' && (
+            <POSSalesView
+              inventory={inventory}
+              setInventory={setInventory}
+              bills={bills}
+              setBills={setBills}
+              leads={leads}
+              stockLogs={stockLogs}
+              setStockLogs={setStockLogs}
+              vehicles={vehicles}
+              currentUser={currentUser}
+              lang={lang}
+              onNavigateToBills={() => setCurrentMenu('bills')}
+              prefilledCustomer={prefilledCustomerForPOS}
+              onClearPrefilledCustomer={() => setPrefilledCustomerForPOS(null)}
+            />
+          )}
+
           {currentMenu === 'customers' && (
             <CustomerView
               leads={leads}
@@ -548,10 +611,7 @@ export default function App() {
               lang={lang}
               onOpenNewLead={() => setIsNewLeadOpen(true)}
               onOpenQuote={handleOpenQuoteForVehicle}
-              onSelectCustomerForPOS={(cust) => {
-                setSelectedCustomerForPOS(cust);
-                setCurrentMenu('pos');
-              }}
+              onSelectCustomerForPOS={handleSelectCustomerForPOS}
             />
           )}
 
@@ -569,7 +629,6 @@ export default function App() {
               lang={lang}
               onOpenQuote={handleOpenQuoteForVehicle}
               onNavigateToStockIn={() => setCurrentMenu('stock_in')}
-              onNavigateToPOS={() => setCurrentMenu('pos')}
             />
           )}
 
@@ -583,28 +642,11 @@ export default function App() {
               setStockLogs={setStockLogs}
               vehicles={vehicles}
               setVehicles={setVehicles}
+              currentUser={currentUser}
               isSuperAdmin={isAdmin}
               lang={lang}
               onNavigateToStock={() => setCurrentMenu('inventory')}
               onNavigateToBills={() => setCurrentMenu('bills')}
-            />
-          )}
-
-          {currentMenu === 'pos' && (
-            <POSSalesView
-              inventory={inventory}
-              setInventory={setInventory}
-              bills={bills}
-              setBills={setBills}
-              leads={leads}
-              stockLogs={stockLogs}
-              setStockLogs={setStockLogs}
-              vehicles={vehicles}
-              currentUser={currentUser}
-              lang={lang}
-              onNavigateToBills={() => setCurrentMenu('bills')}
-              prefilledCustomer={selectedCustomerForPOS}
-              onClearPrefilledCustomer={() => setSelectedCustomerForPOS(null)}
             />
           )}
 
@@ -619,8 +661,11 @@ export default function App() {
               lang={lang}
               isSuperAdmin={isAdmin}
               onDeleteBill={handleDeleteBill}
-              onOpenNewSale={() => setCurrentMenu('pos')}
               onOpenNewImport={isAdmin ? () => setCurrentMenu('stock_in') : undefined}
+              onOpenNewSale={() => {
+                setPrefilledCustomerForPOS(null);
+                setCurrentMenu('pos_sales');
+              }}
             />
           )}
 
@@ -643,6 +688,7 @@ export default function App() {
               vehicles={vehicles}
               lang={lang}
               onNavigateToStock={() => setCurrentMenu('inventory')}
+              onNavigateToStockIn={() => setCurrentMenu('stock_in')}
             />
           )}
 

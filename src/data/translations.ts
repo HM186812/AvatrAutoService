@@ -53,6 +53,7 @@ export interface TranslationSchema {
   headerProfile: string;
   quickPOSBtn: string;
   quickStockInBtn: string;
+  roleAdmin: string;
   roleSuperAdmin: string;
   roleBranchAdmin: string;
   roleSales: string;
@@ -501,6 +502,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     headerProfile: 'ໂປຣໄຟລ໌ຜູ້ໃຊ້ • ຂໍ້ມູນບັນຊີ',
     quickPOSBtn: '+ ຂາຍລົດ (POS)',
     quickStockInBtn: '+ ນຳເຂົ້າລົດ',
+    roleAdmin: 'Admin',
     roleSuperAdmin: 'Admin',
     roleBranchAdmin: 'Admin ສາຂາ',
     roleSales: 'ທີ່ປຶກສາການຂາຍ',
@@ -946,6 +948,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     headerProfile: 'User Profile • Account Information',
     quickPOSBtn: '+ Sell Car (POS)',
     quickStockInBtn: '+ Stock-In Entry',
+    roleAdmin: 'Admin',
     roleSuperAdmin: 'Admin',
     roleBranchAdmin: 'Branch Admin',
     roleSales: 'Sales Specialist',
@@ -1089,13 +1092,13 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Users & Permissions
     usersTitle: 'User Governance & Role Permissions',
-    usersSubtitle: 'Approve team members, grant Super Admin or General User privileges and control system access',
+    usersSubtitle: 'Approve team members, grant Admin or General User privileges and control system access',
     addUserBtn: '+ Add New Member',
     memberName: 'Member Name',
     memberRole: 'Access Role',
     memberDepartment: 'Department',
     memberStatus: 'Status',
-    grantAdminPrivilege: 'Grant Super Admin Access',
+    grantAdminPrivilege: 'Grant Admin Access',
     activeStatus: 'Active',
     suspendedStatus: 'Suspended',
 
@@ -1387,6 +1390,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     headerProfile: 'โปรไฟล์ผู้ใช้ • ข้อมูลบัญชี',
     quickPOSBtn: '+ ขายรถ (POS)',
     quickStockInBtn: '+ นำเข้ารถยนต์',
+    roleAdmin: 'Admin',
     roleSuperAdmin: 'Admin',
     roleBranchAdmin: 'Admin สาขา',
     roleSales: 'ที่ปรึกษาการขาย',
@@ -1534,13 +1538,13 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Users & Permissions
     usersTitle: 'จัดการผู้ใช้และสิทธิ์การเข้าถึง (User Management & Roles)',
-    usersSubtitle: 'อนุมัติสมาชิกทีม กำหนดสิทธิ์ Super Admin หรือผู้ใช้ทั่วไป และควบคุมระบบ',
+    usersSubtitle: 'อนุมัติสมาชิกทีม กำหนดสิทธิ์ Admin หรือผู้ใช้ทั่วไป และควบคุมระบบ',
     addUserBtn: '+ เพิ่มสมาชิกใหม่',
     memberName: 'ชื่อสมาชิก',
     memberRole: 'สิทธิ์การใช้งาน',
     memberDepartment: 'แผนก / ฝ่าย',
     memberStatus: 'สถานะ',
-    grantAdminPrivilege: 'มอบสิทธิ์ Super Admin',
+    grantAdminPrivilege: 'มอบสิทธิ์ Admin',
     activeStatus: 'กำลังใช้งาน (Active)',
     suspendedStatus: 'ระงับชั่วคราว (Suspended)',
 

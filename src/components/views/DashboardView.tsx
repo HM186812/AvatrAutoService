@@ -46,6 +46,7 @@ import {
   Calendar,
   Filter
 } from 'lucide-react';
+import { getModelStockSummaries } from '../../data/stockSummary';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl } from '../../utils/whatsapp';
 import { DEFAULT_EXCHANGE_RATE_LAK, calculateInstallmentSummary, generateInstallmentSchedule } from '../../utils/installment';
@@ -108,6 +109,15 @@ export default function DashboardView({
   const eventCars = inventory.filter(i => i.status === 'event');
   const promoCars = inventory.filter(i => i.status === 'promotion');
   const soldCars = inventory.filter(i => i.status === 'sold');
+
+  // Model-level stock aggregation (< 5 units alert)
+  const modelSummaries = useMemo(() => {
+    return getModelStockSummaries(vehicles, inventory);
+  }, [vehicles, inventory]);
+
+  const lowStockModels = useMemo(() => {
+    return modelSummaries.filter(m => m.isLowStock || m.isOutOfStock);
+  }, [modelSummaries]);
 
   // Sale Bills
   const saleBills = bills ? bills.filter(b => b.billType === 'sale') : [];
@@ -402,6 +412,7 @@ export default function DashboardView({
         </div>
       </div>
 
+
       {/* 4 Dynamic KPI Summary Cards */}
       <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Leads */}
@@ -427,18 +438,20 @@ export default function DashboardView({
 
         {/* KPI 2: ຈຳນວນລົດພ້ອມຂາຍ (Vehicles Ready For Sale) */}
         <div
-          onClick={isAdmin ? () => onNavigateMenu('inventory') : undefined}
-          className={`dashboard-kpi-card bg-zinc-950 border border-zinc-800 rounded-2xl p-5 transition-all ${
-            isAdmin ? 'hover:border-zinc-500 cursor-pointer hover:shadow-xl group' : ''
+          onClick={isAdmin ? () => onNavigateMenu('alerts') : undefined}
+          className={`dashboard-kpi-card bg-zinc-950 border ${
+            lowStockModels.length > 0 ? 'border-amber-500/40 hover:border-amber-500' : 'border-zinc-800 hover:border-zinc-500'
+          } rounded-2xl p-5 transition-all ${
+            isAdmin ? 'cursor-pointer hover:shadow-xl group' : ''
           }`}
         >
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-3">
             <span className="font-bold text-white flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className={`w-2 h-2 rounded-full ${lowStockModels.length > 0 ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse`}></span>
               <span>ຈຳນວນລົດພ້ອມຂາຍ</span>
             </span>
             <span className={`p-2 bg-zinc-900 rounded-lg transition-colors ${isAdmin ? 'group-hover:bg-white group-hover:text-black' : ''}`}>
-              <Car className="w-4 h-4 text-emerald-400" />
+              <Car className={`w-4 h-4 ${lowStockModels.length > 0 ? 'text-amber-400' : 'text-emerald-400'}`} />
             </span>
           </div>
           <div className="flex items-baseline gap-2">
@@ -447,21 +460,31 @@ export default function DashboardView({
               ຄັນ {inventory.length > 0 ? `(${Math.round((readyCars.length / inventory.length) * 100)}%)` : ''}
             </span>
           </div>
-          <div className="mt-2 text-[11px] text-zinc-400 font-mono flex items-center gap-1.5 truncate">
-            <span>A12: <b className="text-white">{readyAvatr12}</b></span>
-            <span>•</span>
-            <span>A11: <b className="text-white">{readyAvatr11}</b></span>
-            <span>•</span>
-            <span>A07: <b className="text-white">{readyAvatr07}</b></span>
-            {otherReady > 0 && <span>• ອື່ນໆ: <b className="text-white">{otherReady}</b></span>}
+          <div className="mt-2 text-[11px] text-zinc-400 font-mono flex items-center gap-1.5 flex-wrap">
+            {modelSummaries.slice(0, 4).map((m, idx) => (
+              <span key={m.modelName} className="inline-flex items-center gap-1">
+                {idx > 0 && <span className="text-zinc-600">•</span>}
+                <span>{m.modelName.replace('AVATR', 'A').trim()}:</span>
+                <b className={m.isOutOfStock ? 'text-red-400' : m.isLowStock ? 'text-amber-300' : 'text-white'}>
+                  {m.count}
+                </b>
+                {m.isLowStock && <span className="text-[9px] text-amber-400 font-bold">(&lt;5)</span>}
+              </span>
+            ))}
           </div>
           <div className={`mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 ${
             isAdmin ? 'group-hover:text-white' : ''
           }`}>
-            <span>{pdiCars.length} PDI • {importedCars.length} ນຳເຂົ້າ</span>
+            <span>
+              {lowStockModels.length > 0 ? (
+                <span className="text-amber-400 font-semibold">⚠️ {lowStockModels.length} ລຸ້ນຕ່ຳກວ່າ 5 ຄັນ</span>
+              ) : (
+                <span>{pdiCars.length} PDI • {importedCars.length} ນຳເຂົ້າ</span>
+              )}
+            </span>
             {isAdmin && (
               <span className="flex items-center gap-1 text-white font-medium group-hover:underline">
-                <span>ກວດສາງ</span>
+                <span>{lowStockModels.length > 0 ? 'ເຕືອນສາງ' : 'ກວດສາງ'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             )}
@@ -470,7 +493,7 @@ export default function DashboardView({
 
         {/* KPI 3: Sales Deliveries */}
         <div
-          onClick={() => onNavigateMenu('pos')}
+          onClick={() => onNavigateMenu('bills')}
           className="dashboard-kpi-card bg-zinc-950 border border-zinc-800 hover:border-zinc-500 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl group"
         >
           <div className="flex items-center justify-between text-zinc-400 text-xs mb-3">
@@ -484,7 +507,7 @@ export default function DashboardView({
             <span className="text-xs text-zinc-400 font-mono">ຄັນທີ່ຂາຍອອກ</span>
           </div>
           <div className="mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 group-hover:text-white">
-            <span>+ ຂາຍລົດ (POS)</span>
+            <span>{t.viewBillsAction}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </div>
         </div>
@@ -537,13 +560,6 @@ export default function DashboardView({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => onNavigateMenu('pos')}
-              className="text-xs text-black bg-white hover:bg-zinc-200 font-bold flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors shadow-md"
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>+ ຂາຍລົດ (POS)</span>
-            </button>
             <button
               onClick={() => onNavigateMenu('bills')}
               className="text-xs text-zinc-300 hover:text-white font-semibold flex items-center gap-1.5 bg-zinc-900 px-3.5 py-2 rounded-xl border border-zinc-700 hover:border-zinc-500 transition-colors"
@@ -607,11 +623,11 @@ export default function DashboardView({
               ເມື່ອມີການຂາຍລົດ ແລະ ອອກໃບບິນຈາກໜ້າ POS Sales Billing ຂໍ້ມູນຈະສະແດງຢູ່ນີ້ໂດຍອັດຕະໂນມັດ
             </p>
             <button
-              onClick={() => onNavigateMenu('pos')}
+              onClick={() => onNavigateMenu('bills')}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl text-xs shadow-md transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>ຂາຍລົດ (POS) ດຽວນີ້</span>
+              <FileText className="w-3.5 h-3.5" />
+              <span>{t.viewBillsAction}</span>
             </button>
           </div>
         ) : (
@@ -1421,7 +1437,7 @@ export default function DashboardView({
               </button>
             )}
             <button
-              onClick={() => onNavigateMenu('pos')}
+              onClick={() => onNavigateMenu('inventory')}
               className="text-xs text-black bg-white hover:bg-zinc-200 font-bold flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors shadow-md"
             >
               <BadgePercent className="w-3.5 h-3.5 fill-black" />

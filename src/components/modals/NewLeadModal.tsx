@@ -192,7 +192,7 @@ export default function NewLeadModal({
 
             <div>
               <label className="block text-zinc-400 mb-1 font-medium">
-                {lang === 'lo' ? 'ເລກບັດປະຊາຊົນ / Passport (ຈະໃສ່ ຫຼື ບໍ່ໃສ່ກໍໄດ້)' : 'ID Card / Passport (Optional)'}
+                {lang === 'lo' ? 'ເລກບັດປະຊາຊົນ / Passport' : 'ID Card / Passport'}
               </label>
               <input
                 type="text"

@@ -60,7 +60,9 @@ export default function UserManagementView({
     setTimeout(() => setActionSuccessMsg(null), 4000);
   };
 
-  const isSuperAdmin = currentUser.role === 'super_admin';
+  const isAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+  const canDeleteUsers = isAdmin || Boolean(currentUser.permissions?.canDeleteUsers);
+  const canGrantRoles = isAdmin || Boolean(currentUser.permissions?.canGrantRoles);
 
   // Toggle user active / suspended status
   const handleToggleUserStatus = async (userToToggle: SystemUser) => {
@@ -70,7 +72,7 @@ export default function UserManagementView({
     }
     const newStatus = userToToggle.status === 'suspended' ? 'active' : 'suspended';
     if (newStatus === 'active') {
-      alert('Reactivation is not available here. Ask the super admin to restore this account.');
+      alert('Reactivation is not available here. Ask an administrator to restore this account.');
       return;
     }
     const updated: SystemUser = { ...userToToggle, status: newStatus as any };
@@ -93,6 +95,17 @@ export default function UserManagementView({
       return;
     }
 
+    const remainingAdmins = users.filter(
+      u => (u.role === 'admin' || u.role === 'super_admin') && 
+           u.status === 'active' && 
+           u.id !== deletingUser.id
+    );
+    if ((deletingUser.role === 'admin' || deletingUser.role === 'super_admin') && remainingAdmins.length === 0) {
+      alert('ບໍ່ສາມາດລົບ Admin ຄົນສຸດທ້າຍອອກຈາກລະບົບໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນໃນລະບົບ.');
+      setDeletingUser(null);
+      return;
+    }
+
     setIsDeleting(true);
     try {
       await deleteStaffProfile(deletingUser.id);
@@ -100,7 +113,15 @@ export default function UserManagementView({
       triggerFeedback(`ລົບຜູ້ໃຊ້ "${deletingUser.name}" ອອກຈາກລະບົບສຳເລັດ`);
       setDeletingUser(null);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not delete this account.');
+      let msg = error instanceof Error ? error.message : 'Could not delete this account.';
+      if (msg.includes('last active')) {
+        msg = 'ບໍ່ສາມາດລົບ Admin ຄົນສຸດທ້າຍອອກຈາກລະບົບໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນ.';
+      } else if (msg.includes('own account')) {
+        msg = 'ບໍ່ສາມາດລົບຕົນເອງອອກຈາກລະບົບໄດ້!';
+      } else if (msg.includes('not found') || msg.includes('404')) {
+        msg = 'ບໍ່ພົບບັນຊີຜູ້ໃຊ້ນີ້ໃນລະບົບ.';
+      }
+      alert(msg);
     } finally {
       setIsDeleting(false);
     }
@@ -198,8 +219,9 @@ export default function UserManagementView({
     );
   };
 
-  // Filtered users
-  const filteredUsers = users.filter(user => {
+  // Filtered users (excluding removed technician demo account)
+  const activeUsers = users.filter(u => u.id !== 'user-tech-01' && !u.name?.includes('ຊ່າງເຕັກນິກ'));
+  const filteredUsers = activeUsers.filter(user => {
     if (selectedRoleFilter === 'admin') {
       if (user.role !== 'admin' && user.role !== 'super_admin') return false;
     } else if (selectedRoleFilter === 'general_user') {
@@ -220,7 +242,7 @@ export default function UserManagementView({
   });
 
   // RESTRICTED VIEW: If current logged in user is a General User
-  if (!isSuperAdmin) {
+  if (!isAdmin && !currentUser.permissions?.canManageUsers) {
     const activeAdmin = users.find(u => u.role === 'super_admin' || u.role === 'admin');
     return (
       <div className="user-management-view space-y-6 pb-12">
@@ -251,7 +273,7 @@ export default function UserManagementView({
     );
   }
 
-  // SUPER ADMIN MANAGEMENT CONSOLE
+  // ADMIN MANAGEMENT CONSOLE
   return (
     <div className="user-management-view space-y-6 pb-12">
       {/* Toast Alert */}
@@ -296,7 +318,7 @@ export default function UserManagementView({
             <span className="user-management-stat-icon user-management-stat-icon-blue"><UserCheck className="h-4 w-4" /></span>
             <div>
               <p className="text-xs text-zinc-400">ບັນຊີທັງໝົດ</p>
-              <p className="mt-0.5 text-xl font-bold text-white">{users.length}</p>
+              <p className="mt-0.5 text-xl font-bold text-white">{activeUsers.length}</p>
             </div>
           </div>
         </div>
@@ -305,7 +327,7 @@ export default function UserManagementView({
             <span className="user-management-stat-icon user-management-stat-icon-green"><CheckCircle2 className="h-4 w-4" /></span>
             <div>
               <p className="text-xs text-zinc-400">ບັນຊີທີ່ໃຊ້ງານຢູ່</p>
-              <p className="mt-0.5 text-xl font-bold text-white">{users.filter(user => user.status !== 'suspended').length}</p>
+              <p className="mt-0.5 text-xl font-bold text-white">{activeUsers.filter(user => user.status !== 'suspended').length}</p>
             </div>
           </div>
         </div>
@@ -314,7 +336,7 @@ export default function UserManagementView({
             <span className="user-management-stat-icon user-management-stat-icon-amber"><Shield className="h-4 w-4" /></span>
             <div>
               <p className="text-xs text-zinc-400">ຜູ້ດູແລລະບົບ (Admin)</p>
-              <p className="mt-0.5 text-xl font-bold text-white">{users.filter(user => user.role === 'admin' || user.role === 'super_admin').length}</p>
+              <p className="mt-0.5 text-xl font-bold text-white">{activeUsers.filter(user => user.role === 'admin' || user.role === 'super_admin').length}</p>
             </div>
           </div>
         </div>
@@ -329,7 +351,7 @@ export default function UserManagementView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {users.map((u) => {
+          {activeUsers.map((u) => {
             const isSelected = currentUser.id === u.id;
             return (
               <button
@@ -515,27 +537,29 @@ export default function UserManagementView({
                 {/* ADMIN ACTIONS: GRANT ROLE & DELETE USER */}
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-900">
                   {/* Grant / Change Role Button */}
-                  <button
-                    onClick={() => {
-                      setEditingUser(user);
-                    }}
-                    className="user-management-grant-button px-3.5 py-2 rounded-xl border font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                    title="ມອບສິດ ແລະ ປ່ຽນບົດບາດ"
-                  >
-                    <Key className="w-3.5 h-3.5" />
-                    <span>ມອບສິດ (Grant)</span>
-                  </button>
+                  {canGrantRoles && (
+                    <button
+                      onClick={() => {
+                        setEditingUser(user);
+                      }}
+                      className="user-management-grant-button px-3.5 py-2 rounded-xl border font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="ມອບສິດ ແລະ ປ່ຽນບົດບາດ"
+                    >
+                      <Key className="w-3.5 h-3.5" />
+                      <span>ມອບສິດ (Grant)</span>
+                    </button>
+                  )}
 
-                  {/* Delete User Button (Disabled for current self Super Admin) */}
+                  {/* Delete User Button (Disabled for current self Admin or if lacking delete permission) */}
                   <button
                     onClick={() => setDeletingUser(user)}
-                    disabled={isCurrentUser}
+                    disabled={isCurrentUser || !canDeleteUsers}
                     className={`user-management-delete-button px-3 py-2 rounded-xl border font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                      isCurrentUser
-                        ? 'bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed'
+                      isCurrentUser || !canDeleteUsers
+                        ? 'bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-50'
                         : 'bg-zinc-900 hover:bg-rose-950/60 text-zinc-300 hover:text-rose-300 border-zinc-800 hover:border-rose-800/60'
                     }`}
-                    title={isCurrentUser ? 'ບໍ່ສາມາດລົບຕົນເອງໄດ້' : 'ລົບຜູ້ໃຊ້ນີ້ອອກຈາກລະບົບ'}
+                    title={isCurrentUser ? 'ບໍ່ສາມາດລົບຕົນເອງໄດ້' : !canDeleteUsers ? 'ທ່ານບໍ່ມີສິດລົບຜູ້ໃຊ້' : 'ລົບຜູ້ໃຊ້ນີ້ອອກຈາກລະບົບ'}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>ລົບຜູ້ໃຊ້</span>

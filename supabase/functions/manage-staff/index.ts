@@ -17,25 +17,25 @@ Deno.serve(async (req) => {
     if (!uuidPattern.test(userId)) return jsonResponse({ error: 'A valid staff user ID is required.' }, 400);
     if (action !== 'update' && action !== 'suspend' && action !== 'delete') return jsonResponse({ error: 'Unsupported staff action.' }, 400);
 
-    const isSuperAdmin = access.actorProfile.role === 'super_admin';
+    const isAdmin = access.actorProfile.role === 'super_admin' || access.actorProfile.role === 'admin';
     const isSelf = userId === access.actor.id;
 
     if (action === 'delete') {
-      if (!isSuperAdmin) {
-        return jsonResponse({ error: 'Only an active super admin can delete staff accounts.' }, 403);
+      if (!isAdmin) {
+        return jsonResponse({ error: 'Only an active admin can delete staff accounts.' }, 403);
       }
       if (isSelf) {
         return jsonResponse({ error: 'You cannot delete your own account.' }, 400);
       }
     } else if (action === 'suspend') {
-      if (!isSuperAdmin) {
-        return jsonResponse({ error: 'Only an active super admin can suspend staff accounts.' }, 403);
+      if (!isAdmin) {
+        return jsonResponse({ error: 'Only an active admin can suspend staff accounts.' }, 403);
       }
       if (isSelf) {
         return jsonResponse({ error: 'You cannot suspend your own account.' }, 400);
       }
-    } else if (action === 'update' && !isSuperAdmin && !isSelf) {
-      return jsonResponse({ error: 'Only an active super admin can update other staff accounts.' }, 403);
+    } else if (action === 'update' && !isAdmin && !isSelf) {
+      return jsonResponse({ error: 'Only an active admin can update other staff accounts.' }, 403);
     }
 
     const { data: target, error: targetError } = await access.admin
@@ -46,15 +46,17 @@ Deno.serve(async (req) => {
     if (targetError) throw targetError;
     if (!target) return jsonResponse({ error: 'Staff profile was not found.' }, 404);
 
+    const isTargetAdmin = target.role === 'super_admin' || target.role === 'admin';
+
     if (action === 'delete') {
-      if (target.role === 'super_admin' && target.status === 'active') {
+      if (isTargetAdmin && target.status === 'active') {
         const { count, error: countError } = await access.admin
           .from('staff_profiles')
           .select('id', { count: 'exact', head: true })
-          .eq('role', 'super_admin')
+          .in('role', ['super_admin', 'admin'])
           .eq('status', 'active');
         if (countError) throw countError;
-        if ((count || 0) <= 1) return jsonResponse({ error: 'The last active super admin cannot be deleted.' }, 409);
+        if ((count || 0) <= 1) return jsonResponse({ error: 'The last active admin cannot be deleted.' }, 409);
       }
 
       // Delete from auth.admin first; Postgres ON DELETE CASCADE will clean up staff_profiles
@@ -73,14 +75,14 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'suspend') {
-      if (target.role === 'super_admin' && target.status === 'active') {
+      if (isTargetAdmin && target.status === 'active') {
         const { count, error: countError } = await access.admin
           .from('staff_profiles')
           .select('id', { count: 'exact', head: true })
-          .eq('role', 'super_admin')
+          .in('role', ['super_admin', 'admin'])
           .eq('status', 'active');
         if (countError) throw countError;
-        if ((count || 0) <= 1) return jsonResponse({ error: 'The last active super admin cannot be suspended.' }, 409);
+        if ((count || 0) <= 1) return jsonResponse({ error: 'The last active admin cannot be suspended.' }, 409);
       }
 
       const { error } = await access.admin
@@ -98,18 +100,19 @@ Deno.serve(async (req) => {
     const department = typeof body.department === 'string' ? body.department.trim().slice(0, 100) : '';
     const requestedRole = typeof body.role === 'string' ? body.role : '';
 
-    // Non-super-admins cannot change roles - their role is strictly pinned to target.role
-    const role = isSuperAdmin ? (requestedRole || target.role) : target.role;
+    // Non-admins cannot change roles - their role is strictly pinned to target.role
+    const role = isAdmin ? (requestedRole || target.role) : target.role;
 
     if (!name || !allowedRoles.has(role)) return jsonResponse({ error: 'Name and a valid staff role are required.' }, 400);
-    if (target.role === 'super_admin' && target.status === 'active' && role !== 'super_admin') {
+    const isNewRoleAdmin = role === 'super_admin' || role === 'admin';
+    if (isTargetAdmin && target.status === 'active' && !isNewRoleAdmin) {
       const { count, error: countError } = await access.admin
         .from('staff_profiles')
         .select('id', { count: 'exact', head: true })
-        .eq('role', 'super_admin')
+        .in('role', ['super_admin', 'admin'])
         .eq('status', 'active');
       if (countError) throw countError;
-      if ((count || 0) <= 1) return jsonResponse({ error: 'The last active super admin cannot be demoted.' }, 409);
+      if ((count || 0) <= 1) return jsonResponse({ error: 'The last active admin cannot be demoted.' }, 409);
     }
 
     const { data: roleRow, error: roleError } = await access.admin

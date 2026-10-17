@@ -229,7 +229,7 @@ export default function POSSalesView({
   const [companyBankInfo, setCompanyBankInfo] = useState<CompanyBankInfo>(() => getStoredCompanyBankInfo());
   const [isEnlargeQrOpen, setIsEnlargeQrOpen] = useState(false);
 
-  // Super Admin: Upload custom company QR Code to Supabase Storage / Cloud
+  // Admin: Upload custom company QR Code to Supabase Storage / Cloud
   const handleCompanyQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isSuperAdmin) {
       triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!');
@@ -270,7 +270,7 @@ export default function POSSalesView({
     }
   };
 
-  // Super Admin: Reset Company QR back to official default
+  // Admin: Reset Company QR back to official default
   const handleResetCompanyQr = async () => {
     if (!isSuperAdmin) return;
     if (!confirm('ທ່ານຕ້ອງການຣີເຊັດຮູບ QR ບໍລິສັດກັບຄືນເປັນຄ່າມາດຕະຖານບໍ່?')) return;
@@ -813,7 +813,7 @@ export default function POSSalesView({
 
                 <div>
                   <label className="block text-zinc-400 mb-1 font-medium">
-                    {lang === 'lo' ? 'ເລກບັດປະຊາຊົນ / Passport (ຈະໃສ່ ຫຼື ບໍ່ໃສ່ກໍໄດ້)' : lang === 'th' ? 'เลขบัตรประจำตัว / Passport (ใส่หรือไม่ใส่ก็ได้)' : 'ID Card / Passport (Optional)'}
+                    {lang === 'lo' ? 'ເລກບັດປະຊາຊົນ / Passport' : lang === 'th' ? 'เลขบัตรประจำตัว / Passport' : 'ID Card / Passport'}
                   </label>
                   <input
                     type="text"
@@ -1120,7 +1120,7 @@ export default function POSSalesView({
                     </div>
                   </div>
 
-                  {/* Super Admin Management Controls Toolbar */}
+                  {/* Admin Management Controls Toolbar */}
                   {isSuperAdmin && (
                     <div className="p-3.5 bg-zinc-950 border border-zinc-700 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-inner">
                       <div className="flex items-center gap-2 text-xs">
@@ -1136,7 +1136,7 @@ export default function POSSalesView({
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
-                        {/* Direct File Upload for Super Admin */}
+                        {/* Direct File Upload for Admin */}
                         <label className="cursor-pointer px-3.5 py-2 bg-white hover:bg-zinc-200 text-black font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all border border-zinc-300">
                           <Upload className="w-3.5 h-3.5" />
                           <span>{companyBankInfo.qrCodeUrl ? 'ປ່ຽນຮູບ QR ບໍລິສັດ' : 'ອັບໂຫລດຮູບ QR ບໍລິສັດ'}</span>
@@ -1361,7 +1361,7 @@ export default function POSSalesView({
                 </div>
                 {isSuperAdmin ? (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1 font-mono">
-                    <ShieldCheck className="w-3 h-3 text-zinc-200" /> {lang === 'lo' ? 'Admin: ຈັດການ & ເພີ່ມໝວດໄດ້' : lang === 'th' ? 'Admin: จัดการ & เพิ่มหมวดได้' : 'Super Admin Mode'}
+                    <ShieldCheck className="w-3 h-3 text-zinc-200" /> {lang === 'lo' ? 'Admin: ຈັດການ & ເພີ່ມໝວດໄດ້' : lang === 'th' ? 'Admin: จัดการ & เพิ่มหมวดได้' : 'Admin Mode'}
                   </span>
                 ) : (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-400 border border-zinc-800 flex items-center gap-1 font-mono">
@@ -1618,7 +1618,7 @@ export default function POSSalesView({
       {/* INSTANT PRINTABLE BILL MODAL UPON SALE COMPLETION */}
       {createdBill && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:max-w-none print:shadow-none">
-          <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-8 text-white space-y-5 max-h-[95vh] overflow-y-auto shadow-2xl print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0 print:max-h-none print:max-w-none print:w-full print:overflow-visible print-modal-container">
+          <div className="relative w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-3xl p-4 sm:p-5 text-white space-y-4 max-h-[92vh] overflow-y-auto shadow-2xl print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0 print:max-h-none print:max-w-none print:w-full print:overflow-visible print-modal-container">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800 print:hidden">
               <div className="flex items-center gap-2 text-white">
                 <CheckCircle2 className="w-5 h-5 text-white" />
@@ -1663,7 +1663,7 @@ export default function POSSalesView({
             {/* Bill Preview Card */}
             <div
               id="printable-pos-receipt"
-              className="a4-document-canvas p-6 official-dealer-document bg-white text-black border border-black rounded-2xl space-y-4 text-xs font-sans shadow-md print:m-0 print:p-2 print:border-none print:shadow-none"
+              className="a4-document-canvas w-full max-w-[580px] mx-auto p-4 sm:p-5 official-dealer-document bg-white text-black border border-black rounded-2xl space-y-3 text-[11px] font-sans shadow-md print:m-0 print:p-2 print:border-none print:shadow-none"
             >
               <div className="flex justify-between items-start pb-4 border-b border-zinc-800">
                 <div>

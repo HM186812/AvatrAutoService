@@ -7,7 +7,7 @@ export interface CompanyBankInfo {
   thbAccount?: string;
   hotline: string;
   branch: string;
-  qrCodeUrl: string | null; // Base64 data URL or image URL uploaded by Super Admin
+  qrCodeUrl: string | null; // Base64 data URL or image URL uploaded by Admin
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -23,7 +23,7 @@ export const DEFAULT_COMPANY_BANK_INFO: CompanyBankInfo = {
   branch: 'ຖະໜົນໄກສອນ ພົມວິຫານ, ບ້ານ ສີວິໄລ, ເມືອງ ໄຊທານີ, ນະຄອນຫຼວງວຽງຈັນ',
   qrCodeUrl: null,
   updatedAt: '2026-10-01 09:00',
-  updatedBy: 'Admin (Super Admin)',
+  updatedBy: 'Admin',
 };
 
 export const getStoredCompanyBankInfo = (): CompanyBankInfo => {

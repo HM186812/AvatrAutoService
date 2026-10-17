@@ -860,8 +860,8 @@ html.light .customer-documents-modal .toolbar-box select {
 
 /* ========================================================
    PDF SINGLE-PAGE PRECISION A4 CANVAS ENGINE
+   (Applied dynamically during PDF generation only)
    ======================================================== */
-.a4-document-canvas,
 .exporting-pdf-single-page {
   width: 794px !important;
   max-width: 794px !important;
@@ -870,13 +870,24 @@ html.light .customer-documents-modal .toolbar-box select {
   height: 1123px !important;
   box-sizing: border-box !important;
   margin: 0 auto !important;
-  padding: 28px 36px !important;
+  padding: 24px 32px !important;
   background-color: #ffffff !important;
   color: #000000 !important;
   box-shadow: none !important;
   display: flex !important;
   flex-direction: column !important;
   justify-content: space-between !important;
+}
+
+/* Screen Document Canvas: Compact, standard, and perfectly visible without excessive scrolling */
+.a4-document-canvas {
+  width: 100%;
+  max-width: 580px;
+  min-height: auto;
+  box-sizing: border-box;
+  margin: 0 auto;
+  background-color: #ffffff;
+  color: #000000;
 }
 
 .exporting-pdf-single-page * {

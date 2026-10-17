@@ -97,14 +97,14 @@ export default function Sidebar({
           adminOnly: false,
         },
         {
-          id: 'pos',
+          id: 'pos_sales',
           labelLo: 'POS ຂາຍລົດຍົນ',
-          labelEn: 'Vehicle Sales POS',
+          labelEn: 'Vehicle POS Sales',
           labelTh: 'POS ขายรถยนต์',
           subLo: 'ອອກບິນ & ຕັດສະຕ໋ອກ',
           icon: ShoppingBag,
-          badge: 'ຂາຍ',
-          badgeColor: 'text-zinc-200 bg-zinc-800 border-zinc-700 font-bold',
+          badge: 'POS',
+          badgeColor: 'text-emerald-300 bg-emerald-950/80 border-emerald-800 font-bold',
           adminOnly: false,
         },
         {
@@ -338,7 +338,7 @@ export default function Sidebar({
                   )}
                 </div>
                 <p className={`text-[10px] truncate ${currentMenu === 'profile' ? 'text-zinc-600' : 'text-zinc-400'}`}>
-                  {isSuperAdmin ? t.roleSuperAdmin : (currentUser.roleTitleLo || t.roleGeneralUser)} • {t.navProfile}
+                  {isSuperAdmin ? (t.roleAdmin || 'Admin') : (currentUser.roleTitleLo || t.roleGeneralUser)} • {t.navProfile}
                 </p>
               </div>
             </div>

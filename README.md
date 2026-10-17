@@ -8,13 +8,11 @@ A modern, high-performance Dealership CRM, POS, and Auto Service Management Syst
 
 - **🚗 Showroom & Model Catalog**: Dynamic vehicle showcase (AVATR 11, AVATR 12, AVATR 07) with color customization, detailed specs, and cloud real-time updates.
 - **💼 POS & Sales Management**: Streamlined billing, package addons, stock deduction, and real-time exchange rate calculation (LAK, USD, THB, CNY).
-- **💳 Company QR Code Payment**: Super Admin uploaded official BCEL OnePay QR code directly stored on Supabase Storage with instant customer display.
+- **💳 Company QR Code Payment**: Admin uploaded official BCEL OnePay QR code directly stored on Supabase Storage with instant customer display.
 - **📦 Inbound Stock-In & Inventory**: Batch receiving with custom chassis/engine VIN numbers, color selection, purchase pricing, and supplier records.
 - **🛡️ Strict Role-Based Access Control (RBAC)**:
-  - `super_admin`: Full system control, role permissions, custom vehicle models, QR code upload, bill deletions.
-  - `admin` / `manager`: Inventory, stock-in, sales and reporting.
+  - `admin`: Full system control, role permissions, custom vehicle models, QR code upload, bill deletions.
   - `sales`: POS, customer quote generation, vehicle catalog.
-  - `technician`: Service tracking and inspections.
 - **⚡ Supabase Cloud & Real-Time Sync**:
   - **PostgreSQL Database**: Real-time cloud synchronization for inventory, bills, vehicle models, settings, and users.
   - **Supabase Realtime**: Instant multi-device state updates via WebSockets.

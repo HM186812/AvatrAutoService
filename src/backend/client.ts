@@ -3,7 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey);
+const isPlaceholder = (val?: string) =>
+  !val ||
+  val.trim() === '' ||
+  val.includes('your-project-id') ||
+  val.includes('your-anon-public-key');
+
+export const isSupabaseConfigured = !isPlaceholder(supabaseUrl) && !isPlaceholder(supabasePublishableKey);
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabasePublishableKey, {

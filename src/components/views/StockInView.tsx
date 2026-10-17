@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceBillRecord, StockLogRecord } from '../../types';
+import { useState, useEffect } from 'react';
+import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceBillRecord, StockLogRecord, SystemUser } from '../../types';
 import { translations } from '../../data/translations';
 import { newRecordId } from '../../backend/ids';
 import { 
@@ -44,6 +44,7 @@ interface StockInViewProps {
   setStockLogs: React.Dispatch<React.SetStateAction<StockLogRecord[]>>;
   vehicles: VehicleModel[];
   setVehicles?: React.Dispatch<React.SetStateAction<VehicleModel[]>>;
+  currentUser?: SystemUser | null;
   isSuperAdmin?: boolean;
   lang: Language;
   onNavigateToStock: () => void;
@@ -59,6 +60,7 @@ export default function StockInView({
   setStockLogs,
   vehicles,
   setVehicles,
+  currentUser,
   isSuperAdmin = false,
   lang,
   onNavigateToStock,
@@ -111,10 +113,16 @@ export default function StockInView({
     }
   };
 
-  // Customs & Logistics - Empty by default
+  // Customs & Logistics - Auto-generate B01 Document Number
+  const generateAutoB01 = () => {
+    const year = new Date().getFullYear();
+    const randomSeq = Math.floor(100000 + Math.random() * 900000);
+    return `B01-LAO-${year}-${randomSeq}`;
+  };
+
   const [supplierName, setSupplierName] = useState('');
   const [importDate, setImportDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [customsDocNumber, setCustomsDocNumber] = useState('');
+  const [customsDocNumber, setCustomsDocNumber] = useState(generateAutoB01);
   const [importEntryPort, setImportEntryPort] = useState('');
   const [destinationWarehouse, setDestinationWarehouse] = useState('');
   
@@ -123,8 +131,15 @@ export default function StockInView({
   const [pdiInspector, setPdiInspector] = useState('');
   const [pdiNotes, setPdiNotes] = useState('');
 
-  const [recordedBy, setRecordedBy] = useState('');
+  const [recordedBy, setRecordedBy] = useState(() => currentUser?.name || currentUser?.email || 'Admin');
   const [notes, setNotes] = useState('');
+
+  // Auto-sync recordedBy with the signed-in user account
+  useEffect(() => {
+    if (currentUser?.name) {
+      setRecordedBy(currentUser.name);
+    }
+  }, [currentUser]);
 
   // Created Bill for instant preview modal
   const [createdBill, setCreatedBill] = useState<InvoiceBillRecord | null>(null);
@@ -151,15 +166,32 @@ export default function StockInView({
     setVin(`${prefix}7RA${randomSuffix}`);
   };
 
-  // Super Admin: Add New Vehicle Model State & Handlers
+  // Admin: Add New Vehicle Model State & Handlers
   const [isAddModelOpen, setIsAddModelOpen] = useState(false);
   const [newModelName, setNewModelName] = useState('');
   const [newModelCategory, setNewModelCategory] = useState('Luxury SUV Coupé');
-  const [newModelTagline, setNewModelTagline] = useState('');
   const [newModelPriceUSD, setNewModelPriceUSD] = useState<number>(45000);
   const [newModelBattery, setNewModelBattery] = useState('94.5 kWh CATL (700 km)');
   const [newModelPowertrain, setNewModelPowertrain] = useState('Dual-Motor AWD (578 hp)');
   const [newModelImage, setNewModelImage] = useState('');
+
+  const handleNewModelImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      triggerToast('ຂະໜາດຮູບພາບບໍ່ຄວນເກີນ 5MB!');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        setNewModelImage(result);
+        triggerToast('ອັບໂຫຼດຮູບລຸ້ນລົດສຳເລັດແລ້ວ!');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleAddNewVehicleModel = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,7 +214,7 @@ export default function StockInView({
       id: modelId,
       name: cleanName,
       subTitle: newModelCategory || 'Next-Gen Intelligent EV',
-      tagline: newModelTagline.trim() || 'ຍົນລະກຳອັດສະລິຍະພຣີມຽມ',
+      tagline: newModelCategory || 'ຍົນລະກຳອັດສະລິຍະພຣີມຽມ',
       category: newModelCategory,
       priceStartingUSD: Number(newModelPriceUSD) || 45000,
       priceStartingLAK: (Number(newModelPriceUSD) || 45000) * 22000,
@@ -228,7 +260,6 @@ export default function StockInView({
     setIsAddModelOpen(false);
     triggerToast(`Admin ໄດ້ເພີ່ມຕົວເລືອກລຸ້ນ ${cleanName} ເຂົ້າສູ່ລະບົບສຳເລັດແລ້ວ!`);
     setNewModelName('');
-    setNewModelTagline('');
     setNewModelImage('');
   };
 
@@ -303,9 +334,26 @@ export default function StockInView({
 
     const finalImage = customImage || heroFallback;
     const cleanVin = vin.toUpperCase().trim();
+    const cleanEngine = engineNumber.toUpperCase().trim();
     const qty = 1;
-    if (inventory.some(item => item.vin.toUpperCase() === vin.trim().toUpperCase())) {
-      triggerToast('VIN ນີ້ມີໃນສາງແລ້ວ');
+
+    if (!cleanVin) {
+      triggerToast('ກະລຸນາປ້ອນເລກຖັງ (VIN / Chassis Number) ກ່ອນ!');
+      return;
+    }
+
+    if (!cleanEngine) {
+      triggerToast('ກະລຸນາປ້ອນເລກຈັກ (Engine / Motor Number) ກ່ອນ!');
+      return;
+    }
+
+    if (inventory.some(item => item.vin.toUpperCase().trim() === cleanVin)) {
+      triggerToast('ເລກຖັງ (VIN) ນີ້ມີໃນສາງແລ້ວ! ເລກຕົວຖັງບໍ່ສາມາດຊໍ້າກັນໄດ້ເດັດຂາດ');
+      return;
+    }
+
+    if (inventory.some(item => (item.engineNumber || '').toUpperCase().trim() === cleanEngine)) {
+      triggerToast('ເລກຈັກ (Engine No.) ນີ້ມີໃນສາງແລ້ວ! ເລກຈັກບໍ່ສາມາດຊໍ້າກັນໄດ້ເດັດຂາດ');
       return;
     }
 
@@ -435,6 +483,8 @@ export default function StockInView({
 
     // Reset Form for next entry
     setVin('');
+    setCustomsDocNumber(generateAutoB01());
+    setRecordedBy(currentUser?.name || currentUser?.email || 'Admin');
   };
 
   return (
@@ -553,20 +603,41 @@ export default function StockInView({
                       role="radio"
                       aria-checked={isSelected}
                       onClick={() => handleModelChange(v.name)}
-                      className="w-full rounded-[inherit] p-4 pr-12 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
+                      className="w-full rounded-[inherit] p-3.5 pr-12 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <strong className="block text-sm font-bold text-white">{v.name}</strong>
-                        {isCustom && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold">
-                            Admin Custom
+                      <div className="flex items-center gap-3">
+                        {/* Vehicle Model Logo / Image */}
+                        <div className="relative w-16 h-12 rounded-xl overflow-hidden border border-zinc-800 shrink-0 bg-zinc-950 flex items-center justify-center shadow-inner">
+                          {v.heroImage ? (
+                            <img
+                              src={v.heroImage}
+                              alt={v.name}
+                              className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <Car className="w-5 h-5 text-zinc-600" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <strong className="block text-sm font-bold text-white truncate">{v.name}</strong>
+                            {isCustom && (
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold shrink-0">
+                                Custom
+                              </span>
+                            )}
+                          </div>
+                          <span className="mt-0.5 block truncate font-sans text-[11px] text-zinc-400">
+                            {v.subTitle || v.category} {v.rangeCLTC ? `(${v.rangeCLTC})` : ''}
                           </span>
-                        )}
+                        </div>
                       </div>
-                      <span className="mt-0.5 block truncate font-sans text-[11px] text-zinc-400">
-                        {v.subTitle || v.category} {v.rangeCLTC ? `(${v.rangeCLTC})` : ''}
-                      </span>
-                      <span className="mt-2 flex items-center justify-between gap-2 border-t border-zinc-800/80 pt-1.5 font-mono text-[10px]">
+
+                      <span className="mt-2.5 flex items-center justify-between gap-2 border-t border-zinc-800/80 pt-2 font-mono text-[10px]">
                         <span className="font-semibold text-zinc-200">
                           ເລີ່ມຕົ້ນ ${v.priceStartingUSD?.toLocaleString()}
                         </span>
@@ -740,18 +811,24 @@ export default function StockInView({
 
             {/* Event & Campaign Category */}
             <div>
-              <label className="block text-zinc-400 mb-1 font-medium">{lang === 'lo' ? 'ໝວດສິນຄ້າ / Event Campaign' : lang === 'th' ? 'หมวดหมู่สินค้า / Event Campaign' : 'Vehicle Category / Campaign'}</label>
-              <select
+              <label className="block text-zinc-400 mb-1 font-medium">
+                {lang === 'lo' ? 'ໝວດສິນຄ້າ / Event Campaign' : lang === 'th' ? 'หมวดหมู่สินค้า / Event Campaign' : 'Vehicle Category / Campaign'}
+              </label>
+              <input
+                type="text"
+                list="campaign-suggestions"
                 value={eventCampaign}
                 onChange={(e) => setEventCampaign(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
-              >
-                <option value="Standard Showroom">{lang === 'lo' ? 'ໂຊຣູມທົ່ວໄປ (Standard Showroom)' : lang === 'th' ? 'โชว์รูมทั่วไป (Standard Showroom)' : 'Standard Showroom'}</option>
-                <option value="Motor Show 2026">{lang === 'lo' ? 'ງານ Motor Show 2026' : lang === 'th' ? 'งาน Motor Show 2026' : 'Motor Show 2026'}</option>
-                <option value="ITECC EV Expo">{lang === 'lo' ? 'ງານ ITECC EV Expo' : lang === 'th' ? 'งาน ITECC EV Expo' : 'ITECC EV Expo'}</option>
-                <option value="Special Promotion">{lang === 'lo' ? 'ໂປຣໂມຊັ່ນ Event ພິເສດ' : lang === 'th' ? 'โปรโมชั่น Event พิเศษ' : 'Special Promotion'}</option>
-                <option value="VIP Test Drive Event">{lang === 'lo' ? 'ລົດທົດລອງຂັບ VIP Event' : lang === 'th' ? 'รถทดลองขับ VIP Event' : 'VIP Test Drive'}</option>
-              </select>
+                placeholder={lang === 'lo' ? 'e.g. Standard Showroom, Motor Show 2026, ITECC EV Expo...' : 'e.g. Standard Showroom, Motor Show 2026...'}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+              />
+              <datalist id="campaign-suggestions">
+                <option value="Standard Showroom" />
+                <option value="Motor Show 2026" />
+                <option value="ITECC EV Expo" />
+                <option value="Special Promotion" />
+                <option value="VIP Test Drive Event" />
+              </datalist>
             </div>
           </div>
         </div>
@@ -798,13 +875,33 @@ export default function StockInView({
             </div>
 
             <div>
-              <label className="block text-zinc-400 mb-1 font-medium">{t.customsDocNo}</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-zinc-400 font-medium">{t.customsDocNo}</label>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                    AUTO
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newCode = generateAutoB01();
+                      setCustomsDocNumber(newCode);
+                      triggerToast(`ສ້າງເລກທີເອກະສານ B01 ໃໝ່: ${newCode}`);
+                    }}
+                    className="text-[10px] text-zinc-400 hover:text-white flex items-center gap-0.5 transition-colors cursor-pointer"
+                    title="ກົດເພື່ອສຸ່ມສ້າງເລກໃໝ່"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>ສຸ່ມໃໝ່</span>
+                  </button>
+                </div>
+              </div>
               <input
                 type="text"
                 value={customsDocNumber}
                 onChange={(e) => setCustomsDocNumber(e.target.value)}
                 placeholder="e.g. B01-LAO-2026-90823"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white text-xs font-bold"
               />
             </div>
 
@@ -1032,15 +1129,23 @@ export default function StockInView({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-zinc-400 font-medium">{t.quantityUnits} <span className="text-red-500">*</span></label>
-                <span className="text-[10px] text-zinc-400 font-mono">1 VIN = 1 vehicle</span>
+                <span className="text-[10px] text-zinc-400 font-mono">1 VIN = 1 ຄັນ</span>
               </div>
-              <input
-                type="number"
-                min="1"
-                value={quantity}
-                readOnly
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-white"
-              />
+              <div className="relative">
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  readOnly
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none cursor-not-allowed opacity-90"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 font-sans">
+                  ລັອກ 1 ຄັນ/ເລກຖັງ
+                </span>
+              </div>
+              <p className="mt-1 text-[10px] text-zinc-500">
+                1 ຄັນຕໍ່ 1 ເລກຖັງ/ເລກຈັກ (ຍອດລວມຈະຄິດໄລ່ຕາມໝວດລຸ້ນລົດ)
+              </p>
             </div>
 
             <div>
@@ -1064,6 +1169,24 @@ export default function StockInView({
                 placeholder={lang === 'lo' ? 'ຊື່ຊ່າງກວດສອບ...' : 'Inspector Name...'}
                 onChange={(e) => setPdiInspector(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-zinc-400 font-medium">
+                  {lang === 'lo' ? 'ຜູ້ບັນທຶກການນຳເຂົ້າ' : lang === 'th' ? 'ผู้บันทึกการนำเข้า' : 'Recorded By'}
+                </label>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                  AUTO ({currentUser?.role || 'User'})
+                </span>
+              </div>
+              <input
+                type="text"
+                value={recordedBy}
+                onChange={(e) => setRecordedBy(e.target.value)}
+                placeholder="Admin / User Name"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white font-medium"
               />
             </div>
           </div>
@@ -1213,7 +1336,7 @@ export default function StockInView({
         </div>
       )}
 
-      {/* MODAL: ADMIN ໃຫຍ່ ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນ (Super Admin Add Vehicle Model) */}
+      {/* MODAL: ADMIN ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນ (Admin Add Vehicle Model) */}
       {isSuperAdmin && isAddModelOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
           <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 text-white space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
@@ -1227,11 +1350,11 @@ export default function StockInView({
                   <h3 className="font-extrabold text-base text-white flex items-center gap-2">
                     <span>ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໃໝ່</span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold">
-                      Admin (Super Admin)
+                      Admin
                     </span>
                   </h3>
                   <p className="text-xs text-zinc-400 mt-0.5">
-                    ສ້າງ ແລະ ເພີ່ມລຸ້ນຍານຍົນ AVATR ເຂົ້າໃນລະບົບຕົວເລືອກ Stock-In, ສະຕ໋ອກລົດ, ໃບສະເໜີລາຄາ ແລະ POS
+                    ສ້າງ ແລະ ເພີ່ມລຸ້ນຍານຍົນ AVATR ເຂົ້າໃນລະບົບຕົວເລືອກ Stock-In, ສະຕ໋ອກລົດ ແລະ ໃບສະເໜີລາຄາ
                   </p>
                 </div>
               </div>
@@ -1242,36 +1365,6 @@ export default function StockInView({
               >
                 <X className="w-5 h-5" />
               </button>
-            </div>
-
-            {/* Quick Presets */}
-            <div className="space-y-1.5 p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800/80">
-              <label className="text-[11px] text-zinc-400 font-medium block">
-                ກົດເລືອກຕົວຢ່າງລຸ້ນຍານຍົນແນະນຳດ່ວນ (Quick Presets):
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { name: 'AVATR 011 MMW Edition', cat: 'Ultra-Luxury Limited Edition', price: 95000, bat: '116.8 kWh (700 km)', pwr: 'Dual-Motor AWD (578 hp)' },
-                  { name: 'AVATR 06 Gran Turismo', cat: 'Intelligent Sports Sedan', price: 39000, bat: '90 kWh CATL (650 km)', pwr: 'Dual-Motor AWD (510 hp)' },
-                  { name: 'AVATR 15 Extended Range', cat: 'Smart SUV EREV (Extended Range)', price: 36000, bat: '45 kWh + Range Extender (1,150 km)', pwr: 'Dual-Motor AWD' },
-                  { name: 'AVATR 07 Ultra Performance', cat: 'Urban Smart SUV', price: 43000, bat: '100 kWh (720 km)', pwr: 'Dual-Motor AWD (598 hp)' },
-                ].map((preset) => (
-                  <button
-                    key={preset.name}
-                    type="button"
-                    onClick={() => {
-                      setNewModelName(preset.name);
-                      setNewModelCategory(preset.cat);
-                      setNewModelPriceUSD(preset.price);
-                      setNewModelBattery(preset.bat);
-                      setNewModelPowertrain(preset.pwr);
-                    }}
-                    className="text-[11px] px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-white hover:text-black text-zinc-300 border border-zinc-800 transition-all font-medium"
-                  >
-                    + {preset.name}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Form */}
@@ -1320,19 +1413,6 @@ export default function StockInView({
                   />
                 </div>
 
-                {/* Tagline */}
-                <div className="sm:col-span-2">
-                  <label className="block text-zinc-400 font-medium mb-1">
-                    ຄຳຂວັນລຸ້ນ / Tagline
-                  </label>
-                  <input
-                    type="text"
-                    value={newModelTagline}
-                    onChange={(e) => setNewModelTagline(e.target.value)}
-                    placeholder="e.g. ຍົນລະກຳອັດສະລິຍະລະດັບ Masterpiece ຮ່ວມມືກັບ Matthew M. Williams"
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-zinc-500"
-                  />
-                </div>
 
                 {/* Battery & Range */}
                 <div>
@@ -1362,18 +1442,107 @@ export default function StockInView({
                   />
                 </div>
 
-                {/* Image URL */}
-                <div className="sm:col-span-2">
-                  <label className="block text-zinc-400 font-medium mb-1">
-                    ຮູບພາບລຸ້ນລົດ (Image URL ຫຼື ປ່ອຍວ່າງເພື່ອໃຊ້ຮູບມາດຕະຖານ)
-                  </label>
-                  <input
-                    type="url"
-                    value={newModelImage}
-                    onChange={(e) => setNewModelImage(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white font-mono text-xs focus:outline-none focus:border-zinc-500"
-                  />
+                {/* Image Upload & Live Preview Section */}
+                <div className="sm:col-span-2 space-y-3 pt-2 border-t border-zinc-800/80">
+                  <div className="flex items-center justify-between">
+                    <label className="text-zinc-300 font-bold flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-white" />
+                      <span>ຮູບພາບລຸ້ນຍານຍົນ & ຕົວຢ່າງສະແດງຜົນ (Vehicle Image & Preview)</span>
+                    </label>
+                    <span className="text-[11px] text-zinc-500 font-mono">
+                      ຮອງຮັບ PNG, JPG, WEBP (&lt; 5MB)
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-start">
+                    {/* Upload Controls */}
+                    <div className="space-y-2.5">
+                      {/* File Upload Button / Dropzone */}
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-zinc-700 hover:border-white rounded-2xl bg-zinc-900/60 hover:bg-zinc-900 transition-all cursor-pointer group text-center">
+                        <Upload className="w-6 h-6 text-zinc-400 group-hover:text-white transition-colors mb-1.5" />
+                        <span className="text-xs font-bold text-zinc-200 group-hover:text-white">
+                          ກົດເພື່ອເລືອກອັບໂຫຼດຮູບຈາກເຄື່ອງ
+                        </span>
+                        <span className="text-[10px] text-zinc-500 mt-0.5">
+                          ອັບໂຫຼດຈາກຄອມພິວເຕີ ຫຼື ໂທລະສັບ
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleNewModelImageUpload}
+                          className="hidden"
+                        />
+                      </label>
+
+                      {/* Or paste URL */}
+                      <div>
+                        <label className="block text-[11px] text-zinc-400 font-medium mb-1">
+                          ຫຼື ວາງລິ້ງຮູບພາບ (Image URL):
+                        </label>
+                        <input
+                          type="url"
+                          value={newModelImage}
+                          onChange={(e) => setNewModelImage(e.target.value)}
+                          placeholder="https://images.unsplash.com/..."
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-zinc-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Live Preview Card */}
+                    <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-3 space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-zinc-400 flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${newModelImage ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`} />
+                          ຕົວຢ່າງສະແດງຜົນ (Live Preview)
+                        </span>
+                        {newModelImage && (
+                          <button
+                            type="button"
+                            onClick={() => setNewModelImage('')}
+                            className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-red-500/10 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>ລົບຮູບ</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 flex items-center justify-center group">
+                        {newModelImage ? (
+                          <>
+                            <img
+                              src={newModelImage}
+                              alt={newModelName || 'Model Preview'}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80';
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
+                            <div className="absolute bottom-2 left-2.5 right-2.5 pointer-events-none">
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-zinc-300 border border-zinc-700/80 font-bold block w-fit mb-0.5">
+                                {newModelCategory || 'Custom Model'}
+                              </span>
+                              <div className="text-xs font-bold text-white truncate">
+                                {newModelName || 'ຊື່ລຸ້ນຍານຍົນ'}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-4 text-center">
+                            <ImageIcon className="w-8 h-8 text-zinc-700 mb-1.5" />
+                            <span className="text-xs text-zinc-500 font-medium">
+                              ຍັງບໍ່ທັນມີຮູບ
+                            </span>
+                            <span className="text-[10px] text-zinc-600 mt-0.5">
+                              (ຖ້າບໍ່ອັບໂຫຼດ ລະບົບຈະໃຊ້ຮູບມາດຕະຖານ AVATR ໃຫ້ອັດຕະໂນມັດ)
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

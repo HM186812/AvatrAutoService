@@ -216,7 +216,7 @@ erDiagram
 
 ### 4.4 Stored Procedures / RPCs ຫຼັກ
 - **`record_vehicle_bill`:** ບັນທຶກການຂາຍ, ຕັດສະຕັອກລົດ, ອອກບິນ, ສ້າງ stock movement, ແລະ ອັບເດດລູກຄ້າໃນ Transaction ດຽວ (Atomic)
-- **`delete_vehicle_bill`:** ຍົກເລີກບິນ ແລະ ຄືນສະຕັອກລົດກັບມາເປັນ `ready` (ສະເພາະ Super Admin)
+- **`delete_vehicle_bill`:** ຍົກເລີກບິນ ແລະ ຄືນສະຕັອກລົດກັບມາເປັນ `ready` (ສະເພາະ Admin)
 - **Security Hardening:** ທຸກຟັງຊັນລັອກ `SET search_path = public` ປ້ອງກັນ Search-path Injection 100%
 
 ---
@@ -230,7 +230,7 @@ erDiagram
 
 ### 5.2 ຕາຕະລາງສິດ Row-Level Security (RLS Matrix)
 
-| ຕາຕະລາງ | Public / Anon | ພະນັກງານ (Sales/Staff) | ຜູ້ຈັດການ (Admin) | ຜູ້ດູແລສູງສຸດ (Super Admin) |
+| ຕາຕະລາງ | Public / Anon | ພະນັກງານ (Sales/Staff) | ຜູ້ດູແລລະບົບ (Admin) |
 | :--- | :---: | :---: | :---: | :---: |
 | `staff_profiles` | ❌ ບໍ່ມີສິດ | 👁️ ອ່ານ Profile ຕົນເອງ | 👁️ ອ່ານ/ແກ້ໄຂ Profile | ⚡ ຈັດການໄດ້ 100% |
 | `vehicle_models` | 👁️ ອ່ານ Catalog | 👁️ ອ່ານໄດ້ | ✏️ ເພີ່ມ/ແກ້ໄຂລຸ້ນ | ⚡ ລຶບລຸ້ນລົດໄດ້ |

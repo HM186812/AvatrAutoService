@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SaleLogRecord, SystemUser, InvoiceBillRecord } from '../../types';
 import { translations } from '../../data/translations';
+import { getModelStockSummaries, LOW_STOCK_THRESHOLD } from '../../data/stockSummary';
 import { 
   saveInventoryItemToSupabase, 
   deleteInventoryItemFromSupabase 
@@ -55,7 +56,6 @@ interface InventoryViewProps {
   lang: Language;
   onOpenQuote: (vehicle: VehicleModel, customerName?: string) => void;
   onNavigateToStockIn?: () => void;
-  onNavigateToPOS?: () => void;
 }
 
 export default function InventoryView({
@@ -71,7 +71,6 @@ export default function InventoryView({
   lang,
   onOpenQuote,
   onNavigateToStockIn,
-  onNavigateToPOS,
 }: InventoryViewProps) {
   const t = translations[lang];
 
@@ -81,6 +80,15 @@ export default function InventoryView({
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [selectedModelFilter, setSelectedModelFilter] = useState<string>('all');
   const [eventPromoFilter, setEventPromoFilter] = useState<'all' | 'event_only' | 'standard'>('all');
+
+  // Model Stock Summaries (< 5 alert)
+  const modelSummaries = useMemo(() => {
+    return getModelStockSummaries(vehicles, inventory);
+  }, [vehicles, inventory]);
+
+  const lowStockModels = useMemo(() => {
+    return modelSummaries.filter(m => m.isLowStock || m.isOutOfStock);
+  }, [modelSummaries]);
 
   // SELL CAR MODAL STATES (ເມື່ອຂາຍອອກກໍເຊັ່ນກັນ)
   const [sellingItem, setSellingItem] = useState<InventoryItem | null>(null);
@@ -224,13 +232,13 @@ export default function InventoryView({
     setEditingItem(null);
   };
 
-  // DELETE VEHICLE HANDLER (ລົບສິນຄ້າອອກຈາກຖານຂໍ້ມູນ - Super Admin only with ConfirmDeleteModal)
+  // DELETE VEHICLE HANDLER (ລົບສິນຄ້າອອກຈາກຖານຂໍ້ມູນ - Admin only with ConfirmDeleteModal)
   const [inventoryToDelete, setInventoryToDelete] = useState<InventoryItem | null>(null);
   const [isDeletingInventory, setIsDeletingInventory] = useState(false);
 
   const handleRequestDeleteItem = (item: InventoryItem) => {
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin (Super Admin) ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!');
+      triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!');
       return;
     }
     setInventoryToDelete(item);
@@ -423,6 +431,146 @@ export default function InventoryView({
             })}
           </div>
 
+          {/* MODEL CATEGORY STOCK SUMMARY & LOW-STOCK (< 5) ALERT BANNER */}
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
+              <div className="flex items-center gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-black shadow-sm">
+                  <Car className="h-4 w-4" />
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-white">
+                      {lang === 'lo' ? 'ຍອດລວມສະຕ໋ອກຕາມໝວດລຸ້ນລົດ' : lang === 'th' ? 'สรุปสต็อกตามหมวดรุ่นรถ' : 'Stock Summary by Model Category'}
+                    </h2>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
+                      ເກນເຕືອນ &lt; {LOW_STOCK_THRESHOLD} ຄັນ
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    {lang === 'lo'
+                      ? 'ລົດແຕ່ລະຄັນມີເລກຖັງ (VIN) ແລະ ເລກຈັກ 1:1 ສະເພາະຕົວ · ສະຫຼຸບຈຳນວນລວມທັງໝົດຕາມໝວດລຸ້ນລົດ'
+                      : lang === 'th'
+                      ? 'รถแต่ละคันมี VIN และเลขเครื่อง 1:1 เฉพาะตัว · รวมจำนวนทั้งหมดตามหมวดรุ่นรถ'
+                      : 'Each car has a unique VIN and engine number · Aggregated by model'}
+                  </p>
+                </div>
+              </div>
+
+              {lowStockModels.length > 0 && (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 animate-bounce" />
+                  <span>
+                    {lang === 'lo'
+                      ? `ມີ ${lowStockModels.length} ລຸ້ນ ທີ່ສະຕ໋ອກຕ່ຳກວ່າ ${LOW_STOCK_THRESHOLD} ຄັນ!`
+                      : lang === 'th'
+                      ? `มี ${lowStockModels.length} รุ่น ที่สต็อกต่ำกว่า ${LOW_STOCK_THRESHOLD} คัน!`
+                      : `${lowStockModels.length} models have low stock (< ${LOW_STOCK_THRESHOLD})`}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Models Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {modelSummaries.map((summary) => {
+                const isSelected = selectedModelFilter === summary.modelName;
+                return (
+                  <button
+                    key={summary.modelName}
+                    type="button"
+                    onClick={() => {
+                      setSelectedModelFilter(isSelected ? 'all' : summary.modelName);
+                    }}
+                    className={`text-left p-4 rounded-2xl border transition-all relative overflow-hidden group ${
+                      isSelected
+                        ? 'border-white bg-zinc-900 ring-2 ring-white/20'
+                        : summary.isOutOfStock
+                        ? 'border-red-500/30 bg-red-950/10 hover:border-red-500/60'
+                        : summary.isLowStock
+                        ? 'border-amber-500/30 bg-amber-950/10 hover:border-amber-500/60'
+                        : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 mb-2.5">
+                      {/* Model Logo / Photo */}
+                      <div className="w-14 h-11 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 shrink-0 flex items-center justify-center shadow-inner">
+                        {summary.model?.heroImage ? (
+                          <img
+                            src={summary.model.heroImage}
+                            alt={summary.modelName}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <Car className="w-5 h-5 text-zinc-600" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block truncate">
+                            {summary.category}
+                          </span>
+                          {summary.isOutOfStock ? (
+                            <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/20 text-red-300 border border-red-500/40">
+                              ໝົດ (0)
+                            </span>
+                          ) : summary.isLowStock ? (
+                            <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                              &lt; 5
+                            </span>
+                          ) : (
+                            <span className="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                              ປົກກະຕິ
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-extrabold text-sm text-white truncate group-hover:text-zinc-200 mt-0.5">
+                          {summary.modelName}
+                        </h3>
+                      </div>
+                    </div>
+
+                    <div className="flex items-baseline justify-between mt-3">
+                      <span className="text-xs text-zinc-400">
+                        {lang === 'lo' ? 'ຍອດລວມພ້ອມຂາຍ:' : lang === 'th' ? 'พร้อมขาย:' : 'Available:'}
+                      </span>
+                      <div className="flex items-baseline gap-1">
+                        <span className={`text-2xl font-mono font-black ${
+                          summary.isOutOfStock ? 'text-red-400' : summary.isLowStock ? 'text-amber-300' : 'text-white'
+                        }`}>
+                          {summary.count}
+                        </span>
+                        <span className="text-xs text-zinc-400 font-medium">ຄັນ</span>
+                      </div>
+                    </div>
+
+                    {/* Progress Gauge to 5 units */}
+                    <div className="mt-2 h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          summary.isOutOfStock ? 'bg-red-500' : summary.isLowStock ? 'bg-amber-400' : 'bg-emerald-400'
+                        }`}
+                        style={{ width: `${Math.min(100, (summary.count / LOW_STOCK_THRESHOLD) * 100)}%` }}
+                      />
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-500 font-mono">
+                      <span>ຂາຍແລ້ວ: {summary.soldCount} ຄັນ</span>
+                      <span className={isSelected ? 'text-white font-bold' : 'text-zinc-400 group-hover:text-white'}>
+                        {isSelected ? '✓ ກຳລັງກອງ' : 'ຄລິກເພື່ອກອງ →'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* DEALERSHIP QUICK ACTIONS BAR */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4 shadow-sm">
             <div className="space-y-1">
@@ -444,17 +592,6 @@ export default function InventoryView({
                 >
                   <Plus className="w-4 h-4" />
                   <span>{t.quickStockInBtn}</span>
-                </button>
-              )}
-
-              {onNavigateToPOS && (
-                <button
-                  type="button"
-                  onClick={onNavigateToPOS}
-                  className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-xs font-extrabold text-black shadow-md transition-all hover:bg-zinc-200"
-                >
-                  <ShoppingBag className="w-4 h-4 fill-black" />
-                  <span>{t.quickPOSBtn}</span>
                 </button>
               )}
             </div>

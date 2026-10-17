@@ -1,6 +1,6 @@
 export type Language = 'lo' | 'en' | 'th';
 
-export type ActiveMenu = 'dashboard' | 'installment_dashboard' | 'customers' | 'inventory' | 'stock_in' | 'pos' | 'bills' | 'alerts' | 'users' | 'profile';
+export type ActiveMenu = 'dashboard' | 'installment_dashboard' | 'pos_sales' | 'customers' | 'inventory' | 'stock_in' | 'bills' | 'alerts' | 'users' | 'profile';
 
 export type UserRole = 'super_admin' | 'admin' | 'sales' | 'technician' | 'general_user';
 

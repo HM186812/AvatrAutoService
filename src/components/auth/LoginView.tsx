@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { SystemUser, Language } from '../../types';
 import { translations } from '../../data/translations';
 import { signInStaff, signUpStaff } from '../../backend/data';
+import { isSupabaseConfigured } from '../../backend/client';
+import { DEFAULT_OFFLINE_USERS } from '../../backend/offlineStore';
 import AvatrLogo from '../layout/AvatrLogo';
 import TurnstileWidget from '../common/TurnstileWidget';
 import {
@@ -34,6 +36,21 @@ interface LoginViewProps {
 }
 
 type MainTab = 'signin' | 'signup';
+
+function formatAuthError(error: unknown, lang: Language): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+    if (lang === 'lo') return 'ບໍ່ສາມາດເຊື່ອມຕໍ່ກັບ Supabase Backend ໄດ້ (Failed to fetch). ກະລຸນາກວດສອບ VITE_SUPABASE_URL ໃນໄຟລ໌ .env ວ່າເປັນ URL ຕົວຈິງ ຫຼື ບໍ່.';
+    if (lang === 'th') return 'ไม่สามารถเชื่อมต่อกับ Supabase Backend ได้ (Failed to fetch) โปรดตรวจสอบ VITE_SUPABASE_URL ในไฟล์ .env ว่าเป็น URL จริงหรือไม่';
+    return 'Could not connect to Supabase Backend (Failed to fetch). Please check VITE_SUPABASE_URL in your .env file.';
+  }
+  if (msg.includes('Supabase is not configured')) {
+    if (lang === 'lo') return 'ຍັງບໍ່ທັນໄດ້ຕັ້ງຄ່າ Supabase ໃນໄຟລ໌ .env (ກະລຸນາໃສ່ Project URL ແລະ Anon Key ຕົວຈິງ).';
+    if (lang === 'th') return 'ยังไม่ได้กำหนดค่า Supabase ในไฟล์ .env (โปรดระบุ Project URL และ Anon Key จริง)';
+    return 'Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.';
+  }
+  return msg;
+}
 
 export default function LoginView({
   users,
@@ -131,7 +148,7 @@ export default function LoginView({
       setSuccessMessage(`${lang === 'th' ? 'เข้าสู่ระบบสำเร็จ' : lang === 'lo' ? 'ເຂົ້າລະບົບສຳເລັດ' : 'Signed in'}: ${user.name}`);
       onLoginSuccess(user, rememberMe);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : (lang === 'th' ? 'เข้าสู่ระบบไม่สำเร็จ' : lang === 'lo' ? 'ເຂົ້າລະບົບບໍ່ສຳເລັດ' : 'Sign-in failed.'));
+      setErrorMessage(formatAuthError(error, lang));
     } finally {
       setIsLoading(false);
     }
@@ -169,7 +186,7 @@ export default function LoginView({
       onRegisterUser?.(user);
       onLoginSuccess(user, rememberMe);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : (lang === 'th' ? 'สมัครบัญชีไม่สำเร็จ' : lang === 'lo' ? 'ສ້າງບັນຊີບໍ່ສຳເລັດ' : 'Sign-up failed.'));
+      setErrorMessage(formatAuthError(error, lang));
     } finally {
       setIsLoading(false);
     }
@@ -376,6 +393,65 @@ export default function LoginView({
         </div>
 
         {/* Feedback Banners with High Visibility */}
+        {/* Offline Demo Mode Quick Access */}
+        {!isSupabaseConfigured && (
+          <div
+            className={`p-4 border rounded-2xl text-xs space-y-3 ${
+              isDark
+                ? 'bg-zinc-900/90 border-amber-500/40 text-zinc-200'
+                : 'bg-amber-50/80 border-amber-300 text-slate-800'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-amber-400">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                <span>
+                  {lang === 'lo'
+                    ? 'ໂໝດ Offline Demo (ຕັດການເຊື່ອມຕໍ່ຖານຂໍ້ມູນແລ້ວ)'
+                    : lang === 'th'
+                    ? 'โหมด Offline Demo (ตัดการเชื่อมต่อฐานข้อมูลแล้ว)'
+                    : 'Offline Demo Mode (Database Disconnected)'}
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                OFFLINE
+              </span>
+            </div>
+
+            <p className="text-[11px] leading-relaxed text-zinc-300">
+              {lang === 'lo'
+                ? 'ທ່ານສາມາດກົດເຂົ້າສູ່ລະບົບທົດລອງໄດ້ທັນທີ ຫຼື ເລືອກຕຳແໜ່ງທີ່ຕ້ອງການທົດສອບ:'
+                : lang === 'th'
+                ? 'คุณสามารถคลิกเข้าสู่ระบบทดลองได้ทันที หรือเลือกตำแหน่งที่ต้องการทดสอบ:'
+                : 'You can sign in with a demo account immediately:'}
+            </p>
+
+            {/* Quick Demo Login Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              {DEFAULT_OFFLINE_USERS.map((demoUser) => (
+                <button
+                  key={demoUser.id}
+                  type="button"
+                  onClick={() => {
+                    onLoginSuccess(demoUser, true);
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer group ${
+                    isDark
+                      ? 'bg-zinc-950/80 border-zinc-700 hover:border-amber-400 hover:bg-zinc-800'
+                      : 'bg-white border-slate-300 hover:border-amber-500 hover:bg-amber-50'
+                  }`}
+                >
+                  <div className="font-bold text-[11px] truncate text-white group-hover:text-amber-400">
+                    {demoUser.role === 'super_admin' ? '👑 ' : demoUser.role === 'sales' ? '💼 ' : '🔧 '}
+                    {demoUser.roleTitleLo}
+                  </div>
+                  <div className="text-[10px] text-zinc-400 truncate">{demoUser.email}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {errorMessage && (
           <div
             className={`p-3 border rounded-2xl text-xs flex items-center gap-2 font-medium ${
