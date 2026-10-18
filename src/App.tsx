@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   Lead, 
   ServiceAppointment, 
@@ -15,6 +15,7 @@ import { translations } from './data/translations';
 import { getModelStockSummaries } from './data/stockSummary';
 import { isSupabaseConfigured, supabase } from './backend/client';
 import {
+  clearStaffCache,
   deleteBill,
   getSignedInStaff,
   loadBackendData,
@@ -177,36 +178,50 @@ export default function App() {
   const [vehicles, setVehicles] = useState<VehicleModel[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isDataSyncing, setIsDataSyncing] = useState(false);
   const [backendError, setBackendError] = useState<string | null>(null);
+  const inFlightSyncRef = useRef<Promise<void> | null>(null);
 
   const refreshBackendData = useCallback(async () => {
-    const data = await loadBackendData();
-    setUsers(data.users);
-    setLeads(data.leads);
-    setInventory(data.inventory);
-    setServices(data.services);
-    setTestDrives(data.testDrives);
-    setStockLogs(data.stockLogs);
-    setBills(data.bills);
-    setVehicles(data.vehicles);
-    if (data.settings && typeof data.settings === 'object') {
-      const settings = data.settings as Record<string, unknown>;
-      if (settings.companyBankInfo) {
-        try {
-          localStorage.setItem('avatr_company_bank_info_v2', JSON.stringify(settings.companyBankInfo));
-        } catch {
-          // ignore
-        }
-      }
-      if (Array.isArray(settings.currencies)) {
-        try {
-          localStorage.setItem('avatr_custom_currencies_v1', JSON.stringify(settings.currencies));
-        } catch {
-          // ignore
-        }
-      }
+    if (inFlightSyncRef.current) {
+      return inFlightSyncRef.current;
     }
-    setBackendError(data.warnings.length ? data.warnings.join(' ') : null);
+    const syncPromise = (async () => {
+      try {
+        const data = await loadBackendData();
+        setUsers(data.users);
+        setLeads(data.leads);
+        setInventory(data.inventory);
+        setServices(data.services);
+        setTestDrives(data.testDrives);
+        setStockLogs(data.stockLogs);
+        setBills(data.bills);
+        setVehicles(data.vehicles);
+        if (data.settings && typeof data.settings === 'object') {
+          const settings = data.settings as Record<string, unknown>;
+          if (settings.companyBankInfo) {
+            try {
+              localStorage.setItem('avatr_company_bank_info_v2', JSON.stringify(settings.companyBankInfo));
+            } catch {
+              // ignore
+            }
+          }
+          if (Array.isArray(settings.currencies)) {
+            try {
+              localStorage.setItem('avatr_custom_currencies_v1', JSON.stringify(settings.currencies));
+            } catch {
+              // ignore
+            }
+          }
+        }
+        setBackendError(data.warnings.length ? data.warnings.join(' ') : null);
+      } finally {
+        inFlightSyncRef.current = null;
+      }
+    })();
+
+    inFlightSyncRef.current = syncPromise;
+    return syncPromise;
   }, []);
 
   useEffect(() => {
@@ -254,6 +269,7 @@ export default function App() {
 
       if (event === 'SIGNED_OUT' || !session?.user) {
         setIsLoggedIn(false);
+        setIsDataSyncing(false);
         setCurrentUser(FALLBACK_EMPTY_USER);
         setUsers([]);
         setLeads([]);
@@ -269,11 +285,23 @@ export default function App() {
 
       try {
         const user = await getSignedInStaff(session.user.id);
-        await refreshBackendData();
         if (!active) return;
         setCurrentUser(user);
         setIsLoggedIn(true);
+        setIsAuthLoading(false);
         setBackendError(null);
+
+        // Fetch remaining 11 backend tables in background (non-blocking)
+        setIsDataSyncing(true);
+        void refreshBackendData()
+          .catch((err) => {
+            if (!active) return;
+            console.error('Failed to sync backend data:', err);
+            setBackendError(err instanceof Error ? err.message : 'Could not load backend data.');
+          })
+          .finally(() => {
+            if (active) setIsDataSyncing(false);
+          });
       } catch (error: unknown) {
         if (!active) return;
         setBackendError(error instanceof Error ? error.message : 'Could not load Supabase session.');
@@ -329,6 +357,8 @@ export default function App() {
 
   const handleLogout = async () => {
     setIsLoggedIn(false);
+    setIsDataSyncing(false);
+    clearStaffCache();
     setCurrentUser(FALLBACK_EMPTY_USER);
     try {
       localStorage.removeItem('avatr_offline_active_user');
@@ -455,6 +485,15 @@ export default function App() {
           setCurrentUser(user);
           setIsLoggedIn(true);
           setBackendError(null);
+          setIsDataSyncing(true);
+          void refreshBackendData()
+            .catch((err) => {
+              console.error('Failed to sync backend data:', err);
+              setBackendError(err instanceof Error ? err.message : 'Could not load backend data.');
+            })
+            .finally(() => {
+              setIsDataSyncing(false);
+            });
         }}
         onRegisterUser={(newUser) => setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)])}
         lang={lang}
@@ -546,9 +585,9 @@ export default function App() {
               className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs bg-zinc-900 border border-zinc-800 font-mono text-[11px]"
               title={backendError || (isSupabaseConfigured ? 'Supabase configured' : 'Supabase is not configured')}
             >
-              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured && !backendError ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured && !backendError ? (isDataSyncing ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse') : 'bg-amber-400'}`}></span>
               <span className="text-zinc-300">
-                {backendError ? 'DB Error' : isSupabaseConfigured ? 'Supabase Cloud' : 'Not Connected'}
+                {backendError ? 'DB Error' : isDataSyncing ? (lang === 'th' ? 'กำลังซิงก์ข้อมูล...' : lang === 'lo' ? 'ກຳລັງຊິ້ງຂໍ້ມູນ...' : 'Syncing data...') : isSupabaseConfigured ? 'Supabase Cloud' : 'Not Connected'}
               </span>
             </div>
 
