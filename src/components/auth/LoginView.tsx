@@ -446,11 +446,11 @@ export default function LoginView({
                       : 'bg-white border-slate-300 hover:border-amber-500 hover:bg-amber-50'
                   }`}
                 >
-                  <div className="font-bold text-[11px] truncate text-white group-hover:text-amber-400">
+                  <div className={`font-bold text-[11px] truncate ${isDark ? 'text-white group-hover:text-amber-400' : 'text-slate-900 group-hover:text-amber-600'}`}>
                     {demoUser.role === 'super_admin' ? '👑 ' : demoUser.role === 'sales' ? '💼 ' : '🔧 '}
                     {demoUser.roleTitleLo}
                   </div>
-                  <div className="text-[10px] text-zinc-400 truncate">{demoUser.email}</div>
+                  <div className={`text-[10px] truncate ${isDark ? 'text-zinc-400' : 'text-slate-600'}`}>{demoUser.email}</div>
                 </button>
               ))}
             </div>
@@ -604,49 +604,24 @@ export default function LoginView({
             <button
               type="submit"
               disabled={isLoading}
-              style={{
-                backgroundColor: isDark ? '#ffffff' : '#09090b',
-                color: isDark ? '#09090b' : '#ffffff',
-              }}
-              className={`w-full py-3 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-3 cursor-pointer group disabled:opacity-50 ${
-                isDark ? 'hover:bg-zinc-100 shadow-zinc-950/50' : 'hover:bg-zinc-800 shadow-slate-400/50'
+              className={`w-full py-3 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-3 cursor-pointer group active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${
+                isDark
+                  ? 'bg-white text-zinc-950 hover:bg-zinc-200 shadow-zinc-950/50'
+                  : 'bg-zinc-950 text-white hover:bg-zinc-800 shadow-slate-400/50'
               }`}
             >
               {isLoading ? (
                 <>
-                  <Loader2
-                    className="w-4 h-4 animate-spin"
-                    style={{ color: isDark ? '#09090b' : '#ffffff' }}
-                  />
-                  <span
-                    className="font-black"
-                    style={{ color: isDark ? '#09090b' : '#ffffff' }}
-                  >
-                    ກຳລັງເຂົ້າສູ່ລະບົບ...
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="font-black">
+                    {lang === 'lo' ? 'ກຳລັງເຂົ້າສູ່ລະບົບ...' : lang === 'th' ? 'กำลังเข้าสู่ระบบ...' : 'Signing in...'}
                   </span>
                 </>
               ) : (
                 <>
-                  <LogIn
-                    className="w-4 h-4"
-                    style={{
-                      color: isDark ? '#09090b' : '#ffffff',
-                      stroke: isDark ? '#09090b' : '#ffffff',
-                    }}
-                  />
-                  <span
-                    className="font-black"
-                    style={{ color: isDark ? '#09090b' : '#ffffff' }}
-                  >
-                    {t.authSignInBtn}
-                  </span>
-                  <ArrowRight
-                    className="w-4 h-4 transition-transform group-hover:translate-x-1"
-                    style={{
-                      color: isDark ? '#09090b' : '#ffffff',
-                      stroke: isDark ? '#09090b' : '#ffffff',
-                    }}
-                  />
+                  <LogIn className="w-4 h-4" />
+                  <span className="font-black">{t.authSignInBtn}</span>
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </>
               )}
             </button>
@@ -869,51 +844,24 @@ export default function LoginView({
             <button
               type="submit"
               disabled={isLoading}
-              style={{
-                backgroundColor: isDark ? '#ffffff' : '#09090b',
-                color: isDark ? '#09090b' : '#ffffff',
-              }}
-              className={`w-full py-3 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-3 cursor-pointer group disabled:opacity-50 ${
+              className={`w-full py-3 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-3 cursor-pointer group active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${
                 isDark
-                  ? 'hover:bg-zinc-100 shadow-zinc-950/50'
-                  : 'hover:bg-zinc-800 shadow-slate-400/50'
+                  ? 'bg-white text-zinc-950 hover:bg-zinc-200 shadow-zinc-950/50'
+                  : 'bg-zinc-950 text-white hover:bg-zinc-800 shadow-slate-400/50'
               }`}
             >
               {isLoading ? (
                 <>
-                  <Loader2
-                    className="w-4 h-4 animate-spin"
-                    style={{ color: isDark ? '#09090b' : '#ffffff' }}
-                  />
-                  <span
-                    className="font-black"
-                    style={{ color: isDark ? '#09090b' : '#ffffff' }}
-                  >
-                    ກຳລັງສ້າງບັນຊີ...
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="font-black">
+                    {lang === 'lo' ? 'ກຳລັງສ້າງບັນຊີ...' : lang === 'th' ? 'กำลังสร้างบัญชี...' : 'Creating account...'}
                   </span>
                 </>
               ) : (
                 <>
-                  <User
-                    className="w-4 h-4"
-                    style={{
-                      color: isDark ? '#09090b' : '#ffffff',
-                      stroke: isDark ? '#09090b' : '#ffffff',
-                    }}
-                  />
-                  <span
-                    className="font-black"
-                    style={{ color: isDark ? '#09090b' : '#ffffff' }}
-                  >
-                    {t.authSignUpBtn}
-                  </span>
-                  <ArrowRight
-                    className="w-4 h-4 transition-transform group-hover:translate-x-1"
-                    style={{
-                      color: isDark ? '#09090b' : '#ffffff',
-                      stroke: isDark ? '#09090b' : '#ffffff',
-                    }}
-                  />
+                  <User className="w-4 h-4" />
+                  <span className="font-black">{t.authSignUpBtn}</span>
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                 </>
               )}
             </button>
