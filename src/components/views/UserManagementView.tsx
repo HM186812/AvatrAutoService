@@ -25,7 +25,6 @@ interface UserManagementViewProps {
   users: SystemUser[];
   setUsers: React.Dispatch<React.SetStateAction<SystemUser[]>>;
   lang: Language;
-  onSwitchUser?: (user: SystemUser) => void;
 }
 
 const ROLE_TITLES: Record<UserRole, string> = {

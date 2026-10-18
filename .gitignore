@@ -41,6 +41,7 @@ Thumbs.db
 .env.test
 .env*
 !.env.example
+!.env.test.example
 
 # Private Keys & Certificates
 *.pem

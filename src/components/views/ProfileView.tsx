@@ -36,7 +36,6 @@ interface ProfileViewProps {
   onClose?: () => void;
   users?: SystemUser[];
   setUsers?: React.Dispatch<React.SetStateAction<SystemUser[]>>;
-  onSwitchUser?: (user: SystemUser) => void;
 }
 
 export default function ProfileView({
@@ -47,7 +46,6 @@ export default function ProfileView({
   onClose,
   users = [],
   setUsers,
-  onSwitchUser,
 }: ProfileViewProps) {
   const t = translations[lang] || translations.lo;
   const [activeTab, setActiveTab] = useState<'profile' | 'users'>('profile');
@@ -363,7 +361,6 @@ export default function ProfileView({
             users={users}
             setUsers={setUsers}
             lang={lang}
-            onSwitchUser={onSwitchUser || (() => {})}
           />
         </div>
       ) : (

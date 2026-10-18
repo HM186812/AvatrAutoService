@@ -30,7 +30,6 @@ interface SidebarProps {
   pendingRequestsCount?: number;
   currentUser: SystemUser;
   allUsers: SystemUser[];
-  onSwitchUser: (user: SystemUser) => void;
   isMobileOpen: boolean;
   setIsMobileOpen: (open: boolean) => void;
   onLogout?: () => void;
@@ -70,7 +69,6 @@ export default function Sidebar({
   pendingRequestsCount = 3,
   currentUser,
   allUsers,
-  onSwitchUser,
   isMobileOpen,
   setIsMobileOpen,
   onLogout,

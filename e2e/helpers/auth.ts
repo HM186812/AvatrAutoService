@@ -1,9 +1,16 @@
 import { Page, expect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
-import path from 'path';
+import fs from 'fs';
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+// Respect existing environment or .env.test first before falling back to .env.local
+if (!process.env.VITE_SUPABASE_URL) {
+  const envTestPath = path.resolve(process.cwd(), '.env.test');
+  if (fs.existsSync(envTestPath)) {
+    dotenv.config({ path: envTestPath });
+  } else {
+    dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+  }
+}
 
 export const TEST_CREDENTIALS = {
   email: 'test01@gmail.com',

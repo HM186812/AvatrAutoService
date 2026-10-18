@@ -343,13 +343,16 @@ export default function POSSalesView({
   // Calculations
   const basePriceUSD = selectedVehicle ? selectedVehicle.priceUSD : 0;
   const netPriceUSD = Math.max(0, basePriceUSD - (discountUSD || 0));
-  const netPriceLAK = netPriceUSD * 22000;
+  const effectiveExchangeRate = selectedVehicle && selectedVehicle.priceUSD > 0 && selectedVehicle.priceLAK > 0
+    ? Math.round(selectedVehicle.priceLAK / selectedVehicle.priceUSD)
+    : 22000;
+  const netPriceLAK = netPriceUSD * effectiveExchangeRate;
   const downPaymentUSD = Math.round(netPriceUSD * (downPaymentPercent / 100));
-  const downPaymentLAK = downPaymentUSD * 22000;
+  const downPaymentLAK = downPaymentUSD * effectiveExchangeRate;
   const loanPrincipalUSD = netPriceUSD - downPaymentUSD;
   // Estimated monthly calculation (approx 7.5% per annum for Lao banks)
   const monthlyPaymentUSD = Math.round((loanPrincipalUSD * (1 + 0.075 * (tenureMonths / 12))) / tenureMonths);
-  const monthlyPaymentLAK = monthlyPaymentUSD * 22000;
+  const monthlyPaymentLAK = monthlyPaymentUSD * effectiveExchangeRate;
 
   // Filtered available vehicles list
   const filteredAvailableVehicles = availableVehicles.filter(item => {
@@ -429,7 +432,7 @@ export default function POSSalesView({
       unitPriceUSD: selectedVehicle.priceUSD,
       unitPriceLAK: selectedVehicle.priceLAK,
       discountUSD: Number(discountUSD) || 0,
-      discountLAK: (Number(discountUSD) || 0) * 22000,
+      discountLAK: (Number(discountUSD) || 0) * effectiveExchangeRate,
       netTotalUSD: netPriceUSD,
       netTotalLAK: netPriceLAK,
       amountUSD: netPriceUSD,

@@ -1,6 +1,3 @@
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
-
 export interface ExportPdfOptions {
   filename?: string;
   margin?: number | [number, number, number, number];
@@ -13,6 +10,7 @@ export interface ExportPdfOptions {
  * Exports a DOM element to an official PDF document.
  * All exported documents use standard A4 paper (210 x 297 mm).
  * Guarantees single-page fit and reliable browser download across all devices.
+ * Uses html2canvas-pro to support modern Tailwind v4 oklch colors and dynamic lazy loading.
  */
 export async function exportElementToPdf(
   elementOrId: HTMLElement | string,
@@ -43,6 +41,12 @@ export async function exportElementToPdf(
   await new Promise((resolve) => setTimeout(resolve, 80));
 
   try {
+    // Dynamically load html2canvas-pro (oklch support) and jsPDF on demand
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import('html2canvas-pro'),
+      import('jspdf'),
+    ]);
+
     const canvas = await html2canvas(element, {
       scale,
       useCORS: true,

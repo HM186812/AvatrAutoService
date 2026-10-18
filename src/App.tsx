@@ -488,10 +488,6 @@ export default function App() {
         billsCount={bills.length}
         currentUser={currentUser}
         allUsers={users}
-        onSwitchUser={(u) => {
-          setCurrentUser(u);
-          triggerToast(`User: ${u.name} (${(u.role === 'super_admin' || u.role === 'admin') ? (t.roleAdmin || 'Admin') : t.roleGeneralUser})`);
-        }}
         isMobileOpen={isMobileSidebarOpen}
         setIsMobileOpen={setIsMobileSidebarOpen}
         onLogout={handleLogout}
@@ -713,10 +709,6 @@ export default function App() {
               users={users}
               setUsers={setUsers}
               lang={lang}
-              onSwitchUser={(u) => {
-                setCurrentUser(u);
-                triggerToast(`ສະຫຼັບບັນຊີເປັນ: ${u.name}`);
-              }}
             />
           )}
 
@@ -733,10 +725,6 @@ export default function App() {
               onClose={() => setCurrentMenu('dashboard')}
               users={users}
               setUsers={setUsers}
-              onSwitchUser={(u) => {
-                setCurrentUser(u);
-                triggerToast(`ສະຫຼັບບັນຊີເປັນ: ${u.name}`);
-              }}
             />
           )}
         </main>

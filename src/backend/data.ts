@@ -216,11 +216,14 @@ export async function createStaffAccount(input: {
   const { data, error } = await client.functions.invoke('create-staff', { body: input });
   if (error) {
     let errMsg = error.message || 'Could not create the staff account.';
-    if ('context' in error && typeof (error as any).context?.json === 'function') {
-      try {
-        const body = await (error as any).context.json();
-        if (body?.error) errMsg = body.error;
-      } catch {}
+    if (error && typeof error === 'object' && 'context' in error) {
+      const ctx = (error as { context?: { json?: () => Promise<{ error?: string }> } }).context;
+      if (typeof ctx?.json === 'function') {
+        try {
+          const body = await ctx.json();
+          if (body?.error) errMsg = body.error;
+        } catch {}
+      }
     }
     throw new Error(errMsg);
   }
@@ -1167,19 +1170,23 @@ export async function deleteStaffProfile(id: string) {
     }
 
     edgeErrorMsg = edgeError.message;
-    if ('context' in edgeError && typeof (edgeError as any).context?.json === 'function') {
-      try {
-        const errBody = await (edgeError as any).context.json();
-        if (errBody?.error) edgeErrorMsg = errBody.error;
-      } catch {}
+    if (edgeError && typeof edgeError === 'object' && 'context' in edgeError) {
+      const ctx = (edgeError as { context?: { json?: () => Promise<{ error?: string }> } }).context;
+      if (typeof ctx?.json === 'function') {
+        try {
+          const errBody = await ctx.json();
+          if (errBody?.error) edgeErrorMsg = errBody.error;
+        } catch {}
+      }
     }
 
     // If it's a critical safety block (last admin or self delete), abort immediately with clear message
     if (edgeErrorMsg.includes('last active') || edgeErrorMsg.includes('own account')) {
       throw new Error(edgeErrorMsg);
     }
-  } catch (err: any) {
-    if (err.message?.includes('last active') || err.message?.includes('own account')) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('last active') || msg.includes('own account')) {
       throw err;
     }
     console.warn('manage-staff edge function delete failed, attempting fallbacks:', err);
@@ -1197,8 +1204,9 @@ export async function deleteStaffProfile(id: string) {
     if (rpcErrorMsg.includes('last active') || rpcErrorMsg.includes('own account')) {
       throw new Error(rpcErrorMsg);
     }
-  } catch (err: any) {
-    if (err.message?.includes('last active') || err.message?.includes('own account')) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('last active') || msg.includes('own account')) {
       throw err;
     }
     console.warn('RPC delete_staff_profile failed, attempting direct table delete:', err);
