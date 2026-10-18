@@ -36,7 +36,9 @@ import {
   Calendar,
   Lock,
   AlertTriangle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
@@ -80,6 +82,7 @@ export default function InventoryView({
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [selectedModelFilter, setSelectedModelFilter] = useState<string>('all');
   const [eventPromoFilter, setEventPromoFilter] = useState<'all' | 'event_only' | 'standard'>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // Model Stock Summaries (< 5 alert)
   const modelSummaries = useMemo(() => {
@@ -192,7 +195,11 @@ export default function InventoryView({
 
   // Filtered Inventory
   const filteredInventory = inventory.filter(item => {
-    if (selectedStatusFilter !== 'all' && item.status !== selectedStatusFilter) return false;
+    if (selectedStatusFilter === 'all') {
+      if (item.status === 'sold' || item.stockQuantity === 0) return false;
+    } else if (item.status !== selectedStatusFilter) {
+      return false;
+    }
     if (selectedModelFilter !== 'all' && item.model !== selectedModelFilter) return false;
     if (eventPromoFilter === 'event_only' && !item.eventCampaign) return false;
     if (eventPromoFilter === 'standard' && item.eventCampaign) return false;
@@ -632,7 +639,54 @@ export default function InventoryView({
 
           </div>
 
-          {/* VEHICLE STOCK CARDS LIST */}
+          {/* VEHICLE STOCK OVERVIEW & VIEW MODE TOGGLE */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-zinc-400">
+                {lang === 'lo'
+                  ? `ລາຍການລົດທັງໝົດ: ${filteredInventory.length} ຄັນ`
+                  : lang === 'th'
+                  ? `รายการรถทั้งหมด: ${filteredInventory.length} คัน`
+                  : `Showing ${filteredInventory.length} vehicles`}
+              </span>
+              {filteredInventory.length < inventory.length && (
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  ({lang === 'lo' ? `ຈາກສາງ ${inventory.length} ຄັນ` : `of ${inventory.length}`})
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-1 rounded-xl shadow-inner">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-black shadow-sm'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+                title={lang === 'lo' ? 'ມຸມມອງກາດກະທັດຮັດ (Compact Grid)' : 'Compact Grid View'}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="text-[11px]">{lang === 'lo' ? 'ກາດ' : 'Grid'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white text-black shadow-sm'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+                title={lang === 'lo' ? 'ມຸມມອງຕາຕະລາງພາບລວມ (Table Overview)' : 'Table Overview'}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="text-[11px]">{lang === 'lo' ? 'ຕາຕະລາງ' : 'Table'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* VEHICLE STOCK CARDS LIST / TABLE */}
           {filteredInventory.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950 px-5 py-14 text-center">
               <Car className="mx-auto mb-3 h-10 w-10 text-zinc-600" />
@@ -643,22 +697,18 @@ export default function InventoryView({
                 {lang === 'lo' ? 'ລອງປ່ຽນຄຳຄົ້ນຫາ ຫຼື ຕົວກອງ ແລ້ວຄົ້ນຫາອີກຄັ້ງ' : lang === 'th' ? 'ลองเปลี่ยนคำค้นหาหรือตัวกรอง แล้วค้นหาอีกครั้ง' : 'Try changing your search or filters.'}
               </p>
             </div>
-          ) : (
-          <div className={`grid grid-cols-1 gap-4 ${
-            filteredInventory.length === 1
-              ? 'mx-auto w-full max-w-3xl'
-              : 'md:grid-cols-2 2xl:grid-cols-3'
-          }`}>
+          ) : viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {filteredInventory.map((item) => {
               const vehicle = vehicles.find(v => v.name === item.model) || vehicles[0];
 
               return (
                 <div
                   key={item.vin}
-                  className="bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-3xl overflow-hidden flex flex-col justify-between transition-all hover:shadow-2xl group"
+                  className="bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-2xl overflow-hidden flex flex-col justify-between transition-all hover:shadow-xl group"
                 >
-                  {/* Image & Badges */}
-                  <div className="relative h-48 bg-zinc-900 overflow-hidden">
+                  {/* Compact Image & Badges */}
+                  <div className="relative h-32 bg-zinc-900 overflow-hidden">
                     <img
                       src={item.image || vehicle?.heroImage || '/avatr-logo.png'}
                       alt={item.model}
@@ -671,11 +721,12 @@ export default function InventoryView({
                           target.src = '/avatr-logo.png';
                         }
                       }}
-                      className="w-full h-full object-cover filter contrast-125 transition-transform duration-500"
+                      className="w-full h-full object-cover filter contrast-125 transition-transform duration-500 group-hover:scale-105"
                     />
 
-                    <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-zinc-950/85 px-3 py-1.5 text-xs font-semibold text-white shadow-sm backdrop-blur-md">
+                    {/* Status Badge */}
+                    <div className="absolute left-2 top-2 flex flex-wrap gap-1">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-zinc-950/85 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm backdrop-blur-md">
                         <span className={`h-1.5 w-1.5 rounded-full ${
                           item.status === 'ready' ? 'bg-emerald-400'
                             : item.status === 'pdi' ? 'bg-amber-400'
@@ -688,7 +739,7 @@ export default function InventoryView({
                     </div>
 
                     {/* Stock Quantity Badge (Top Right) */}
-                    <div className={`absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold backdrop-blur-md shadow-lg font-mono ${
+                    <div className={`absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold backdrop-blur-md shadow-md font-mono ${
                       item.stockQuantity === 0
                         ? 'stock-badge-out bg-zinc-950/90 text-zinc-400 border border-zinc-800'
                         : item.stockQuantity < 5
@@ -696,93 +747,63 @@ export default function InventoryView({
                         : 'stock-badge-normal bg-black/85 text-white border border-zinc-700 always-white-text'
                     }`}>
                       {item.stockQuantity < 5 && item.stockQuantity > 0 ? (
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse stock-low-icon" />
+                        <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 animate-pulse stock-low-icon" />
                       ) : (
-                        <Car className="w-3.5 h-3.5 text-zinc-300 shrink-0 stock-normal-icon" />
+                        <Car className="w-3 h-3 text-zinc-300 shrink-0 stock-normal-icon" />
                       )}
-                      <span className={item.stockQuantity < 5 && item.stockQuantity > 0 ? "stock-low-text" : item.stockQuantity === 0 ? "stock-out-text" : "stock-normal-text"}>
-                        {t.tableStock}: {item.stockQuantity} {t.unitCars}
-                        {item.stockQuantity < 5 && item.stockQuantity > 0 ? ` (${lang === 'lo' ? 'ໃກ້ໝົດ' : lang === 'th' ? 'ใกล้หมด' : 'Low'})` : ''}
+                      <span>
+                        {item.stockQuantity} {t.unitCars}
                       </span>
                     </div>
 
                     {/* Price */}
-                    <div className="absolute bottom-3 right-3 bg-black/85 backdrop-blur-md px-3 py-1 rounded-xl border border-zinc-700 text-right shadow-md always-white-text">
-                      <span className="text-base font-black font-mono text-white tracking-tight" style={{ color: '#ffffff' }}>
+                    <div className="absolute bottom-2 right-2 bg-black/85 backdrop-blur-md px-2 py-0.5 rounded-lg border border-zinc-700 text-right shadow-md always-white-text">
+                      <span className="text-xs font-black font-mono text-white tracking-tight" style={{ color: '#ffffff' }}>
                         ${item.priceUSD.toLocaleString()}
                       </span>
                     </div>
 
                     {/* Event & Promotion Badge */}
                     {item.eventCampaign && (
-                      <div className="absolute bottom-3 left-3 bg-white text-black px-2.5 py-1 rounded-xl text-[10px] font-bold shadow-lg flex items-center gap-1 backdrop-blur-md border border-zinc-300">
-                        <Sparkles className="w-3 h-3 fill-black" />
-                        <span className="truncate max-w-37.5">{item.eventCampaign}</span>
+                      <div className="absolute bottom-2 left-2 bg-white text-black px-1.5 py-0.5 rounded-md text-[9px] font-bold shadow-md flex items-center gap-1 backdrop-blur-md border border-zinc-300">
+                        <Sparkles className="w-2.5 h-2.5 fill-black" />
+                        <span className="truncate max-w-28">{item.eventCampaign}</span>
                       </div>
                     )}
                   </div>
 
                   {/* Body Details */}
-                  <div className="flex flex-1 flex-col gap-4 p-5">
+                  <div className="flex flex-1 flex-col justify-between gap-2.5 p-3">
                     <div>
                       <div className="min-w-0">
-                        <h3 className="text-lg font-bold tracking-tight text-white">{item.model}</h3>
-                        <p className="mt-0.5 truncate text-sm text-zinc-400">{item.color || '—'}{item.trim ? ` · ${item.trim}` : ''}</p>
+                        <h3 className="text-sm font-bold tracking-tight text-white truncate">{item.model}</h3>
+                        <p className="text-[11px] truncate text-zinc-400">{item.color || '—'}{item.trim ? ` · ${item.trim}` : ''}</p>
                       </div>
-                      <p className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
-                        <span>{lang === 'lo' ? 'ປ້າຍທະບຽນ' : lang === 'th' ? 'ทะเบียน' : 'Plate'}</span>
+                      <p className="mt-1 flex items-center gap-1.5 text-[10px] text-zinc-500">
+                        <span>{lang === 'lo' ? 'ທະບຽນ' : lang === 'th' ? 'ทะเบียน' : 'Plate'}:</span>
                         <strong className="font-medium text-zinc-200">{item.plateNumber || '—'}</strong>
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 text-sm sm:grid-cols-2">
+                    <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-zinc-850 bg-zinc-900/50 p-2 text-[10px]">
                       <div className="min-w-0">
-                        <span className="block text-[11px] text-zinc-500">{t.tableVin}</span>
-                        <strong className="mt-1 block truncate font-mono text-xs font-medium text-zinc-200" title={item.vin}>{item.vin}</strong>
+                        <span className="block text-zinc-500 text-[9px]">{t.tableVin}</span>
+                        <strong className="block truncate font-mono text-zinc-300" title={item.vin}>{item.vin}</strong>
                       </div>
-                      {item.engineNumber && (
-                        <div className="min-w-0">
-                          <span className="block text-[11px] text-zinc-500">{lang === 'lo' ? 'ເລກຈັກ' : lang === 'th' ? 'เลขเครื่องยนต์' : 'Engine number'}</span>
-                          <strong className="mt-1 block truncate font-mono text-xs font-medium text-zinc-200" title={item.engineNumber}>{item.engineNumber}</strong>
-                        </div>
-                      )}
                       <div className="min-w-0">
-                        <span className="block text-[11px] text-zinc-500">PDI</span>
-                        <strong className={`mt-1 block truncate text-xs font-semibold ${item.pdiStatus === 'passed' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                        <span className="block text-zinc-500 text-[9px]">PDI</span>
+                        <strong className={`block truncate font-semibold ${item.pdiStatus === 'passed' ? 'text-emerald-400' : 'text-amber-400'}`}>
                           {pdiStatusLabel(item.pdiStatus)}
                         </strong>
                       </div>
-                      <div className="min-w-0">
-                        <span className="block text-[11px] text-zinc-500">{lang === 'lo' ? 'ທີ່ຕັ້ງ' : lang === 'th' ? 'ที่ตั้ง' : 'Location'}</span>
-                        <strong className="mt-1 block truncate text-xs font-medium text-zinc-200" title={item.location || ''}>{item.location || '—'}</strong>
+                      <div className="min-w-0 col-span-2">
+                        <span className="block text-zinc-500 text-[9px]">{lang === 'lo' ? 'ທີ່ຕັ້ງ' : 'Location'}</span>
+                        <strong className="block truncate text-zinc-400 font-normal" title={item.location || ''}>{item.location || '—'}</strong>
                       </div>
-                      {/* Event & Promotion Schedule Badge */}
-                      {(item.eventStartDate || item.eventEndDate || item.eventCampaign) && (
-                        <div className="pt-1.5 border-t border-zinc-800/80 space-y-1">
-                          {item.eventCampaign && (
-                            <div className="flex items-center gap-1 text-[11px] font-sans font-bold text-zinc-200">
-                              <Sparkles className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
-                              <span className="truncate">{item.eventCampaign}</span>
-                            </div>
-                          )}
-                          {(item.eventStartDate || item.eventEndDate) && (
-                            <div className="flex items-center gap-1 text-[10px] text-zinc-300 font-mono">
-                              <Calendar className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
-                              <span>ກຳນົດເວລາ: {item.eventStartDate || 'ເລີ່ມຕົ້ນ'} ຫາ {item.eventEndDate || 'ສິ້ນສຸດ'}</span>
-                            </div>
-                          )}
-                          {item.eventLocation && (
-                            <div className="flex items-center gap-1 text-[10px] text-zinc-400 font-sans truncate">
-                              <MapPin className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                              <span className="truncate">{item.eventLocation}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
 
                     {/* ACTION BUTTONS: ແກ້ໄຂ (Edit) & ລົບ (Delete) */}
-                    <div className="pt-2 border-t border-zinc-800 flex items-center gap-2">
+                    <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-1.5">
                       {/* ແກ້ໄຂ (Edit) Button */}
                       <button
                         type="button"
@@ -790,9 +811,9 @@ export default function InventoryView({
                           setEditingItem(item);
                           setEditPriceValue(item.priceUSD);
                         }}
-                        className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                        className="flex min-h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 cursor-pointer"
                       >
-                        <Edit3 className="w-3.5 h-3.5 text-zinc-400" />
+                        <Edit3 className="w-3 h-3 text-zinc-400" />
                         <span>{t.edit}</span>
                       </button>
 
@@ -800,11 +821,10 @@ export default function InventoryView({
                       <button
                         type="button"
                         onClick={() => handleRequestDeleteItem(item)}
-                        className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2.5 text-sm text-zinc-500 transition-colors hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:hover:text-rose-400"
+                        className="flex min-h-8 items-center justify-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-xs text-zinc-500 transition-colors hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-400 cursor-pointer"
                         title={t.btnDeleteCar}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>{t.delete}</span>
+                        <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
@@ -812,8 +832,107 @@ export default function InventoryView({
               );
             })}
           </div>
-          )}
-        </>
+          ) : (
+          /* TABLE OVERVIEW VIEW */
+          <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-xl">
+            <table className="w-full text-left text-xs text-zinc-300">
+              <thead className="border-b border-zinc-800 bg-zinc-900/90 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                <tr>
+                  <th className="py-2.5 px-3">ພາບ</th>
+                  <th className="py-2.5 px-3">ລຸ້ນ / Trim</th>
+                  <th className="py-2.5 px-3 font-mono">VIN / ປ້າຍ</th>
+                  <th className="py-2.5 px-3">ສີ</th>
+                  <th className="py-2.5 px-3">ສະຖານະ</th>
+                  <th className="py-2.5 px-3">PDI</th>
+                  <th className="py-2.5 px-3 text-center">ຈຳນວນ</th>
+                  <th className="py-2.5 px-3 text-right">ລາຄາ (USD)</th>
+                  <th className="py-2.5 px-3 text-center">ຈັດການ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-850">
+                {filteredInventory.map((item) => {
+                  const vehicle = vehicles.find(v => v.name === item.model) || vehicles[0];
+                  return (
+                    <tr key={item.vin} className="hover:bg-zinc-900/40 transition-colors">
+                      <td className="py-2 px-3">
+                        <img
+                          src={item.image || vehicle?.heroImage || '/avatr-logo.png'}
+                          alt={item.model}
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.onerror = null;
+                            target.src = '/avatr-logo.png';
+                          }}
+                          className="w-12 h-8 rounded-lg object-cover border border-zinc-800 shrink-0"
+                        />
+                      </td>
+                      <td className="py-2 px-3 font-semibold text-white">
+                        <div className="font-bold">{item.model}</div>
+                        <div className="text-[10px] text-zinc-400 font-normal">{item.trim || 'Standard'}</div>
+                      </td>
+                      <td className="py-2 px-3 font-mono text-xs">
+                        <div className="text-zinc-200">{item.vin}</div>
+                        <div className="text-[10px] text-zinc-500">{item.plateNumber || '—'}</div>
+                      </td>
+                      <td className="py-2 px-3 text-zinc-300 text-xs">
+                        {item.color || '—'}
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold text-white">
+                          <span className={`h-1.5 w-1.5 rounded-full ${
+                            item.status === 'ready' ? 'bg-emerald-400'
+                              : item.status === 'pdi' ? 'bg-amber-400'
+                              : item.status === 'sold' ? 'bg-zinc-400'
+                              : item.status === 'reserved' ? 'bg-violet-400'
+                              : 'bg-sky-400'
+                          }`} />
+                          {inventoryStatusLabels[item.status]}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className={`text-[10px] font-semibold ${item.pdiStatus === 'passed' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {pdiStatusLabel(item.pdiStatus)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-center font-mono font-bold">
+                        <span className={item.stockQuantity < 5 && item.stockQuantity > 0 ? 'text-amber-400' : 'text-zinc-200'}>
+                          {item.stockQuantity}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono font-bold text-white">
+                        ${item.priceUSD.toLocaleString()}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingItem(item);
+                              setEditPriceValue(item.priceUSD);
+                            }}
+                            className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 cursor-pointer"
+                            title={t.edit}
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRequestDeleteItem(item)}
+                            className="p-1 rounded-lg hover:bg-rose-500/20 text-zinc-500 hover:text-rose-400 border border-zinc-800 cursor-pointer"
+                            title={t.btnDeleteCar}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
       ) : (
         /* STOCK-IN & STOCK-OUT TRANSACTION HISTORY TAB */
         <div className="space-y-4 text-xs">

@@ -18,8 +18,12 @@ import {
   Coins, 
   Check, 
   RotateCcw,
-  BadgePercent
+  BadgePercent,
+  Loader2,
+  FileCheck
 } from 'lucide-react';
+import { exportElementToPdf } from '../../utils/pdfExport';
+import { exportElementToDocx } from '../../utils/docxExport';
 import { 
   generateInstallmentSchedule, 
   calculateInstallmentSummary,
@@ -214,9 +218,48 @@ export default function InstallmentLedgerModal({
     URL.revokeObjectURL(url);
   };
 
+  const [isExportingLedgerPdf, setIsExportingLedgerPdf] = useState(false);
+  const [isExportingLedgerDocx, setIsExportingLedgerDocx] = useState(false);
+
+  const handleExportPDF = async () => {
+    try {
+      setIsExportingLedgerPdf(true);
+      const cleanName = customer.customerName.replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+      const filename = `AVATR_Installment_Ledger_${cleanName}.pdf`;
+      await exportElementToPdf('printable-installment-ledger', {
+        filename,
+        margin: [6, 6, 6, 6],
+        orientation: 'landscape',
+        singlePage: false,
+      });
+    } catch (err) {
+      console.error('Error generating ledger PDF:', err);
+      alert('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້');
+    } finally {
+      setIsExportingLedgerPdf(false);
+    }
+  };
+
+  const handleExportDocx = async () => {
+    try {
+      setIsExportingLedgerDocx(true);
+      const cleanName = customer.customerName.replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+      const filename = `AVATR_Installment_Ledger_${cleanName}.docx`;
+      await exportElementToDocx('printable-installment-ledger', {
+        filename,
+        title: `AVATR Installment Ledger - ${customer.customerName}`,
+      });
+    } catch (err) {
+      console.error('Error generating ledger DOCX:', err);
+      alert('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້');
+    } finally {
+      setIsExportingLedgerDocx(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-zinc-950 border border-zinc-800 rounded-3xl p-4 sm:p-6 text-white space-y-5 max-h-[95vh] overflow-y-auto shadow-2xl">
+      <div id="printable-installment-ledger" className="relative w-full max-w-5xl bg-zinc-950 border border-zinc-800 rounded-3xl p-4 sm:p-6 text-white space-y-5 max-h-[95vh] overflow-y-auto shadow-2xl">
         
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-800">
@@ -246,14 +289,52 @@ export default function InstallmentLedgerModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+            <button
+              onClick={handleExportPDF}
+              disabled={isExportingLedgerPdf}
+              className="px-3 py-1.5 bg-zinc-100 hover:bg-white text-black rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-zinc-300 disabled:opacity-60 cursor-pointer"
+              title="ບັນທຶກເປັນ PDF"
+            >
+              {isExportingLedgerPdf ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                  <span>PDF...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5 text-black" />
+                  <span>PDF</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleExportDocx}
+              disabled={isExportingLedgerDocx}
+              className="px-3 py-1.5 bg-zinc-100 hover:bg-white text-black rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-zinc-300 disabled:opacity-60 cursor-pointer"
+              title="ບັນທຶກເປັນ Word DOCX"
+            >
+              {isExportingLedgerDocx ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                  <span>Word...</span>
+                </>
+              ) : (
+                <>
+                  <FileCheck className="w-3.5 h-3.5 text-black" />
+                  <span>DOCX</span>
+                </>
+              )}
+            </button>
+
             <button
               onClick={handleExportCSV}
               className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 rounded-xl text-xs font-semibold border border-zinc-700 flex items-center gap-1.5 transition-colors cursor-pointer"
               title="ນຳອອກເປັນໄຟລ໌ CSV"
             >
               <Download className="w-3.5 h-3.5 text-zinc-400" />
-              <span>ນຳອອກ CSV</span>
+              <span>CSV</span>
             </button>
             <button
               onClick={() => window.print()}
@@ -261,7 +342,7 @@ export default function InstallmentLedgerModal({
               title="ພິມຕາຕະລາງ"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>ພິມຕາຕະລາງ</span>
+              <span>ພິມ</span>
             </button>
             <button
               onClick={onClose}

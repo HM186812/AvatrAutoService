@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { VehicleModel, Language } from '../../types';
 import AvatrLogo from '../layout/AvatrLogo';
-import { X, Printer, Phone, Download, CheckCircle, ShieldCheck, Loader2, Calendar } from 'lucide-react';
+import { X, Printer, Phone, Download, CheckCircle, ShieldCheck, Loader2, Calendar, FileCheck } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
+import { exportElementToDocx } from '../../utils/docxExport';
 
 interface QuotationModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export default function QuotationModal({
   const [loanMonths, setLoanMonths] = useState<number>(48);
   const [interestRateYearly, setInterestRateYearly] = useState<number>(5.5); // 5.5% typical Lao bank auto finance
   const [isExportingQuotePdf, setIsExportingQuotePdf] = useState(false);
+  const [isExportingQuoteDocx, setIsExportingQuoteDocx] = useState(false);
   const rateLAK = 22000;
 
   if (!isOpen) return null;
@@ -68,6 +70,22 @@ export default function QuotationModal({
     }
   };
 
+  const handleDownloadQuoteDocx = async () => {
+    try {
+      setIsExportingQuoteDocx(true);
+      const filename = `AVATR_Quotation_${vehicle.name.replace(/\s+/g, '_')}_${quotationNumber}.docx`;
+      await exportElementToDocx('printable-quotation', {
+        filename,
+        title: `AVATR Official Quotation ${quotationNumber} - ${vehicle.name}`,
+      });
+    } catch (err) {
+      console.error('Error generating quotation DOCX:', err);
+      alert('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້');
+    } finally {
+      setIsExportingQuoteDocx(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:max-w-none print:shadow-none">
       <div className="relative w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl p-6 sm:p-8 text-white max-h-[92vh] overflow-y-auto print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0 print:max-h-none print:max-w-none print:w-full print:overflow-visible print-modal-container">
@@ -88,12 +106,29 @@ export default function QuotationModal({
               {isExportingQuotePdf ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
-                  <span>ກຳລັງສ້າງ PDF...</span>
+                  <span>PDF...</span>
                 </>
               ) : (
                 <>
                   <Download className="w-3.5 h-3.5 text-black" />
-                  <span>{lang === 'lo' ? 'ບັນທຶກເປັນ PDF' : 'Save PDF'}</span>
+                  <span>PDF</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleDownloadQuoteDocx}
+              disabled={isExportingQuoteDocx}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-white text-black rounded-xl text-xs font-bold transition-colors shadow-sm border border-zinc-300 cursor-pointer"
+            >
+              {isExportingQuoteDocx ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                  <span>Word...</span>
+                </>
+              ) : (
+                <>
+                  <FileCheck className="w-3.5 h-3.5 text-black" />
+                  <span>DOCX</span>
                 </>
               )}
             </button>

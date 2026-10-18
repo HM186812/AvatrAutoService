@@ -51,6 +51,7 @@ import {
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, formatWhatsAppNumber, openWhatsApp } from '../../utils/whatsapp';
 import { exportElementToPdf } from '../../utils/pdfExport';
+import { exportElementToDocx } from '../../utils/docxExport';
 
 interface POSSalesViewProps {
   inventory: InventoryItem[];
@@ -170,6 +171,7 @@ export default function POSSalesView({
   
   // Finance Options
   const [downPaymentPercent, setDownPaymentPercent] = useState<number>(30);
+  const [downPaymentUSDInput, setDownPaymentUSDInput] = useState<number | ''>('');
   const [tenureMonths, setTenureMonths] = useState<number>(48);
 
   // Handle prefilled customer incoming from CRM
@@ -181,6 +183,7 @@ export default function POSSalesView({
       if (prefilledCustomer.paymentType === 'installment' || prefilledCustomer.paymentType === 'finance') {
         setPaymentMethod('finance');
         if (prefilledCustomer.downPaymentPercent) setDownPaymentPercent(prefilledCustomer.downPaymentPercent);
+        if (prefilledCustomer.downPaymentUSD) setDownPaymentUSDInput(prefilledCustomer.downPaymentUSD);
         if (prefilledCustomer.tenureMonths) setTenureMonths(prefilledCustomer.tenureMonths);
       }
       if (prefilledCustomer.interestedModel) {
@@ -347,12 +350,64 @@ export default function POSSalesView({
     ? Math.round(selectedVehicle.priceLAK / selectedVehicle.priceUSD)
     : 22000;
   const netPriceLAK = netPriceUSD * effectiveExchangeRate;
-  const downPaymentUSD = Math.round(netPriceUSD * (downPaymentPercent / 100));
+
+  // Effective Down Payment Amount in USD
+  const downPaymentUSD = downPaymentUSDInput !== ''
+    ? Number(downPaymentUSDInput)
+    : Math.round(netPriceUSD * (downPaymentPercent / 100));
   const downPaymentLAK = downPaymentUSD * effectiveExchangeRate;
-  const loanPrincipalUSD = netPriceUSD - downPaymentUSD;
+
+  // Remaining Balance in USD (ຍອດຄົງເຫຼືອ / ຍອດຈັດສິນເຊື່ອ)
+  const remainingBalanceUSD = Math.max(0, netPriceUSD - downPaymentUSD);
+  const loanPrincipalUSD = remainingBalanceUSD;
+
   // Estimated monthly calculation (approx 7.5% per annum for Lao banks)
-  const monthlyPaymentUSD = Math.round((loanPrincipalUSD * (1 + 0.075 * (tenureMonths / 12))) / tenureMonths);
+  const monthlyPaymentUSD = tenureMonths > 0
+    ? Math.round((loanPrincipalUSD * (1 + 0.075 * (tenureMonths / 12))) / tenureMonths)
+    : 0;
   const monthlyPaymentLAK = monthlyPaymentUSD * effectiveExchangeRate;
+
+  // 2-Way Sync Handlers for Down Payment % and USD Amount
+  const handleDownPaymentPercentChange = (val: number | '') => {
+    if (val === '') {
+      setDownPaymentPercent(0);
+      setDownPaymentUSDInput('');
+      return;
+    }
+    const percent = Math.min(100, Math.max(0, val));
+    setDownPaymentPercent(percent);
+    if (netPriceUSD > 0) {
+      const calculatedUSD = Math.round((netPriceUSD * percent) / 100);
+      setDownPaymentUSDInput(calculatedUSD);
+    }
+  };
+
+  const handleDownPaymentUSDChange = (val: number | '') => {
+    if (val === '') {
+      setDownPaymentUSDInput('');
+      setDownPaymentPercent(0);
+      return;
+    }
+    const usd = Math.min(netPriceUSD, Math.max(0, val));
+    setDownPaymentUSDInput(usd);
+    if (netPriceUSD > 0) {
+      const calculatedPercent = Number(((usd / netPriceUSD) * 100).toFixed(1));
+      setDownPaymentPercent(Math.min(100, calculatedPercent));
+    }
+  };
+
+  // Keep down payment USD in sync when netPriceUSD changes
+  useEffect(() => {
+    if (netPriceUSD > 0) {
+      if (downPaymentUSDInput === '') {
+        const calculatedUSD = Math.round((netPriceUSD * downPaymentPercent) / 100);
+        setDownPaymentUSDInput(calculatedUSD);
+      } else {
+        const calculatedPercent = Number(((Number(downPaymentUSDInput) / netPriceUSD) * 100).toFixed(1));
+        setDownPaymentPercent(Math.min(100, calculatedPercent));
+      }
+    }
+  }, [netPriceUSD]);
 
   // Filtered available vehicles list
   const filteredAvailableVehicles = availableVehicles.filter(item => {
@@ -466,7 +521,7 @@ export default function POSSalesView({
       const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Sale could not be saved.';
       if (msg.includes('already has a stock-out movement') || msg.includes('already sold') || msg.includes('not available')) {
         const soldVin = selectedVehicle.vin;
-        setInventory(prev => prev.map(item => item.vin === soldVin ? { ...item, stockQuantity: 0, status: 'sold', reservedForCustomer: undefined } : item));
+        setInventory(prev => prev.filter(item => item.vin !== soldVin));
         const nextCar = availableVehicles.find(v => v.vin !== soldVin);
         setSelectedVin(nextCar?.vin || '');
       }
@@ -475,7 +530,8 @@ export default function POSSalesView({
     } finally {
       setIsProcessingSale(false);
     }
-    setInventory(prev => prev.map(item => item.vin === selectedVehicle.vin ? updatedInventoryItem : item));
+    // Remove sold vehicle completely from active inventory
+    setInventory(prev => prev.filter(item => item.vin !== selectedVehicle.vin));
     setBills(prev => [newBill, ...prev]);
 
     // 3. RECORD STOCK-OUT TRANSACTION LOG
@@ -517,6 +573,7 @@ export default function POSSalesView({
   };
 
   const [isExportingPosPdf, setIsExportingPosPdf] = useState(false);
+  const [isExportingPosDocx, setIsExportingPosDocx] = useState(false);
 
   const handleDownloadPosPdf = async () => {
     if (!createdBill) return;
@@ -535,6 +592,24 @@ export default function POSSalesView({
       alert('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້');
     } finally {
       setIsExportingPosPdf(false);
+    }
+  };
+
+  const handleDownloadPosDocx = async () => {
+    if (!createdBill) return;
+    try {
+      setIsExportingPosDocx(true);
+      const cleanName = (createdBill.customerName || createdBill.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+      const filename = `AVATR_Sales_Invoice_${createdBill.billNumber}_${cleanName}.docx`;
+      await exportElementToDocx('printable-pos-receipt', {
+        filename,
+        title: `AVATR Sales Invoice ${createdBill.billNumber}`,
+      });
+    } catch (err) {
+      console.error('Error generating POS receipt DOCX:', err);
+      alert('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້');
+    } finally {
+      setIsExportingPosDocx(false);
     }
   };
 
@@ -1306,39 +1381,105 @@ export default function POSSalesView({
 
               {/* Financing Details */}
               {paymentMethod === 'finance' && (
-                <div className="p-4 bg-zinc-900/80 rounded-2xl border border-zinc-800 space-y-3 text-xs">
+                <div className="p-4 bg-zinc-900/80 rounded-2xl border border-zinc-800 space-y-3.5 text-xs">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                    <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                      <Building2 className="w-4 h-4 text-zinc-300" />
+                      <span>{lang === 'lo' ? 'ລາຍລະອຽດການວາງດາວ & ຜ່ອນຊຳລະ' : lang === 'th' ? 'รายละเอียดเงินดาวน์ & การผ่อนชำระ' : 'Installment & Down Payment Details'}</span>
+                    </span>
+                    <span className="text-[11px] text-zinc-400 font-mono">
+                      {lang === 'lo' ? 'ລາຄາລົດສຸດທິ: ' : 'Net: '}<strong className="text-white">${netPriceUSD.toLocaleString()} USD</strong>
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* 1. Down Payment Percent (%) */}
                     <div>
-                      <label className="block text-zinc-400 mb-1 font-medium">ວາງເງິນດາວ (%)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={downPaymentPercent}
-                        onChange={(e) => setDownPaymentPercent(Number(e.target.value))}
-                        placeholder="30"
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
-                      />
+                      <label className="block text-zinc-400 mb-1 font-medium">
+                        {lang === 'lo' ? 'ວາງເງິນດາວ (%)' : lang === 'th' ? 'เงินดาวน์ (%)' : 'Down Payment (%)'}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={downPaymentPercent === 0 && downPaymentUSDInput === '' ? '' : downPaymentPercent}
+                          onChange={(e) => handleDownPaymentPercentChange(e.target.value === '' ? '' : Number(e.target.value))}
+                          placeholder="30"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-xs font-bold pointer-events-none">
+                          %
+                        </span>
+                      </div>
                     </div>
 
+                    {/* 2. Down Payment Amount ($ USD) */}
                     <div>
-                      <label className="block text-zinc-400 mb-1 font-medium">ໄລຍະເວລາຜ່ອນ (ເດືອນ)</label>
+                      <label className="block text-zinc-400 mb-1 font-medium">
+                        {lang === 'lo' ? 'ຈຳນວນເງິນວາງດາວ ($ USD)' : lang === 'th' ? 'จำนวนเงินดาวน์ ($ USD)' : 'Down Payment Amount ($ USD)'}
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-xs font-bold pointer-events-none">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={netPriceUSD}
+                          value={downPaymentUSDInput}
+                          onChange={(e) => handleDownPaymentUSDChange(e.target.value === '' ? '' : Number(e.target.value))}
+                          placeholder="0"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-7 pr-3 py-2 text-white font-mono font-bold focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 3. Remaining Balance ($ USD) Auto Calculated */}
+                    <div>
+                      <label className="block text-zinc-400 mb-1 font-medium">
+                        {lang === 'lo' ? 'ຍອດຄົງເຫຼືອ / ຍອດຈັດສິນເຊື່ອ ($ USD)' : lang === 'th' ? 'ยอดคงเหลือจัดไฟแนนซ์ ($ USD)' : 'Remaining Balance ($ USD)'}
+                      </label>
+                      <div className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-white font-mono flex items-center justify-between shadow-inner">
+                        <span className="text-zinc-500 text-xs">$</span>
+                        <span className="font-bold text-sm text-emerald-400 tracking-tight">
+                          ${remainingBalanceUSD.toLocaleString()} USD
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-zinc-500 font-mono mt-0.5 block">
+                        ({lang === 'lo' ? 'ລາຄາສຸດທິ' : 'Net'} ${netPriceUSD.toLocaleString()} - {lang === 'lo' ? 'ເງິນດາວ' : 'Down'} ${downPaymentUSD.toLocaleString()})
+                      </span>
+                    </div>
+
+                    {/* 4. Tenure Months */}
+                    <div>
+                      <label className="block text-zinc-400 mb-1 font-medium">
+                        {lang === 'lo' ? 'ໄລຍະເວລາຜ່ອນ (ເດືອນ)' : lang === 'th' ? 'ระยะเวลาผ่อน (เดือน)' : 'Tenure (Months)'}
+                      </label>
                       <input
                         type="number"
                         min="1"
+                        max="120"
                         value={tenureMonths}
                         onChange={(e) => setTenureMonths(Number(e.target.value))}
                         placeholder="48"
                         className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
                       />
+                      <span className="text-[10px] text-zinc-500 font-mono mt-0.5 block">
+                        {Math.floor(tenureMonths / 12)} {lang === 'lo' ? 'ປີ' : 'Years'}{tenureMonths % 12 ? ` ${tenureMonths % 12} ${lang === 'lo' ? 'ເດືອນ' : 'Months'}` : ''}
+                      </span>
                     </div>
                   </div>
 
                   {/* Calculated Finance Summary */}
-                  <div className="p-3 bg-zinc-900 rounded-xl border border-zinc-800 flex justify-between items-center text-xs font-mono">
-                    <span className="text-zinc-400">ຄ່າງວດປະມານການຕໍ່ເດືອນ:</span>
+                  <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 flex justify-between items-center text-xs font-mono">
+                    <span className="text-zinc-400">
+                      {lang === 'lo' ? 'ຄ່າງວດປະມານການຕໍ່ເດືອນ:' : lang === 'th' ? 'ค่างวดประมาณการต่อเดือน:' : 'Estimated Monthly Payment:'}
+                    </span>
                     <div className="text-right">
-                      <span className="text-white font-bold text-sm">${monthlyPaymentUSD.toLocaleString()} USD / ເດືອນ</span>
+                      <span className="text-white font-bold text-sm">
+                        ${monthlyPaymentUSD.toLocaleString()} USD / {lang === 'lo' ? 'ເດືອນ' : 'month'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1480,13 +1621,39 @@ export default function POSSalesView({
                 </div>
               )}
 
+              {paymentMethod === 'finance' && (
+                <div className="p-3 bg-zinc-900/90 rounded-2xl border border-zinc-800 space-y-1.5 font-mono text-xs">
+                  <div className="flex justify-between text-zinc-300">
+                    <span>{lang === 'lo' ? `ວາງເງິນດາວ (${downPaymentPercent}%):` : `Down Payment (${downPaymentPercent}%):`}</span>
+                    <span className="font-bold text-white">${downPaymentUSD.toLocaleString()} USD</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-400 font-bold">
+                    <span>{lang === 'lo' ? 'ຍອດຄົງເຫຼືອ (ຍອດຈັດສິນເຊື່ອ):' : 'Remaining Balance:'}</span>
+                    <span>${remainingBalanceUSD.toLocaleString()} USD</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-400 text-[11px] pt-1 border-t border-zinc-800">
+                    <span>{lang === 'lo' ? `ໄລຍະເວລາຜ່ອນ ${tenureMonths} ເດືອນ:` : `Tenure ${tenureMonths} mos:`}</span>
+                    <span className="text-zinc-300">~${monthlyPaymentUSD.toLocaleString()} USD / {lang === 'lo' ? 'ເດືອນ' : 'mo'}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="pos-net-total flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 text-white">
                 <div>
-                  <span className="text-sm font-bold block">{t.netPaymentTotal}:</span>
+                  <span className="text-sm font-bold block">
+                    {paymentMethod === 'finance' 
+                      ? (lang === 'lo' ? 'ຍອດເງິນດາວທີ່ຕ້ອງຊຳລະມື້ນີ້:' : 'Down Payment Due Today:') 
+                      : `${t.netPaymentTotal}:`}
+                  </span>
+                  {paymentMethod === 'finance' && (
+                    <span className="text-[11px] text-zinc-400 font-mono block mt-0.5">
+                      {lang === 'lo' ? 'ລາຄາລົດລວມ:' : 'Total Car Price:'} ${netPriceUSD.toLocaleString()} USD
+                    </span>
+                  )}
                 </div>
                 <div className="text-right">
                   <span className="text-3xl sm:text-4xl font-black font-mono text-white">
-                    ${netPriceUSD.toLocaleString()} USD
+                    ${(paymentMethod === 'finance' ? downPaymentUSD : netPriceUSD).toLocaleString()} USD
                   </span>
                 </div>
               </div>
@@ -1655,7 +1822,25 @@ export default function POSSalesView({
                   ) : (
                     <>
                       <Download className="w-3.5 h-3.5 text-black" />
-                      <span>{lang === 'lo' ? 'ບັນທຶກເປັນ PDF' : 'Save PDF'}</span>
+                      <span>PDF</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleDownloadPosDocx}
+                  disabled={isExportingPosDocx}
+                  className="px-3 py-1.5 bg-zinc-100 hover:bg-white text-black rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-zinc-300 disabled:opacity-60 cursor-pointer"
+                  title="ບັນທຶກໃບບິນເປັນ Word DOCX"
+                >
+                  {isExportingPosDocx ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                      <span>ກຳລັງສ້າງ Word...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileCheck className="w-3.5 h-3.5 text-black" />
+                      <span>DOCX</span>
                     </>
                   )}
                 </button>
@@ -1730,8 +1915,27 @@ export default function POSSalesView({
                 <span className="text-xl font-black text-black">${createdBill.netTotalUSD.toLocaleString()}</span>
               </div>
 
+              {createdBill.paymentMethod === 'finance' && (
+                <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-600/30 font-mono text-[10.5px] space-y-1 text-black">
+                  <div className="flex justify-between font-bold">
+                    <span>{lang === 'lo' ? `ວາງເງິນດາວ (${createdBill.downPaymentPercent || 0}%):` : `Down Payment (${createdBill.downPaymentPercent || 0}%):`}</span>
+                    <span>${(createdBill.downPaymentUSD || 0).toLocaleString()} USD</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-black">
+                    <span>{lang === 'lo' ? 'ຍອດຄົງເຫຼືອ / ຍອດຈັດສິນເຊື່ອ:' : 'Remaining Balance:'}</span>
+                    <span>${Math.max(0, (createdBill.netTotalUSD || 0) - (createdBill.downPaymentUSD || 0)).toLocaleString()} USD</span>
+                  </div>
+                  {createdBill.tenureMonths && (
+                    <div className="flex justify-between text-zinc-600 text-[10px]">
+                      <span>{lang === 'lo' ? 'ໄລຍະເວລາຜ່ອນ:' : 'Tenure:'}</span>
+                      <span>{createdBill.tenureMonths} {lang === 'lo' ? 'ເດືອນ' : 'Months'}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="text-[11px] text-zinc-700">
-                {t.paymentType}: <strong className="text-black uppercase">{createdBill.paymentMethod}</strong> • {t.salesRepresentative}: {createdBill.recordedBy}
+                {t.paymentType}: <strong className="text-black uppercase">{createdBill.paymentMethod === 'finance' ? (lang === 'lo' ? 'ຜ່ອນຊຳລະ / ສິນເຊື່ອ (FINANCE)' : 'FINANCE / INSTALLMENT') : createdBill.paymentMethod}</strong> • {t.salesRepresentative}: {createdBill.recordedBy}
               </div>
             </div>
 

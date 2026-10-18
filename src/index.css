@@ -305,6 +305,24 @@ html.light .stock-badge-low svg {
   stroke: #d97706 !important;
 }
 
+/* Model Category Alert Cards in Light Mode (.light) - 100% Pure White Background */
+html.light .category-alert-card {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .category-alert-card:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.07) !important;
+}
+
+html.light .category-alert-card .stage-breakdown-box {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
 /* Safeguard for amber text in light mode */
 html.light .text-amber-200,
 html.light .text-amber-300 {
@@ -883,7 +901,7 @@ html.light .customer-documents-modal .toolbar-box select {
 .a4-document-canvas {
   width: 100%;
   max-width: 580px;
-  min-height: auto;
+  min-height: 0;
   box-sizing: border-box;
   margin: 0 auto;
   background-color: #ffffff;
@@ -1029,7 +1047,7 @@ html.dark .app-shell {
 .app-content h3 {
   letter-spacing: -0.015em;
   line-height: 1.35;
-  text-wrap: pretty;
+  overflow-wrap: break-word;
 }
 
 .app-content h1 {
@@ -1790,7 +1808,7 @@ html.dark .dashboard-view {
 }
 
 .dashboard-view .dashboard-kpi-card:hover {
-  border-color: color-mix(in srgb, var(--dashboard-accent), transparent 35%) !important;
+  border-color: var(--dashboard-accent) !important;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.09);
   transform: translateY(-2px);
 }

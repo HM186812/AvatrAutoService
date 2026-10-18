@@ -97,63 +97,30 @@ export function mapStaffProfile(profile: DbRow, permissionRow?: DbRow): SystemUs
   };
 }
 
-let cachedStaffRoles: DbRow[] | null = null;
-let activeStaffPromise: { userId: string; promise: Promise<SystemUser> } | null = null;
-
-export function clearStaffCache() {
-  cachedStaffRoles = null;
-  activeStaffPromise = null;
-}
-
 export async function getSignedInStaff(userId: string): Promise<SystemUser> {
   if (!isSupabaseConfigured) {
     return offlineGetActiveUser() || DEFAULT_OFFLINE_USERS[0];
   }
+  const client = requireSupabase();
+  const { data: profile, error: profileError } = await client
+    .from('staff_profiles')
+    .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
+    .eq('id', userId)
+    .maybeSingle();
 
-  // Deduplicate concurrent requests for the same userId (e.g. signInStaff + onAuthStateChange)
-  if (activeStaffPromise && activeStaffPromise.userId === userId) {
-    return activeStaffPromise.promise;
+  if (profileError) throw profileError;
+  if (!profile || profile.status !== 'active') {
+    throw new Error('This login does not have an active staff profile. Ask the administrator to set up access.');
   }
 
-  const staffPromise = (async () => {
-    const client = requireSupabase();
+  const { data: roleRow, error: roleError } = await client
+    .from('staff_roles')
+    .select('role_code,permissions')
+    .eq('role_code', profile.role)
+    .maybeSingle();
 
-    // Fetch staff_profiles and staff_roles in parallel (or use cached roles) to eliminate waterfall
-    const rolesPromise = cachedStaffRoles
-      ? Promise.resolve({ data: cachedStaffRoles, error: null })
-      : client.from('staff_roles').select('role_code,permissions');
-
-    const profilePromise = client
-      .from('staff_profiles')
-      .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
-      .eq('id', userId)
-      .maybeSingle();
-
-    const [profileRes, rolesRes] = await Promise.all([profilePromise, rolesPromise]);
-
-    if (profileRes.error) throw profileRes.error;
-    const profile = profileRes.data;
-    if (!profile || profile.status !== 'active') {
-      throw new Error('This login does not have an active staff profile. Ask the administrator to set up access.');
-    }
-
-    if (!cachedStaffRoles && rolesRes.data) {
-      cachedStaffRoles = rolesRes.data;
-    }
-
-    const roles = cachedStaffRoles || rolesRes.data || [];
-    const matchedRole = roles.find((r: DbRow) => r.role_code === profile.role);
-    return mapStaffProfile(profile, matchedRole?.permissions);
-  })();
-
-  activeStaffPromise = { userId, promise: staffPromise };
-  try {
-    return await staffPromise;
-  } finally {
-    if (activeStaffPromise?.userId === userId) {
-      activeStaffPromise = null;
-    }
-  }
+  if (roleError) throw roleError;
+  return mapStaffProfile(profile, roleRow?.permissions);
 }
 
 export async function signInStaff(email: string, password: string, captchaToken?: string): Promise<SystemUser> {
@@ -457,9 +424,6 @@ export async function loadBackendData(): Promise<BackendData> {
   // Directory access is restricted by RLS. A staff member who cannot view it can still use core data.
   const profiles = profilesResult.error ? [] : (profilesResult.data || []);
   const roles = rolesResult.error ? [] : (rolesResult.data || []);
-  if (roles.length > 0) {
-    cachedStaffRoles = roles;
-  }
   const permissionsByRole = new Map(roles.map((row: DbRow) => [row.role_code, row.permissions]));
   const users = profiles.map((row: DbRow) => mapStaffProfile(row, permissionsByRole.get(row.role)));
   const staffById = new Map(users.map((user) => [user.id, user]));

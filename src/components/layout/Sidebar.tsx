@@ -168,16 +168,6 @@ export default function Sidebar({
           badgeColor: 'text-zinc-300 bg-zinc-900 border-zinc-700',
           adminOnly: false,
         },
-        {
-          id: 'users',
-          labelLo: 'ຈັດການຜູ້ໃຊ້ & ມອບສິດ',
-          labelEn: 'User Management',
-          labelTh: 'จัดการผู้ใช้ & สิทธิ์',
-          icon: ShieldCheck,
-          badge: 'Admin',
-          badgeColor: 'text-amber-300 bg-amber-950/80 border-amber-800 font-bold',
-          adminOnly: true,
-        },
       ],
     },
   ];

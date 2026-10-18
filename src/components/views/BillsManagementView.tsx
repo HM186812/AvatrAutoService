@@ -40,9 +40,11 @@ import {
   ChevronRight,
   TrendingUp,
   SlidersHorizontal,
-  Clock
+  Clock,
+  FileCheck
 } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
+import { exportElementToDocx } from '../../utils/docxExport';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl } from '../../utils/whatsapp';
 import { saveBillToSupabase } from '../../supabase';
@@ -87,6 +89,7 @@ export default function BillsManagementView({
   const [selectedBillForPrint, setSelectedBillForPrint] = useState<InvoiceBillRecord | null>(null);
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
   const [isExportingBillPdf, setIsExportingBillPdf] = useState(false);
+  const [isExportingBillDocx, setIsExportingBillDocx] = useState(false);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
   // Modal states for Installment Ledger & Documents
@@ -278,6 +281,43 @@ export default function BillsManagementView({
       alert('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້. ກະລຸນາລອງໃໝ່ ຫຼື ໃຊ້ປຸ່ມພິມບິນ');
     } finally {
       setIsExportingBillPdf(false);
+    }
+  };
+
+  const handleDirectDownloadBillDocx = (bill: InvoiceBillRecord) => {
+    setSelectedBillForPrint(bill);
+    setTimeout(async () => {
+      try {
+        setIsExportingBillDocx(true);
+        const cleanName = (bill.customerName || bill.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+        const filename = `AVATR_Bill_${bill.billNumber}_${cleanName}.docx`;
+        await exportElementToDocx('printable-official-bill', {
+          filename,
+          title: `AVATR Official Bill ${bill.billNumber}`,
+        });
+      } catch (err) {
+        console.error('Error generating bill DOCX:', err);
+      } finally {
+        setIsExportingBillDocx(false);
+      }
+    }, 150);
+  };
+
+  const handleDownloadBillDocx = async () => {
+    if (!selectedBillForPrint) return;
+    try {
+      setIsExportingBillDocx(true);
+      const cleanName = (selectedBillForPrint.customerName || selectedBillForPrint.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+      const filename = `AVATR_Bill_${selectedBillForPrint.billNumber}_${cleanName}.docx`;
+      await exportElementToDocx('printable-official-bill', {
+        filename,
+        title: `AVATR Official Bill ${selectedBillForPrint.billNumber}`,
+      });
+    } catch (err) {
+      console.error('Error generating bill DOCX:', err);
+      alert('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້. ກະລຸນາລອງໃໝ່');
+    } finally {
+      setIsExportingBillDocx(false);
     }
   };
 
@@ -1170,6 +1210,15 @@ export default function BillsManagementView({
                                 <Download className="w-3 h-3" />
                               </button>
 
+                              <button
+                                onClick={() => handleDirectDownloadBillDocx(bill)}
+                                disabled={isExportingBillDocx}
+                                className="p-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-lg transition-all flex items-center justify-center cursor-pointer"
+                                title="ບັນທຶກ Word DOCX"
+                              >
+                                <FileCheck className="w-3 h-3" />
+                              </button>
+
                               {isSuperAdmin && onDeleteBill && (
                                 <button
                                   onClick={() => {
@@ -1225,12 +1274,31 @@ export default function BillsManagementView({
                   {isExportingBillPdf ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
-                      <span>ກຳລັງສ້າງ PDF...</span>
+                      <span>PDF...</span>
                     </>
                   ) : (
                     <>
                       <Download className="w-3.5 h-3.5 text-black" />
                       <span>PDF (A4)</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleDownloadBillDocx}
+                  disabled={isExportingBillDocx}
+                  className="px-2.5 py-1 bg-zinc-100 hover:bg-white text-black rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-zinc-300 disabled:opacity-60 cursor-pointer"
+                  title="ບັນທຶກໃບບິນເປັນ Word DOCX"
+                >
+                  {isExportingBillDocx ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                      <span>Word...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileCheck className="w-3.5 h-3.5 text-black" />
+                      <span>DOCX</span>
                     </>
                   )}
                 </button>

@@ -198,6 +198,45 @@ export interface TranslationSchema {
   minThreshold: string;
   recommendedOrder: string;
   updateThresholdBtn: string;
+  stockAlertSystemBadge: string;
+  stockAlertHeading: string;
+  stockAlertThresholdRule: string;
+  stockAlertDesc: string;
+  stockAlertRuleTitle: string;
+  stockAlertRuleSummary: string;
+  btnInboundStockIn: string;
+  btnFullInventory: string;
+  outOfStockModelsTitle: string;
+  outOfStockModelsSub: string;
+  noneOutOfStock: string;
+  lowStockModelsTitle: string;
+  lowStockModelsSub: string;
+  noneLowStock: string;
+  healthyStockModelsTitle: string;
+  healthyStockModelsSub: string;
+  noneHealthyStock: string;
+  filterActiveBadge: string;
+  filterViewAction: string;
+  filterAllModelsTab: string;
+  filterAlertOnlyTab: string;
+  filterLowStockTab: string;
+  filterOutOfStockTab: string;
+  searchModelCategoryPlaceholder: string;
+  categoryAlertSectionTitle: string;
+  categoryAlertSectionSubtitle: string;
+  badgeOutOfStock: string;
+  badgeLowStock: string;
+  badgeHealthyStock: string;
+  availableStockLabel: string;
+  thresholdRuleLabel: string;
+  btnStockInCar: string;
+  stageReady: string;
+  stagePdi: string;
+  stageImported: string;
+  stageEventPromo: string;
+  stageSold: string;
+  noAlertsTitle: string;
+  noAlertsDesc: string;
 
   // Users & Permissions
   usersTitle: string;
@@ -647,6 +686,45 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     minThreshold: 'ຈຸດເຕືອນຂັ້ນຕ່ຳ',
     recommendedOrder: 'ຈຳນວນແນະນຳໃຫ້ນຳເຂົ້າ',
     updateThresholdBtn: 'ປັບຄ່າແຈ້ງເຕືອນ',
+    stockAlertSystemBadge: 'ລະບົບເຕືອນສະຕ໋ອກຕາມໝວດລຸ້ນລົດ (Model-Level Alert System)',
+    stockAlertHeading: 'ແຈ້ງເຕືອນສະຕ໋ອກຕາມໝວດລຸ້ນລົດ',
+    stockAlertThresholdRule: 'ຕ່ຳກວ່າ 5 ຄັນເຕືອນທັນທີ',
+    stockAlertDesc: 'ການແຈ້ງເຕືອນຈະຄິດໄລ່ຈາກຍອດລວມສິນຄ້າໃນສາງຂອງ "ໝວດ ຫຼື ລຸ້ນລົດ" ໂດຍກົງ (ບໍ່ກວດເປັນລາຍຄັນ). ຫາກລຸ້ນໃດມີຍອດລວມພ້ອມຂາຍຕ່ຳກວ່າ 5 ຄັນ ລະບົບຈະແຈ້ງເຕືອນໃຫ້ເຕີມສະຕ໋ອກທັນທີ.',
+    stockAlertRuleTitle: 'ຫຼັກການເຕືອນຕາມໝວດລຸ້ນລົດ:',
+    stockAlertRuleSummary: 'ກວດນັບຍອດລວມຂອງແຕ່ລະໝວດລຸ້ນ (AVATR 12, AVATR 11, AVATR 07...). ຫາກຍອດລວມ < 5 ຄັນ = ⚠️ ໃກ້ໝົດສະຕ໋ອກ · ຫາກເທົ່າກັບ 0 ຄັນ = 🔴 ໝົດສະຕ໋ອກ.',
+    btnInboundStockIn: '+ ຮັບລົດເຂົ້າສາງ (Stock-In)',
+    btnFullInventory: 'ເບິ່ງລາຍການສາງທັງໝົດ',
+    outOfStockModelsTitle: 'ໝວດລົດໝົດສະຕ໋ອກ',
+    outOfStockModelsSub: '0 ຄັນ · ບໍ່ມີລົດໃນສາງ',
+    noneOutOfStock: 'ບໍ່ມີໝວດລົດໝົດ',
+    lowStockModelsTitle: 'ໝວດລົດໃກ້ໝົດສະຕ໋ອກ',
+    lowStockModelsSub: 'ຕ່ຳກວ່າ 5 ຄັນ · ຄວນສັ່ງລົດເພີ່ມ',
+    noneLowStock: 'ບໍ່ມີໝວດໃກ້ໝົດ',
+    healthyStockModelsTitle: 'ໝວດລົດສະຕ໋ອກພຽງພໍ',
+    healthyStockModelsSub: 'ຕັ້ງແຕ່ 5 ຄັນຂຶ້ນໄປ',
+    noneHealthyStock: 'ທຸກລຸ້ນຕ່ຳກວ່າເກນ',
+    filterActiveBadge: '✓ ກຳລັງກອງ',
+    filterViewAction: 'ກອງເບິ່ງ',
+    filterAllModelsTab: 'ທຸກໝວດລຸ້ນ',
+    filterAlertOnlyTab: 'ສະເພາະລຸ້ນທີ່ເຕືອນ',
+    filterLowStockTab: 'ໃກ້ໝົດ (<5)',
+    filterOutOfStockTab: 'ໝົດ (0)',
+    searchModelCategoryPlaceholder: 'ຄົ້ນຫາລຸ້ນ ຫຼື ໝວດລົດ...',
+    categoryAlertSectionTitle: 'ສະຖານະແຈ້ງເຕືອນສະຕ໋ອກຕາມໝວດລຸ້ນລົດ',
+    categoryAlertSectionSubtitle: 'ກວດສອບສະຕ໋ອກລວມທັງໝົດແຍກຕາມໝວດລຸ້ນ',
+    badgeOutOfStock: 'ໝົດສະຕ໋ອກ (0 ຄັນ)',
+    badgeLowStock: 'ໃກ້ໝົດສະຕ໋ອກ: ເຫຼືອ',
+    badgeHealthyStock: 'ສະຕ໋ອກພຽງພໍ',
+    availableStockLabel: 'ຍອດລວມພ້ອມຂາຍ',
+    thresholdRuleLabel: 'ເກນເຕືອນ: 5 ຄັນ',
+    btnStockInCar: '+ ຮັບລົດເຂົ້າສາງ',
+    stageReady: 'ພ້ອມຂາຍ',
+    stagePdi: 'ກວດ PDI',
+    stageImported: 'ນຳເຂົ້າ/ຢູ່ດ່ານ',
+    stageEventPromo: 'Event/ໂປຣ',
+    stageSold: 'ຂາຍແລ້ວ',
+    noAlertsTitle: 'ບໍ່ມີລາຍການແຈ້ງເຕືອນໃນເງື່ອນໄຂນີ້',
+    noAlertsDesc: 'ສະຕ໋ອກລົດທຸກໝວດລຸ້ນຢູ່ໃນລະດັບປົກກະຕິ ຫຼື ລອງປ່ຽນຕົວກອງ',
 
     // Users & Permissions
     usersTitle: 'ຈັດການຜູ້ໃຊ້ ແລະ ສິດການເຂົ້າເຖິງ (User Management & Roles)',
@@ -1089,6 +1167,45 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     minThreshold: 'Low Threshold Limit',
     recommendedOrder: 'Recommended Reorder Qty',
     updateThresholdBtn: 'Update Alerts',
+    stockAlertSystemBadge: 'Model-Level Stock Alert System',
+    stockAlertHeading: 'Model Stock Alerts',
+    stockAlertThresholdRule: 'Alerts when < 5 units',
+    stockAlertDesc: 'Alerts are triggered strictly based on the total stock of each vehicle Model/Category (not per single car). If any model drops below 5 units, a restock alert is triggered.',
+    stockAlertRuleTitle: 'Model-Level Alert Rules:',
+    stockAlertRuleSummary: 'Monitors total aggregated stock per model (AVATR 12, AVATR 11, AVATR 07...). If total < 5 units = ⚠️ Low Stock · If 0 units = 🔴 Out of Stock.',
+    btnInboundStockIn: '+ Inbound Stock-In',
+    btnFullInventory: 'Full Inventory',
+    outOfStockModelsTitle: 'Out of Stock Models',
+    outOfStockModelsSub: '0 units available',
+    noneOutOfStock: 'None',
+    lowStockModelsTitle: 'Low Stock Models',
+    lowStockModelsSub: '< 5 units · Restock recommended',
+    noneLowStock: 'None',
+    healthyStockModelsTitle: 'Healthy Stock Models',
+    healthyStockModelsSub: '≥ 5 units available',
+    noneHealthyStock: 'All below threshold',
+    filterActiveBadge: '✓ Filtering',
+    filterViewAction: 'Filter',
+    filterAllModelsTab: 'All Models',
+    filterAlertOnlyTab: 'Alerts Only',
+    filterLowStockTab: 'Low (<5)',
+    filterOutOfStockTab: 'Out (0)',
+    searchModelCategoryPlaceholder: 'Search model or category...',
+    categoryAlertSectionTitle: 'Model Category Stock Alert Status',
+    categoryAlertSectionSubtitle: 'Live aggregated stock monitoring by vehicle model category',
+    badgeOutOfStock: 'Out of Stock (0 units)',
+    badgeLowStock: 'Low Stock: only',
+    badgeHealthyStock: 'Healthy Stock',
+    availableStockLabel: 'Available in Stock',
+    thresholdRuleLabel: 'Threshold: 5 units',
+    btnStockInCar: '+ Restock',
+    stageReady: 'Ready',
+    stagePdi: 'PDI Check',
+    stageImported: 'Imported/Port',
+    stageEventPromo: 'Event/Promo',
+    stageSold: 'Sold',
+    noAlertsTitle: 'No alert items found',
+    noAlertsDesc: 'All vehicle models are within normal stock levels or adjust your filter',
 
     // Users & Permissions
     usersTitle: 'User Governance & Role Permissions',
@@ -1386,7 +1503,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     headerPOS: 'POS ขายรถยนต์ • ออกใบเสร็จ & ตัดสต็อก',
     headerBills: 'บันทึกบิลทั้งหมด • ใบรับ & ใบขาย',
     headerAlerts: 'แจ้งเตือนสต็อก • ใกล้หมด & วางแผนนำเข้า',
-    headerUsers: 'ອນຸມັດສະມາຊິກ • ກຳນົດສິດ (Admin)',
+    headerUsers: 'อนุมัติสมาชิก • กำหนดสิทธิ์ (Admin)',
     headerProfile: 'โปรไฟล์ผู้ใช้ • ข้อมูลบัญชี',
     quickPOSBtn: '+ ขายรถ (POS)',
     quickStockInBtn: '+ นำเข้ารถยนต์',
@@ -1535,6 +1652,45 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     minThreshold: 'เกณฑ์แจ้งเตือนขั้นต่ำ',
     recommendedOrder: 'จำนวนที่แนะนำให้นำเข้า',
     updateThresholdBtn: 'ปรับค่าการแจ้งเตือน',
+    stockAlertSystemBadge: 'ระบบแจ้งเตือนสต็อกตามหมวดรุ่นรถ (Model-Level Alert System)',
+    stockAlertHeading: 'แจ้งเตือนสต็อกตามหมวดรุ่นรถ',
+    stockAlertThresholdRule: 'ต่ำกว่า 5 คันเตือนทันที',
+    stockAlertDesc: 'การแจ้งเตือนคำนวณจากยอดรวมสินค้าในคลังของ "หมวดหรือรุ่นรถ" โดยตรง (ไม่ตรวจเป็นรายคัน) หากรุ่นใดมียอดพร้อมขายต่ำกว่า 5 คัน จะแจ้งเตือนให้เติมสต็อกทันที',
+    stockAlertRuleTitle: 'หลักการแจ้งเตือนตามหมวดรุ่นรถ:',
+    stockAlertRuleSummary: 'ตรวจนับยอดรวมของแต่ละหมวดรุ่น (AVATR 12, AVATR 11, AVATR 07...). หากยอดรวม < 5 คัน = ⚠️ ใกล้หมดสต็อก · หากเท่ากับ 0 คัน = 🔴 หมดสต็อก',
+    btnInboundStockIn: '+ นำเข้ารถสู่คลัง (Stock-In)',
+    btnFullInventory: 'ดูรายการคลังทั้งหมด',
+    outOfStockModelsTitle: 'หมวดรถหมดสต็อก',
+    outOfStockModelsSub: '0 คัน · ไม่มีรถในคลัง',
+    noneOutOfStock: 'ไม่มีหมวดรถหมด',
+    lowStockModelsTitle: 'หมวดรถใกล้หมดสต็อก',
+    lowStockModelsSub: 'ต่ำกว่า 5 คัน · ควรเพิ่มสต็อก',
+    noneLowStock: 'ไม่มีหมวดใกล้หมด',
+    healthyStockModelsTitle: 'หมวดรถสต็อกเพียงพอ',
+    healthyStockModelsSub: 'ตั้งแต่ 5 คันขึ้นไป',
+    noneHealthyStock: 'ทุกรุ่นต่ำกว่าเกณฑ์',
+    filterActiveBadge: '✓ กำลังกรอง',
+    filterViewAction: 'กรองดู',
+    filterAllModelsTab: 'ทุกหมวดรุ่น',
+    filterAlertOnlyTab: 'เฉพาะรุ่นที่เตือน',
+    filterLowStockTab: 'ใกล้หมด (<5)',
+    filterOutOfStockTab: 'หมด (0)',
+    searchModelCategoryPlaceholder: 'ค้นหารุ่น หรือหมวดรถ...',
+    categoryAlertSectionTitle: 'สถานะแจ้งเตือนสต็อกตามหมวดรุ่นรถ',
+    categoryAlertSectionSubtitle: 'ตรวจสอบสต็อกรวมทั้งหมดแยกตามหมวดรุ่น',
+    badgeOutOfStock: 'หมดสต็อก (0 คัน)',
+    badgeLowStock: 'ใกล้หมดสต็อก: เหลือ',
+    badgeHealthyStock: 'สต็อกเพียงพอ',
+    availableStockLabel: 'ยอดรวมพร้อมขาย',
+    thresholdRuleLabel: 'เกณฑ์เตือน: 5 คัน',
+    btnStockInCar: '+ นำเข้ารถสู่คลัง',
+    stageReady: 'พร้อมขาย',
+    stagePdi: 'ตรวจ PDI',
+    stageImported: 'นำเข้า/อยู่ด่าน',
+    stageEventPromo: 'Event/โปร',
+    stageSold: 'ขายแล้ว',
+    noAlertsTitle: 'ไม่พบรายการแจ้งเตือนในเงื่อนไขนี้',
+    noAlertsDesc: 'สต็อกรถทุกหมวดรุ่นอยู่ในระดับปกติ หรือลองเปลี่ยนตัวกรอง',
 
     // Users & Permissions
     usersTitle: 'จัดการผู้ใช้และสิทธิ์การเข้าถึง (User Management & Roles)',
@@ -1556,8 +1712,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     securityPermissions: 'สิทธิ์ความปลอดภัยที่ได้รับ',
 
     // Currencies Modal
-    currencyTitle: 'ຕັ້ງຄ່າສະກຸນເງິນ (Currencies)',
-    currencySubtitle: 'ເລືອກ ແລະ ຈັດການສະກຸນເງິນໃນລະບົບ',
+    currencyTitle: 'ตั้งค่าสกุลเงิน (Currencies)',
+    currencySubtitle: 'เลือกและจัดการสกุลเงินในระบบ',
     baseCurrencyUSD: 'สกุลเงินหลัก: ดอลลาร์สหรัฐ (USD $)',
     exchangeRateLAK: 'อัตราแลกเปลี่ยน 1 USD -> กีบ (LAK ₭)',
     exchangeRateTHB: 'อัตราแลกเปลี่ยน 1 USD -> บาท (THB ฿)',

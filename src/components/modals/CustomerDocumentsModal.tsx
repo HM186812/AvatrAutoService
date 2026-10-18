@@ -16,9 +16,11 @@ import {
   CreditCard,
   Building2,
   Calendar,
-  Sparkles
+  Sparkles,
+  FileCheck
 } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
+import { exportElementToDocx } from '../../utils/docxExport';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay } from '../../utils/whatsapp';
 import { DEFAULT_EXCHANGE_RATE_LAK, generateInstallmentSchedule } from '../../utils/installment';
@@ -51,6 +53,7 @@ export default function CustomerDocumentsModal({
   const [activeDoc, setActiveDoc] = useState<DocumentType>(initialDoc);
   const [showToolbar, setShowToolbar] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingDocx, setIsExportingDocx] = useState(false);
   const [isPaymentConfirmedNow, setIsPaymentConfirmedNow] = useState(customer.status === 'delivered');
 
   useEffect(() => {
@@ -179,6 +182,31 @@ export default function CustomerDocumentsModal({
     }
   };
 
+  const handleDownloadDocx = async () => {
+    try {
+      setIsExportingDocx(true);
+      const docNames: Record<DocumentType, string> = {
+        booking: 'ໃບສັນຍາສັ່ງຈອງ_Booking',
+        receipt: 'ໃບຮັບເງິນ_Receipt',
+        handover: 'ໃບມອບລົດ_Handover',
+        authorization: 'ໃບມອບສິດ_PowerOfAttorney',
+        installment_schedule: 'ຕາຕະລາງຜ່ອນຊຳລະ_Schedule',
+      };
+      const cleanCustomerName = customer.customerName.replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+      const filename = `AVATR_${docNames[activeDoc]}_${cleanCustomerName}.docx`;
+
+      await exportElementToDocx('printable-customer-document', {
+        filename,
+        title: `AVATR ${docNames[activeDoc]} - ${customer.customerName}`,
+      });
+    } catch (error) {
+      console.error('DOCX export failed:', error);
+      alert('ບໍ່ສາມາດບັນທຶກ DOCX ໄດ້. ກະລຸນາລອງໃໝ່');
+    } finally {
+      setIsExportingDocx(false);
+    }
+  };
+
   // Confirm Payment directly from inside the document modal
   const handleConfirmPaymentFromDoc = async () => {
     const updated: Lead = {
@@ -271,12 +299,32 @@ export default function CustomerDocumentsModal({
               {isExportingPdf ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
-                  <span>ກຳລັງສ້າງ PDF...</span>
+                  <span>PDF...</span>
                 </>
               ) : (
                 <>
                   <Download className="w-3.5 h-3.5 text-black" />
-                  <span>ບັນທຶກເປັນ PDF (A4)</span>
+                  <span>PDF (A4)</span>
+                </>
+              )}
+            </button>
+
+            {/* Export DOCX */}
+            <button
+              onClick={handleDownloadDocx}
+              disabled={isExportingDocx}
+              className="px-3.5 py-1.5 bg-zinc-100 hover:bg-white text-black font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-md border border-zinc-300 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              title="ດາວໂຫຼດ ຫຼື ບັນທຶກເອກະສານນີ້ເປັນໄຟລ໌ Word (.docx)"
+            >
+              {isExportingDocx ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                  <span>Word...</span>
+                </>
+              ) : (
+                <>
+                  <FileCheck className="w-3.5 h-3.5 text-black" />
+                  <span>DOCX (Word)</span>
                 </>
               )}
             </button>
