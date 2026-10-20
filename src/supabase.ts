@@ -20,6 +20,7 @@ export const auth = supabase?.auth ?? null;
 export const storage = supabase?.storage ?? null;
 
 async function currentStaffId() {
+  if (!isSupabaseConfigured) return 'user-admin-01';
   const { data, error } = await requireSupabase().auth.getUser();
   if (error) throw error;
   if (!data.user) throw new Error('A signed-in staff account is required.');
@@ -75,6 +76,16 @@ export async function deleteUserFromSupabase(userId: string) {
 }
 
 export async function uploadCompanyQrCodeToStorage(file: File, staff: SystemUser) {
+  if (!isSupabaseConfigured) {
+    const reader = new FileReader();
+    const dataUrl = await new Promise<string>((resolve) => {
+      reader.onload = () => resolve((reader.result as string) || '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+    await saveDealershipSettingsPatch({ companyQrImageUrl: dataUrl, uploadedBy: staff.id }, staff.id);
+    return dataUrl;
+  }
   const { url } = await uploadDealershipAsset(file, 'qr');
   await saveDealershipSettingsPatch({ companyQrImageUrl: url, uploadedBy: staff.id }, staff.id);
   return url;

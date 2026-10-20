@@ -4,6 +4,7 @@ import AvatrLogo from '../layout/AvatrLogo';
 import { X, Printer, Phone, Download, CheckCircle, ShieldCheck, Loader2, Calendar, FileCheck } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { exportElementToDocx } from '../../utils/docxExport';
+import { showToast } from '../common';
 
 interface QuotationModalProps {
   isOpen: boolean;
@@ -64,7 +65,7 @@ export default function QuotationModal({
       });
     } catch (err) {
       console.error('Error generating quotation PDF:', err);
-      alert('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້');
+      showToast('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້', 'error');
     } finally {
       setIsExportingQuotePdf(false);
     }
@@ -80,7 +81,7 @@ export default function QuotationModal({
       });
     } catch (err) {
       console.error('Error generating quotation DOCX:', err);
-      alert('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້');
+      showToast('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້', 'error');
     } finally {
       setIsExportingQuoteDocx(false);
     }
@@ -207,8 +208,9 @@ export default function QuotationModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pb-3 border-b border-zinc-800">
               <div>
-                <label className="text-zinc-400 block mb-1">ຊື່ລູກຄ້າໃນໃບສະເໜີລາຄາ</label>
+                <label htmlFor="quote-client-name" className="text-zinc-400 block mb-1 cursor-pointer">ຊື່ລູກຄ້າໃນໃບສະເໜີລາຄາ</label>
                 <input
+                  id="quote-client-name"
                   type="text"
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
@@ -217,8 +219,9 @@ export default function QuotationModal({
                 />
               </div>
               <div>
-                <label className="text-zinc-400 block mb-1">ເບີໂທລະສັບ</label>
+                <label htmlFor="quote-client-phone" className="text-zinc-400 block mb-1 cursor-pointer">ເບີໂທລະສັບ</label>
                 <input
+                  id="quote-client-phone"
                   type="text"
                   value={clientPhone}
                   onChange={(e) => setClientPhone(e.target.value)}
@@ -227,11 +230,12 @@ export default function QuotationModal({
                 />
               </div>
               <div>
-                <label className="text-zinc-400 block mb-1 flex items-center gap-1.5">
+                <label htmlFor="quote-date" className="text-zinc-400 block mb-1 flex items-center gap-1.5 cursor-pointer">
                   <Calendar className="w-3.5 h-3.5 text-white" />
                   <span>ວັນທີອອກໃບສະເໜີ (ວັນ/ເດືອນ/ປີ)</span>
                 </label>
                 <input
+                  id="quote-date"
                   type="date"
                   value={quoteDate}
                   onChange={(e) => setQuoteDate(e.target.value)}
@@ -242,10 +246,11 @@ export default function QuotationModal({
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="text-zinc-400 block mb-1">
+                <label htmlFor="quote-downpayment" className="text-zinc-400 block mb-1 cursor-pointer">
                   ວາງເງິນດາວ: <strong className="text-white font-mono">{downPaymentPercent}%</strong>
                 </label>
                 <input
+                  id="quote-downpayment"
                   type="number"
                   min="10"
                   max="90"
@@ -256,15 +261,16 @@ export default function QuotationModal({
               </div>
 
               <div>
-                <label className="text-zinc-400 block mb-1">
+                <span className="text-zinc-400 block mb-1 font-sans">
                   ໄລຍະເວລາຜ່ອນ: <strong className="text-white font-mono">{loanMonths} ເດືອນ</strong>
-                </label>
+                </span>
                 <div className="flex gap-1">
                   {[12, 24, 36, 48, 60].map((m) => (
                     <button
                       key={m}
+                      type="button"
                       onClick={() => setLoanMonths(m)}
-                      className={`flex-1 py-1 text-center rounded-lg border transition-colors ${
+                      className={`flex-1 py-1 text-center rounded-lg border transition-all cursor-pointer active:scale-95 ${
                         loanMonths === m ? 'bg-white text-black font-semibold border-white shadow-sm' : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                       }`}
                     >
@@ -275,10 +281,11 @@ export default function QuotationModal({
               </div>
 
               <div>
-                <label className="text-zinc-400 block mb-1">
+                <label htmlFor="quote-interest-rate" className="text-zinc-400 block mb-1 cursor-pointer">
                   ດອກເບ້ຍຕໍ່ປີ: <strong className="text-white font-mono">{interestRateYearly}%</strong>
                 </label>
                 <input
+                  id="quote-interest-rate"
                   type="number"
                   step="0.1"
                   min="1"

@@ -30,9 +30,9 @@ export default function VehicleModal({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 bg-black/70 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full transition-colors border border-zinc-700 cursor-pointer shadow-lg"
+          className="absolute top-4 right-4 z-10 p-2 bg-black/70 hover:bg-black/90 text-white rounded-full transition-colors border border-zinc-700 cursor-pointer shadow-lg always-white-text"
         >
-          <X className="w-5 h-5" />
+          <X className="w-5 h-5 always-white-icon text-white" />
         </button>
 
         {/* Hero Visual */}
@@ -46,7 +46,7 @@ export default function VehicleModal({
           
           <div className="absolute bottom-4 left-6 right-6 flex flex-wrap items-end justify-between gap-4 always-white-text">
             <div>
-              <span className="text-xs font-mono uppercase tracking-widest px-2.5 py-1 bg-black/80 border border-zinc-700 rounded-lg text-zinc-200" style={{ color: '#e4e4e7' }}>
+              <span className="text-xs font-mono uppercase tracking-widest px-2.5 py-1 bg-black/80 border border-zinc-700 rounded-lg text-white always-white-text">
                 {vehicle.category}
               </span>
               <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1 drop-shadow-md" style={{ color: '#ffffff' }}>

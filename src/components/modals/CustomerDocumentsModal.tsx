@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { exportElementToDocx } from '../../utils/docxExport';
+import { showToast } from '../common';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay } from '../../utils/whatsapp';
 import { DEFAULT_EXCHANGE_RATE_LAK, generateInstallmentSchedule } from '../../utils/installment';
@@ -176,7 +177,7 @@ export default function CustomerDocumentsModal({
       });
     } catch (error) {
       console.error('PDF export failed:', error);
-      alert('ບໍ່ສາມາດບັນທຶກ PDF ໄດ້. ກະລຸນາລອງໃໝ່ ຫຼື ໃຊ້ປຸ່ມພິມເອກະສານ');
+      showToast('ບໍ່ສາມາດບັນທຶກ PDF ໄດ້. ກະລຸນາລອງໃໝ່ ຫຼື ໃຊ້ປຸ່ມພິມເອກະສານ', 'error');
     } finally {
       setIsExportingPdf(false);
     }
@@ -201,7 +202,7 @@ export default function CustomerDocumentsModal({
       });
     } catch (error) {
       console.error('DOCX export failed:', error);
-      alert('ບໍ່ສາມາດບັນທຶກ DOCX ໄດ້. ກະລຸນາລອງໃໝ່');
+      showToast('ບໍ່ສາມາດບັນທຶກ DOCX ໄດ້. ກະລຸນາລອງໃໝ່', 'error');
     } finally {
       setIsExportingDocx(false);
     }
@@ -229,7 +230,7 @@ export default function CustomerDocumentsModal({
       }
       setIsPaymentConfirmedNow(true);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not save payment to database.');
+      showToast(err instanceof Error ? err.message : 'Could not save payment to database.', 'error');
     }
   };
 

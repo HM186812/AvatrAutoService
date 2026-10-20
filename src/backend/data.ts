@@ -417,11 +417,12 @@ export async function loadBackendData(): Promise<BackendData> {
     client.from('dealership_settings').select('config').eq('id', true).maybeSingle(),
   ]);
 
-  for (const result of [modelsResult, inventoryResult, customersResult, billsResult, itemsResult, movementsResult]) {
+  for (const result of [modelsResult, inventoryResult, customersResult, billsResult, itemsResult]) {
     if (result.error) throw result.error;
   }
 
-  // Directory access is restricted by RLS. A staff member who cannot view it can still use core data.
+  // Directory access and operational logs can be restricted by RLS.
+  // Unauthenticated visitors or staff who cannot view them should still load core catalog data.
   const profiles = profilesResult.error ? [] : (profilesResult.data || []);
   const roles = rolesResult.error ? [] : (rolesResult.data || []);
   const permissionsByRole = new Map(roles.map((row: DbRow) => [row.role_code, row.permissions]));
@@ -439,7 +440,7 @@ export async function loadBackendData(): Promise<BackendData> {
     itemsByBill.set(item.bill_id, items);
   }
   const bills = (billsResult.data || []).map((row: DbRow) => mapBill(row, (itemsByBill.get(row.id) || [])[0]));
-  const services = (servicesResult.data || []).map((row: DbRow): ServiceAppointment => ({
+  const services = (servicesResult.error ? [] : (servicesResult.data || [])).map((row: DbRow): ServiceAppointment => ({
     id: row.id,
     customerName: row.customer_name,
     phone: row.phone,
@@ -454,7 +455,7 @@ export async function loadBackendData(): Promise<BackendData> {
     batteryHealthPercent: row.battery_health_percent == null ? undefined : Number(row.battery_health_percent),
     notes: row.notes || '',
   }));
-  const testDrives = (testDrivesResult.data || []).map((row: DbRow): TestDriveBooking => ({
+  const testDrives = (testDrivesResult.error ? [] : (testDrivesResult.data || [])).map((row: DbRow): TestDriveBooking => ({
     id: row.id,
     customerName: row.customer_name,
     phone: row.phone,
@@ -466,7 +467,7 @@ export async function loadBackendData(): Promise<BackendData> {
     status: row.status,
   }));
   const billById = new Map((billsResult.data || []).map((bill: DbRow) => [bill.id, bill]));
-  const stockLogs = (movementsResult.data || []).map((movement: DbRow): StockLogRecord => {
+  const stockLogs = (movementsResult.error ? [] : (movementsResult.data || [])).map((movement: DbRow): StockLogRecord => {
     const bill = billById.get(movement.bill_id) as DbRow | undefined;
     const item = (itemsByBill.get(movement.bill_id) || [])[0];
     const vehicle = inventoryByVin.get(movement.vehicle_vin);
@@ -624,10 +625,24 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
     return;
   }
   const client = requireSupabase();
-  const { data: models, error: modelsError } = await client.from('vehicle_models').select('id,name');
-  if (modelsError) throw modelsError;
-  const modelId = (models || []).find((model) => model.name === lead.interestedModel)?.id;
-  if (!modelId) throw new Error(`Vehicle model "${lead.interestedModel}" is not configured in the database.`);
+
+  // Robust, case-insensitive model lookup with fallback
+  let modelId: string | null = null;
+  try {
+    const { data: models } = await client.from('vehicle_models').select('id,name');
+    if (models && models.length > 0) {
+      const target = (lead.interestedModel || '').trim().toLowerCase();
+      const matched = models.find((m) =>
+        (m.id && m.id.toLowerCase() === target) ||
+        (m.name && m.name.toLowerCase() === target) ||
+        (m.name && m.name.toLowerCase().replace(/\s+/g, '') === target.replace(/\s+/g, '')) ||
+        (m.id && m.id.toLowerCase().replace(/[-_\s]+/g, '') === target.replace(/[-_\s]+/g, ''))
+      );
+      modelId = matched?.id || models[0].id || null;
+    }
+  } catch (err) {
+    console.warn('Could not query vehicle_models for lead:', err);
+  }
 
   const safeName = sanitizeText(lead.customerName, 120);
   const safePhone = sanitizePhone(lead.phone, 30);
@@ -639,55 +654,77 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
     throw new Error('ตรวจพบอักขระหรือรูปแบบคำสั่งที่ไม่อนุญาตในข้อมูลลูกค้า');
   }
 
+  const isUuid = (val?: string | null) =>
+    !!val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+  const safeLeadId = isUuid(lead.id) ? lead.id : newRecordId();
+
   let finalAssignedStaffId: string | null = null;
   let isExistingCustomer = false;
 
-  if (lead.id) {
-    const { data: existingLead, error: existingError } = await client
-      .from('customers')
-      .select('assigned_to')
-      .eq('id', lead.id)
-      .maybeSingle();
-    if (existingError) throw existingError;
-    if (existingLead !== null) {
-      isExistingCustomer = true;
-      finalAssignedStaffId = existingLead.assigned_to ?? null;
+  if (isUuid(lead.id)) {
+    try {
+      const { data: existingLead, error: existingError } = await client
+        .from('customers')
+        .select('assigned_to')
+        .eq('id', lead.id)
+        .maybeSingle();
+      if (!existingError && existingLead !== null) {
+        isExistingCustomer = true;
+        finalAssignedStaffId = existingLead.assigned_to ?? null;
+      }
+    } catch {
+      // Ignore if table query fails
     }
   }
 
   if (!isExistingCustomer) {
     if (lead.assignedTo) {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(lead.assignedTo);
-      if (isUuid) {
+      if (isUuid(lead.assignedTo)) {
         finalAssignedStaffId = lead.assignedTo;
       } else {
-        const { data: matchedStaff, error: matchError } = await client
-          .from('staff_profiles')
-          .select('id')
-          .eq('name', lead.assignedTo)
-          .maybeSingle();
-        if (matchError) throw matchError;
-        if (matchedStaff?.id) {
-          finalAssignedStaffId = matchedStaff.id;
+        try {
+          const { data: matchedStaff } = await client
+            .from('staff_profiles')
+            .select('id')
+            .eq('name', lead.assignedTo)
+            .maybeSingle();
+          if (matchedStaff?.id) {
+            finalAssignedStaffId = matchedStaff.id;
+          }
+        } catch {
+          // Ignore matching error
         }
       }
     }
 
-    if (!finalAssignedStaffId) {
-      finalAssignedStaffId = assignedStaffId || null;
+    if (!finalAssignedStaffId && isUuid(assignedStaffId)) {
+      finalAssignedStaffId = assignedStaffId;
+    }
+  }
+
+  // Ensure staff ID is valid UUID if set, otherwise fallback to null to protect foreign keys
+  if (finalAssignedStaffId && !isUuid(finalAssignedStaffId)) {
+    finalAssignedStaffId = null;
+  }
+
+  let safeCreatedAt: string = new Date().toISOString();
+  if (lead.createdAt) {
+    const d = new Date(lead.createdAt);
+    if (!isNaN(d.getTime())) {
+      safeCreatedAt = d.toISOString();
     }
   }
 
   const { error } = await client.from('customers').upsert({
-    id: lead.id,
+    id: safeLeadId,
     name: safeName,
     phone: safePhone,
     email: safeEmail || null,
     category: lead.category,
     source: sanitizeText(lead.source, 100) || null,
     interested_model_id: modelId,
-    status: lead.status,
-    priority: lead.priority,
+    status: lead.status || 'new',
+    priority: lead.priority || 'normal',
     budget: safeBudget || null,
     assigned_to: finalAssignedStaffId,
     notes: safeNotes || null,
@@ -713,13 +750,17 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
     payment_confirmed_by: sanitizeText(lead.paymentConfirmedBy, 120) || null,
     payment_type_confirmed: lead.paymentTypeConfirmed || null,
     installment_records: Array.isArray(lead.installmentRecords) ? lead.installmentRecords : [],
-    created_at: lead.createdAt ? new Date(lead.createdAt).toISOString() : undefined,
+    created_at: safeCreatedAt,
   });
   if (error) throw error;
+
+  // Sync offline store for instant local cache availability
+  offlineSaveLead({ ...lead, id: safeLeadId });
 }
 
 export async function updateLeadStatus(id: string, status: Lead['status']) {
-  if (!isSupabaseConfigured) {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+  if (!isSupabaseConfigured || !isUuid) {
     const data = getOfflineBackendData();
     const target = data.leads.find((l) => l.id === id);
     if (target) {
@@ -739,7 +780,8 @@ export async function updateLeadStatus(id: string, status: Lead['status']) {
 }
 
 export async function deleteLead(id: string) {
-  if (!isSupabaseConfigured) {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+  if (!isSupabaseConfigured || !isUuid) {
     offlineDeleteLead(id);
     return;
   }

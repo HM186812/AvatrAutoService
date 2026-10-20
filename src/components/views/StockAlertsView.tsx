@@ -244,18 +244,18 @@ export default function StockAlertsView({
       </section>
 
       {/* Main Model/Category Alert Cards Section */}
-      <section className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
-        <div className="flex flex-col gap-4 border-b border-zinc-800 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+      <section className="category-stock-alert-section overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex flex-col gap-4 border-b border-zinc-200 dark:border-zinc-800 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-lg bg-zinc-900 border border-zinc-800 text-amber-400">
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-zinc-100 border border-zinc-300 text-amber-500 dark:bg-zinc-900 dark:border-zinc-800 dark:text-amber-400">
                 <Layers className="w-4 h-4" />
               </span>
               <div>
-                <h2 className="text-base font-bold text-white">
+                <h2 className="text-base font-black text-black dark:text-white">
                   {t.categoryAlertSectionTitle}
                 </h2>
-                <p className="text-xs text-zinc-400 mt-0.5">
+                <p className="text-xs text-black font-bold dark:text-zinc-400 dark:font-normal mt-0.5">
                   {t.categoryAlertSectionSubtitle} · {displayedModels.length}
                 </p>
               </div>
@@ -268,10 +268,10 @@ export default function StockAlertsView({
               <button
                 type="button"
                 onClick={() => setFilterType('all')}
-                className={`px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${
                   filterType === 'all'
-                    ? 'border-zinc-500 bg-zinc-800 text-white font-bold'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                    ? 'border-black bg-zinc-200 text-black dark:border-zinc-500 dark:bg-zinc-800 dark:text-white'
+                    : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
                 }`}
               >
                 {t.filterAllModelsTab} ({modelSummaries.length})
@@ -279,10 +279,10 @@ export default function StockAlertsView({
               <button
                 type="button"
                 onClick={() => setFilterType('alert_only')}
-                className={`px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${
                   filterType === 'alert_only'
-                    ? 'border-amber-500 bg-amber-500/20 text-amber-300 font-bold'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                    ? 'border-black bg-amber-200 text-black dark:border-amber-500 dark:bg-amber-500/20 dark:text-amber-300'
+                    : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
                 }`}
               >
                 {t.filterAlertOnlyTab} ({totalAlertModels.length})
@@ -290,10 +290,10 @@ export default function StockAlertsView({
               <button
                 type="button"
                 onClick={() => setFilterType('low_stock')}
-                className={`px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${
                   filterType === 'low_stock'
-                    ? 'border-amber-500 bg-amber-500/20 text-amber-300 font-bold'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                    ? 'border-black bg-amber-200 text-black dark:border-amber-500 dark:bg-amber-500/20 dark:text-amber-300'
+                    : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
                 }`}
               >
                 {t.filterLowStockTab} ({lowStockModels.length})
@@ -301,10 +301,10 @@ export default function StockAlertsView({
               <button
                 type="button"
                 onClick={() => setFilterType('out_of_stock')}
-                className={`px-3 py-1.5 rounded-lg border font-medium transition-colors cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${
                   filterType === 'out_of_stock'
-                    ? 'border-rose-500 bg-rose-500/20 text-rose-300 font-bold'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                    ? 'border-black bg-rose-200 text-black dark:border-rose-500 dark:bg-rose-500/20 dark:text-rose-300'
+                    : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
                 }`}
               >
                 {t.filterOutOfStockTab} ({outOfStockModels.length})
@@ -313,13 +313,13 @@ export default function StockAlertsView({
 
             {/* Search Input */}
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black dark:text-zinc-500" />
               <input
                 type="search"
                 placeholder={t.searchModelCategoryPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full sm:w-56 rounded-xl border border-zinc-800 bg-zinc-900 pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+                className="w-full sm:w-56 rounded-xl border border-zinc-300 bg-zinc-50 pl-9 pr-3 py-1.5 text-xs text-black font-semibold placeholder:text-zinc-600 focus:border-black focus:outline-none focus:ring-1 focus:ring-black dark:border-zinc-800 dark:bg-zinc-900 dark:text-white dark:font-normal dark:placeholder:text-zinc-500 dark:focus:border-zinc-500 dark:focus:ring-zinc-700"
               />
             </div>
           </div>
@@ -328,12 +328,12 @@ export default function StockAlertsView({
         {/* Content: MODEL CATEGORY ALERT CARDS */}
         <div className="p-4 sm:p-6 space-y-4">
           {displayedModels.length === 0 ? (
-            <div className="py-12 text-center text-zinc-400 space-y-3">
-              <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
-              <p className="font-bold text-white text-base">
+            <div className="py-12 text-center text-black dark:text-zinc-400 space-y-3">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 dark:text-emerald-400 mx-auto" />
+              <p className="font-black text-black dark:text-white text-base">
                 {t.noAlertsTitle}
               </p>
-              <p className="text-xs">
+              <p className="text-xs text-black font-semibold dark:text-zinc-400 dark:font-normal">
                 {t.noAlertsDesc}
               </p>
             </div>
@@ -344,7 +344,7 @@ export default function StockAlertsView({
               return (
                 <div
                   key={item.modelName}
-                  className="category-alert-card rounded-2xl border transition-all p-5 sm:p-6 shadow-sm bg-white border-slate-200 hover:border-slate-300 dark:bg-zinc-950 dark:border-zinc-800 dark:hover:border-zinc-700"
+                  className="category-alert-card rounded-2xl border transition-all p-5 sm:p-6 shadow-sm bg-white border-zinc-200 hover:border-zinc-400 dark:bg-zinc-950 dark:border-zinc-800 dark:hover:border-zinc-700"
                 >
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                     {/* Model Info */}
@@ -353,23 +353,23 @@ export default function StockAlertsView({
                         <img
                           src={item.model.heroImage}
                           alt={item.modelName}
-                          className="w-24 h-16 rounded-xl object-cover border border-slate-200 dark:border-zinc-700 shrink-0 bg-slate-100 dark:bg-zinc-900 shadow-sm"
+                          className="w-24 h-16 rounded-xl object-cover border border-zinc-300 dark:border-zinc-700 shrink-0 bg-zinc-100 dark:bg-zinc-900 shadow-sm"
                           onError={(e) => {
                             (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80';
                           }}
                         />
                       ) : (
-                        <div className="w-24 h-16 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-900 grid place-items-center shrink-0">
-                          <Car className="w-7 h-7 text-slate-400 dark:text-zinc-500" />
+                        <div className="w-24 h-16 rounded-xl border border-zinc-300 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 grid place-items-center shrink-0">
+                          <Car className="w-7 h-7 text-black dark:text-zinc-500" />
                         </div>
                       )}
 
                       <div className="min-w-0 space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white truncate">
+                          <h3 className="text-lg sm:text-xl font-black text-black dark:text-white truncate">
                             {item.modelName}
                           </h3>
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-slate-200 bg-slate-100 text-slate-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-zinc-300 bg-zinc-100 text-black font-black dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
                             {item.category}
                           </span>
                           
@@ -391,7 +391,7 @@ export default function StockAlertsView({
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-zinc-400 truncate">
+                        <p className="text-xs text-black font-semibold dark:text-zinc-400 dark:font-normal truncate">
                           {item.model?.subTitle || item.model?.tagline || 'AVATR Intelligent Luxury EV'}
                         </p>
                       </div>
@@ -401,24 +401,24 @@ export default function StockAlertsView({
                     <div className="flex flex-wrap items-center gap-6 lg:justify-end">
                       {/* Total Available in Stock */}
                       <div className="text-left sm:text-right">
-                        <div className="text-[11px] text-slate-500 dark:text-zinc-400 font-medium">
+                        <div className="text-[11px] text-black font-black dark:text-zinc-400 dark:font-medium">
                           {t.availableStockLabel}:
                         </div>
                         <div className={`text-2xl sm:text-3xl font-black font-mono tabular-nums ${
                           item.isOutOfStock ? 'text-rose-600 dark:text-rose-400' : item.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                         }`}>
                           {item.count}{' '}
-                          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">{t.unitCars}</span>
+                          <span className="text-xs font-bold text-black dark:text-zinc-400 dark:font-normal">{t.unitCars}</span>
                         </div>
                       </div>
 
                       {/* Threshold Gauge bar */}
                       <div className="w-28 sm:w-36">
-                        <div className="flex justify-between text-[10px] text-slate-500 dark:text-zinc-500 mb-1 font-mono">
+                        <div className="flex justify-between text-[10px] text-black font-black dark:text-zinc-500 dark:font-mono mb-1">
                           <span>0</span>
                           <span>{t.thresholdRuleLabel}</span>
                         </div>
-                        <div className="w-full bg-slate-100 dark:bg-zinc-800 rounded-full h-2.5 overflow-hidden border border-slate-200 dark:border-zinc-700">
+                        <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-2.5 overflow-hidden border border-zinc-300 dark:border-zinc-700">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${
                               item.isOutOfStock ? 'bg-rose-500' : item.isLowStock ? 'bg-amber-500' : 'bg-emerald-500'
@@ -433,10 +433,10 @@ export default function StockAlertsView({
                         <button
                           type="button"
                           onClick={onNavigateToStockIn}
-                          className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200 transition-colors shadow-md flex items-center gap-1.5 cursor-pointer shrink-0"
+                          className="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200 transition-colors shadow-md flex items-center gap-1.5 cursor-pointer shrink-0 always-white-text"
                           title={`${t.btnStockInCar} ${item.modelName}`}
                         >
-                          <PackagePlus className="w-4 h-4" />
+                          <PackagePlus className="w-4 h-4 always-white-icon" />
                           <span>{t.btnStockInCar}</span>
                         </button>
                       )}
@@ -444,45 +444,45 @@ export default function StockAlertsView({
                   </div>
 
                   {/* Warehouse Stage Breakdown for this Model */}
-                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-zinc-800/80 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
-                    <div className="stage-breakdown-box rounded-xl border border-slate-200 bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs">
-                      <div className="flex items-center gap-1 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold mb-1">
-                        <Check className="w-3.5 h-3.5" />
+                  <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800/80 grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+                    <div className="stage-breakdown-box rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs">
+                      <div className="flex items-center gap-1 text-[11px] text-black font-black dark:text-emerald-400 mb-1">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         <span>{t.stageReady}</span>
                       </div>
-                      <div className="text-lg font-bold font-mono text-slate-900 dark:text-white">{item.readyCount} <span className="text-[10px] font-sans text-slate-500 dark:text-zinc-500">{t.unitCars}</span></div>
+                      <div className="text-lg font-black font-mono text-black dark:text-white">{item.readyCount} <span className="text-[10px] font-sans text-black font-bold dark:text-zinc-500 dark:font-normal">{t.unitCars}</span></div>
                     </div>
 
-                    <div className="stage-breakdown-box rounded-xl border border-slate-200 bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs">
-                      <div className="flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400 font-semibold mb-1">
-                        <Clock className="w-3.5 h-3.5" />
+                    <div className="stage-breakdown-box rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs">
+                      <div className="flex items-center gap-1 text-[11px] text-black font-black dark:text-amber-400 mb-1">
+                        <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                         <span>{t.stagePdi}</span>
                       </div>
-                      <div className="text-lg font-bold font-mono text-slate-900 dark:text-white">{item.pdiCount} <span className="text-[10px] font-sans text-slate-500 dark:text-zinc-500">{t.unitCars}</span></div>
+                      <div className="text-lg font-black font-mono text-black dark:text-white">{item.pdiCount} <span className="text-[10px] font-sans text-black font-bold dark:text-zinc-500 dark:font-normal">{t.unitCars}</span></div>
                     </div>
 
-                    <div className="stage-breakdown-box rounded-xl border border-slate-200 bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs">
-                      <div className="flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-400 font-semibold mb-1">
-                        <Truck className="w-3.5 h-3.5" />
+                    <div className="stage-breakdown-box rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs">
+                      <div className="flex items-center gap-1 text-[11px] text-black font-black dark:text-blue-400 mb-1">
+                        <Truck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                         <span>{t.stageImported}</span>
                       </div>
-                      <div className="text-lg font-bold font-mono text-slate-900 dark:text-white">{item.importedCount} <span className="text-[10px] font-sans text-slate-500 dark:text-zinc-500">{t.unitCars}</span></div>
+                      <div className="text-lg font-black font-mono text-black dark:text-white">{item.importedCount} <span className="text-[10px] font-sans text-black font-bold dark:text-zinc-500 dark:font-normal">{t.unitCars}</span></div>
                     </div>
 
-                    <div className="stage-breakdown-box rounded-xl border border-slate-200 bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs">
-                      <div className="flex items-center gap-1 text-[11px] text-purple-700 dark:text-purple-400 font-semibold mb-1">
-                        <Sparkles className="w-3.5 h-3.5" />
+                    <div className="stage-breakdown-box rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs">
+                      <div className="flex items-center gap-1 text-[11px] text-black font-black dark:text-purple-400 mb-1">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
                         <span>{t.stageEventPromo}</span>
                       </div>
-                      <div className="text-lg font-bold font-mono text-slate-900 dark:text-white">{item.eventCount} <span className="text-[10px] font-sans text-slate-500 dark:text-zinc-500">{t.unitCars}</span></div>
+                      <div className="text-lg font-black font-mono text-black dark:text-white">{item.eventCount} <span className="text-[10px] font-sans text-black font-bold dark:text-zinc-500 dark:font-normal">{t.unitCars}</span></div>
                     </div>
 
-                    <div className="stage-breakdown-box rounded-xl border border-slate-200 bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs col-span-2 sm:col-span-1">
-                      <div className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-zinc-400 font-semibold mb-1">
-                        <Lock className="w-3.5 h-3.5" />
+                    <div className="stage-breakdown-box rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 p-2.5 shadow-2xs col-span-2 sm:col-span-1">
+                      <div className="flex items-center gap-1 text-[11px] text-black font-black dark:text-zinc-400 mb-1">
+                        <Lock className="w-3.5 h-3.5 text-zinc-700 dark:text-zinc-400" />
                         <span>{t.stageSold}</span>
                       </div>
-                      <div className="text-lg font-bold font-mono text-slate-800 dark:text-zinc-300">{item.soldCount} <span className="text-[10px] font-sans text-slate-500 dark:text-zinc-500">{t.unitCars}</span></div>
+                      <div className="text-lg font-black font-mono text-black dark:text-zinc-300">{item.soldCount} <span className="text-[10px] font-sans text-black font-bold dark:text-zinc-500 dark:font-normal">{t.unitCars}</span></div>
                     </div>
                   </div>
                 </div>

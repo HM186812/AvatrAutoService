@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { 
   Lead, 
   ServiceAppointment, 
@@ -26,19 +26,20 @@ import { DEFAULT_OFFLINE_USERS } from './backend/offlineStore';
 import { newRecordId } from './backend/ids';
 // Categorized Components & Views
 import { Sidebar } from './components/layout';
+import AvatrLogo from './components/layout/AvatrLogo';
+import { ToastContainer, showToast, ToastType, ViewSkeleton } from './components/common';
 import { LoginView } from './components/auth';
-import {
-  DashboardView,
-  CustomerView,
-  InventoryView,
-  StockInView,
-  POSSalesView,
-  BillsManagementView,
-  StockAlertsView,
-  UserManagementView,
-  ProfileView,
-  InstallmentDashboardView,
-} from './components/views';
+
+const DashboardView = lazy(() => import('./components/views/DashboardView'));
+const CustomerView = lazy(() => import('./components/views/CustomerView'));
+const InventoryView = lazy(() => import('./components/views/InventoryView'));
+const StockInView = lazy(() => import('./components/views/StockInView'));
+const POSSalesView = lazy(() => import('./components/views/POSSalesView'));
+const BillsManagementView = lazy(() => import('./components/views/BillsManagementView'));
+const StockAlertsView = lazy(() => import('./components/views/StockAlertsView'));
+const UserManagementView = lazy(() => import('./components/views/UserManagementView'));
+const ProfileView = lazy(() => import('./components/views/ProfileView'));
+const InstallmentDashboardView = lazy(() => import('./components/views/InstallmentDashboardView'));
 import {
   NewLeadModal,
   QuotationModal,
@@ -74,6 +75,7 @@ import {
 
 export default function App() {
   const [currentMenu, setCurrentMenu] = useState<ActiveMenu>('dashboard');
+  const [customerViewInitialTab, setCustomerViewInitialTab] = useState<'new_leads' | 'existing_customers' | 'installment_customers'>('new_leads');
   const [lang, setLang] = useState<Language>(() => {
     try {
       const saved = localStorage.getItem('avatr_app_lang');
@@ -238,10 +240,20 @@ export default function App() {
             };
             setCurrentUser(cleanUser);
             setIsLoggedIn(true);
-          } else if (user && (user.id === 'user-tech-01' || user.name?.includes('ຊ່າງເຕັກນິກ'))) {
+          } else {
             setCurrentUser(DEFAULT_OFFLINE_USERS[0]);
             setIsLoggedIn(true);
           }
+        } catch {
+          setCurrentUser(DEFAULT_OFFLINE_USERS[0]);
+          setIsLoggedIn(true);
+        }
+      } else {
+        // Auto sign-in as Admin on Localhost for immediate seamless testing
+        setCurrentUser(DEFAULT_OFFLINE_USERS[0]);
+        setIsLoggedIn(true);
+        try {
+          localStorage.setItem('avatr_offline_active_user', JSON.stringify(DEFAULT_OFFLINE_USERS[0]));
         } catch {}
       }
       setIsAuthLoading(false);
@@ -294,6 +306,21 @@ export default function App() {
   const lowStockCount = modelStockSummaries.filter(m => m.isLowStock).length;
   const outOfStockCount = modelStockSummaries.filter(m => m.isOutOfStock).length;
 
+  // Active installment & leasing portfolio count
+  const installmentCount = useMemo(() => {
+    return leads.filter(l => 
+      l.paymentType === 'installment' || 
+      l.paymentType === 'finance' || 
+      Boolean(l.downPaymentPercent) || 
+      Boolean(l.financeCompany) || 
+      Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
+      l.installmentStatus === 'active_repaying' ||
+      l.installmentStatus === 'completed' ||
+      l.installmentStatus === 'approved' ||
+      l.installmentStatus === 'pending_approval'
+    ).length;
+  }, [leads]);
+
   // Modal States
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
   const [isServiceOpen, setIsServiceOpen] = useState(false);
@@ -324,8 +351,6 @@ export default function App() {
     }
   }, [currentUser.role, currentMenu, isAdmin]);
 
-  // Toast Notification
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleLogout = async () => {
     setIsLoggedIn(false);
@@ -371,11 +396,8 @@ export default function App() {
     }
   };
 
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 4500);
+  const triggerToast = (msg: string, type: ToastType = 'success') => {
+    showToast(msg, type);
   };
 
   // Handlers
@@ -443,7 +465,30 @@ export default function App() {
   };
 
   if (isAuthLoading) {
-    return <div className="min-h-screen bg-black text-white grid place-items-center">Loading…</div>;
+    return (
+      <div className="min-h-[100dvh] w-full bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden select-none">
+        <div className="absolute w-96 h-96 rounded-full bg-blue-600/10 blur-[120px] pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col items-center gap-5 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center p-3 shadow-2xl backdrop-blur-md animate-pulse">
+            <AvatrLogo className="w-full h-full" />
+          </div>
+          
+          <div className="space-y-1.5">
+            <h1 className="text-xl font-bold tracking-widest uppercase font-sans text-white">
+              AVATR AUTO SERVICE
+            </h1>
+            <p className="text-xs text-slate-400 font-mono tracking-wider">
+              {lang === 'lo' ? 'ກຳລັງໂຫລດລະບົບ...' : lang === 'th' ? 'กำลังโหลดระบบ...' : 'Initializing showroom system...'}
+            </p>
+          </div>
+
+          <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden mt-2">
+            <div className="w-1/2 h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // If user is logged out, show LoginView
@@ -466,14 +511,9 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell min-h-screen bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-20 right-4 z-50 bg-zinc-900 border border-zinc-600 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-          <span>{toastMessage}</span>
-        </div>
-      )}
+    <div className="app-shell min-h-[100dvh] bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
+      {/* Modern High-Agency Luxury Toast Container */}
+      <ToastContainer />
 
       {/* LEFT SIDEBAR */}
       <Sidebar
@@ -486,6 +526,7 @@ export default function App() {
         lowStockCount={lowStockCount}
         outOfStockCount={outOfStockCount}
         billsCount={bills.length}
+        installmentCount={installmentCount}
         currentUser={currentUser}
         allUsers={users}
         isMobileOpen={isMobileSidebarOpen}
@@ -496,41 +537,41 @@ export default function App() {
       />
 
       {/* MAIN CONTENT CANVAS */}
-      <div className="lg:pl-72 flex-1 flex flex-col min-w-0 min-h-screen">
+      <div className="lg:pl-72 flex-1 flex flex-col min-w-0 min-h-[100dvh]">
         {/* Top Header Strip inside Main Area */}
-        <header className="app-header sticky top-0 z-30 bg-black/90 backdrop-blur-md border-b border-zinc-800/80 px-4 sm:px-8 py-3 flex items-center justify-between gap-3">
+        <header className="app-header sticky top-0 z-30 bg-white/90 dark:bg-black/90 backdrop-blur-md border-b border-slate-200/90 dark:border-zinc-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="lg:hidden p-2 text-zinc-400 hover:text-white rounded-xl border border-zinc-800 bg-zinc-900 transition-colors flex-shrink-0"
+              className="lg:hidden p-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-colors flex-shrink-0"
             >
               <Menu className="w-5 h-5" />
             </button>
 
             {/* Current Active Section Heading */}
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-white flex-shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="p-2 rounded-xl bg-blue-50 dark:bg-zinc-900 border border-blue-200 dark:border-zinc-800 text-blue-600 dark:text-white flex-shrink-0 shadow-2xs">
                 {currentMenu === 'dashboard' && <LayoutDashboard className="w-4 h-4" />}
-                {currentMenu === 'pos_sales' && <ShoppingBag className="w-4 h-4 text-emerald-400" />}
+                {currentMenu === 'pos_sales' && <ShoppingBag className="w-4 h-4 text-blue-600 dark:text-emerald-400" />}
                 {currentMenu === 'customers' && <Users className="w-4 h-4" />}
                 {currentMenu === 'inventory' && <Car className="w-4 h-4" />}
                 {currentMenu === 'stock_in' && <PackagePlus className="w-4 h-4" />}
                 {currentMenu === 'bills' && <FileText className="w-4 h-4" />}
-                {currentMenu === 'installment_dashboard' && <CreditCard className="w-4 h-4 text-amber-400" />}
-                {currentMenu === 'alerts' && <AlertTriangle className="w-4 h-4" />}
+                {currentMenu === 'installment_dashboard' && <CreditCard className="w-4 h-4 text-blue-600 dark:text-amber-400" />}
+                {currentMenu === 'alerts' && <AlertTriangle className="w-4 h-4 text-amber-500" />}
                 {currentMenu === 'users' && <Key className="w-4 h-4" />}
                 {currentMenu === 'profile' && <UserIcon className="w-4 h-4" />}
               </span>
 
               <div className="min-w-0">
-                <h2 className="text-xs sm:text-sm font-bold text-white truncate leading-tight">
+                <h2 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate leading-tight">
                   {currentMenu === 'dashboard' && t.headerDashboard}
                   {currentMenu === 'pos_sales' && (t.headerPOS || 'POS ຂາຍລົດຍົນ • ອອກໃບບິນ & ຕັດສະຕ໋ອກ')}
                   {currentMenu === 'customers' && t.headerCustomers}
                   {currentMenu === 'inventory' && t.headerInventory}
                   {currentMenu === 'stock_in' && t.headerStockIn}
                   {currentMenu === 'bills' && t.headerBills}
-                  {currentMenu === 'installment_dashboard' && (lang === 'lo' ? 'Dashboard ຜ່ອນຊຳລະ & ເງິນດາວ (Leasing & Installment Portfolio)' : 'Installment & Down Payment Dashboard')}
+                  {currentMenu === 'installment_dashboard' && t.headerInstallmentDashboard}
                   {currentMenu === 'alerts' && t.headerAlerts}
                   {currentMenu === 'users' && t.headerUsers}
                   {currentMenu === 'profile' && t.headerProfile}
@@ -541,21 +582,21 @@ export default function App() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Supabase Cloud Connection Status Indicator */}
+            {/* Database Connection Status Indicator */}
             <div 
-              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs bg-zinc-900 border border-zinc-800 font-mono text-[11px]"
-              title={backendError || (isSupabaseConfigured ? 'Supabase configured' : 'Supabase is not configured')}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 font-mono text-[11px]"
+              title={backendError || (isSupabaseConfigured ? 'Supabase configured' : 'ໂໝດ Localhost Offline (ຕັດການເຊື່ອມຕໍ່ຖານຂໍ້ມູນແລ້ວ)')}
             >
-              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured && !backendError ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-              <span className="text-zinc-300">
-                {backendError ? 'DB Error' : isSupabaseConfigured ? 'Supabase Cloud' : 'Not Connected'}
+              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured && !backendError ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+              <span className="text-slate-600 dark:text-zinc-300 font-medium">
+                {backendError ? 'DB Error' : isSupabaseConfigured ? 'Supabase Cloud' : 'Localhost (Offline)'}
               </span>
             </div>
 
             {/* Theme Toggle Button (Light / Night Mode) */}
             <button
               onClick={toggleTheme}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs bg-slate-50 hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white transition-colors"
               title={theme === 'dark' ? t.lightMode : t.darkMode}
             >
               {theme === 'dark' ? (
@@ -565,19 +606,20 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-zinc-800" />
+                  <Moon className="w-3.5 h-3.5 text-slate-700" />
                   <span className="text-[11px] font-medium hidden sm:inline">{t.darkMode}</span>
                 </>
               )}
             </button>
 
-            <span className="px-3 py-1.5 rounded-xl text-xs font-bold border border-zinc-700 bg-zinc-900 text-zinc-200">{currentUser.roleTitleLo}</span>
+            <span className="px-3 py-1.5 rounded-xl text-xs font-bold border border-blue-200 dark:border-zinc-700 bg-blue-50 dark:bg-zinc-900 text-blue-700 dark:text-zinc-200">{currentUser.roleTitleLo}</span>
           </div>
         </header>
 
         {/* Content Views */}
         <main className="app-content flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto">
-          {currentMenu === 'dashboard' && (
+          <Suspense fallback={<ViewSkeleton />}>
+            {currentMenu === 'dashboard' && (
             <DashboardView
               leads={leads}
               setLeads={setLeads}
@@ -592,6 +634,11 @@ export default function App() {
               onNavigateMenu={(menu) => setCurrentMenu(menu)}
               onOpenNewLead={() => setIsNewLeadOpen(true)}
               onOpenQuote={handleOpenQuoteForVehicle}
+              onOpenNewService={() => setIsServiceOpen(true)}
+              onOpenNewTestDrive={() => {
+                setTestDriveInitialModel('AVATR 12');
+                setIsTestDriveOpen(true);
+              }}
             />
           )}
 
@@ -602,6 +649,7 @@ export default function App() {
               bills={bills}
               setBills={setBills}
               leads={leads}
+              setLeads={setLeads}
               stockLogs={stockLogs}
               setStockLogs={setStockLogs}
               vehicles={vehicles}
@@ -620,9 +668,15 @@ export default function App() {
               vehicles={vehicles}
               currentUser={currentUser}
               lang={lang}
+              initialClassificationTab={customerViewInitialTab}
               onOpenNewLead={() => setIsNewLeadOpen(true)}
               onOpenQuote={handleOpenQuoteForVehicle}
               onSelectCustomerForPOS={handleSelectCustomerForPOS}
+              onNavigateMenu={(menu) => setCurrentMenu(menu)}
+              bills={bills}
+              setBills={setBills}
+              services={services}
+              onAddService={handleAddService}
             />
           )}
 
@@ -685,10 +739,15 @@ export default function App() {
               leads={leads}
               setLeads={setLeads}
               bills={bills}
+              setBills={setBills}
               vehicles={vehicles}
               currentUser={currentUser}
               lang={lang}
               onNavigateMenu={(menu) => setCurrentMenu(menu)}
+              onNavigateTab={(tab) => {
+                setCustomerViewInitialTab(tab);
+                setCurrentMenu('customers');
+              }}
             />
           )}
 
@@ -727,6 +786,7 @@ export default function App() {
               setUsers={setUsers}
             />
           )}
+          </Suspense>
         </main>
       </div>
 

@@ -22,7 +22,10 @@ import {
   X,
   Loader2,
   Sun,
-  Moon
+  Moon,
+  Crown,
+  Briefcase,
+  Wrench
 } from 'lucide-react';
 
 interface LoginViewProps {
@@ -199,7 +202,7 @@ export default function LoginView({
 
   return (
     <div
-      className={`app-shell login-shell min-h-screen flex items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans transition-colors duration-300 ${
+      className={`app-shell login-shell min-h-[100dvh] flex items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans transition-colors duration-300 ${
         isDark ? 'bg-[#09090b] text-white selection:bg-white selection:text-black' : 'bg-[#f8fafc] text-slate-900 selection:bg-slate-900 selection:text-white'
       }`}
     >
@@ -446,9 +449,15 @@ export default function LoginView({
                       : 'bg-white border-slate-300 hover:border-amber-500 hover:bg-amber-50'
                   }`}
                 >
-                  <div className={`font-bold text-[11px] truncate ${isDark ? 'text-white group-hover:text-amber-400' : 'text-slate-900 group-hover:text-amber-600'}`}>
-                    {demoUser.role === 'super_admin' ? '👑 ' : demoUser.role === 'sales' ? '💼 ' : '🔧 '}
-                    {demoUser.roleTitleLo}
+                  <div className={`font-bold text-[11px] truncate flex items-center gap-1.5 ${isDark ? 'text-white group-hover:text-amber-400' : 'text-slate-900 group-hover:text-amber-600'}`}>
+                    {demoUser.role === 'super_admin' ? (
+                      <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    ) : demoUser.role === 'sales' ? (
+                      <Briefcase className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    ) : (
+                      <Wrench className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    )}
+                    <span className="truncate">{demoUser.roleTitleLo}</span>
                   </div>
                   <div className={`text-[10px] truncate ${isDark ? 'text-zinc-400' : 'text-slate-600'}`}>{demoUser.email}</div>
                 </button>

@@ -4,6 +4,7 @@ import { translations } from '../../data/translations';
 import { saveStoredCurrencies } from '../../data/currencies';
 import { saveDealershipConfigToSupabase } from '../../supabase';
 import { DollarSign, Plus, Trash2, Check, X, RefreshCw, ShieldCheck, Lock } from 'lucide-react';
+import { showToast } from '../common';
 
 interface CurrencyModalProps {
   isOpen: boolean;
@@ -63,7 +64,7 @@ export default function CurrencyModal({
     if (!newCode.trim()) return;
     const cleanCode = newCode.trim().toUpperCase();
     if (list.some(c => c.code === cleanCode)) {
-      alert('ສະກຸນເງິນນີ້ມີຢູ່ໃນລະບົບແລ້ວ!');
+      showToast('ສະກຸນເງິນນີ້ມີຢູ່ໃນລະບົບແລ້ວ!', 'warning');
       return;
     }
     const newCurr: CustomCurrencyConfig = {
@@ -90,7 +91,7 @@ export default function CurrencyModal({
 
   const handleDelete = (code: string) => {
     if (code === 'USD') {
-      alert('ບໍ່ສາມາດລົບ USD ໄດ້ ເນື່ອງຈາກເປັນສະກຸນເງິນຫຼັກ');
+      showToast('ບໍ່ສາມາດລົບ USD ໄດ້ ເນື່ອງຈາກເປັນສະກຸນເງິນຫຼັກ', 'warning');
       return;
     }
     const updated = list.filter(c => c.code !== code);
@@ -255,8 +256,9 @@ export default function CurrencyModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1">ລະຫັດສະກຸນເງິນ (Code) <span className="text-red-500">*</span></label>
+                  <label htmlFor="currency-code" className="block text-zinc-400 mb-1 cursor-pointer">ລະຫັດສະກຸນເງິນ (Code) <span className="text-red-500">*</span></label>
                   <input
+                    id="currency-code"
                     type="text"
                     required
                     placeholder="e.g. CNY, EUR, JPY"
@@ -267,8 +269,9 @@ export default function CurrencyModal({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1">ສັນຍະລັກ (Symbol) <span className="text-red-500">*</span></label>
+                  <label htmlFor="currency-symbol" className="block text-zinc-400 mb-1 cursor-pointer">ສັນຍະລັກ (Symbol) <span className="text-red-500">*</span></label>
                   <input
+                    id="currency-symbol"
                     type="text"
                     required
                     placeholder="e.g. ¥, €, £"
@@ -281,8 +284,9 @@ export default function CurrencyModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1">ຊື່ສະກຸນເງິນ</label>
+                  <label htmlFor="currency-name" className="block text-zinc-400 mb-1 cursor-pointer">ຊື່ສະກຸນເງິນ</label>
                   <input
+                    id="currency-name"
                     type="text"
                     placeholder="e.g. ຢວນຈີນ (CNY)"
                     value={newNameLo}
@@ -292,8 +296,9 @@ export default function CurrencyModal({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1">ຄ່າອ້າງອີງທຽບ 1 USD <span className="text-red-500">*</span></label>
+                  <label htmlFor="currency-rate" className="block text-zinc-400 mb-1 cursor-pointer">ຄ່າອ້າງອີງທຽບ 1 USD <span className="text-red-500">*</span></label>
                   <input
+                    id="currency-rate"
                     type="number"
                     step="any"
                     required

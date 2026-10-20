@@ -12,6 +12,8 @@ import {
   AVATR_VEHICLES,
   INITIAL_BILLS,
   INITIAL_LEADS,
+  INITIAL_SERVICES,
+  INITIAL_TEST_DRIVES,
 } from '../data/mockData';
 import type { BackendData } from './data';
 
@@ -162,8 +164,8 @@ export function getOfflineBackendData(): BackendData {
   const leads = readStorage<Lead[]>('leads', INITIAL_LEADS);
   const bills = readStorage<InvoiceBillRecord[]>('bills', INITIAL_BILLS);
   const stockLogs = readStorage<StockLogRecord[]>('stockLogs', []);
-  const services = readStorage<ServiceAppointment[]>('services', []);
-  const testDrives = readStorage<TestDriveBooking[]>('testDrives', []);
+  const services = readStorage<ServiceAppointment[]>('services', INITIAL_SERVICES);
+  const testDrives = readStorage<TestDriveBooking[]>('testDrives', INITIAL_TEST_DRIVES);
   const settings = readStorage<Record<string, unknown>>('settings', {
     companyBankInfo: {
       bankName: 'BCEL OnePay (ທະນາຄານການຄ້າຕ່າງປະເທດລາວ)',

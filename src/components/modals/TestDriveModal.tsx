@@ -75,24 +75,26 @@ export default function TestDriveModal({
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-xs">
           <div>
-            <label className="block text-zinc-400 mb-1 font-medium">
+            <label htmlFor="td-name" className="block text-zinc-400 mb-1 font-medium cursor-pointer">
               {lang === 'lo' ? 'ຊື່ ແລະ ນາມສະກຸນ *' : lang === 'th' ? 'ชื่อและนามสกุล *' : 'Full Name *'}
             </label>
             <input
+              id="td-name"
               type="text"
               required
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: ທ່ານ ອາລຸນ' : lang === 'th' ? 'ตัวอย่าง: คุณ สมชาย' : 'e.g. John Doe'}
+              placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: ທ່ານ ອາລຸນ' : lang === 'th' ? 'ตัวอย่าง: คุณ สมชาย' : 'e.g. Mr. Aloun Saysana'}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-white"
             />
           </div>
 
           <div>
-            <label className="block text-zinc-400 mb-1 font-medium">
+            <label htmlFor="td-phone" className="block text-zinc-400 mb-1 font-medium cursor-pointer">
               {lang === 'lo' ? 'ເບີໂທລະສັບ (Laos Mobile) *' : lang === 'th' ? 'เบอร์โทรศัพท์ *' : 'Phone Number *'}
             </label>
             <input
+              id="td-phone"
               type="text"
               required
               value={phone}
@@ -104,13 +106,14 @@ export default function TestDriveModal({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-zinc-400 mb-1 font-medium">
+              <label htmlFor="td-model" className="block text-zinc-400 mb-1 font-medium cursor-pointer">
                 {lang === 'lo' ? 'ລຸ້ນລົດທີ່ຕ້ອງການທົດລອງຂັບ' : lang === 'th' ? 'รุ่นรถที่ต้องการทดลองขับ' : 'Vehicle Model'}
               </label>
               <select
+                id="td-model"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white cursor-pointer"
               >
                 <option value="AVATR 12">AVATR 12 (Grand Coupé)</option>
                 <option value="AVATR 11">AVATR 11 (Luxury SUV Coupé)</option>
@@ -119,13 +122,14 @@ export default function TestDriveModal({
             </div>
 
             <div>
-              <label className="block text-zinc-400 mb-1 font-medium">
+              <label htmlFor="td-timeslot" className="block text-zinc-400 mb-1 font-medium cursor-pointer">
                 {lang === 'lo' ? 'ຊ່ວງເວລາ' : lang === 'th' ? 'ช่วงเวลา' : 'Time Slot'}
               </label>
               <select
+                id="td-timeslot"
                 value={timeSlot}
                 onChange={(e) => setTimeSlot(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white cursor-pointer"
               >
                 <option value="09:30 AM">09:30 AM {lang === 'lo' ? '(ເຊົ້າ)' : lang === 'th' ? '(เช้า)' : '(Morning)'}</option>
                 <option value="11:00 AM">11:00 AM {lang === 'lo' ? '(ສວາຍ)' : lang === 'th' ? '(สาย)' : '(Late Morning)'}</option>
@@ -136,11 +140,12 @@ export default function TestDriveModal({
           </div>
 
           <div>
-            <label className="block text-zinc-400 mb-1 font-medium flex items-center gap-1.5">
+            <label htmlFor="td-date" className="block text-zinc-400 mb-1 font-medium flex items-center gap-1.5 cursor-pointer">
               <Calendar className="w-3.5 h-3.5 text-zinc-400" />
               <span>{lang === 'lo' ? 'ວັນເດືອນປີ ສະດວກ (ວັນ/ເດືອນ/ປີ) *' : lang === 'th' ? 'วัน/เดือน/ปี ที่สะดวก *' : 'Preferred Date (YYYY-MM-DD) *'}</span>
             </label>
             <input
+              id="td-date"
               type="date"
               required
               value={date}
@@ -150,13 +155,14 @@ export default function TestDriveModal({
           </div>
 
           <div>
-            <label className="block text-zinc-400 mb-1 font-medium">
+            <label htmlFor="td-location" className="block text-zinc-400 mb-1 font-medium cursor-pointer">
               {lang === 'lo' ? 'ສະຖານທີ່ / ເສັ້ນທາງທົດລອງຂັບ' : lang === 'th' ? 'สถานที่ / เส้นทางทดลองขับ' : 'Test Drive Route / Location'}
             </label>
             <select
+              id="td-location"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white cursor-pointer"
             >
               <option value="ໂຊຣູມ AVATR ວຽງຈັນ (ຫຼັກ 3 ຖະໜົນທ່າເດື່ອ)">
                 {lang === 'lo' ? 'ໂຊຣູມໃຫຍ່ AVATR ວຽງຈັນ (ຫຼັກ 3 ຖະໜົນທ່າເດື່ອ)' : lang === 'th' ? 'โชว์รูมใหญ่ AVATR เวียงจันทน์ (หลัก 3 ถนนท่าเดื่อ)' : 'AVATR Flagship Showroom (Lak 3 Thadeua)'}

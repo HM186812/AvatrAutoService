@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { exportElementToDocx } from '../../utils/docxExport';
+import { showToast } from '../common';
 import { 
   generateInstallmentSchedule, 
   calculateInstallmentSummary,
@@ -234,7 +235,7 @@ export default function InstallmentLedgerModal({
       });
     } catch (err) {
       console.error('Error generating ledger PDF:', err);
-      alert('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້');
+      showToast('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້', 'error');
     } finally {
       setIsExportingLedgerPdf(false);
     }
@@ -251,7 +252,7 @@ export default function InstallmentLedgerModal({
       });
     } catch (err) {
       console.error('Error generating ledger DOCX:', err);
-      alert('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້');
+      showToast('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້', 'error');
     } finally {
       setIsExportingLedgerDocx(false);
     }
@@ -615,8 +616,9 @@ export default function InstallmentLedgerModal({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 mb-1">ຈຳນວນເງິນທີ່ໄດ້ຮັບ ($ USD) <span className="text-red-500">*</span></label>
+                  <label htmlFor="ledger-pay-amount" className="block text-zinc-400 mb-1 cursor-pointer">ຈຳນວນເງິນທີ່ໄດ້ຮັບ ($ USD) <span className="text-red-500">*</span></label>
                   <input
+                    id="ledger-pay-amount"
                     type="number"
                     value={payAmountUSD}
                     onChange={(e) => setPayAmountUSD(Number(e.target.value))}
@@ -629,11 +631,12 @@ export default function InstallmentLedgerModal({
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-zinc-400 mb-1 flex items-center gap-1.5">
+                    <label htmlFor="ledger-pay-date" className="block text-zinc-400 mb-1 flex items-center gap-1.5 cursor-pointer">
                       <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                       <span>{lang === 'lo' ? 'ວັນທີຮັບເງິນ (ວັນ/ເດືອນ/ປີ) *' : lang === 'th' ? 'วันที่รับเงิน (วัน/เดือน/ปี) *' : 'Payment Date *'}</span>
                     </label>
                     <input
+                      id="ledger-pay-date"
                       type="date"
                       value={payDate}
                       onChange={(e) => setPayDate(e.target.value)}
@@ -642,11 +645,12 @@ export default function InstallmentLedgerModal({
                   </div>
 
                   <div>
-                    <label className="block text-zinc-400 mb-1">ຮູບແບບການຊຳລະ</label>
+                    <label htmlFor="ledger-pay-method" className="block text-zinc-400 mb-1 cursor-pointer">ຮູບແບບການຊຳລະ</label>
                     <select
+                      id="ledger-pay-method"
                       value={payMethod}
                       onChange={(e) => setPayMethod(e.target.value as any)}
-                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white cursor-pointer"
                     >
                       <option value="transfer">ໂອນເງິນ / QR (Transfer / QR)</option>
                       <option value="cash">ເງິນສົດ (Cash)</option>
@@ -657,8 +661,9 @@ export default function InstallmentLedgerModal({
                 {payMethod === 'transfer' && (
                   <div className="space-y-2">
                     <div>
-                      <label className="block text-zinc-400 mb-1">ເລກອ້າງອີງ / Slip Reference</label>
+                      <label htmlFor="ledger-pay-ref" className="block text-zinc-400 mb-1 cursor-pointer">ເລກອ້າງອີງ / Slip Reference</label>
                       <input
+                        id="ledger-pay-ref"
                         type="text"
                         value={payRef}
                         onChange={(e) => setPayRef(e.target.value)}
@@ -670,8 +675,9 @@ export default function InstallmentLedgerModal({
                 )}
 
                 <div>
-                  <label className="block text-zinc-400 mb-1">ໝາຍເຫດ</label>
+                  <label htmlFor="ledger-pay-notes" className="block text-zinc-400 mb-1 cursor-pointer">ໝາຍເຫດ</label>
                   <input
+                    id="ledger-pay-notes"
                     type="text"
                     value={payNotes}
                     onChange={(e) => setPayNotes(e.target.value)}

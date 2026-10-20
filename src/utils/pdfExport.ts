@@ -25,11 +25,11 @@ export async function exportElementToPdf(
     throw new Error('Element not found for PDF export');
   }
 
-  const {
+    const {
     filename = 'avatr-document.pdf',
     margin = [4, 4, 4, 4],
     orientation = 'portrait',
-    scale = 2,
+    scale = 2.5,
     singlePage = true,
   } = options;
 
@@ -56,7 +56,10 @@ export async function exportElementToPdf(
       windowWidth: 794,
       scrollX: 0,
       scrollY: 0,
-      ignoreElements: (el) => el.classList.contains('hide-on-pdf') || el.classList.contains('no-print'),
+      ignoreElements: (el) =>
+        el.classList.contains('hide-on-pdf') ||
+        el.classList.contains('no-print') ||
+        el.classList.contains('print:hidden'),
     });
 
     const isPortrait = orientation === 'portrait';
@@ -94,22 +97,22 @@ export async function exportElementToPdf(
         posY = marginTop;
       }
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
-      pdf.addImage(imgData, 'JPEG', posX, posY, targetWidth, targetHeight, undefined, 'FAST');
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', posX, posY, targetWidth, targetHeight, undefined, 'FAST');
     } else {
       // Multi-page slicing
       let leftHeight = canvas.height;
       let position = marginTop;
       const pageCanvasHeight = (availableHeight * canvas.width) / availableWidth;
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const imgData = canvas.toDataURL('image/png');
 
-      pdf.addImage(imgData, 'JPEG', marginLeft, position, availableWidth, (canvas.height * availableWidth) / canvas.width, undefined, 'FAST');
+      pdf.addImage(imgData, 'PNG', marginLeft, position, availableWidth, (canvas.height * availableWidth) / canvas.width, undefined, 'FAST');
       leftHeight -= pageCanvasHeight;
 
       while (leftHeight > 0) {
         position = position - pageHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', marginLeft, position, availableWidth, (canvas.height * availableWidth) / canvas.width, undefined, 'FAST');
+        pdf.addImage(imgData, 'PNG', marginLeft, position, availableWidth, (canvas.height * availableWidth) / canvas.width, undefined, 'FAST');
         leftHeight -= pageCanvasHeight;
       }
     }

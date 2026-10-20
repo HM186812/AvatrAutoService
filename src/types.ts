@@ -175,6 +175,13 @@ export interface InvoiceBillRecord {
   monthlyPaymentLAK?: number;
   freeGifts?: string[];
   warrantyTerms?: string;
+  warrantyStartDate?: string;
+  warrantyExpiryDate?: string;
+  warrantyYears?: number;
+  warrantyDistanceKm?: number;
+  currentMileageKm?: number;
+  batteryHealthSOH?: number;
+  afterSalesNotes?: string;
 
   // For Installment & Down Payment Bills
   installmentPeriod?: number; // ງວດທີ 1, 2, 3...
@@ -278,10 +285,26 @@ export interface Lead {
   paymentBank?: string;
   paymentReceiptNo?: string;
   paymentConfirmedBy?: string;
-  paymentTypeConfirmed?: 'deposit' | 'down_payment' | 'full' | 'installment';
+  paymentTypeConfirmed?: 'deposit' | 'down_payment' | 'full' | 'installment' | 'installment_completed';
+  paidDate?: string;
+  isPaymentCompleted?: boolean;
 
   // Installment payment schedule ledger
   installmentRecords?: InstallmentPaymentRecord[];
+
+  // After-Sales & Warranty Tracking fields
+  plateNumber?: string; // ປ້າຍທະບຽນລົດ
+  vin?: string; // ເລກ VIN 17 ຫຼັກ
+  engineNumber?: string; // ເລກຈັກ / Motor No.
+  color?: string; // ສີລົດ
+  currentMileageKm?: number; // ເລກກິໂລແມັດປັດຈຸບັນ
+  batteryHealthSOH?: number; // ສຸຂະພາບແບັດເຕີຣີ % (SOH)
+  warrantyStartDate?: string; // ວັນທີເລີ່ມຮັບປະກັນ YYYY-MM-DD
+  warrantyExpiryDate?: string; // ວັນທີສິ້ນສຸດຮັບປະກັນ YYYY-MM-DD
+  warrantyYears?: number; // ຈຳນວນປີຮັບປະກັນ ເຊັ່ນ 3, 5, 8
+  warrantyDistanceKm?: number; // ໄລຍະທາງຮັບປະກັນ km ເຊັ່ນ 100,000, 160,000
+  warrantyTerms?: string; // ເງື່ອນໄຂ / ຊື່ແພັກເກັດການຮັບປະກັນ
+  afterSalesNotes?: string; // ໝາຍເຫດການດູແລຫຼັງການຂາຍ
 }
 
 export interface ServiceAppointment {
@@ -297,6 +320,7 @@ export interface ServiceAppointment {
   technician: string;
   estimatedCostUSD: number;
   batteryHealthPercent?: number;
+  mileageKm?: number;
   notes: string;
 }
 

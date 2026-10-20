@@ -27,6 +27,7 @@ interface SidebarProps {
   lowStockCount: number;
   outOfStockCount: number;
   billsCount?: number;
+  installmentCount?: number;
   pendingRequestsCount?: number;
   currentUser: SystemUser;
   allUsers: SystemUser[];
@@ -66,6 +67,7 @@ export default function Sidebar({
   lowStockCount,
   outOfStockCount,
   billsCount = 4,
+  installmentCount,
   pendingRequestsCount = 3,
   currentUser,
   allUsers,
@@ -154,9 +156,9 @@ export default function Sidebar({
       ],
     },
     {
-      groupLo: 'ການເງິນ & ການຈັດການລະບົບ',
-      groupEn: 'FINANCE & GOVERNANCE',
-      groupTh: 'การเงิน & จัดการระบบ',
+      groupLo: 'ການເງິນ & ໃບບິນ',
+      groupEn: 'FINANCE & BILLS',
+      groupTh: 'การเงิน & บันทึกบิล',
       items: [
         {
           id: 'bills',
@@ -185,11 +187,11 @@ export default function Sidebar({
       )}
 
       {/* Left Sidebar Container */}
-      <aside className={`app-sidebar fixed top-0 bottom-0 left-0 z-50 w-72 bg-zinc-950 border-r border-zinc-800/80 flex flex-col justify-between transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+      <aside className={`app-sidebar fixed top-0 bottom-0 left-0 z-50 w-72 bg-white dark:bg-zinc-950 border-r border-slate-200 dark:border-zinc-800/80 flex flex-col justify-between transition-transform duration-300 ease-in-out lg:translate-x-0 ${
         isMobileOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         {/* Sidebar Header: Logo & Branding */}
-        <div className="p-4 border-b border-zinc-900">
+        <div className="p-4 border-b border-slate-200 dark:border-zinc-900">
           <div 
             onClick={() => {
               setCurrentMenu('dashboard');
@@ -200,14 +202,14 @@ export default function Sidebar({
             <AvatrLogo className="w-9 h-9 shrink-0" />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-black text-lg tracking-widest text-white group-hover:text-zinc-200">
+                <span className="font-black text-lg tracking-widest text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-zinc-200">
                   AVATR
                 </span>
-                <span className="text-[9px] tracking-widest font-mono uppercase px-1.5 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-300 rounded font-semibold">
+                <span className="text-[9px] tracking-widest font-mono uppercase px-1.5 py-0.5 bg-slate-100 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 text-slate-800 dark:text-zinc-300 rounded font-semibold">
                   AUTO
                 </span>
               </div>
-              <p className="text-[10px] text-zinc-400 truncate tracking-wide">
+              <p className="text-[10px] text-slate-700 dark:text-zinc-400 truncate tracking-wide font-medium">
                 Changan × Huawei × CATL
               </p>
             </div>
@@ -228,9 +230,9 @@ export default function Sidebar({
 
             return (
               <div key={groupIdx} className="space-y-1">
-                <div className="text-[10px] font-mono tracking-widest uppercase text-zinc-500 px-2.5 pb-1 flex items-center justify-between">
+                <div className="text-[10px] font-mono tracking-widest uppercase text-slate-900 dark:text-zinc-400 font-bold px-2.5 pb-1 flex items-center justify-between">
                   <span>{groupLabel}</span>
-                  <span className="text-zinc-600 text-[9px]">{visibleItems.length}</span>
+                  <span className="text-slate-700 dark:text-zinc-500 text-[9px] font-semibold">{visibleItems.length}</span>
                 </div>
 
                 <div className="space-y-1">
@@ -249,24 +251,26 @@ export default function Sidebar({
                           setIsMobileOpen(false);
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left group ${
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left group ${
                           isActive
-                            ? 'bg-white text-black font-bold shadow-md'
-                            : 'text-zinc-400 hover:text-white hover:bg-zinc-900/90'
+                            ? 'sidebar-menu-btn-active font-bold shadow-sm'
+                            : 'text-slate-900 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-900/90'
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Icon className={`w-4 h-4 shrink-0 transition-colors ${
                             isActive 
-                              ? 'text-black' 
-                              : 'text-zinc-400 group-hover:text-white'
+                              ? 'text-blue-600 dark:text-white' 
+                              : 'text-slate-900 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-white'
                           }`} />
                           <span className="truncate">{label}</span>
                         </div>
 
                         {badgeText !== null && badgeText !== undefined && (
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono border shrink-0 ml-1.5 ${
-                            item.badgeColor || (isActive ? 'bg-zinc-200 text-black border-zinc-300 font-bold' : 'bg-zinc-900 text-zinc-300 border-zinc-800')
+                            item.badgeColor || (isActive 
+                              ? 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900 dark:text-blue-100 font-bold' 
+                              : 'bg-slate-100 dark:bg-zinc-900 text-slate-800 dark:text-zinc-300 border-slate-200 dark:border-zinc-800')
                           }`}>
                             {badgeText}
                           </span>
@@ -286,22 +290,22 @@ export default function Sidebar({
                 setCurrentMenu('alerts');
                 setIsMobileOpen(false);
               }}
-              className="mt-2 p-2.5 bg-zinc-900/90 border border-zinc-700/80 rounded-xl cursor-pointer hover:bg-zinc-800 transition-colors"
+              className="mt-2 p-2.5 bg-amber-50 dark:bg-zinc-900/90 border border-amber-200 dark:border-zinc-700/80 rounded-xl cursor-pointer hover:bg-amber-100/70 dark:hover:bg-zinc-800 transition-colors"
             >
-              <div className="flex items-center gap-1.5 text-white font-semibold text-xs mb-1">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-zinc-300" />
+              <div className="flex items-center gap-1.5 text-amber-950 dark:text-white font-bold text-xs mb-1">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-zinc-300" />
                 <span className="truncate">{t.navAlerts}</span>
               </div>
-              <div className="text-[11px] text-zinc-400 space-y-0.5">
-                {outOfStockCount > 0 && <span className="text-zinc-200 block truncate font-medium">• {t.criticalStockAlert}: {outOfStockCount}</span>}
-                {lowStockCount > 0 && <span className="text-zinc-300 block truncate">• {t.warningStockAlert}: {lowStockCount}</span>}
+              <div className="text-[11px] space-y-0.5">
+                {outOfStockCount > 0 && <span className="text-rose-700 dark:text-rose-300 block truncate font-bold">• {t.criticalStockAlert}: {outOfStockCount}</span>}
+                {lowStockCount > 0 && <span className="text-amber-800 dark:text-amber-300 block truncate font-medium">• {t.warningStockAlert}: {lowStockCount}</span>}
               </div>
             </div>
           )}
         </div>
 
         {/* Sidebar Footer: Profile, Theme, Language, Logout */}
-        <div className="p-3 border-t border-zinc-900 bg-zinc-950 space-y-2">
+        <div className="p-3 border-t border-slate-200 dark:border-zinc-900 bg-white dark:bg-zinc-950 space-y-2">
 
           {/* User Profile Card Button */}
           <button
@@ -310,17 +314,17 @@ export default function Sidebar({
               setCurrentMenu('profile');
               setIsMobileOpen(false);
             }}
-            className={`w-full p-2 rounded-xl border transition-all text-left flex items-center justify-between gap-2 group ${
+            className={`w-full p-2.5 rounded-xl border transition-all text-left flex items-center justify-between gap-2 group ${
               currentMenu === 'profile'
-                ? 'bg-white text-black border-white shadow-md'
-                : 'bg-zinc-900/90 hover:bg-zinc-800 border-zinc-800 text-white'
+                ? 'sidebar-menu-btn-active font-bold shadow-sm'
+                : 'bg-slate-50 dark:bg-zinc-900/90 hover:bg-slate-100 dark:hover:bg-zinc-800 border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white'
             }`}
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <div className={`w-7 h-7 overflow-hidden rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-8 h-8 overflow-hidden rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
                 currentMenu === 'profile'
-                  ? 'bg-black text-white'
-                  : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-blue-100 text-blue-700 dark:bg-zinc-800 dark:text-zinc-200 border border-blue-200 dark:border-zinc-700'
               }`}>
                 {currentUser.avatarUrl ? (
                   <img src={currentUser.avatarUrl} alt="" className="h-full w-full object-cover" />
@@ -330,19 +334,19 @@ export default function Sidebar({
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1">
-                  <span className="text-xs font-bold truncate">{currentUser.name.split(' ')[0]}</span>
+                  <span className="text-xs font-bold truncate text-slate-900 dark:text-white">{currentUser.name.split(' ')[0]}</span>
                   {isSuperAdmin && (
-                    <ShieldCheck className={`w-3 h-3 shrink-0 ${currentMenu === 'profile' ? 'text-black' : 'text-zinc-200'}`} />
+                    <ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${currentMenu === 'profile' ? 'text-blue-600 dark:text-white' : 'text-blue-600 dark:text-zinc-200'}`} />
                   )}
                 </div>
-                <p className={`text-[10px] truncate ${currentMenu === 'profile' ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                <p className={`text-[10px] truncate ${currentMenu === 'profile' ? 'text-blue-700 dark:text-blue-200 font-semibold' : 'text-slate-600 dark:text-zinc-400 font-medium'}`}>
                   {isSuperAdmin ? (t.roleAdmin || 'Admin') : (currentUser.roleTitleLo || t.roleGeneralUser)} • {t.navProfile}
                 </p>
               </div>
             </div>
 
             <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-transform group-hover:translate-x-0.5 ${
-              currentMenu === 'profile' ? 'text-black' : 'text-zinc-500'
+              currentMenu === 'profile' ? 'text-blue-600 dark:text-white' : 'text-slate-600 dark:text-zinc-500'
             }`} />
           </button>
 
@@ -353,30 +357,30 @@ export default function Sidebar({
               <button
                 type="button"
                 onClick={onToggleTheme}
-                className="flex items-center justify-center gap-1.5 p-1.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-xs text-zinc-300 hover:text-white transition-colors"
+                className="flex items-center justify-center gap-1.5 p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900/90 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs text-slate-800 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white transition-colors"
                 title={theme === 'dark' ? t.lightMode : t.darkMode}
               >
                 {theme === 'dark' ? (
                   <>
                     <Sun className="w-3.5 h-3.5 text-zinc-200" />
-                    <span className="text-[11px] font-medium">{t.lightMode}</span>
+                    <span className="text-[11px] font-bold">{t.lightMode}</span>
                   </>
                 ) : (
                   <>
-                    <Moon className="w-3.5 h-3.5 text-zinc-800" />
-                    <span className="text-[11px] font-medium">{t.darkMode}</span>
+                    <Moon className="w-3.5 h-3.5 text-slate-800" />
+                    <span className="text-[11px] font-bold text-slate-900">{t.darkMode}</span>
                   </>
                 )}
               </button>
             )}
 
             {/* Language Switcher */}
-            <div className={`flex items-center justify-around p-1 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs ${!onToggleTheme ? 'col-span-2' : ''}`}>
+            <div className={`flex items-center justify-around p-1 bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs ${!onToggleTheme ? 'col-span-2' : ''}`}>
               <button
                 type="button"
                 onClick={() => setLang('lo')}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                  lang === 'lo' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                  lang === 'lo' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-2xs' : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 ລາວ
@@ -384,8 +388,8 @@ export default function Sidebar({
               <button
                 type="button"
                 onClick={() => setLang('en')}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                  lang === 'en' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                  lang === 'en' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-2xs' : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 EN
@@ -393,8 +397,8 @@ export default function Sidebar({
               <button
                 type="button"
                 onClick={() => setLang('th')}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                  lang === 'th' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-white'
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                  lang === 'th' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-2xs' : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 ไทย
@@ -407,16 +411,16 @@ export default function Sidebar({
             <button
               type="button"
               onClick={onLogout}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-800 text-xs font-semibold transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 dark:bg-zinc-900 dark:hover:bg-zinc-850 text-slate-800 hover:text-rose-600 dark:text-zinc-300 dark:hover:text-white border border-slate-200 dark:border-zinc-800 text-xs font-bold transition-colors"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5 text-slate-800 dark:text-zinc-300" />
               <span>{t.navLogout}</span>
             </button>
           )}
 
           {/* Version Info */}
           <div className="pt-0.5 text-center select-none">
-            <span className="text-[9px] font-mono text-zinc-600 tracking-wider">
+            <span className="text-[9px] font-mono text-slate-500 dark:text-zinc-600 tracking-wider">
               v1.2.0 · USD Edition
             </span>
           </div>

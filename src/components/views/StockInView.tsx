@@ -5,10 +5,12 @@ import { newRecordId } from '../../backend/ids';
 import { 
   saveBillToSupabase, 
   saveVehicleModelToSupabase,
-  deleteVehicleModelFromSupabase
+  deleteVehicleModelFromSupabase,
+  saveInventoryItemToSupabase
 } from '../../supabase';
 import AvatrLogo from '../layout/AvatrLogo';
-import { ConfirmDeleteModal } from '../modals';
+import { ConfirmDeleteModal, EditVehicleModelModal } from '../modals';
+import { showToast } from '../common';
 import { 
   PackagePlus, 
   Truck, 
@@ -33,6 +35,7 @@ import {
   Plus,
   Lock,
   Trash2,
+  Edit3,
   Loader2
 } from 'lucide-react';
 
@@ -144,11 +147,9 @@ export default function StockInView({
 
   // Created Bill for instant preview modal
   const [createdBill, setCreatedBill] = useState<InvoiceBillRecord | null>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const triggerToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 4000);
+    showToast(msg, 'success');
   };
 
   // Model selection without forcing auto-filled text onto blank form
@@ -267,6 +268,53 @@ export default function StockInView({
   // Delete vehicle model state for modern confirmation modal
   const [modelToDelete, setModelToDelete] = useState<VehicleModel | null>(null);
   const [isDeletingModel, setIsDeletingModel] = useState(false);
+
+  // Edit vehicle model state
+  const [modelToEdit, setModelToEdit] = useState<VehicleModel | null>(null);
+  const [isEditModelOpen, setIsEditModelOpen] = useState(false);
+
+  const handleRequestEditModel = (e: React.MouseEvent, v: VehicleModel) => {
+    e.stopPropagation();
+    if (!isSuperAdmin) {
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດແກ້ໄຂໝວດ/ລຸ້ນຍານຍົນໄດ້!');
+      return;
+    }
+    setModelToEdit(v);
+    setIsEditModelOpen(true);
+  };
+
+  const handleSaveEditedModel = async (updatedModel: VehicleModel, oldName: string) => {
+    await saveVehicleModelToSupabase(updatedModel);
+
+    // Update vehicles in state
+    if (setVehicles) {
+      setVehicles(prev => prev.map(v => (v.id === updatedModel.id || v.name === oldName ? updatedModel : v)));
+    }
+
+    // If current selected model was edited, update selected model
+    if (model === oldName) {
+      setModel(updatedModel.name);
+    }
+
+    // Cascade: If model name changed, update all existing items in inventory
+    if (updatedModel.name !== oldName) {
+      const matchingItems = inventory.filter(i => i.model === oldName);
+      if (matchingItems.length > 0) {
+        setInventory(prev =>
+          prev.map(item => (item.model === oldName ? { ...item, model: updatedModel.name } : item))
+        );
+        for (const item of matchingItems) {
+          try {
+            await saveInventoryItemToSupabase({ ...item, model: updatedModel.name });
+          } catch (e) {
+            console.error('Failed to sync inventory item model name:', e);
+          }
+        }
+      }
+    }
+
+    triggerToast(`ແກ້ໄຂຂໍ້ມູນໝວດ/ລຸ້ນ "${updatedModel.name}" ສຳເລັດແລ້ວ!`);
+  };
 
   const handleRequestDeleteModel = (e: React.MouseEvent, v: VehicleModel) => {
     e.stopPropagation();
@@ -496,13 +544,6 @@ export default function StockInView({
 
   return (
     <div className="mx-auto max-w-screen-2xl space-y-6 pb-16">
-      {/* Toast Notification */}
-      {toastMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-zinc-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
 
       {/* Top Banner */}
       <div className="theme-adaptive-dark-surface relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-950 to-black p-5 shadow-xl sm:p-7">
@@ -510,17 +551,17 @@ export default function StockInView({
         <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="mb-2 flex items-center gap-2">
-              <span className="rounded-xl bg-white p-2 text-black shadow-sm">
-                <PackagePlus className="h-5 w-5" />
+              <span className="rounded-xl bg-slate-900 text-white dark:bg-white dark:text-black p-2 shadow-sm always-white-text">
+                <PackagePlus className="h-5 w-5 always-white-icon" />
               </span>
-              <span className="text-[11px] font-mono font-bold uppercase tracking-[0.18em] text-zinc-300">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-zinc-300">
                 VEHICLE IMPORT & STOCK-IN
               </span>
             </div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
               {t.stockInHeader || t.stockInTitle}
             </h1>
-            <p className="mt-1 max-w-2xl text-xs text-zinc-400 sm:text-sm">
+            <p className="mt-1 max-w-2xl text-xs text-slate-600 dark:text-zinc-400 sm:text-sm">
               {t.stockInHeaderSub || t.stockInSubtitle}
             </p>
           </div>
@@ -567,7 +608,7 @@ export default function StockInView({
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
               <label className="text-zinc-400 font-medium text-xs flex items-center gap-2">
-                <span>ເລືອກລຸ້ນຍານຍົນ AVATR <span className="text-red-500">*</span></span>
+                <span>ເລືອກລຸ້ນຍານຍົນ AVATR <span className="text-red-500 font-bold ml-1">*</span></span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">
                   {vehicles.length} ລຸ້ນໃນລະບົບ
                 </span>
@@ -601,8 +642,8 @@ export default function StockInView({
                     key={v.id || v.name}
                     className={`relative rounded-2xl border transition-all ${
                       isSelected
-                        ? 'bg-zinc-900 border-slate-950 dark:border-white text-white shadow-xl ring-2 ring-slate-950/40 dark:ring-white/50'
-                        : 'bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                        ? 'bg-slate-900 text-white dark:bg-white dark:text-black border-slate-950 dark:border-white shadow-xl ring-2 ring-slate-900/20 dark:ring-white/50 always-white-text'
+                        : 'bg-slate-50 dark:bg-zinc-900/40 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-400 dark:hover:border-zinc-700 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     <button
@@ -610,11 +651,11 @@ export default function StockInView({
                       role="radio"
                       aria-checked={isSelected}
                       onClick={() => handleModelChange(v.name)}
-                      className="w-full rounded-[inherit] p-3.5 pr-12 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
+                      className="w-full rounded-[inherit] p-3.5 pr-12 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
                     >
                       <div className="flex items-center gap-3">
                         {/* Vehicle Model Logo / Image */}
-                        <div className="relative w-16 h-12 rounded-xl overflow-hidden border border-zinc-800 shrink-0 bg-zinc-950 flex items-center justify-center shadow-inner">
+                        <div className="relative w-16 h-12 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 shrink-0 bg-slate-100 dark:bg-zinc-950 flex items-center justify-center shadow-inner">
                           {v.heroImage ? (
                             <img
                               src={v.heroImage}
@@ -625,45 +666,60 @@ export default function StockInView({
                               }}
                             />
                           ) : (
-                            <Car className="w-5 h-5 text-zinc-600" />
+                            <Car className="w-5 h-5 text-slate-400 dark:text-zinc-600" />
                           )}
                         </div>
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
-                            <strong className="block text-sm font-bold text-white truncate">{v.name}</strong>
+                            <strong className={`block text-sm font-bold truncate ${isSelected ? 'text-white dark:text-black' : 'text-slate-900 dark:text-white'}`}>{v.name}</strong>
                             {isCustom && (
-                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold shrink-0">
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-300 dark:border-zinc-700 font-bold shrink-0">
                                 Custom
                               </span>
                             )}
                           </div>
-                          <span className="mt-0.5 block truncate font-sans text-[11px] text-zinc-400">
+                          <span className={`mt-0.5 block truncate font-sans text-[11px] ${isSelected ? 'text-slate-300 dark:text-zinc-600' : 'text-slate-500 dark:text-zinc-400'}`}>
                             {v.subTitle || v.category} {v.rangeCLTC ? `(${v.rangeCLTC})` : ''}
                           </span>
                         </div>
                       </div>
 
-                      <span className="mt-2.5 flex items-center justify-between gap-2 border-t border-zinc-800/80 pt-2 font-mono text-[10px]">
-                        <span className="font-semibold text-zinc-200">
+                      <span className={`mt-2.5 flex items-center justify-between gap-2 border-t pt-2 font-mono text-[10px] ${isSelected ? 'border-slate-800 dark:border-zinc-200' : 'border-slate-200 dark:border-zinc-800/80'}`}>
+                        <span className={`font-semibold ${isSelected ? 'text-slate-200 dark:text-zinc-800' : 'text-slate-700 dark:text-zinc-200'}`}>
                           ເລີ່ມຕົ້ນ ${v.priceStartingUSD?.toLocaleString()}
                         </span>
-                        <span className="flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-0.5 font-bold text-zinc-300">
-                          <Car className="h-3 w-3 text-zinc-400" />
+                        <span className={`flex items-center gap-1 rounded-md border px-2 py-0.5 font-bold ${
+                          isSelected
+                            ? 'border-slate-700 bg-slate-800 dark:border-zinc-300 dark:bg-zinc-100 text-white dark:text-black always-white-text'
+                            : 'border-slate-200 bg-white dark:border-zinc-700 dark:bg-zinc-800 text-slate-800 dark:text-zinc-300'
+                        }`}>
+                          <Car className={`h-3 w-3 ${isSelected ? 'always-white-icon text-white' : ''}`} />
                           <span>{t.tableStock}: {modelStock} {t.unitCars}</span>
                         </span>
                       </span>
                     </button>
                     {isSuperAdmin && (
-                      <button
-                        type="button"
-                        title={lang === 'lo' ? `ລົບລຸ້ນ ${v.name}` : 'Delete Model'}
-                        aria-label={lang === 'lo' ? `ລົບລຸ້ນ ${v.name}` : `Delete model ${v.name}`}
-                        onClick={(e) => handleRequestDeleteModel(e, v)}
-                        className="absolute right-2 top-2 rounded-lg border border-red-500/20 bg-red-500/10 p-1 text-red-400 opacity-80 transition-all hover:bg-red-500/20 hover:text-red-300 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="absolute right-2 top-2 z-10 flex items-center gap-1">
+                        <button
+                          type="button"
+                          title={lang === 'lo' ? `ແກ້ໄຂໝວດ/ລຸ້ນ ${v.name}` : 'Edit Model'}
+                          aria-label={lang === 'lo' ? `ແກ້ໄຂໝວດ/ລຸ້ນ ${v.name}` : `Edit model ${v.name}`}
+                          onClick={(e) => handleRequestEditModel(e, v)}
+                          className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-1 text-blue-500 dark:text-blue-400 opacity-80 transition-all hover:bg-blue-500/20 hover:text-blue-600 dark:hover:text-blue-300 hover:opacity-100 hover:scale-105 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 cursor-pointer"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          title={lang === 'lo' ? `ລົບລຸ້ນ ${v.name}` : 'Delete Model'}
+                          aria-label={lang === 'lo' ? `ລົບລຸ້ນ ${v.name}` : `Delete model ${v.name}`}
+                          onClick={(e) => handleRequestDeleteModel(e, v)}
+                          className="rounded-lg border border-red-500/20 bg-red-500/10 p-1 text-red-500 dark:text-red-400 opacity-80 transition-all hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-300 hover:opacity-100 hover:scale-105 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     )}
                   </div>
                 );
@@ -724,7 +780,7 @@ export default function StockInView({
 
             {/* VIN - Manual Entry Only */}
             <div>
-              <label className="block text-zinc-400 mb-1 font-medium">{t.vinNumber} <span className="text-red-500">*</span></label>
+              <label className="block text-zinc-400 mb-1 font-medium">{t.vinNumber} <span className="text-red-500 font-bold ml-1">*</span></label>
               <input
                 type="text"
                 required
@@ -740,7 +796,7 @@ export default function StockInView({
             <div>
               <label className="mb-1 block font-medium text-zinc-400">
                 {lang === 'lo' ? 'ເລກຈັກ (Engine / Motor Number)' : lang === 'th' ? 'เลขเครื่องยนต์ / มอเตอร์ (Engine No.)' : 'Engine / Motor No.'}
-                {' '}<span className="text-red-500">*</span>
+                {' '}<span className="text-red-500 font-bold ml-1">*</span>
               </label>
               <input
                 type="text"
@@ -857,7 +913,7 @@ export default function StockInView({
 
           <div className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <label className="block text-zinc-400 mb-1 font-medium">{t.supplierName} <span className="text-red-500">*</span></label>
+              <label className="block text-zinc-400 mb-1 font-medium">{t.supplierName} <span className="text-red-500 font-bold ml-1">*</span></label>
               <input
                 type="text"
                 required
@@ -871,7 +927,7 @@ export default function StockInView({
             <div>
               <label className="mb-1 flex w-full items-center gap-1.5 font-medium text-zinc-400">
                 <Calendar className="w-3.5 h-3.5 text-white" />
-                <span>{lang === 'lo' ? 'ວັນທີນຳເຂົ້າສາງ (ວັນ/ເດືອນ/ປີ)' : lang === 'th' ? 'วันที่นำเข้าสต็อก (วัน/เดือน/ปี)' : 'Stock In Date'} <span className="text-red-500">*</span></span>
+                <span>{lang === 'lo' ? 'ວັນທີນຳເຂົ້າສາງ (ວັນ/ເດືອນ/ປີ)' : lang === 'th' ? 'วันที่นำเข้าสต็อก (วัน/เดือน/ปี)' : 'Stock In Date'} <span className="text-red-500 font-bold ml-1">*</span></span>
               </label>
               <input
                 type="date"
@@ -937,7 +993,7 @@ export default function StockInView({
 
             <div>
               <label className="mb-1 block font-medium text-zinc-400">
-                {lang === 'lo' ? 'ສະຖານະສິນຄ້າເບື້ອງຕົ້ນ' : lang === 'th' ? 'สถานะสินค้าเริ่มต้น' : 'Initial Stock Status'} <span className="text-red-500">*</span>
+                {lang === 'lo' ? 'ສະຖານະສິນຄ້າເບື້ອງຕົ້ນ' : lang === 'th' ? 'สถานะสินค้าเริ่มต้น' : 'Initial Stock Status'} <span className="text-red-500 font-bold ml-1">*</span>
               </label>
               <select
                 value={status}
@@ -991,7 +1047,7 @@ export default function StockInView({
               {/* Campaign Title */}
               <div className="sm:col-span-2">
                 <label className="mb-1.5 block font-bold text-zinc-300">
-                  ຊື່ງານ Event / ຊື່ໂປຣໂມຊັນ (Campaign Title) <span className="text-red-500">*</span>
+                  ຊື່ງານ Event / ຊື່ໂປຣໂມຊັນ (Campaign Title) <span className="text-red-500 font-bold ml-1">*</span>
                 </label>
                 <input
                   type="text"
@@ -1007,7 +1063,7 @@ export default function StockInView({
               <div>
                 <label className="mb-1.5 flex w-full items-center gap-1 font-bold text-zinc-300">
                   <Calendar className="w-3.5 h-3.5 text-zinc-300" />
-                  <span>ວັນທີເລີ່ມຕົ້ນ (Start Date) <span className="text-red-500">*</span></span>
+                  <span>ວັນທີເລີ່ມຕົ້ນ (Start Date) <span className="text-red-500 font-bold ml-1">*</span></span>
                 </label>
                 <input
                   type="date"
@@ -1023,7 +1079,7 @@ export default function StockInView({
                 <label className="mb-1.5 flex w-full items-center justify-between font-bold text-zinc-300">
                   <span className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-zinc-300" />
-                    <span>ວັນທີສິ້ນສຸດ (End Date) <span className="text-red-500">*</span></span>
+                    <span>ວັນທີສິ້ນສຸດ (End Date) <span className="text-red-500 font-bold ml-1">*</span></span>
                   </span>
                   <div className="flex items-center gap-1">
                     {[7, 14, 30, 60].map(days => (
@@ -1115,7 +1171,7 @@ export default function StockInView({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <div className="sm:col-span-2">
               <div className="flex items-center justify-between mb-1">
-                <label className="text-zinc-400 font-medium">{t.importCostUSD} ($ USD) <span className="text-red-500">*</span></label>
+                <label className="text-zinc-400 font-medium">{t.importCostUSD} ($ USD) <span className="text-red-500 font-bold ml-1">*</span></label>
               </div>
 
               <div className="relative">
@@ -1136,7 +1192,7 @@ export default function StockInView({
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-zinc-400 font-medium">{t.quantityUnits} <span className="text-red-500">*</span></label>
+                <label className="text-zinc-400 font-medium">{t.quantityUnits} <span className="text-red-500 font-bold ml-1">*</span></label>
                 <span className="text-[10px] text-zinc-400 font-mono">1 VIN = 1 ຄັນ</span>
               </div>
               <div className="relative">
@@ -1382,7 +1438,7 @@ export default function StockInView({
                 {/* Model Name */}
                 <div className="sm:col-span-2">
                   <label className="block text-zinc-300 font-bold mb-1">
-                    ຊື່ລຸ້ນຍານຍົນ (Model Name) *
+                    ຊື່ລຸ້ນຍານຍົນ (Model Name) <span className="text-red-500 font-bold ml-1">*</span>
                   </label>
                   <input
                     type="text"
@@ -1530,7 +1586,7 @@ export default function StockInView({
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
                             <div className="absolute bottom-2 left-2.5 right-2.5 pointer-events-none">
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-zinc-300 border border-zinc-700/80 font-bold block w-fit mb-0.5">
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white border border-white/20 font-bold block w-fit mb-0.5 always-white-text">
                                 {newModelCategory || 'Custom Model'}
                               </span>
                               <div className="text-xs font-bold text-white truncate">
@@ -1593,6 +1649,19 @@ export default function StockInView({
         confirmButtonText={lang === 'lo' ? 'ຢືນຢັນລົບລຸ້ນນີ້' : 'Delete Model'}
         cancelButtonText={lang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
         lang={lang}
+      />
+
+      {/* Modern Modal for Editing Vehicle Model */}
+      <EditVehicleModelModal
+        isOpen={isEditModelOpen}
+        onClose={() => {
+          setIsEditModelOpen(false);
+          setModelToEdit(null);
+        }}
+        model={modelToEdit}
+        onSave={handleSaveEditedModel}
+        lang={lang}
+        existingModelNames={vehicles.map(v => v.name)}
       />
     </div>
   );

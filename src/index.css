@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Phetsarath OT Font Declarations */
 @font-face {
   font-family: 'Phetsarath OT';
@@ -40,7 +42,7 @@
 @theme {
   --font-sans: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-body: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
-  --font-mono: 'Phetsarath OT', 'Phetsarath', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 @layer base {
@@ -48,23 +50,27 @@
   *,
   ::before,
   ::after {
-    font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
     box-sizing: border-box;
   }
 
-  html {
-    font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    transition: background-color 0.25s ease, color 0.25s ease;
-  }
-
+  html,
   body {
     font-family: 'Phetsarath OT', 'Phetsarath', 'Noto Sans Lao', sans-serif;
     background-color: #f8fafc;
     color: #09090b;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     transition: background-color 0.25s ease, color 0.25s ease;
     min-height: 100vh;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono) !important;
+    font-feature-settings: "tnum" 1, "zero" 1;
   }
 
   input,
@@ -166,6 +172,25 @@ html.light .bg-zinc-950\/50 {
 html.light .theme-adaptive-dark-surface {
   background-image: none !important;
   background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #09090b !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04) !important;
+}
+
+html.light .theme-adaptive-dark-surface h1,
+html.light .theme-adaptive-dark-surface h2,
+html.light .theme-adaptive-dark-surface h3,
+html.light .theme-adaptive-dark-surface strong,
+html.light .theme-adaptive-dark-surface b {
+  color: #09090b !important;
+}
+
+html.light .theme-adaptive-dark-surface p {
+  color: #475569 !important;
+}
+
+html.light .theme-adaptive-dark-surface span.font-mono {
+  color: #334155 !important;
 }
 
 /* Regular User QR Indicator Banner in Light Mode */
@@ -255,21 +280,156 @@ html.light .border-zinc-950,
 html.light .border-zinc-900,
 html.light .border-zinc-850,
 html.light .border-zinc-800,
+html.light .border-zinc-800\/90,
 html.light .border-zinc-800\/80,
+html.light .border-zinc-800\/70,
+html.light .border-zinc-800\/60,
+html.light .border-zinc-800\/50,
+html.light .border-zinc-800\/40,
 html.light .border-zinc-700,
+html.light .border-zinc-700\/90,
+html.light .border-zinc-700\/80,
+html.light .border-zinc-700\/60,
 html.light .border-zinc-600 {
   border-color: #e2e8f0 !important;
 }
 
-/* Crisp Typography in Light Mode */
-html.light .text-white {
+/* Semantic Badge Border Overrides in Light Mode (Crisp & Harmonious) */
+html.light .border-amber-800\/40,
+html.light .border-amber-800\/50,
+html.light .border-amber-800\/60,
+html.light .border-amber-500\/20,
+html.light .border-amber-500\/30,
+html.light .border-amber-500\/40,
+html.light .border-amber-400\/10,
+html.light .border-amber-400\/20,
+html.light .border-amber-400\/30 {
+  border-color: #fde68a !important;
+}
+
+html.light .border-emerald-800\/40,
+html.light .border-emerald-800\/50,
+html.light .border-emerald-800\/60,
+html.light .border-emerald-500\/15,
+html.light .border-emerald-500\/20,
+html.light .border-emerald-500\/30,
+html.light .border-emerald-500\/40,
+html.light .border-emerald-400\/10,
+html.light .border-emerald-400\/20 {
+  border-color: #a7f3d0 !important;
+}
+
+html.light .border-rose-900\/60,
+html.light .border-rose-800\/60,
+html.light .border-rose-800\/80,
+html.light .border-rose-500\/30,
+html.light .border-rose-500\/50,
+html.light .border-rose-400\/10,
+html.light .border-rose-400\/20,
+html.light .border-red-800,
+html.light .border-red-800\/50,
+html.light .border-red-800\/60,
+html.light .border-red-500\/20,
+html.light .border-red-500\/30,
+html.light .border-red-500\/40 {
+  border-color: #fecdd3 !important;
+}
+
+html.light .border-blue-800\/40,
+html.light .border-blue-800\/50,
+html.light .border-blue-500\/20,
+html.light .border-blue-500\/30 {
+  border-color: #bfdbfe !important;
+}
+
+html.light .border-purple-800\/40,
+html.light .border-purple-700\/60,
+html.light .border-purple-500\/30 {
+  border-color: #e9d5ff !important;
+}
+
+/* ========================================================
+   CRISP HIGH-CONTRAST LIGHT MODE TYPOGRAPHY ENGINE (.light)
+   ======================================================== */
+
+/* 1. All Headings & Titles in Light Mode -> Deep Pitch Black (Protected on dark buttons & photo badges only) */
+html.light h1:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-blue-700 *):not(button.bg-emerald-600 *):not(button.bg-emerald-700 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(.azure-gradient-btn *),
+html.light h2:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-blue-700 *):not(button.bg-emerald-600 *):not(button.bg-emerald-700 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(.azure-gradient-btn *),
+html.light h3:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-blue-700 *):not(button.bg-emerald-600 *):not(button.bg-emerald-700 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(.azure-gradient-btn *),
+html.light h4:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-blue-700 *):not(button.bg-emerald-600 *):not(button.bg-emerald-700 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(.azure-gradient-btn *),
+html.light h5:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-blue-700 *):not(button.bg-emerald-600 *):not(button.bg-emerald-700 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(.azure-gradient-btn *),
+html.light h6:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-blue-700 *):not(button.bg-emerald-600 *):not(button.bg-emerald-700 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(.azure-gradient-btn *),
+html.light strong:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-blue-700 *):not(button.bg-emerald-600 *):not(button.bg-emerald-700 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(.azure-gradient-btn *):not(.stock-badge-low *),
+html.light b:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-blue-700 *):not(button.bg-emerald-600 *):not(button.bg-emerald-700 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(.azure-gradient-btn *):not(.stock-badge-low *),
+html.light th:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *) {
   color: #09090b !important;
 }
 
-/* Protected Overlays & Badges ONLY over Car Photos in Light Mode */
+/* 2. Numeric Counters, Monospace Figures & Statistics in Light Mode */
+html.light .font-mono:not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(.azure-gradient-btn *):not(.always-white-text):not(.always-white-text *):not(.official-dealer-document *):not([class*="text-emerald"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-rose"]):not([class*="text-red"]):not([class*="text-purple"]):not([class*="text-sky"]):not([class*="text-indigo"]):not(.stock-badge-low *):not(.stock-badge-low) {
+  color: #09090b !important;
+}
+
+/* 3. Metric Value Displays (text-xl, text-2xl, text-3xl, text-4xl) in Light Mode */
+html.light [class*="text-xl"]:not(button *):not(.always-white-text):not(.always-white-text *):not([class*="text-emerald"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-rose"]):not([class*="text-red"]):not([class*="text-purple"]):not([class*="text-sky"]),
+html.light [class*="text-2xl"]:not(button *):not(.always-white-text):not(.always-white-text *):not([class*="text-emerald"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-rose"]):not([class*="text-red"]):not([class*="text-purple"]):not([class*="text-sky"]),
+html.light [class*="text-3xl"]:not(button *):not(.always-white-text):not(.always-white-text *):not([class*="text-emerald"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-rose"]):not([class*="text-red"]):not([class*="text-purple"]):not([class*="text-sky"]),
+html.light [class*="text-4xl"]:not(button *):not(.always-white-text):not(.always-white-text *):not([class*="text-emerald"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-rose"]):not([class*="text-red"]):not([class*="text-purple"]):not([class*="text-sky"]) {
+  color: #09090b !important;
+}
+
+/* 4. White Text Conversion to Deep Pitch Black (Excluding genuine dark buttons & photo badges only) */
+html.light .text-white:not(button.bg-blue-600):not(button.bg-blue-600 *):not(button.bg-blue-700):not(button.bg-blue-700 *):not(button.bg-emerald-600):not(button.bg-emerald-600 *):not(button.bg-emerald-700):not(button.bg-emerald-700 *):not(button.bg-rose-600):not(button.bg-rose-600 *):not(button.bg-red-600):not(button.bg-red-600 *):not(button.bg-amber-600):not(button.bg-amber-600 *):not(button.bg-slate-900):not(button.bg-slate-900 *):not(a.bg-blue-600):not(a.bg-blue-600 *):not(a.bg-emerald-600):not(a.bg-emerald-600 *):not(.azure-gradient-btn):not(.azure-gradient-btn *):not(.always-white-text):not(.always-white-text *):not(.official-dealer-document *):not(span.bg-blue-600):not(span.bg-blue-600 *):not(span.bg-emerald-600):not(span.bg-emerald-600 *):not(span.bg-rose-600):not(span.bg-rose-600 *):not(button[type="submit"].bg-white):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button):not(.pos-confirm-sale-button *):not(.user-management-primary-action):not(.user-management-primary-action *):not(.user-management-modal-submit):not(.user-management-modal-submit *):not(.user-management-danger-action):not(.user-management-danger-action *) {
+  color: #09090b !important;
+}
+
+/* 5. Protected Overlays & Badges ONLY over Car Photos in Light Mode */
 html.light .always-white-text:not(.stock-badge-low),
 html.light .always-white-text:not(.stock-badge-low) *:not(.stock-badge-low):not(.stock-badge-low *) {
   color: #ffffff !important;
+}
+
+/* 6. Explicit Dark Action Buttons & Dark Overlays (Keep Crisp White Text) */
+html.light button.bg-blue-600,
+html.light button.bg-blue-600 *,
+html.light button.bg-blue-700,
+html.light button.bg-blue-700 *,
+html.light button.bg-emerald-600,
+html.light button.bg-emerald-600 *,
+html.light button.bg-emerald-700,
+html.light button.bg-emerald-700 *,
+html.light button.bg-rose-600,
+html.light button.bg-rose-600 *,
+html.light button.bg-red-600,
+html.light button.bg-red-600 *,
+html.light button.bg-slate-900,
+html.light button.bg-slate-900 *,
+html.light a.bg-emerald-600,
+html.light a.bg-emerald-600 *,
+html.light a.bg-blue-600,
+html.light a.bg-blue-600 *,
+html.light .azure-gradient-btn,
+html.light .azure-gradient-btn * {
+  color: #ffffff !important;
+}
+
+html.light button.bg-blue-600 svg,
+html.light button.bg-emerald-600 svg,
+html.light button.bg-rose-600 svg,
+html.light button.bg-red-600 svg,
+html.light button.bg-slate-900 svg,
+html.light button[type="submit"].bg-white svg,
+html.light .pos-confirm-sale-button svg,
+html.light .user-management-primary-action svg,
+html.light .user-management-modal-submit svg,
+html.light .user-management-danger-action svg,
+html.light a.bg-emerald-600 svg,
+html.light a.bg-blue-600 svg,
+html.light .azure-gradient-btn svg,
+html.light .always-white-icon,
+html.light .always-white-text svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 /* Stock Badges in Default / Dark Mode */
@@ -323,14 +483,6 @@ html.light .category-alert-card .stage-breakdown-box {
   border-color: #e2e8f0 !important;
 }
 
-/* Safeguard for amber text in light mode */
-html.light .text-amber-200,
-html.light .text-amber-300 {
-  color: #b45309 !important;
-}
-html.light .text-amber-400 {
-  color: #92400e !important;
-}
 
 /* Light Mode Paper & Invoice styling */
 html.light .receipt-paper {
@@ -344,25 +496,50 @@ html.light .receipt-paper * {
   color: #09090b !important;
 }
 
-html.light .text-zinc-100,
-html.light .text-zinc-200 {
-  color: #18181b !important;
+/* Ultra High-Contrast Pitch Black & Dark Slate Typography in Light Mode */
+html.light .text-zinc-100:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *),
+html.light .text-zinc-200:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *),
+html.light .text-zinc-300:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *),
+html.light .text-slate-100:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *),
+html.light .text-slate-200:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *),
+html.light .text-slate-300:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *) {
+  color: #09090b !important;
 }
 
-html.light .text-zinc-300 {
+html.light .text-zinc-400:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *),
+html.light .text-slate-400:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *) {
   color: #334155 !important;
 }
 
-html.light .text-zinc-400 {
-  color: #64748b !important;
+html.light .text-zinc-500:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *),
+html.light .text-slate-500:not(.always-white-text):not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.azure-gradient-btn *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *) {
+  color: #475569 !important;
 }
 
-html.light .text-zinc-500 {
-  color: #94a3b8 !important;
+html.light .text-zinc-600:not(.always-white-text):not(.always-white-text *):not(button *),
+html.light .text-slate-600:not(.always-white-text):not(.always-white-text *):not(button *) {
+  color: #334155 !important;
 }
 
-html.light .text-zinc-600 {
-  color: #64748b !important;
+html.light .text-zinc-700:not(.always-white-text):not(.always-white-text *):not(button *),
+html.light .text-slate-700:not(.always-white-text):not(.always-white-text *):not(button *) {
+  color: #1e293b !important;
+}
+
+/* Light Mode Global SVG Icon Sharp Black Rendering */
+html.light svg:not(.always-white-icon):not(.always-white-icon *):not(.always-white-text *):not(.azure-gradient-btn *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-amber-600 *):not(a.bg-emerald-600 *):not(a.bg-blue-600 *):not(button.bg-slate-900 *):not(button[type="submit"].bg-white *):not(.pos-confirm-sale-button *):not(.user-management-primary-action *):not(.user-management-modal-submit *):not(.user-management-danger-action *):not(.official-dealer-document *):not([class*="text-emerald"]):not([class*="text-blue"]):not([class*="text-amber"]):not([class*="text-rose"]):not([class*="text-purple"]):not([class*="text-sky"]):not([class*="text-indigo"]):not(.lucide-sun):not([class*="fill-black"]) {
+  color: #09090b !important;
+  stroke: #09090b !important;
+}
+
+html.light svg.text-zinc-400:not(.always-white-icon):not(.always-white-text *):not(button *),
+html.light svg.text-zinc-500:not(.always-white-icon):not(.always-white-text *):not(button *),
+html.light svg.text-zinc-600:not(.always-white-icon):not(.always-white-text *):not(button *),
+html.light svg.text-slate-400:not(.always-white-icon):not(.always-white-text *):not(button *),
+html.light svg.text-slate-500:not(.always-white-icon):not(.always-white-text *):not(button *),
+html.light svg.text-slate-600:not(.always-white-icon):not(.always-white-text *):not(button *) {
+  color: #334155 !important;
+  stroke: #334155 !important;
 }
 
 html.light .app-shell .pos-province-trigger {
@@ -441,35 +618,120 @@ html.light textarea::placeholder {
   color: #94a3b8 !important;
 }
 
-/* Solid Active Buttons & Tabs Inversion in Light Mode (Deep Obsidian in Light Mode) */
-html.light .bg-white.text-black:not(.official-dealer-document):not(.official-dealer-document *),
-html.light .bg-white.text-zinc-950:not(.official-dealer-document):not(.official-dealer-document *) {
-  background-color: #09090b !important;
-  color: #ffffff !important;
+/* Checkbox Accent in Light Mode (High Contrast Crisp Checkmarks) */
+html.light input[type="checkbox"] {
+  accent-color: #09090b !important;
 }
 
-html.light .bg-white.text-black:not(.official-dealer-document):not(.official-dealer-document *) svg,
-html.light .bg-white.text-zinc-950:not(.official-dealer-document):not(.official-dealer-document *) svg {
+/* Option tags inside select dropdowns in Light Mode */
+html.light option {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+}
+
+/* Light Surface for elements with .bg-white.text-black / .bg-white.text-zinc-950 in Light Mode */
+html.light .bg-white.text-black:not(button[type="submit"]):not(.pos-confirm-sale-button):not(.official-dealer-document):not(.official-dealer-document *),
+html.light .bg-white.text-zinc-950:not(button[type="submit"]):not(.pos-confirm-sale-button):not(.official-dealer-document):not(.official-dealer-document *) {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .bg-white.text-black:not(button[type="submit"]):not(.pos-confirm-sale-button):not(.official-dealer-document):not(.official-dealer-document *) *,
+html.light .bg-white.text-zinc-950:not(button[type="submit"]):not(.pos-confirm-sale-button):not(.official-dealer-document):not(.official-dealer-document *) * {
+  color: #09090b !important;
+}
+
+html.light .bg-white.text-black:not(button[type="submit"]):not(.pos-confirm-sale-button):not(.official-dealer-document):not(.official-dealer-document *) svg,
+html.light .bg-white.text-zinc-950:not(button[type="submit"]):not(.pos-confirm-sale-button):not(.official-dealer-document):not(.official-dealer-document *) svg {
+  color: #09090b !important;
+  stroke: #09090b !important;
+}
+
+/* Primary Action CTA Buttons in Light Mode (Deep Obsidian / Slate-900 with Crisp White Text) */
+html.light button[type="submit"].bg-white,
+html.light button[type="submit"].bg-white *,
+html.light .pos-confirm-sale-button,
+html.light .pos-confirm-sale-button * {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+  border-color: #0f172a !important;
+}
+
+html.light button[type="submit"].bg-white svg,
+html.light .pos-confirm-sale-button svg {
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
 
+html.light button[type="submit"].bg-white:hover,
+html.light .pos-confirm-sale-button:hover {
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+}
+
+/* Universal Non-Inverting Hover for all light elements */
 html.light .hover\:bg-zinc-200:hover {
-  background-color: #18181b !important;
+  background-color: #f1f5f9 !important;
+  color: #09090b !important;
+}
+
+/* Universal Dark-Hover Neutralizer in Light Mode: NEVER DARKEN HOVERED ITEMS */
+html.light [class*="hover:bg-zinc-9"]:hover:not(.always-white-text):not(button.bg-blue-600):not(button.bg-emerald-600):not(button.bg-rose-600):not(button.bg-red-600):not(button.bg-slate-900):not(button.bg-amber-400),
+html.light [class*="hover:bg-zinc-8"]:hover:not(.always-white-text):not(button.bg-blue-600):not(button.bg-emerald-600):not(button.bg-rose-600):not(button.bg-red-600):not(button.bg-slate-900):not(button.bg-amber-400),
+html.light [class*="hover:bg-zinc-7"]:hover:not(.always-white-text):not(button.bg-blue-600):not(button.bg-emerald-600):not(button.bg-rose-600):not(button.bg-red-600):not(button.bg-slate-900):not(button.bg-amber-400) {
+  background-color: #f1f5f9 !important;
+  color: #09090b !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light [class*="hover:bg-zinc-9"]:hover *:not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button.bg-amber-400 *),
+html.light [class*="hover:bg-zinc-8"]:hover *:not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button.bg-amber-400 *),
+html.light [class*="hover:bg-zinc-7"]:hover *:not(.always-white-text *):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(button.bg-rose-600 *):not(button.bg-red-600 *):not(button.bg-slate-900 *):not(button.bg-amber-400 *) {
+  color: #09090b !important;
+}
+
+/* Universal Dividers in Light Mode */
+html.light [class*="divide-zinc-"] > * + * {
+  border-color: #e2e8f0 !important;
 }
 
 /* Tables in Light Mode */
 html.light table thead {
   background-color: #f1f5f9 !important;
-  color: #475569 !important;
+  color: #09090b !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light table thead th {
+  color: #09090b !important;
+  font-weight: 800 !important;
+}
+
+html.light table tbody {
+  color: #09090b !important;
+}
+
+html.light table tbody td {
+  color: #09090b !important;
 }
 
 html.light table tbody tr {
   border-color: #e2e8f0 !important;
 }
 
-html.light table tbody tr:hover {
+html.light table tbody tr:hover,
+html.light tr[class*="hover:bg-zinc-"]:hover,
+html.light tr.hover\:bg-zinc-900\/50:hover,
+html.light tr.hover\:bg-zinc-900\/40:hover,
+html.light tr.hover\:bg-zinc-900\/30:hover {
   background-color: #f8fafc !important;
+  color: #09090b !important;
+}
+
+html.light table tbody tr:hover td,
+html.light table tbody tr:hover th {
+  color: #09090b !important;
 }
 
 /* Modal Backdrops & Dialogs in Light Mode */
@@ -483,70 +745,412 @@ html.light .fixed.inset-0.bg-black\/70 {
   backdrop-filter: blur(8px) !important;
 }
 
-/* Luxurious Semantic Status Badges & Accents in Light Mode */
+/* Modal Windows & Inner Dialogs in Light Mode */
+html.light .fixed.inset-0 .relative.bg-zinc-950,
+html.light #printable-installment-ledger,
+html.light .customer-documents-modal,
+html.light .user-management-modal {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #09090b !important;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16) !important;
+}
+
+html.light .fixed.inset-0 .relative.bg-zinc-950 h1,
+html.light .fixed.inset-0 .relative.bg-zinc-950 h2,
+html.light .fixed.inset-0 .relative.bg-zinc-950 h3,
+html.light .fixed.inset-0 .relative.bg-zinc-950 h4,
+html.light #printable-installment-ledger h1,
+html.light #printable-installment-ledger h2,
+html.light #printable-installment-ledger h3,
+html.light #printable-installment-ledger h4,
+html.light .customer-documents-modal h1,
+html.light .customer-documents-modal h2,
+html.light .customer-documents-modal h3,
+html.light .customer-documents-modal h4,
+html.light .user-management-modal h1,
+html.light .user-management-modal h2,
+html.light .user-management-modal h3,
+html.light .user-management-modal h4 {
+  color: #09090b !important;
+}
+
+/* User Management View Dedicated High-Contrast Light Mode Rules */
+html.light .user-management-toolbar {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #09090b !important;
+}
+
+html.light .user-management-toolbar input,
+html.light .user-management-toolbar select {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #09090b !important;
+}
+
+html.light .user-management-primary-action {
+  background-color: #0f172a !important;
+  border: 1px solid #0f172a !important;
+  color: #ffffff !important;
+}
+
+html.light .user-management-primary-action * {
+  color: #ffffff !important;
+}
+
+html.light .user-management-primary-action svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+html.light .user-management-primary-action:hover {
+  background-color: #1e293b !important;
+}
+
+html.light .user-management-hero {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #09090b !important;
+}
+
+html.light .user-management-hero-icon {
+  background-color: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #09090b !important;
+}
+
+html.light .user-management-eyebrow {
+  background-color: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+}
+
+html.light .user-management-modal-cancel {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+html.light .user-management-modal-cancel:hover {
+  background-color: #e2e8f0 !important;
+  color: #09090b !important;
+}
+
+html.light .user-management-modal-submit {
+  background-color: #0f172a !important;
+  border: 1px solid #0f172a !important;
+  color: #ffffff !important;
+}
+
+html.light .user-management-modal-submit * {
+  color: #ffffff !important;
+}
+
+html.light .user-management-modal-submit:hover {
+  background-color: #1e293b !important;
+}
+
+html.light .user-management-danger-action {
+  background-color: #dc2626 !important;
+  border: 1px solid #dc2626 !important;
+  color: #ffffff !important;
+}
+
+html.light .user-management-danger-action * {
+  color: #ffffff !important;
+}
+
+html.light .user-management-danger-action svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+html.light .user-management-danger-action:hover {
+  background-color: #b91c1c !important;
+}
+
+/* Vehicle Photo Overlays & Badges in Light Mode */
+html.light .group .relative .absolute.top-2.left-2 span,
+html.light [class*="aspect-"] .absolute.top-2.left-2 span,
+html.light [class*="aspect-"] .absolute.left-2.top-2 span {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  color: #09090b !important;
+  border-color: rgba(226, 232, 240, 0.95) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+html.light .group .relative .absolute.top-2.left-2 span *,
+html.light [class*="aspect-"] .absolute.top-2.left-2 span *,
+html.light [class*="aspect-"] .absolute.left-2.top-2 span * {
+  color: #09090b !important;
+}
+
+html.light .stock-badge-normal {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #cbd5e1 !important;
+  color: #09090b !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light .stock-badge-normal * {
+  color: #09090b !important;
+}
+
+html.light .stock-badge-normal svg {
+  color: #09090b !important;
+  stroke: #09090b !important;
+}
+
+html.light .stock-badge-out {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #64748b !important;
+}
+
+html.light .stock-badge-out * {
+  color: #64748b !important;
+}
+
+/* Price overlay on bottom right of vehicle photo cards */
+html.light .group .relative .absolute.bottom-2.right-2,
+html.light [class*="aspect-"] .absolute.bottom-2.right-2 {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+html.light .group .relative .absolute.bottom-2.right-2 *,
+html.light [class*="aspect-"] .absolute.bottom-2.right-2 * {
+  color: #ffffff !important;
+}
+
+/* ========================================================
+   COMPREHENSIVE HIGH-CONTRAST LIGHT MODE SEMANTIC ENGINE
+   ======================================================== */
+
+/* 1. Emerald & Green (Success, Ready, Completed, In Stock) */
+html.light .bg-emerald-400\/10,
+html.light .bg-emerald-400\/20,
 html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/15,
 html.light .bg-emerald-500\/20,
+html.light .bg-emerald-950\/10,
+html.light .bg-emerald-950\/20,
 html.light .bg-emerald-950\/30,
 html.light .bg-emerald-950\/40,
 html.light .bg-emerald-950\/60,
+html.light .bg-emerald-950\/80,
 html.light .bg-emerald-950 {
   background-color: #ecfdf5 !important;
   border-color: #a7f3d0 !important;
   color: #065f46 !important;
 }
-html.light .text-emerald-400,
+html.light .text-emerald-200,
 html.light .text-emerald-300,
-html.light .text-emerald-500 {
-  color: #059669 !important;
+html.light .text-emerald-400,
+html.light .text-emerald-500,
+html.light .text-emerald-600,
+html.light .text-green-300,
+html.light .text-green-400,
+html.light .text-green-500 {
+  color: #047857 !important;
+}
+html.light .text-emerald-400 svg,
+html.light .text-emerald-300 svg,
+html.light svg.text-emerald-400,
+html.light svg.text-emerald-300 {
+  color: #047857 !important;
+  stroke: #047857 !important;
 }
 
+/* 2. Amber & Yellow (Warning, Low Stock, Pending, In Prep, Due Soon) */
+html.light .bg-amber-400\/10,
+html.light .bg-amber-400\/20,
+html.light .bg-amber-500\/10,
+html.light .bg-amber-500\/15,
+html.light .bg-amber-500\/20,
+html.light .bg-amber-950\/10,
+html.light .bg-amber-950\/15,
+html.light .bg-amber-950\/20,
+html.light .bg-amber-950\/30,
+html.light .bg-amber-950\/40,
+html.light .bg-amber-950\/60,
+html.light .bg-amber-950\/80,
+html.light .bg-amber-950\/90,
+html.light .bg-amber-950,
+html.light .bg-yellow-400\/10,
+html.light .bg-yellow-500\/10,
+html.light .bg-yellow-500\/20,
+html.light .bg-yellow-950 {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}
+html.light .text-amber-200,
+html.light .text-amber-300,
+html.light .text-amber-400,
+html.light .text-amber-500,
+html.light .text-amber-600,
+html.light .text-yellow-200,
+html.light .text-yellow-300,
+html.light .text-yellow-400,
+html.light .text-yellow-500,
+html.light .text-amber-300\/90 {
+  color: #92400e !important;
+}
+html.light .text-amber-400 svg,
+html.light .text-amber-300 svg,
+html.light svg.text-amber-400,
+html.light svg.text-amber-300 {
+  color: #92400e !important;
+  stroke: #92400e !important;
+}
+
+/* 3. Rose & Red (Danger, Out of Stock, Overdue, Cancelled, Alert) */
+html.light .bg-rose-400\/10,
+html.light .bg-rose-400\/20,
+html.light .bg-rose-500\/10,
+html.light .bg-rose-500\/15,
+html.light .bg-rose-500\/20,
+html.light .bg-rose-950\/20,
+html.light .bg-rose-950\/30,
+html.light .bg-rose-950\/40,
+html.light .bg-rose-950\/60,
+html.light .bg-rose-950\/80,
+html.light .bg-rose-950,
+html.light .bg-red-400\/10,
+html.light .bg-red-400\/20,
+html.light .bg-red-500\/10,
+html.light .bg-red-500\/15,
+html.light .bg-red-500\/20,
+html.light .bg-red-500\/30,
+html.light .bg-red-500\/40,
+html.light .bg-red-950\/10,
+html.light .bg-red-950\/20,
+html.light .bg-red-950\/30,
+html.light .bg-red-950\/40,
+html.light .bg-red-950\/50,
+html.light .bg-red-950\/60,
+html.light .bg-red-950\/80,
+html.light .bg-red-950 {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+html.light .text-rose-200,
+html.light .text-rose-300,
+html.light .text-rose-400,
+html.light .text-rose-500,
+html.light .text-red-200,
+html.light .text-red-300,
+html.light .text-red-400,
+html.light .text-red-500 {
+  color: #9f1239 !important;
+}
+html.light .text-rose-400 svg,
+html.light .text-rose-300 svg,
+html.light .text-red-400 svg,
+html.light svg.text-rose-400,
+html.light svg.text-red-400 {
+  color: #9f1239 !important;
+  stroke: #9f1239 !important;
+}
+
+/* 4. Blue (Info, Finance, Processing, Active) */
+html.light .bg-blue-400\/10,
+html.light .bg-blue-400\/20,
 html.light .bg-blue-500\/10,
+html.light .bg-blue-500\/15,
 html.light .bg-blue-500\/20,
+html.light .bg-blue-950\/20,
 html.light .bg-blue-950\/30,
 html.light .bg-blue-950\/40,
 html.light .bg-blue-950\/60,
+html.light .bg-blue-950\/80,
 html.light .bg-blue-950 {
   background-color: #eff6ff !important;
   border-color: #bfdbfe !important;
   color: #1e40af !important;
 }
-html.light .text-blue-400,
+html.light .text-blue-200,
 html.light .text-blue-300,
+html.light .text-blue-400,
 html.light .text-blue-500 {
-  color: #2563eb !important;
+  color: #1e40af !important;
+}
+html.light .text-blue-400 svg,
+html.light .text-blue-300 svg,
+html.light svg.text-blue-400,
+html.light svg.text-blue-300 {
+  color: #1e40af !important;
+  stroke: #1e40af !important;
 }
 
-html.light .bg-amber-500\/10,
-html.light .bg-amber-500\/20,
-html.light .bg-amber-950\/30,
-html.light .bg-amber-950\/40,
-html.light .bg-amber-950\/60,
-html.light .bg-amber-950 {
-  background-color: #fffbeb !important;
-  border-color: #fde68a !important;
-  color: #92400e !important;
+/* 5. Purple, Violet & Indigo (Admin, Special Status, VIP) */
+html.light [class*="bg-purple-950"],
+html.light [class*="bg-indigo-950"],
+html.light .bg-purple-500\/10,
+html.light .bg-purple-500\/20,
+html.light .bg-purple-500\/30,
+html.light .bg-violet-500\/15,
+html.light .bg-violet-500\/20 {
+  background-color: #faf5ff !important;
+  border-color: #e9d5ff !important;
+  color: #6b21a8 !important;
 }
-html.light .text-amber-400,
-html.light .text-amber-300,
-html.light .text-amber-500 {
-  color: #b45309 !important;
+html.light .text-purple-200,
+html.light .text-purple-300,
+html.light .text-purple-400,
+html.light .text-purple-500,
+html.light .text-violet-300,
+html.light .text-violet-400,
+html.light .text-indigo-400,
+html.light [class*="text-purple-"],
+html.light [class*="text-indigo-"] {
+  color: #6b21a8 !important;
 }
 
-html.light .bg-rose-500\/10,
-html.light .bg-rose-500\/20,
-html.light .bg-rose-950\/30,
-html.light .bg-rose-950\/40,
-html.light .bg-rose-950\/60,
-html.light .bg-rose-950 {
-  background-color: #fff1f2 !important;
-  border-color: #fecdd3 !important;
-  color: #9f1239 !important;
+/* 6. Cyan, Sky & Teal (Specs, Range, Trim, Category) */
+html.light [class*="bg-cyan-950"],
+html.light [class*="bg-teal-950"],
+html.light .bg-cyan-500\/10,
+html.light .bg-cyan-500\/20,
+html.light .bg-sky-500\/10,
+html.light .bg-sky-500\/15,
+html.light .bg-sky-500\/20,
+html.light .bg-sky-400\/10 {
+  background-color: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  color: #0369a1 !important;
 }
-html.light .text-rose-400,
-html.light .text-rose-300,
-html.light .text-red-400,
-html.light .text-rose-500 {
-  color: #e11d48 !important;
+html.light .text-cyan-200,
+html.light .text-cyan-300,
+html.light .text-cyan-400,
+html.light .text-cyan-500,
+html.light .text-sky-200,
+html.light .text-sky-300,
+html.light .text-sky-400,
+html.light .text-sky-500,
+html.light .text-teal-300,
+html.light .text-teal-400,
+html.light [class*="text-cyan-"],
+html.light [class*="text-teal-"] {
+  color: #0369a1 !important;
+}
+
+/* 7. Form Labels in Light Mode: Crisp Pitch Dark Slate */
+html.light label:not(button *):not(.always-white-text *):not(.azure-gradient-btn *) {
+  color: #0f172a !important;
+  font-weight: 600;
+}
+
+/* 8. Light Mode Hover Safety: Prevent hover turning text into white on light backgrounds */
+html.light .hover\:text-white:hover:not(.bg-blue-600):not(.bg-emerald-600):not(.bg-rose-600):not(.bg-red-600):not(.bg-slate-900):not(.bg-black):not(.bg-zinc-950):not(.hover\:bg-blue-600:hover):not(.hover\:bg-emerald-600:hover):not(.hover\:bg-rose-600:hover):not(.hover\:bg-black:hover):not(.hover\:bg-zinc-950:hover):not(.hover\:bg-slate-900:hover),
+html.light .group:hover .group-hover\:text-white:not(.group-hover\:bg-blue-600):not(.group-hover\:bg-emerald-600):not(button.bg-blue-600 *):not(button.bg-emerald-600 *):not(.bg-blue-600 *):not(.bg-emerald-600 *) {
+  color: #09090b !important;
 }
 
 /* Crisp White Text for Action Buttons in Light Mode */
@@ -885,13 +1489,14 @@ html.light .customer-documents-modal .toolbar-box select {
   max-width: 794px !important;
   min-width: 794px !important;
   min-height: 1123px !important;
-  height: 1123px !important;
+  height: auto !important;
   box-sizing: border-box !important;
   margin: 0 auto !important;
   padding: 24px 32px !important;
   background-color: #ffffff !important;
   color: #000000 !important;
   box-shadow: none !important;
+  overflow: visible !important;
   display: flex !important;
   flex-direction: column !important;
   justify-content: space-between !important;
@@ -918,7 +1523,7 @@ html.light .customer-documents-modal .toolbar-box select {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm 10mm;
+    margin: 5mm 6mm;
   }
 
   body,
@@ -926,8 +1531,8 @@ html.light .customer-documents-modal .toolbar-box select {
     background-color: #ffffff !important;
     background: #ffffff !important;
     color: #000000 !important;
-    height: 100% !important;
-    min-height: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
     width: 100% !important;
     overflow: visible !important;
     margin: 0 !important;
@@ -992,17 +1597,16 @@ html.light .customer-documents-modal .toolbar-box select {
 
   .official-dealer-document,
   #printable-customer-document,
-  #printable-official-bill,
   #printable-quotation,
   .a4-document-canvas,
   .print-area {
     width: 100% !important;
     max-width: 100% !important;
-    min-height: 275mm !important;
-    height: 275mm !important;
-    max-height: 280mm !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: 275mm !important;
     margin: 0 auto !important;
-    padding: 2mm 4mm !important;
+    padding: 2mm 3mm !important;
     border: none !important;
     box-shadow: none !important;
     background: #ffffff !important;
@@ -1016,6 +1620,49 @@ html.light .customer-documents-modal .toolbar-box select {
     box-sizing: border-box !important;
   }
 
+  /* Strict single-page fitting for official bill */
+  #printable-official-bill {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: 275mm !important;
+    margin: 0 auto !important;
+    padding: 1.5mm 3mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    page-break-inside: avoid !important;
+    page-break-before: avoid !important;
+    page-break-after: avoid !important;
+    break-inside: avoid !important;
+    break-before: avoid !important;
+    break-after: avoid !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+
+  #printable-official-bill * {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  #printable-official-bill table,
+  #printable-official-bill tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  #printable-official-bill td,
+  #printable-official-bill th {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+  }
 }
 
 /* Shared application UI polish */
@@ -1257,20 +1904,20 @@ html.light .user-management-view .user-management-stat-icon-amber {
 
 html.light .user-management-view .text-zinc-400,
 html.light .user-management-view .text-zinc-500 {
-  color: #64748b !important;
+  color: #1e293b !important;
 }
 
 html.light .user-management-view .text-zinc-300 {
-  color: #475569 !important;
+  color: #0f172a !important;
 }
 
 html.light .user-management-view .text-zinc-100,
 html.light .user-management-view .text-zinc-200 {
-  color: #1e293b !important;
+  color: #09090b !important;
 }
 
 html.light .user-management-view [class*="text-purple-"] {
-  color: #7e22ce !important;
+  color: #6b21a8 !important;
 }
 
 html.light .user-management-view [class*="text-indigo-"] {
@@ -1278,7 +1925,7 @@ html.light .user-management-view [class*="text-indigo-"] {
 }
 
 html.light .user-management-view [class*="text-cyan-"] {
-  color: #0e7490 !important;
+  color: #0369a1 !important;
 }
 
 html.light .user-management-view [class*="text-teal-"] {
@@ -1391,148 +2038,148 @@ html.dark .user-management-view .user-management-stat {
   border-radius: 0.75rem;
 }
 
-.user-management-view .user-management-stat-icon-blue,
-.user-management-view .user-management-stat-icon-green,
-.user-management-view .user-management-stat-icon-amber {
+html.dark .user-management-view .user-management-stat-icon-blue,
+html.dark .user-management-view .user-management-stat-icon-green,
+html.dark .user-management-view .user-management-stat-icon-amber {
   background-color: #223149;
   border-color: #34445d;
   color: #b6c3d5;
 }
 
-.user-management-view .user-management-hero-icon,
-.user-management-view .user-management-eyebrow {
+html.dark .user-management-view .user-management-hero-icon,
+html.dark .user-management-view .user-management-eyebrow {
   background-color: #223149;
   color: #cbd5e1;
 }
 
-.user-management-view .user-management-primary-action {
+html.dark .user-management-view .user-management-primary-action {
   border: 1px solid #334155;
   background-color: #334155;
   color: #ffffff;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
 }
 
-.user-management-view .user-management-primary-action:hover {
+html.dark .user-management-view .user-management-primary-action:hover {
   background-color: #475569;
 }
 
-.user-management-view .user-management-permission-badge {
+html.dark .user-management-view .user-management-permission-badge {
   background-color: #223149;
   border: 1px solid #34445d;
   color: #cbd5e1;
 }
 
-.user-management-view .user-management-permission-danger {
+html.dark .user-management-view .user-management-permission-danger {
   background-color: #3b2731;
   border-color: #66404d;
   color: #f0c5ce;
 }
 
-.user-management-view .user-management-permission-row:has(input:checked) {
+html.dark .user-management-view .user-management-permission-row:has(input:checked) {
   background-color: #223149 !important;
   border-color: #3b4d66 !important;
 }
 
-.user-management-view .user-management-permission-row:has(input:checked):has(input.accent-rose-500) {
+html.dark .user-management-view .user-management-permission-row:has(input:checked):has(input.accent-rose-500) {
   background-color: #3b2731 !important;
   border-color: #66404d !important;
 }
 
-.user-management-view .user-management-switch-button {
+html.dark .user-management-view .user-management-switch-button {
   border-color: #34445d;
   background-color: #172235;
   color: #cbd5e1;
 }
 
-.user-management-view .user-management-switch-button:hover {
+html.dark .user-management-view .user-management-switch-button:hover {
   border-color: #52637b;
   background-color: #223149;
 }
 
-.user-management-view .user-management-switch-selected {
+html.dark .user-management-view .user-management-switch-selected {
   border-color: #52637b;
   background-color: #334155;
   color: #ffffff;
 }
 
-.user-management-view .user-management-switch-role {
+html.dark .user-management-view .user-management-switch-role {
   color: #b6c3d5;
 }
 
-.user-management-view .user-management-role-dot-admin,
-.user-management-view .user-management-role-dot-user {
+html.dark .user-management-view .user-management-role-dot-admin,
+html.dark .user-management-view .user-management-role-dot-user {
   background-color: #94a3b8;
 }
 
-.user-management-view .user-management-grant-button,
-.user-management-view .user-management-modal-cancel,
-.user-management-view .user-management-modal-close {
+html.dark .user-management-view .user-management-grant-button,
+html.dark .user-management-view .user-management-modal-cancel,
+html.dark .user-management-view .user-management-modal-close {
   border-color: #3b4d66;
   background-color: #223149;
   color: #dbe4ef;
 }
 
-.user-management-view .user-management-grant-button:hover,
-.user-management-view .user-management-modal-cancel:hover,
-.user-management-view .user-management-modal-close:hover {
+html.dark .user-management-view .user-management-grant-button:hover,
+html.dark .user-management-view .user-management-modal-cancel:hover,
+html.dark .user-management-view .user-management-modal-close:hover {
   border-color: #52637b;
   background-color: #2b3b53;
   color: #ffffff;
 }
 
-.user-management-view .user-management-modal-submit {
+html.dark .user-management-view .user-management-modal-submit {
   border: 1px solid #52637b;
   background-color: #334155;
   color: #ffffff;
 }
 
-.user-management-view .user-management-modal-submit:hover {
+html.dark .user-management-view .user-management-modal-submit:hover {
   background-color: #475569;
 }
 
-.user-management-view .user-management-danger-action {
+html.dark .user-management-view .user-management-danger-action {
   border: 1px solid #80505c;
   background-color: #673c49;
   color: #ffffff;
 }
 
-.user-management-view .user-management-danger-action:hover {
+html.dark .user-management-view .user-management-danger-action:hover {
   background-color: #7a4655;
 }
 
-.user-management-view .user-management-delete-button:not(:disabled) {
+html.dark .user-management-view .user-management-delete-button:not(:disabled) {
   border-color: #3b4d66;
   background-color: #223149;
   color: #dbe4ef;
 }
 
-.user-management-view .user-management-delete-button:not(:disabled):hover {
+html.dark .user-management-view .user-management-delete-button:not(:disabled):hover {
   border-color: #80505c;
   background-color: #3b2731;
   color: #f0c5ce;
 }
 
-.user-management-view .user-management-delete-button:disabled {
+html.dark .user-management-view .user-management-delete-button:disabled {
   border-color: #334155;
   background-color: #1e293b;
   color: #64748b;
   cursor: not-allowed;
 }
 
-.user-management-view .user-management-role-admin,
-.user-management-view .user-management-role-user {
+html.dark .user-management-view .user-management-role-admin,
+html.dark .user-management-view .user-management-role-user {
   background-color: #223149;
   border: 1px solid #34445d;
   color: #d2dbe7;
 }
 
-.user-management-view .user-management-status-active {
+html.dark .user-management-view .user-management-status-active {
   background-color: #20332f;
   border-color: #38564e;
   color: #b8d4cb;
 }
 
-.user-management-view .user-management-status-suspended {
+html.dark .user-management-view .user-management-status-suspended {
   background-color: #3b2731;
   border-color: #66404d;
   color: #f0c5ce;
@@ -2094,4 +2741,131 @@ html.dark .dashboard-view {
     padding: 1rem;
     border-radius: 1rem;
   }
+}
+
+/* ==========================================================================
+   Stock Alert by Model Category - Light Mode Pure Black Text Rules
+   ========================================================================== */
+html.light .category-stock-alert-section {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .category-stock-alert-section h2,
+html.light .category-stock-alert-section h3,
+html.light .category-stock-alert-section p,
+html.light .category-stock-alert-section input,
+html.light .category-stock-alert-section .stage-breakdown-box span,
+html.light .category-stock-alert-section .stage-breakdown-box div {
+  color: #000000 !important;
+}
+
+html.light .category-stock-alert-section .stage-breakdown-box {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* ==========================================================================
+   Customer Lead Card: Installment Financing Plan Header in Light Mode
+   ========================================================================== */
+html.light .installment-financing-plan-header,
+html.light .installment-financing-plan-header span {
+  color: #000000 !important;
+}
+
+/* ==========================================================================
+   BENTO 2.0 SYSTEM & ELECTRIC AZURE PALETTE (CLEAN MINIMAL SHOWROOM)
+   ========================================================================== */
+.bento-card {
+  border-radius: 1.5rem;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html.light .bento-card {
+  background-color: #ffffff !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 10px 25px -5px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.light .bento-card:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 20px 30px -10px rgba(37, 99, 235, 0.06) !important;
+}
+
+html.dark .bento-card {
+  background-color: #09090b !important;
+  border: 1px solid #27272a !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Electric Azure Button & Accents */
+.azure-gradient-btn {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.25) !important;
+}
+.azure-gradient-btn:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+  box-shadow: 0 6px 20px 0 rgba(37, 99, 235, 0.35) !important;
+  transform: translateY(-1px);
+}
+.azure-gradient-btn * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Modern Showroom Sidebar Active & Inactive Styles */
+html.light .app-sidebar {
+  background-color: #ffffff !important;
+  border-right-color: #e2e8f0 !important;
+  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light .app-sidebar button:not(.sidebar-menu-btn-active) {
+  color: #09090b !important;
+  font-weight: 700 !important;
+}
+
+html.light .app-sidebar button:not(.sidebar-menu-btn-active):hover {
+  background-color: #f1f5f9 !important;
+  color: #2563eb !important;
+}
+
+html.light .app-sidebar button:not(.sidebar-menu-btn-active) svg {
+  color: #09090b !important;
+  stroke: #09090b !important;
+}
+
+html.light .app-sidebar button:not(.sidebar-menu-btn-active):hover svg {
+  color: #2563eb !important;
+  stroke: #2563eb !important;
+}
+
+html.light .sidebar-menu-btn-active {
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #bfdbfe !important;
+  font-weight: 800 !important;
+}
+html.light .sidebar-menu-btn-active svg {
+  color: #2563eb !important;
+  stroke: #2563eb !important;
+}
+
+html.dark .sidebar-menu-btn-active {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+  border: 1px solid #3b82f6 !important;
+  font-weight: 700 !important;
+}
+html.dark .sidebar-menu-btn-active svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+html.light .dashboard-panel {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #09090b !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 10px 25px -5px rgba(15, 23, 42, 0.03) !important;
 }

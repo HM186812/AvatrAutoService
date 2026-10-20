@@ -142,6 +142,8 @@ export function formatWhatsAppDisplay(phone: string | undefined | null): string 
   return `+${num}`;
 }
 
+import { showToast } from '../components/common/Toast';
+
 /**
  * Direct trigger to open WhatsApp in new tab / application
  */
@@ -153,10 +155,29 @@ export function openWhatsApp(
 ): boolean {
   const url = getWhatsAppUrl(phone, customerName, model, lang);
   if (!url) {
-    alert('ກະລຸນາປ້ອນເບີໂທລະສັບໃຫ້ຖືກຕ້ອງກ່ອນເປີດ WhatsApp (ຕົວຢ່າງ: 020 5xxxxxxx)');
+    showToast('ກະລຸນາປ້ອນເບີໂທລະສັບໃຫ້ຖືກຕ້ອງກ່ອນເປີດ WhatsApp (ຕົວຢ່າງ: 020 5xxxxxxx)', 'warning');
     return false;
   }
 
   window.open(url, '_blank', 'noopener,noreferrer');
   return true;
 }
+
+/**
+ * Direct trigger to open WhatsApp with a custom message body
+ */
+export function openWhatsAppWithMessage(
+  phone: string | undefined | null,
+  message: string
+): boolean {
+  const formattedNumber = formatWhatsAppNumber(phone);
+  if (!formattedNumber) {
+    showToast('ກະລຸນາປ້ອນເບີໂທລະສັບໃຫ້ຖືກຕ້ອງກ່ອນເປີດ WhatsApp (ຕົວຢ່າງ: 020 5xxxxxxx)', 'warning');
+    return false;
+  }
+
+  const url = `https://wa.me/${formattedNumber}?text=${encodeURIComponent(message)}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+  return true;
+}
+

@@ -3,13 +3,23 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// =========================================================================
+// ຕັ້ງຄ່າໂໝດຖານຂໍ້ມູນ (DATABASE CONNECTION MODE)
+// ຖ້າບໍ່ມີ .env ຫຼື ບໍ່ມີ Key ລະບົບຈະ Fallback ເປັນ LocalStorage Offline Mode ອັດຕະໂນມັດ
+// ຫາກຕ້ອງການບັງຄັບ Offline ຕະຫຼອດເວລາ ສາມາດໃສ່ VITE_FORCE_OFFLINE="true" ໃນ .env ໄດ້
+// =========================================================================
+export const FORCE_OFFLINE_DATABASE = import.meta.env.VITE_FORCE_OFFLINE === 'true';
+
 const isPlaceholder = (val?: string) =>
   !val ||
   val.trim() === '' ||
   val.includes('your-project-id') ||
   val.includes('your-anon-public-key');
 
-export const isSupabaseConfigured = !isPlaceholder(supabaseUrl) && !isPlaceholder(supabasePublishableKey);
+export const isSupabaseConfigured =
+  !FORCE_OFFLINE_DATABASE &&
+  !isPlaceholder(supabaseUrl) &&
+  !isPlaceholder(supabasePublishableKey);
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabasePublishableKey, {

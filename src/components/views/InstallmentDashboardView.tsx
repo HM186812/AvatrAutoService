@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Lead, 
   VehicleModel, 
@@ -9,163 +9,189 @@ import {
   InstallmentPaymentRecord 
 } from '../../types';
 import { translations } from '../../data/translations';
+import { showToast } from '../common';
 import { 
-  CreditCard, 
-  Building2, 
-  Coins, 
-  TrendingUp, 
   Users, 
   CheckCircle2, 
   Clock, 
-  AlertTriangle, 
   Search, 
-  Download, 
   Calendar, 
-  FileText, 
-  Phone, 
-  Car, 
-  BadgePercent, 
-  ArrowRight,
+  FileText,
+  CreditCard,
+  Coins,
+  BadgePercent,
+  AlertTriangle,
+  Building2,
+  Car,
+  LayoutGrid,
+  List,
+  Plus,
+  ArrowUpRight,
   ShieldCheck,
-  ChevronRight,
-  CheckCircle,
-  Filter,
+  Check,
+  Sparkles,
+  Phone,
+  MapPin,
+  FileCheck,
+  Lock
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
-import { getWhatsAppUrl } from '../../utils/whatsapp';
-import { DEFAULT_EXCHANGE_RATE_LAK, generateInstallmentSchedule, calculateInstallmentSummary } from '../../utils/installment';
+import { getWhatsAppUrl, openWhatsAppWithMessage } from '../../utils/whatsapp';
+import { 
+  DEFAULT_EXCHANGE_RATE_LAK, 
+  generateInstallmentSchedule, 
+  calculateInstallmentSummary 
+} from '../../utils/installment';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
-import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
-import { saveLead } from '../../backend/data';
+import CustomerDocumentsModal from '../modals/CustomerDocumentsModal';
+import QuickInstallmentPaymentModal from '../modals/QuickInstallmentPaymentModal';
+import ConfirmPayoffModal from '../modals/ConfirmPayoffModal';
+import { saveLead, saveBillRecord } from '../../backend/data';
+import { newRecordId } from '../../backend/ids';
 
 interface InstallmentDashboardViewProps {
   leads: Lead[];
   setLeads?: React.Dispatch<React.SetStateAction<Lead[]>>;
   bills?: InvoiceBillRecord[];
+  setBills?: React.Dispatch<React.SetStateAction<InvoiceBillRecord[]>>;
   vehicles: VehicleModel[];
   lang: Language;
   currentUser?: SystemUser | null;
   onNavigateMenu?: (menu: ActiveMenu) => void;
+  onNavigateTab?: (tab: 'new_leads' | 'existing_customers' | 'installment_customers') => void;
 }
 
 export default function InstallmentDashboardView({
   leads = [],
   setLeads,
   bills = [],
+  setBills,
   vehicles = [],
   lang,
   currentUser,
   onNavigateMenu,
+  onNavigateTab,
 }: InstallmentDashboardViewProps) {
   const t = translations[lang] || translations.lo;
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'delivered' | 'completed'>('all');
-  const [timeframe, setTimeframe] = useState<'all' | 'month' | 'year'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'due' | 'completed'>('all');
+  const [modelFilter, setModelFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
   // Modals
+  const [selectedLeadForQuickPay, setSelectedLeadForQuickPay] = useState<Lead | null>(null);
   const [selectedLeadForLedger, setSelectedLeadForLedger] = useState<Lead | null>(null);
   const [selectedLeadForDocs, setSelectedLeadForDocs] = useState<Lead | null>(null);
+  const [selectedLeadForPayoff, setSelectedLeadForPayoff] = useState<{
+    lead: Lead;
+    summary: any;
+    contractNo: string;
+  } | null>(null);
 
-  // 1. Filter installment customers (leads with installment type or finance info)
+  const triggerToast = (msg: string) => {
+    showToast(msg, 'success');
+  };
+
+  // 1. Filter installment customers (leads with installment type, down payment, leasing, or from bills)
   const installmentLeads = useMemo(() => {
-    return leads.filter(l => 
-      l.paymentType === 'installment' || 
-      l.paymentType === 'finance' || 
-      Boolean(l.downPaymentPercent) || 
-      Boolean(l.financeCompany) ||
-      Boolean(l.installmentRecords && l.installmentRecords.length > 0)
-    );
-  }, [leads]);
+    const matchedLeads = leads.filter(l => {
+      // If customer payment is fully completed & moved, exclude unless viewing 'completed' status
+      if (l.isPaymentCompleted && statusFilter !== 'completed') return false;
 
-  // 2. Filter installment bills (bills from finance/down payment)
-  const installmentBills = useMemo(() => {
-    return bills.filter(b => 
-      b.billType === 'installment' || 
-      b.paymentMethod === 'finance' || 
-      Boolean(b.financeCompany) || 
-      Boolean(b.downPaymentPercent && b.downPaymentPercent > 0)
-    );
-  }, [bills]);
-
-  // 3. Compute Portfolio Metrics
-  const portfolioMetrics = useMemo(() => {
-    let totalVehicleValueUSD = 0;
-    let totalDownPaymentUSD = 0;
-    let totalFinancedUSD = 0;
-    let totalCollectedUSD = 0;
-    let totalOutstandingUSD = 0;
-    let onTimeInstallments = 0;
-    let totalInstallmentsChecked = 0;
-
-    installmentLeads.forEach(lead => {
-      const matchedVeh = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
-      const vehiclePrice = matchedVeh?.priceStartingUSD || 50000;
-      totalVehicleValueUSD += vehiclePrice;
-
-      const downUSD = lead.downPaymentUSD || Math.round(vehiclePrice * ((lead.downPaymentPercent || 30) / 100));
-      totalDownPaymentUSD += downUSD;
-
-      const loanPrincipal = Math.max(0, vehiclePrice - downUSD);
-      totalFinancedUSD += loanPrincipal;
-
-      // Calculate schedule summary
-      const schedule = lead.installmentRecords && lead.installmentRecords.length > 0
-        ? lead.installmentRecords
-        : generateInstallmentSchedule(lead, vehiclePrice);
-
-      const summary = calculateInstallmentSummary(lead, schedule, vehiclePrice);
-      totalCollectedUSD += summary.totalPaidInstallmentsUSD;
-      totalOutstandingUSD += summary.remainingInstallmentsUSD;
-
-      totalInstallmentsChecked += schedule.length;
-      onTimeInstallments += schedule.filter(s => s.status === 'paid').length;
+      const isInstallment = l.paymentType === 'installment' || 
+        l.paymentType === 'finance' || 
+        Boolean(l.downPaymentPercent) || 
+        Boolean(l.financeCompany) || 
+        Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
+        l.installmentStatus === 'active_repaying' ||
+        l.installmentStatus === 'completed' ||
+        l.installmentStatus === 'approved' ||
+        l.installmentStatus === 'pending_approval';
+      return isInstallment;
     });
 
-    const averageDownPercent = totalVehicleValueUSD > 0
-      ? Math.round((totalDownPaymentUSD / totalVehicleValueUSD) * 100)
-      : 30;
+    const seenPhones = new Set(matchedLeads.map(l => (l.phone || '').replace(/\D/g, '')).filter(Boolean));
+    const extraFromBills: Lead[] = [];
+    
+    bills.filter(b => (b.paymentMethod === 'finance' || b.billType === 'installment' || Boolean(b.downPaymentPercent))).forEach(bill => {
+      const cleanPhone = (bill.customerPhone || '').replace(/\D/g, '');
+      if (cleanPhone && seenPhones.has(cleanPhone)) return;
+      if (matchedLeads.some(l => l.id === bill.leadId)) return;
+      if (leads.some(l => (l.id === bill.leadId || (cleanPhone && l.phone && l.phone.replace(/\D/g, '') === cleanPhone)) && l.isPaymentCompleted) && statusFilter !== 'completed') return;
+      seenPhones.add(cleanPhone || bill.id);
+      
+      extraFromBills.push({
+        id: bill.leadId || `inst-bill-${bill.id}`,
+        customerName: bill.customerName || 'ລູກຄ້າຜ່ອນ',
+        phone: bill.customerPhone || '',
+        idCardNumber: bill.customerIDCard,
+        province: bill.customerProvince || 'ນະຄອນຫຼວງວຽງຈັນ',
+        category: 'walk_in',
+        source: 'POS Installment',
+        interestedModel: bill.model || 'AVATR 11',
+        status: 'delivered',
+        priority: 'high',
+        notes: `ສັນຍາຜ່ອນຈາກບິນ ${bill.billNumber || bill.id}`,
+        paymentType: 'installment',
+        paymentTypeConfirmed: 'down_payment',
+        installmentStatus: 'active_repaying',
+        downPaymentPercent: bill.downPaymentPercent || 30,
+        downPaymentUSD: bill.downPaymentUSD || 0,
+        tenureMonths: bill.tenureMonths || 48,
+        monthlyPaymentLAK: bill.monthlyPaymentLAK || 0,
+        financeCompany: bill.financeCompany || 'AVATR Leasing',
+        paymentReceiptNo: bill.billNumber || bill.id,
+        paymentDate: bill.date,
+        createdAt: bill.date || new Date().toISOString(),
+        assignedTo: bill.salesRep || 'Admin',
+      });
+    });
 
-    const healthRate = totalInstallmentsChecked > 0
-      ? Math.min(100, Math.round((onTimeInstallments / totalInstallmentsChecked) * 100))
-      : 100;
+    return [...matchedLeads, ...extraFromBills];
+  }, [leads, bills]);
 
-    return {
-      totalCustomers: installmentLeads.length,
-      totalVehicleValueUSD,
-      totalDownPaymentUSD,
-      totalDownPaymentLAK: totalDownPaymentUSD * DEFAULT_EXCHANGE_RATE_LAK,
-      averageDownPercent,
-      totalFinancedUSD,
-      totalFinancedLAK: totalFinancedUSD * DEFAULT_EXCHANGE_RATE_LAK,
-      totalCollectedUSD,
-      totalCollectedLAK: totalCollectedUSD * DEFAULT_EXCHANGE_RATE_LAK,
-      totalOutstandingUSD,
-      totalOutstandingLAK: totalOutstandingUSD * DEFAULT_EXCHANGE_RATE_LAK,
-      healthRate,
-    };
+  // 2. Computed Summaries per Lead
+  const leadsWithSummaries = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    return installmentLeads.map(lead => {
+      const matchedVeh = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
+      const basePrice = matchedVeh?.priceStartingUSD || 50000;
+      const records = generateInstallmentSchedule(lead, basePrice);
+      const summary = calculateInstallmentSummary(lead, records, basePrice);
+
+      // Next due record
+      const nextUnpaid = records.find(r => r.status !== 'paid');
+      const isDueSoon = nextUnpaid ? (new Date(nextUnpaid.dueDate).getTime() - today.getTime()) / (1000 * 3600 * 24) <= 7 : false;
+      const isOverdue = nextUnpaid ? nextUnpaid.dueDate < todayStr : false;
+
+      const contractNo = lead.paymentReceiptNo || `AVT-FIN-${lead.id.replace(/\D/g, '').slice(-4) || '001'}`;
+
+      return {
+        lead,
+        matchedVeh,
+        basePrice,
+        records,
+        summary,
+        nextUnpaid,
+        isDueSoon,
+        isOverdue,
+        contractNo,
+      };
+    });
   }, [installmentLeads, vehicles]);
 
-  // 5. Tenure breakdown (36, 48, 60 months)
-  const tenureBreakdown = useMemo(() => {
-    const t36 = installmentLeads.filter(l => (l.tenureMonths || 48) <= 36);
-    const t48 = installmentLeads.filter(l => (l.tenureMonths || 48) === 48);
-    const t60 = installmentLeads.filter(l => (l.tenureMonths || 48) >= 60);
-    const total = installmentLeads.length || 1;
-
-    return [
-      { label: '36 ເດືອນ (3 ປີ)', count: t36.length, percent: Math.round((t36.length / total) * 100) },
-      { label: '48 ເດືອນ (4 ປີ - ນິຍົມສູງສຸດ)', count: t48.length, percent: Math.round((t48.length / total) * 100) },
-      { label: '60 ເດືອນ (5 ປີ)', count: t60.length, percent: Math.round((t60.length / total) * 100) },
-    ];
-  }, [installmentLeads]);
-
-  // 6. Filtered Customer Table List
+  // 3. Filtered Customers
   const filteredCustomers = useMemo(() => {
-    return installmentLeads.filter(lead => {
+    return leadsWithSummaries.filter(({ lead, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
+      // Model Filter
+      if (modelFilter !== 'all' && lead.interestedModel !== modelFilter) return false;
+
       // Status filter
-      if (statusFilter === 'delivered' && lead.status !== 'delivered') return false;
-      if (statusFilter === 'active' && lead.installmentStatus !== 'active_repaying' && lead.status === 'delivered') return false;
-      if (statusFilter === 'completed' && lead.installmentStatus !== 'completed') return false;
+      if (statusFilter === 'active' && summary.isFullyPaid) return false;
+      if (statusFilter === 'completed' && !summary.isFullyPaid) return false;
+      if (statusFilter === 'due' && !isDueSoon && !isOverdue) return false;
 
       // Search
       if (searchQuery.trim()) {
@@ -174,400 +200,637 @@ export default function InstallmentDashboardView({
           lead.customerName.toLowerCase().includes(q) ||
           lead.phone.toLowerCase().includes(q) ||
           (lead.interestedModel && lead.interestedModel.toLowerCase().includes(q)) ||
-          (lead.province && lead.province.toLowerCase().includes(q))
+          (lead.province && lead.province.toLowerCase().includes(q)) ||
+          contractNo.toLowerCase().includes(q)
         );
       }
       return true;
     });
-  }, [installmentLeads, statusFilter, searchQuery]);
+  }, [leadsWithSummaries, statusFilter, modelFilter, searchQuery]);
 
-  // Handle export CSV
-  const handleExportCsv = () => {
-    const headers = [
-      'CustomerName',
-      'Phone',
-      'Model',
-      'PriceUSD',
-      'DownPercent',
-      'DownPaymentUSD',
-      'LoanUSD',
-      'TenureMonths',
-      'MonthlyLAK',
-      'Status'
-    ];
+  // 4. Portfolio Overall KPI Metrics
+  const portfolioMetrics = useMemo(() => {
+    let totalPortfolioBalanceUSD = 0;
+    let totalCollectedUSD = 0;
+    let activeContractsCount = 0;
+    let dueOrOverdueCount = 0;
 
-    const rows = filteredCustomers.map(lead => {
-      const v = vehicles.find(veh => veh.name === lead.interestedModel);
-      const price = v?.priceStartingUSD || 50000;
-      const downUSD = lead.downPaymentUSD || Math.round(price * ((lead.downPaymentPercent || 30) / 100));
-      const loanUSD = Math.max(0, price - downUSD);
-
-      return [
-        `"${lead.customerName}"`,
-        lead.phone,
-        lead.interestedModel,
-        price,
-        lead.downPaymentPercent || 30,
-        downUSD,
-        loanUSD,
-        lead.tenureMonths || 48,
-        lead.monthlyPaymentLAK || 21500000,
-        lead.status === 'delivered' ? 'ຈ່າຍແລ້ວ/ສົ່ງມອບ' : 'ກຳລັງດຳເນີນງານ'
-      ];
+    leadsWithSummaries.forEach(({ summary, isDueSoon, isOverdue }) => {
+      totalPortfolioBalanceUSD += summary.remainingInstallmentsUSD;
+      totalCollectedUSD += summary.totalPaidInstallmentsUSD + summary.downPaymentUSD;
+      if (!summary.isFullyPaid) {
+        activeContractsCount += 1;
+      }
+      if (isDueSoon || isOverdue) {
+        dueOrOverdueCount += 1;
+      }
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `AVATR_Installment_Dashboard_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+    return {
+      totalPortfolioBalanceUSD,
+      totalPortfolioBalanceLAK: totalPortfolioBalanceUSD * DEFAULT_EXCHANGE_RATE_LAK,
+      totalCollectedUSD,
+      totalCollectedLAK: totalCollectedUSD * DEFAULT_EXCHANGE_RATE_LAK,
+      activeContractsCount,
+      dueOrOverdueCount,
+      totalContracts: leadsWithSummaries.length,
+    };
+  }, [leadsWithSummaries]);
 
-  // Update customer records from ledger
+  // Update customer records from ledger or quick payment
   const handleUpdateCustomerRecords = async (customerId: string, updatedRecords: InstallmentPaymentRecord[]) => {
     const targetLead = leads.find(l => l.id === customerId);
     if (!targetLead) throw new Error('Customer record not found.');
+    
     const paidRecords = updatedRecords.filter(r => r.status === 'paid');
-    const totalPaidLAK = paidRecords.reduce((sum, r) => sum + r.amountLAK, 0);
-    const totalPaidUSD = paidRecords.reduce((sum, r) => sum + r.amountUSD, 0);
+    const totalPaidLAK = paidRecords.reduce((sum, r) => sum + (r.paidAmountLAK || r.amountLAK), 0);
+    const totalPaidUSD = paidRecords.reduce((sum, r) => sum + (r.paidAmountUSD || r.amountUSD), 0);
+    const isCompleted = paidRecords.length === updatedRecords.length && updatedRecords.length > 0;
+
     const updatedCust: Lead = {
       ...targetLead,
       installmentRecords: updatedRecords,
       paidAmountLAK: totalPaidLAK,
       paidAmountUSD: totalPaidUSD,
-      installmentStatus: paidRecords.length === updatedRecords.length && updatedRecords.length > 0 ? 'completed' : 'active_repaying',
+      installmentStatus: isCompleted ? 'completed' : 'active_repaying',
       lastFollowUp: new Date().toISOString(),
     };
+
     if (!currentUser?.id) {
       throw new Error('Sign in again before saving installment ledger.');
     }
+
     await saveLead(updatedCust, currentUser.id);
     if (setLeads) {
       setLeads(prev => prev.map(l => l.id === customerId ? updatedCust : l));
     }
+
+    // Synchronize newly paid installment receipts into bills collection
+    if (setBills) {
+      paidRecords.forEach(r => {
+        const receiptNo = r.receiptNo || `REC-INS-${targetLead.id.replace(/\D/g, '').slice(-4) || '001'}-${String(r.period).padStart(2, '0')}`;
+        const alreadyInBills = bills.some(b => b.billNumber === receiptNo || (b.leadId === targetLead.id && b.installmentPeriod === r.period));
+        if (!alreadyInBills) {
+          const matchedVeh = vehicles.find(v => v.name === targetLead.interestedModel);
+          const payUSD = Number(r.paidAmountUSD || r.amountUSD) || 0;
+          const payLAK = Number(r.paidAmountLAK || r.amountLAK) || Math.round(payUSD * DEFAULT_EXCHANGE_RATE_LAK);
+          const newReceiptBill: InvoiceBillRecord = {
+            id: newRecordId(),
+            billType: 'installment',
+            billNumber: receiptNo,
+            date: r.paidDate || new Date().toISOString().slice(0, 10),
+            model: targetLead.interestedModel || matchedVeh?.name || 'AVATR',
+            vin: targetLead.vin || '',
+            plateNumber: targetLead.plateNumber || '',
+            color: targetLead.color || '',
+            quantity: 1,
+            unitPriceUSD: payUSD,
+            unitPriceLAK: payLAK,
+            discountUSD: 0,
+            discountLAK: 0,
+            netTotalUSD: payUSD,
+            netTotalLAK: payLAK,
+            amountUSD: payUSD,
+            amountLAK: payLAK,
+            customerName: targetLead.customerName,
+            customerPhone: targetLead.phone,
+            leadId: targetLead.id,
+            customerIDCard: targetLead.idCardNumber,
+            customerAddress: [targetLead.village, targetLead.district, targetLead.province].filter(Boolean).join(', '),
+            customerProvince: targetLead.province,
+            paymentMethod: (r.paymentMethod as any) || 'transfer',
+            bankName: r.bankName,
+            transferRef: r.transferRef,
+            installmentPeriod: r.period,
+            tenureMonths: targetLead.tenureMonths,
+            monthlyPaymentLAK: payLAK,
+            financeCompany: targetLead.financeCompany,
+            salesRep: r.collectedBy || currentUser?.name || 'Admin',
+            recordedBy: currentUser?.name || 'Admin',
+            notes: r.notes || `ຮັບເງິນງວດທີ ${r.period} ລູກຄ້າ ${targetLead.customerName}`,
+          };
+          saveBillRecord(newReceiptBill, currentUser.id).catch(err => console.warn('Sync installment bill:', err));
+          setBills(prev => [newReceiptBill, ...prev]);
+        }
+      });
+    }
+
+    showToast('ບັນທຶກຮັບເງິນງວດ ແລະ ອັບເດດຕາຕະລາງຜ່ອນສຳເລັດແລ້ວ!');
+  };
+
+  // Confirm Final Payoff and Move to Completed Customers Page
+  const handleConfirmPayoff = async (customerId: string) => {
+    const target = leadsWithSummaries.find(item => item.lead.id === customerId);
+    if (!target) throw new Error('Customer record not found.');
+    const { lead, summary, contractNo } = target;
+
+    if (!summary.isFullyPaid) {
+      throw new Error('ລູກຄ້າຕ້ອງຊຳລະຄົບທຸກງວດ (100%) ຈຶ່ງສາມາດຢືນຢັນການຊຳລະສຳເລັດໄດ້.');
+    }
+
+    const updatedCust: Lead = {
+      ...lead,
+      installmentStatus: 'completed',
+      isPaymentCompleted: true,
+      status: 'delivered',
+      paymentTypeConfirmed: 'installment_completed',
+      paidDate: new Date().toISOString().slice(0, 10),
+      notes: (lead.notes ? lead.notes + '\n' : '') + `[${new Date().toLocaleDateString('lo-LA')}] ຢືນຢັນການຊຳລະຄົບຖ້ວນທຸກງວດ (ສັນຍາເລກທີ ${contractNo}) ໂດຍ ${currentUser?.name || 'Admin'}`,
+      lastFollowUp: new Date().toISOString(),
+    };
+
+    if (!currentUser?.id) {
+      throw new Error('Sign in again before confirming payoff.');
+    }
+
+    await saveLead(updatedCust, currentUser.id);
+    if (setLeads) {
+      setLeads(prev => prev.map(l => l.id === customerId ? updatedCust : l));
+    }
+
+    showToast(`ຢືນຢັນການຊຳລະສຳເລັດຄົບ 100% ແລ້ວ! ຂໍ້ມູນ "${updatedCust.customerName}" ໄດ້ຍ້າຍໄປໜ້າ "ລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ"`);
+
+    // Switch view / navigate to Completed Customers tab immediately
+    if (onNavigateTab) {
+      onNavigateTab('existing_customers');
+    } else if (onNavigateMenu) {
+      onNavigateMenu('customers');
+    }
+  };
+
+  // Handle WhatsApp Due Reminder
+  const handleSendWhatsAppReminder = (lead: Lead, summary: any, contractNo: string, nextUnpaid?: InstallmentPaymentRecord) => {
+    const nextPeriod = nextUnpaid?.period || (summary.paidCount + 1);
+    const nextDueDate = nextUnpaid?.dueDate || '10 ຂອງເດືອນ';
+    const monthlyLAK = nextUnpaid?.amountLAK || summary.monthlyPaymentLAK;
+    const monthlyUSD = nextUnpaid?.amountUSD || summary.monthlyPaymentUSD;
+
+    const message = `ສະບາຍດີ ທ່ານ ${lead.customerName}, ຈາກສູນລົດໄຟຟ້າ AVATR Laos.
+
+ຂໍແຈ້ງເຕືອນຄ່າງວດລົດ ${lead.interestedModel} (ເລກສັນຍາ: ${contractNo}):
+- ງວດທີ: ${nextPeriod} / ${summary.tenure} ງວດ
+- ຈຳນວນເງິນທີ່ຕ້ອງຊຳລະ: ${monthlyLAK.toLocaleString()} ກີບ (~$${monthlyUSD.toLocaleString()} USD)
+- ວັນຄົບກຳນົດ: ${nextDueDate}
+
+ຊ່ອງທາງການຊຳລະ:
+- ທະນາຄານການຄ້າຕ່າງປະເທດລາວ (BCEL): 010-12-00-08849201-001
+- ຊື່ບັນຊີ: AVATR AUTO LAOS CO., LTD
+
+ເມື່ອຊຳລະແລ້ວ ກະລຸນາສົ່ງສະລິບຢັ້ງຢືນມາຍັງ WhatsApp ນີ້. ຂໍຂອບໃຈ.`;
+
+    openWhatsAppWithMessage(lead.phone, message);
   };
 
   return (
-    <div className="space-y-7 pb-16 font-sans">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-amber-500/15 via-zinc-900 to-zinc-950 border border-amber-500/30 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
+    <div className="space-y-6 pb-12 font-sans">
+      
+      {/* 1. Header with Title & Action Suite */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-zinc-800">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="p-1.5 bg-amber-400 text-black rounded-lg font-bold">
-              <CreditCard className="w-5 h-5 text-black" />
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-amber-400 text-black rounded-2xl shadow-lg shadow-amber-400/20">
+              <CreditCard className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2 tracking-tight">
+                <span>ລູກຄ້າຜ່ອນຊຳລະ & ສິນເຊື່ອລົດຍົນ</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-amber-700 dark:text-amber-300 font-mono border border-slate-200 dark:border-zinc-700 font-bold">
+                  {filteredCustomers.length} ສັນຍາ
+                </span>
+              </h2>
+              <p className="text-xs text-slate-600 dark:text-zinc-400 mt-0.5">
+                ສູນຈັດການສັນຍາຜ່ອນ, ບັນທຶກຮັບເງິນງວດ, ຕິດຕາມວັນຄົບກຳນົດ ແລະ ອອກໃບບິນງວດລົດ AVATR ຕາມເວລາຕົວຈິງ
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Controls & New Installment Button */}
+        <div className="flex items-center gap-2.5 ml-auto">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'cards' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="ສະແດງແບບ Cards"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              <span className="hidden sm:inline">Cards</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'table' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="ສະແດງແບບ Table"
+            >
+              <List className="w-4 h-4" />
+              <span className="hidden sm:inline">Table</span>
+            </button>
+          </div>
+
+          {/* Add New Contract (Opens POS Sales) */}
+          <button
+            type="button"
+            onClick={() => onNavigateMenu ? onNavigateMenu('pos_sales') : undefined}
+            className="flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-black font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer active:scale-95"
+            title="ເປີດໜ້າ POS ເພື່ອສ້າງສັນຍາຜ່ອນ & ວາງດາວລົດຄັນໃໝ່"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ ສັນຍາຜ່ອນໃໝ່ (POS)</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Top 4 Focused Financial KPI Metrics Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Outstanding Portfolio Balance */}
+        <div className="rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm space-y-2 relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">ຍອດສິນເຊື່ອຄົງເຫຼືອລວມ</span>
+            <div className="p-2 rounded-xl bg-amber-50 dark:bg-zinc-900 border border-amber-200 dark:border-zinc-800 text-amber-600 dark:text-amber-400">
+              <Coins className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="space-y-0.5">
+            <span className="text-2xl font-black font-mono text-slate-900 dark:text-white block">
+              ${portfolioMetrics.totalPortfolioBalanceUSD.toLocaleString()} USD
             </span>
-            <span className="text-xs font-mono uppercase tracking-widest text-amber-300 font-bold">
-              INSTALLMENT ANALYTICS
+            <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono block">
+              ~ {portfolioMetrics.totalPortfolioBalanceLAK.toLocaleString()} LAK
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Dashboard ຕິດຕາມການຜ່ອນຊຳລະ & ເງິນດາວ
-          </h1>
-          <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            ລວມສະຖິຕິການເງິນ, ຍອດເງິນດາວ, ຍອດກູ້ຢືມສິນເຊື່ອ, ການເກັບເງິນງວດ ແລະ ຄວາມຄືບໜ້າການຊຳລະຂອງລູກຄ້າທຸກຄົນ
+          <p className="text-[11px] text-slate-500 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800/80">
+            ຍອດເງິນກູ້ຄົງເຫຼືອຈາກ {portfolioMetrics.activeContractsCount} ສັນຍາທີ່ກຳລັງຜ່ອນ
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Timeframe Selector */}
-          <div className="flex items-center bg-zinc-900/90 border border-zinc-800 p-1 rounded-xl text-xs font-medium">
-            <button
-              onClick={() => setTimeframe('all')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${timeframe === 'all' ? 'bg-amber-400 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
-            >
-              ທັງໝົດ
-            </button>
-            <button
-              onClick={() => setTimeframe('month')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${timeframe === 'month' ? 'bg-amber-400 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
-            >
-              ເດືອນນີ້
-            </button>
-            <button
-              onClick={() => setTimeframe('year')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${timeframe === 'year' ? 'bg-amber-400 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
-            >
-              ປີນີ້
-            </button>
-          </div>
-
-          <button
-            onClick={handleExportCsv}
-            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
-          </button>
-
-          {onNavigateMenu && (
-            <button
-              onClick={() => onNavigateMenu('bills')}
-              className="px-4 py-2 bg-white text-black hover:bg-zinc-200 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>ໄປໜ້າບັນທຶກບິນ</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 6 High-Impact Portfolio KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Card 1: Total Down Payment */}
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden group hover:border-amber-500/50 transition-all">
-          <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-              <BadgePercent className="w-4 h-4 text-amber-400" />
-              <span>ຍອດເງິນດາວທັງໝົດ (Down Payments)</span>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] border border-amber-500/40 font-bold">
-              COLLECTED
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
-            ${portfolioMetrics.totalDownPaymentUSD.toLocaleString()} USD
-          </div>
-          <div className="text-xs text-zinc-400 font-mono mt-1">
-            ~{portfolioMetrics.totalDownPaymentLAK.toLocaleString()} LAK
-          </div>
-          <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400">
-            <span>ອັດຕາດາວສະເລ່ຍ:</span>
-            <span className="text-white font-bold">{portfolioMetrics.averageDownPercent}% ຂອງມູນຄ່າລົດ</span>
-          </div>
-        </div>
-
-        {/* Card 2: Total Financed Portfolio */}
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden group hover:border-blue-500/50 transition-all">
-          <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-blue-400" />
-              <span>ຍອດສິນເຊື່ອລວມ (Loan Portfolio)</span>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono text-[10px] border border-blue-500/40 font-bold">
-              FINANCED
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-            ${portfolioMetrics.totalFinancedUSD.toLocaleString()} USD
-          </div>
-          <div className="text-xs text-zinc-400 font-mono mt-1">
-            ~{portfolioMetrics.totalFinancedLAK.toLocaleString()} LAK
-          </div>
-          <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400">
-            <span>ສັນຍາກູ້ຢືມທັງໝົດ:</span>
-            <span className="text-blue-300 font-bold">{portfolioMetrics.totalCustomers} ສັນຍາລົດຍົນ</span>
-          </div>
-        </div>
-
-        {/* Card 3: Total Installments Collected */}
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden group hover:border-emerald-500/50 transition-all">
-          <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-              <Coins className="w-4 h-4 text-emerald-400" />
-              <span>ຍອດເກັບເງິນງວດແລ້ວ (Installments Paid)</span>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px] border border-emerald-500/40 font-bold">
-              RECEIVED
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-400">
-            ${portfolioMetrics.totalCollectedUSD.toLocaleString()} USD
-          </div>
-          <div className="text-xs text-zinc-400 font-mono mt-1">
-            ~{portfolioMetrics.totalCollectedLAK.toLocaleString()} LAK
-          </div>
-          <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400">
-            <span>ບິນຮັບເງິນງວດໃນລະບົບ:</span>
-            <span className="text-emerald-300 font-bold">{installmentBills.length} ໃບບິນ</span>
-          </div>
-        </div>
-
-        {/* Card 4: Outstanding Balance */}
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden group hover:border-purple-500/50 transition-all">
-          <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-purple-400" />
-              <span>ຍອດໜີ້ຄົງເຫຼືອທີ່ຕ້ອງເກັບ (Outstanding)</span>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono text-[10px] border border-purple-500/40 font-bold">
-              REMAINING
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-            ${portfolioMetrics.totalOutstandingUSD.toLocaleString()} USD
-          </div>
-          <div className="text-xs text-zinc-400 font-mono mt-1">
-            ~{portfolioMetrics.totalOutstandingLAK.toLocaleString()} LAK
-          </div>
-          <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400">
-            <span>ຄວາມຄືບໜ້າການເກັບ:</span>
-            <span className="text-purple-300 font-bold">
-              {portfolioMetrics.totalFinancedUSD > 0
-                ? Math.round((portfolioMetrics.totalCollectedUSD / portfolioMetrics.totalFinancedUSD) * 100)
-                : 0}% ສຳເລັດ
-            </span>
-          </div>
-        </div>
-
-        {/* Card 5: Total Installment Customers */}
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden group hover:border-zinc-700 transition-all">
-          <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-zinc-400" />
-              <span>ລູກຄ້າຜ່ອນ & ດາວທັງໝົດ</span>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700 font-bold">
-              ACCOUNTS
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-            {portfolioMetrics.totalCustomers} <span className="text-sm font-sans text-zinc-400">ລາຍການ</span>
-          </div>
-          <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400 font-sans">
-            <span>ສະຖານະ:</span>
-            <span className="text-emerald-400 font-bold">
-              {installmentLeads.filter(l => l.status === 'delivered').length} ຈ່າຍດາວແລ້ວ
-            </span>
-          </div>
-        </div>
-
-        {/* Card 6: Repayment Health Index */}
-        <div className="bg-zinc-950 border border-zinc-800 p-5 rounded-3xl relative overflow-hidden group hover:border-emerald-500/50 transition-all">
-          <div className="flex items-center justify-between text-zinc-400 text-xs mb-2">
-            <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>ດັດຊະນີສຸຂະພາບການຊຳລະ</span>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px] border border-emerald-500/40 font-bold">
-              HEALTH
-            </span>
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-400">
-            {portfolioMetrics.healthRate}%
-          </div>
-          <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex justify-between text-[11px] text-zinc-400">
-            <span>ການປະເມີນຄວາມສ່ຽງ:</span>
-            <span className="text-emerald-300 font-bold">ລະດັບດີຫຼາຍ (Low Risk)</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Installment tenure overview */}
-      <div className="bg-zinc-950 border border-zinc-800 p-6 rounded-3xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-blue-400" />
-              <h3 className="font-bold text-sm text-white">
-                ໄລຍະເວລາຜ່ອນທີ່ນິຍົມ (Tenure)
-              </h3>
+        {/* Card 2: Total Active Contracts */}
+        <div className="rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm space-y-2 relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">ສັນຍາຜ່ອນທີ່ດຳເນີນການ</span>
+            <div className="p-2 rounded-xl bg-blue-50 dark:bg-zinc-900 border border-blue-200 dark:border-zinc-800 text-blue-600 dark:text-blue-400">
+              <CreditCard className="w-4 h-4" />
             </div>
-            <span className="text-xs text-zinc-500 font-mono">Tenure %</span>
           </div>
+          <div className="space-y-0.5">
+            <span className="text-2xl font-black font-mono text-slate-900 dark:text-white block">
+              {portfolioMetrics.activeContractsCount} <span className="text-sm font-normal text-slate-500 dark:text-zinc-400 font-sans">ສັນຍາ</span>
+            </span>
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-sans block font-semibold">
+              ຜ່ອນຄົບ 100% ແລ້ວ: {portfolioMetrics.totalContracts - portfolioMetrics.activeContractsCount} ສັນຍາ
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800/80">
+            ທັງໝົດໃນລະບົບ {portfolioMetrics.totalContracts} ສັນຍາ
+          </p>
+        </div>
 
-          <div className="space-y-4 pt-1">
-            {tenureBreakdown.map(tenure => (
-              <div key={tenure.label} className="p-3 bg-zinc-900/60 rounded-2xl border border-zinc-800 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-white font-semibold">{tenure.label}</span>
-                  <span className="font-mono font-bold text-blue-400">{tenure.percent}% ({tenure.count} ຄົນ)</span>
+        {/* Card 3: Total Collected Payments */}
+        <div className="rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm space-y-2 relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">ຍອດເກັບເງິນແລ້ວທັງໝົດ</span>
+            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-zinc-900 border border-emerald-200 dark:border-zinc-800 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="space-y-0.5">
+            <span className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400 block">
+              ${portfolioMetrics.totalCollectedUSD.toLocaleString()} USD
+            </span>
+            <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono block">
+              ~ {portfolioMetrics.totalCollectedLAK.toLocaleString()} LAK
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800/80">
+            ລວມເງິນດາວ & ເງິນງວດທີ່ຮັບແລ້ວຕົວຈິງ
+          </p>
+        </div>
+
+        {/* Card 4: Due & Overdue Alerts */}
+        <div className={`rounded-3xl border p-5 shadow-sm space-y-2 relative overflow-hidden ${
+          portfolioMetrics.dueOrOverdueCount > 0 
+            ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/60' 
+            : 'bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800'
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">ຮອດກຳນົດຊຳລະ / ຄ້າງ</span>
+            <div className={`p-2 rounded-xl border ${
+              portfolioMetrics.dueOrOverdueCount > 0 
+                ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-700/60 text-amber-600 dark:text-amber-400' 
+                : 'bg-slate-100 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400'
+            }`}>
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="space-y-0.5">
+            <span className={`text-2xl font-black font-mono block ${
+              portfolioMetrics.dueOrOverdueCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'
+            }`}>
+              {portfolioMetrics.dueOrOverdueCount} <span className="text-sm font-normal text-slate-500 dark:text-zinc-400 font-sans">ລູກຄ້າ</span>
+            </span>
+            <span className="text-xs text-slate-500 dark:text-zinc-400 font-sans block">
+              {portfolioMetrics.dueOrOverdueCount > 0 ? 'ແນະນຳສົ່ງ WhatsApp ແຈ້ງເຕືອນ' : 'ບໍ່ມີຍອດຄ້າງຊຳລະ'}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800/80">
+            ກວດເຊັກຮອບຊຳລະພາຍໃນ 7 ວັນ
+          </p>
+        </div>
+      </div>
+
+      {/* 3. Search & Filter Toolbar */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[260px]">
+          <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="ຄົ້ນຫາຊື່ລູກຄ້າ, ເບີໂທ, ເລກສັນຍາ, ລຸ້ນລົດ, ແຂວງ..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-medium"
+          />
+        </div>
+
+        {/* Model Filter */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-zinc-400 font-medium">ລຸ້ນລົດ:</span>
+          <select
+            value={modelFilter}
+            onChange={(e) => setModelFilter(e.target.value)}
+            className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white font-medium"
+          >
+            <option value="all">ທຸກລຸ້ນ</option>
+            {vehicles.map(v => (
+              <option key={v.id || v.name} value={v.name}>{v.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Status Filter */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-zinc-400 font-medium">ສະຖານະ:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white font-medium"
+          >
+            <option value="all">ທຸກສະຖານະ ({leadsWithSummaries.length})</option>
+            <option value="active">ກຳລັງຜ່ອນ ({leadsWithSummaries.filter(s => !s.summary.isFullyPaid).length})</option>
+            <option value="due">ຮອດກຳນົດຊຳລະ ({leadsWithSummaries.filter(s => s.isDueSoon || s.isOverdue).length})</option>
+            <option value="completed">ຜ່ອນຄົບ 100% ({leadsWithSummaries.filter(s => s.summary.isFullyPaid).length})</option>
+          </select>
+        </div>
+      </div>
+
+      {/* 4. Main Content: Cards View (Default) or Table View */}
+      {filteredCustomers.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-zinc-800 bg-zinc-950/50 p-12 text-center">
+          <CreditCard className="mx-auto w-12 h-12 text-zinc-600 mb-3" />
+          <p className="text-sm font-bold text-zinc-300">ບໍ່ພົບຂໍ້ມູນລູກຄ້າຜ່ອນ-ດາວທີ່ຕົງກັບເງື່ອນໄຂຄົ້ນຫາ</p>
+          <p className="text-xs text-zinc-500 mt-1">
+            ທ່ານສາມາດກົດປຸ່ມ <strong>+ ສັນຍາຜ່ອນໃໝ່ (POS)</strong> ດ້ານເທິງເພື່ອສ້າງລາຍການຂາຍຜ່ອນຊຳລະໃໝ່ໄດ້
+          </p>
+        </div>
+      ) : viewMode === 'cards' ? (
+        /* ================= CARDS BENTO GRID VIEW ================= */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {filteredCustomers.map(({ lead, basePrice, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
+            return (
+              <div 
+                key={lead.id}
+                className="group rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-4 hover:border-zinc-700 transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-4">
+                  {/* Top Bar: Customer Identity & Status */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-zinc-800/80">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-base text-white">{lead.customerName}</h3>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-300">
+                          {contractNo}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-zinc-400 mt-1">
+                        <span className="font-mono">{lead.phone}</span>
+                        {(lead.province || lead.district) && (
+                          <span className="flex items-center gap-0.5 text-zinc-500">
+                            <MapPin className="w-3 h-3" />
+                            <span>{[lead.district, lead.province].filter(Boolean).join(', ')}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status Badge */}
+                    <div>
+                      {summary.isFullyPaid ? (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800/50 flex items-center gap-1.5 shadow-sm">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>ຜ່ອນຄົບ 100%</span>
+                        </span>
+                      ) : isOverdue ? (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-950 text-red-300 border border-red-800/50 flex items-center gap-1.5 shadow-sm animate-pulse">
+                          <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                          <span>ກາຍກຳນົດຊຳລະ</span>
+                        </span>
+                      ) : isDueSoon ? (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800/50 flex items-center gap-1.5 shadow-sm">
+                          <Clock className="w-3.5 h-3.5 text-amber-400" />
+                          <span>ຮອດກຳນົດຊຳລະ</span>
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-800/50 flex items-center gap-1.5 shadow-sm">
+                          <Clock className="w-3.5 h-3.5 text-blue-400" />
+                          <span>ກຳລັງຜ່ອນ (Active)</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Vehicle & Finance Partner Info */}
+                  <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-900/60 border border-zinc-800/70">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-zinc-950 border border-zinc-800 grid place-items-center text-white shrink-0">
+                        <Car className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <span className="font-black text-sm text-white block">{lead.interestedModel}</span>
+                        <span className="text-[11px] text-zinc-400 font-mono">
+                          ລາຄາລົດ: ${basePrice.toLocaleString()} USD
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] text-zinc-500 block">ໄຟແນນ / Leasing:</span>
+                      <span className="text-xs font-bold text-amber-400 block">
+                        {lead.financeCompany || 'AVATR Leasing'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Financial 4-Matrix Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-mono">
+                    <div className="p-2.5 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
+                      <span className="text-[10px] text-zinc-500 font-sans block">ເງິນດາວທີ່ຈ່າຍ:</span>
+                      <strong className="text-white block mt-0.5">${summary.downPaymentUSD.toLocaleString()}</strong>
+                      <span className="text-[10px] text-amber-400 font-sans">{summary.downPaymentPercent}%</span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
+                      <span className="text-[10px] text-zinc-500 font-sans block">ຍອດກູ້ & ດອກເບ້ຍ:</span>
+                      <strong className="text-white block mt-0.5">${summary.principalFinancedUSD.toLocaleString()}</strong>
+                      <span className="text-[10px] text-zinc-400 font-sans">{summary.tenure} ງວດ</span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-zinc-900/40 border border-zinc-800/60">
+                      <span className="text-[10px] text-zinc-500 font-sans block">ຄ່າງວດ/ເດືອນ:</span>
+                      <strong className="text-white block mt-0.5">${summary.monthlyPaymentUSD.toLocaleString()}</strong>
+                      <span className="text-[10px] text-zinc-400 font-sans">~{Math.round(summary.monthlyPaymentLAK / 1000000)}M ກີບ</span>
+                    </div>
+
+                    <div className={`p-2.5 rounded-xl border ${
+                      isOverdue 
+                        ? 'bg-red-950/20 border-red-800/60 text-red-300' 
+                        : isDueSoon 
+                        ? 'bg-amber-950/20 border-amber-800/60 text-amber-300' 
+                        : 'bg-zinc-900/40 border-zinc-800/60'
+                    }`}>
+                      <span className="text-[10px] text-zinc-500 font-sans block">ວັນຄົບກຳນົດ:</span>
+                      <strong className="block mt-0.5">{nextUnpaid ? nextUnpaid.dueDate : 'ຄົບແລ້ວ'}</strong>
+                      <span className="text-[10px] font-sans">
+                        {nextUnpaid ? `ງວດ ${nextUnpaid.period}/${summary.tenure}` : '100%'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Repayment Progress Bar */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-400 flex items-center gap-1.5 font-medium">
+                        <span>ຄວາມຄືບໜ້າການຜ່ອນ:</span>
+                        <strong className="text-white font-mono">{summary.paidCount}/{summary.totalCount} ງວດ</strong>
+                      </span>
+                      <span className="font-mono font-bold text-amber-400">{summary.progressPercent}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          summary.isFullyPaid ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-amber-300'
+                        }`}
+                        style={{ width: `${summary.progressPercent}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-zinc-500 font-mono">
+                      <span>ຈ່າຍແລ້ວ: ${summary.totalPaidInstallmentsUSD.toLocaleString()} USD</span>
+                      <span>ໜີ້ເຫຼືອ: ${summary.remainingInstallmentsUSD.toLocaleString()} USD</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-blue-500 rounded-full transition-all"
-                    style={{ width: `${tenure.percent}%` }}
-                  />
+
+                {/* Bottom Action Suite Buttons */}
+                <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Primary Button: ບັນທຶກຮັບເງິນງວດ */}
+                    {!summary.isFullyPaid && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLeadForQuickPay(lead)}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                        title="ເປີດໜ້າຕ່າງບັນທຶກຮັບເງິນງວດດ່ວນ & ອອກໃບບິນງວດ"
+                      >
+                        <Coins className="w-3.5 h-3.5" />
+                        <span>ບັນທຶກຮັບເງິນງວດ</span>
+                      </button>
+                    )}
+
+                    {/* Payoff Confirmation Button: Active when 100% fully paid, disabled with remaining periods when not */}
+                    {summary.isFullyPaid ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLeadForPayoff({ lead, summary, contractNo })}
+                        className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/25 transition-all cursor-pointer active:scale-95 animate-pulse"
+                        title="ຢືນຢັນການຊຳລະສຳເລັດ ແລະ ຍ້າຍຂໍ້ມູນໄປໜ້າລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-zinc-950" />
+                        <span>ຢືນຢັນການຊຳລະສຳເລັດ</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="px-3 py-2 bg-zinc-900/60 text-zinc-500 border border-zinc-800/80 font-medium rounded-xl text-xs flex items-center gap-1.5 cursor-not-allowed opacity-75"
+                        title="ປຸ່ມຢືນຢັນຈະສາມາດກົດໄດ້ເມື່ອຊຳລະສຳເລັດຄົບທຸກງວດ (100%) ແລ້ວເທົ່ານັ້ນ"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-zinc-600" />
+                        <span>ຢືນຢັນການຊຳລະສຳເລັດ (ຍັງເຫຼືອ {summary.remainingPeriods} ງວດ)</span>
+                      </button>
+                    )}
+
+                    {/* Button 2: ຕາຕະລາງຜ່ອນ */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLeadForLedger(lead)}
+                      className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                      title="ເບິ່ງຕາຕະລາງການຜ່ອນຊຳລະຄົບທຸກງວດ"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>ຕາຕະລາງຜ່ອນ</span>
+                    </button>
+
+                    {/* Button 3: ເອກະສານ & ສັນຍາ */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLeadForDocs(lead)}
+                      className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                      title="ເບິ່ງສັນຍາຜ່ອນ, ໃບຮັບເງິນດາວ ແລະ ຕາຕະລາງ A4"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>ເອກະສານ & ສັນຍາ</span>
+                    </button>
+                  </div>
+
+                  {/* Button 4: WhatsApp Due Reminder */}
+                  <button
+                    type="button"
+                    onClick={() => handleSendWhatsAppReminder(lead, summary, contractNo, nextUnpaid)}
+                    className="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ml-auto"
+                    title="ສົ່ງຂໍ້ຄວາມ WhatsApp ແຈ້ງເຕືອນຄ່າງວດຫາລູກຄ້າ"
+                  >
+                    <WhatsAppIcon className="w-3.5 h-3.5" />
+                    <span>ແຈ້ງເຕືອນງວດ</span>
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-
-          <div className="text-[11px] text-zinc-400 pt-2 border-t border-zinc-800/80 leading-relaxed">
-            ລູກຄ້າສ່ວນໃຫຍ່ເລືອກແຜນຜ່ອນ 48 ເດືອນ (4 ປີ) ເພື່ອຮັບຄ່າງວດທີ່ເໝາະສົມ (~18-22 ລ້ານກີບ/ເດືອນ).
-          </div>
+            );
+          })}
         </div>
-
-      {/* INSTALLMENT CUSTOMER REPAYMENT TRACKER TABLE */}
-      <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden space-y-4 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
-          <div>
-            <h2 className="text-lg font-black text-white flex items-center gap-2">
-              <Users className="w-5 h-5 text-amber-400" />
-              <span>ລາຍຊື່ລູກຄ້າຜ່ອນ-ດາວ & ຕາຕະລາງຕິດຕາມການຊຳລະ</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-mono">
-                {filteredCustomers.length} ລູກຄ້າ
-              </span>
-            </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              ກວດສອບສະຖານະ, ເງິນດາວ, ຍອດກູ້ຢືມ, ຄ່າງວດ ແລະ ເປີດຕາຕະລາງບັນທຶກຮັບເງິນງວດໄດ້ໂດຍກົງ
-            </p>
-          </div>
-
-          {/* Table Filters */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative min-w-[200px]">
-              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="ຄົ້ນຫາຊື່, ເບີໂທ, ລຸ້ນລົດ..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white font-medium"
-              />
-            </div>
-
-            {/* Status Filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white"
-            >
-              <option value="all">ທຸກສະຖານະ</option>
-              <option value="delivered">ຈ່າຍດາວແລ້ວ</option>
-              <option value="active">ກຳລັງຜ່ອນ</option>
-              <option value="completed">ຜ່ອນຄົບແລ້ວ</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Table Content */}
-        <div className="overflow-x-auto text-xs">
-          <table className="w-full text-left">
-            <thead className="bg-zinc-900 text-zinc-400 font-medium border-b border-zinc-800">
-              <tr>
-                <th className="py-3.5 px-4">ລູກຄ້າ & ເບີໂທ</th>
-                <th className="py-3.5 px-4">ລຸ້ນລົດທີ່ເລືອກ</th>
-                <th className="py-3.5 px-4">ເງິນດາວ (% & USD)</th>
-                <th className="py-3.5 px-4">ຍອດກູ້ & ງວດ</th>
-                <th className="py-3.5 px-4">ຄ່າງວດ/ເດືອນ</th>
-                <th className="py-3.5 px-4">ຄວາມຄືບໜ້າການຜ່ອນ</th>
-                <th className="py-3.5 px-4">ສະຖານະ</th>
-                <th className="py-3.5 px-4 text-center">ການດຳເນີນງານ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/80 font-mono">
-              {filteredCustomers.length === 0 ? (
+      ) : (
+        /* ================= HIGH-DENSITY TABLE VIEW ================= */
+        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-xl">
+          <div className="overflow-x-auto text-xs">
+            <table className="w-full text-left">
+              <thead className="bg-zinc-900 text-zinc-400 font-medium border-b border-zinc-800">
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-zinc-500 font-sans">
-                    ບໍ່ພົບລາຍຊື່ລູກຄ້າຜ່ອນ-ດາວທີ່ກົງກັບເງື່ອນໄຂ
-                  </td>
+                  <th className="py-3.5 px-4">ລູກຄ້າ & ເບີໂທ</th>
+                  <th className="py-3.5 px-4">ລຸ້ນລົດ & ສັນຍາ</th>
+                  <th className="py-3.5 px-4">ເງິນດາວ</th>
+                  <th className="py-3.5 px-4">ຍອດກູ້ & ງວດ</th>
+                  <th className="py-3.5 px-4">ຄ່າງວດ/ເດືອນ</th>
+                  <th className="py-3.5 px-4">ວັນຄົບກຳນົດ</th>
+                  <th className="py-3.5 px-4">ຄວາມຄືບໜ້າ</th>
+                  <th className="py-3.5 px-4">ສະຖານະ</th>
+                  <th className="py-3.5 px-4 text-center">ການດຳເນີນງານ</th>
                 </tr>
-              ) : (
-                filteredCustomers.map(lead => {
-                  const matchedVeh = vehicles.find(v => v.name === lead.interestedModel);
-                  const basePrice = matchedVeh?.priceStartingUSD || 50000;
-                  const downUSD = lead.downPaymentUSD || Math.round(basePrice * ((lead.downPaymentPercent || 30) / 100));
-                  const loanUSD = Math.max(0, basePrice - downUSD);
-                  const tenureMonths = lead.tenureMonths || 48;
-                  const monthlyLAK = lead.monthlyPaymentLAK || Math.round((loanUSD * DEFAULT_EXCHANGE_RATE_LAK) / tenureMonths);
-
-                  // Progress
-                  const records = lead.installmentRecords || [];
-                  const paidCount = records.filter(r => r.status === 'paid').length;
-                  const progressPct = Math.round((paidCount / tenureMonths) * 100);
-
+              </thead>
+              <tbody className="divide-y divide-zinc-800/80 font-mono">
+                {filteredCustomers.map(({ lead, basePrice, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
                   return (
                     <tr key={lead.id} className="hover:bg-zinc-900/50 transition-colors">
                       {/* Customer */}
@@ -585,63 +848,79 @@ export default function InstallmentDashboardView({
                             <span>WA</span>
                           </a>
                         </div>
-                        <span className="text-[10px] text-zinc-500 block">{lead.province}</span>
                       </td>
 
-                      {/* Model */}
+                      {/* Model & Contract */}
                       <td className="py-3.5 px-4 font-sans">
                         <strong className="text-white block">{lead.interestedModel}</strong>
-                        <span className="text-zinc-400 text-[11px] font-mono">${basePrice.toLocaleString()} USD</span>
+                        <span className="text-zinc-500 text-[10px] font-mono">{contractNo}</span>
                       </td>
 
                       {/* Down Payment */}
                       <td className="py-3.5 px-4">
-                        <strong className="text-amber-400 block">${downUSD.toLocaleString()} USD</strong>
-                        <span className="text-[11px] text-zinc-400 font-sans">ດາວ {lead.downPaymentPercent || 30}%</span>
+                        <strong className="text-amber-400 block">${summary.downPaymentUSD.toLocaleString()} USD</strong>
+                        <span className="text-[11px] text-zinc-400 font-sans">ດາວ {summary.downPaymentPercent}%</span>
                       </td>
 
                       {/* Loan & Tenure */}
                       <td className="py-3.5 px-4">
-                        <strong className="text-white block">${loanUSD.toLocaleString()} USD</strong>
-                        <span className="text-zinc-400 text-[11px] font-sans">{tenureMonths} ເດືອນ ({Math.round(tenureMonths / 12)} ປີ)</span>
+                        <strong className="text-white block">${summary.principalFinancedUSD.toLocaleString()} USD</strong>
+                        <span className="text-zinc-400 text-[11px] font-sans">{summary.tenure} ງວດ</span>
                       </td>
 
                       {/* Monthly Payment */}
                       <td className="py-3.5 px-4">
-                        <strong className="text-white block">~{monthlyLAK.toLocaleString()} LAK</strong>
-                        <span className="text-[10px] text-zinc-500 font-mono">~${Math.round(monthlyLAK / DEFAULT_EXCHANGE_RATE_LAK)} USD/ເດືອນ</span>
+                        <strong className="text-white block">~{summary.monthlyPaymentLAK.toLocaleString()} LAK</strong>
+                        <span className="text-[10px] text-zinc-500 font-mono">${summary.monthlyPaymentUSD.toLocaleString()} USD</span>
+                      </td>
+
+                      {/* Due Date */}
+                      <td className="py-3.5 px-4">
+                        <span className={`block font-bold ${
+                          isOverdue ? 'text-red-400' : isDueSoon ? 'text-amber-400' : 'text-zinc-300'
+                        }`}>
+                          {nextUnpaid ? nextUnpaid.dueDate : 'ຄົບແລ້ວ'}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-sans">
+                          {nextUnpaid ? `ງວດ ${nextUnpaid.period}/${summary.tenure}` : '100%'}
+                        </span>
                       </td>
 
                       {/* Progress */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center justify-between text-[11px] mb-1 font-sans">
-                          <span className="text-zinc-400">{paidCount}/{tenureMonths} ງວດ</span>
-                          <span className="text-amber-400 font-bold">{progressPct}%</span>
+                          <span className="text-zinc-400">{summary.paidCount}/{summary.totalCount}</span>
+                          <span className="text-amber-400 font-bold">{summary.progressPercent}%</span>
                         </div>
-                        <div className="w-24 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="w-20 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-amber-400 rounded-full"
-                            style={{ width: `${progressPct}%` }}
+                            style={{ width: `${summary.progressPercent}%` }}
                           />
                         </div>
                       </td>
 
                       {/* Status */}
                       <td className="py-3.5 px-4 font-sans">
-                        {lead.status === 'delivered' ? (
+                        {summary.isFullyPaid ? (
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                            <span>ຈ່າຍດາວແລ້ວ</span>
+                            <span>ຜ່ອນຄົບແລ້ວ</span>
                           </span>
-                        ) : lead.installmentStatus === 'active_repaying' ? (
+                        ) : isOverdue ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/30 inline-flex items-center gap-1 animate-pulse">
+                            <AlertTriangle className="w-3 h-3 text-red-400" />
+                            <span>ກາຍກຳນົດ</span>
+                          </span>
+                        ) : isDueSoon ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-300" />
+                            <span>ຮອດກຳນົດ</span>
+                          </span>
+                        ) : (
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30 inline-flex items-center gap-1">
                             <Clock className="w-3 h-3 text-blue-400" />
                             <span>ກຳລັງຜ່ອນ</span>
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 inline-flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-amber-300" />
-                            <span>ລໍຖ້າອະນຸມັດ</span>
                           </span>
                         )}
                       </td>
@@ -649,13 +928,42 @@ export default function InstallmentDashboardView({
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-center font-sans">
                         <div className="flex items-center justify-center gap-1.5">
+                          {summary.isFullyPaid ? (
+                            <button
+                              onClick={() => setSelectedLeadForPayoff({ lead, summary, contractNo })}
+                              className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm animate-pulse"
+                              title="ຢືນຢັນການຊຳລະສຳເລັດ ແລະ ຍ້າຍຂໍ້ມູນໄປໜ້າລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-zinc-950" />
+                              <span>ຢືນຢັນຊຳລະຄົບ</span>
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => setSelectedLeadForQuickPay(lead)}
+                                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                                title="ບັນທຶກຮັບເງິນງວດດ່ວນ"
+                              >
+                                <Coins className="w-3.5 h-3.5" />
+                                <span>ຮັບເງິນ</span>
+                              </button>
+                              <button
+                                disabled
+                                className="px-2 py-1.5 bg-zinc-900 text-zinc-600 border border-zinc-800 rounded-xl text-[11px] font-medium transition-all flex items-center gap-1 cursor-not-allowed opacity-60"
+                                title={`ຍັງເຫຼືອອີກ ${summary.remainingPeriods} ງວດ ຈຶ່ງຈະສາມາດຢືນຢັນຊຳລະຄົບໄດ້`}
+                              >
+                                <Lock className="w-3 h-3 text-zinc-600" />
+                                <span>ຍັງເຫຼືອ {summary.remainingPeriods} ງວດ</span>
+                              </button>
+                            </>
+                          )}
+
                           <button
                             onClick={() => setSelectedLeadForLedger(lead)}
-                            className="px-2.5 py-1.5 bg-zinc-900 hover:bg-white hover:text-black text-zinc-200 border border-zinc-700 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                            className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-xl text-xs transition-all flex items-center justify-center cursor-pointer"
                             title="ເປີດຕາຕະລາງຜ່ອນ & ບັນທຶກຮັບເງິນງວດ"
                           >
                             <Calendar className="w-3.5 h-3.5" />
-                            <span>ຕາຕະລາງຜ່ອນ</span>
                           </button>
 
                           <button
@@ -665,18 +973,39 @@ export default function InstallmentDashboardView({
                           >
                             <FileText className="w-3.5 h-3.5" />
                           </button>
+
+                          <button
+                            onClick={() => handleSendWhatsAppReminder(lead, summary, contractNo, nextUnpaid)}
+                            className="p-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 border border-emerald-800/60 rounded-xl text-xs transition-all flex items-center justify-center cursor-pointer"
+                            title="ສົ່ງ WhatsApp ແຈ້ງເຕືອນ"
+                          >
+                            <WhatsAppIcon className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* MODAL 1: INSTALLMENT LEDGER MODAL */}
+      {/* MODAL 1: QUICK INSTALLMENT PAYMENT MODAL */}
+      {selectedLeadForQuickPay && (
+        <QuickInstallmentPaymentModal
+          isOpen={Boolean(selectedLeadForQuickPay)}
+          onClose={() => setSelectedLeadForQuickPay(null)}
+          customer={selectedLeadForQuickPay}
+          vehicles={vehicles}
+          currentUser={currentUser || undefined}
+          lang={lang}
+          onPaymentSuccess={handleUpdateCustomerRecords}
+        />
+      )}
+
+      {/* MODAL 2: INSTALLMENT LEDGER MODAL (FULL 48-MONTH AMORTIZATION) */}
       {selectedLeadForLedger && (
         <InstallmentLedgerModal
           isOpen={Boolean(selectedLeadForLedger)}
@@ -689,7 +1018,7 @@ export default function InstallmentDashboardView({
         />
       )}
 
-      {/* MODAL 2: CUSTOMER DOCUMENTS MODAL (A4 PRINT / PDF) */}
+      {/* MODAL 3: CUSTOMER DOCUMENTS MODAL (A4 PRINT / PDF CONTRACTS) */}
       {selectedLeadForDocs && (
         <CustomerDocumentsModal
           isOpen={Boolean(selectedLeadForDocs)}
@@ -708,6 +1037,18 @@ export default function InstallmentDashboardView({
               setLeads(prev => prev.map(l => l.id === updatedCust.id ? updatedCust : l));
             }
           }}
+        />
+      )}
+
+      {/* MODAL 4: CONFIRM PAYOFF AND MOVE TO COMPLETED VIEW */}
+      {selectedLeadForPayoff && (
+        <ConfirmPayoffModal
+          isOpen={Boolean(selectedLeadForPayoff)}
+          onClose={() => setSelectedLeadForPayoff(null)}
+          customer={selectedLeadForPayoff.lead}
+          summary={selectedLeadForPayoff.summary}
+          contractNo={selectedLeadForPayoff.contractNo}
+          onConfirm={handleConfirmPayoff}
         />
       )}
     </div>

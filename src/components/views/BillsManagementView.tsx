@@ -11,6 +11,7 @@ import {
 import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import { translations } from '../../data/translations';
 import AvatrLogo from '../layout/AvatrLogo';
+import { showToast } from '../common';
 import { 
   FileText, 
   Search, 
@@ -226,7 +227,7 @@ export default function BillsManagementView({
       setSelectedBillIds([]);
     } catch (err) {
       console.error('Error batch deleting bills:', err);
-      alert(err instanceof Error ? err.message : 'Could not delete selected bills.');
+      showToast(err instanceof Error ? err.message : 'Could not delete selected bills.', 'error');
     } finally {
       setIsDeletingBatch(false);
     }
@@ -278,7 +279,7 @@ export default function BillsManagementView({
       });
     } catch (err) {
       console.error('Error generating bill PDF:', err);
-      alert('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້. ກະລຸນາລອງໃໝ່ ຫຼື ໃຊ້ປຸ່ມພິມບິນ');
+      showToast('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້. ກະລຸນາລອງໃໝ່ ຫຼື ໃຊ້ປຸ່ມພິມບິນ', 'error');
     } finally {
       setIsExportingBillPdf(false);
     }
@@ -315,7 +316,7 @@ export default function BillsManagementView({
       });
     } catch (err) {
       console.error('Error generating bill DOCX:', err);
-      alert('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້. ກະລຸນາລອງໃໝ່');
+      showToast('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້. ກະລຸນາລອງໃໝ່', 'error');
     } finally {
       setIsExportingBillDocx(false);
     }
@@ -865,8 +866,16 @@ export default function BillsManagementView({
                 <tbody className="divide-y divide-zinc-800/80">
                   {filteredInstallmentContracts.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-zinc-500">
-                        ບໍ່ພົບລາຍຊື່ສັນຍາລູກຄ້າຜ່ອນ-ດາວທີ່ກົງກັບເງື່ອນໄຂ
+                      <td colSpan={7} className="px-6 py-12 text-center">
+                        <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl border border-zinc-700 bg-zinc-900 text-zinc-400">
+                          <FileText className="h-5 w-5" />
+                        </span>
+                        <span className="mt-3 block text-sm font-semibold text-zinc-200">
+                          {lang === 'lo' ? 'ບໍ່ພົບລາຍຊື່ສັນຍາລູກຄ້າຜ່ອນ-ດາວ' : lang === 'th' ? 'ไม่พบสัญญาผ่อน-ดาวน์' : 'No Installment Contracts Found'}
+                        </span>
+                        <span className="mt-1 block text-xs text-zinc-400">
+                          {lang === 'lo' ? 'ຍັງບໍ່ມີສັນຍາທີ່ກົງກັບເງື່ອນໄຂ ຫຼື ລອງປ່ຽນຄຳຄົ້ນຫາ' : 'No contracts match your criteria or try another filter.'}
+                        </span>
                       </td>
                     </tr>
                   ) : (
@@ -1323,7 +1332,7 @@ export default function BillsManagementView({
             {/* PRINTABLE BILL CANVAS (Standard Compact Dealership Layout) */}
             <div 
               id="printable-official-bill"
-              className="official-dealer-document a4-document-canvas w-full max-w-[580px] mx-auto p-4 sm:p-5 bg-white text-black font-sans text-[11px] leading-normal border border-black rounded-lg shadow-xl flex flex-col justify-between print:m-0 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0"
+              className="official-dealer-document a4-document-canvas w-full max-w-[580px] mx-auto p-4 sm:p-5 bg-white text-black font-sans text-[11px] leading-normal border border-black rounded-lg shadow-xl flex flex-col justify-between print:m-0 print:p-1 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto print:max-h-[278mm] print:break-inside-avoid print:page-break-inside-avoid print:page-break-after-avoid print:overflow-hidden"
               style={{ backgroundColor: '#ffffff', color: '#000000', borderColor: '#000000' }}
             >
               {/* Top Section: National Motto & Header */}
@@ -1373,7 +1382,7 @@ export default function BillsManagementView({
               </div>
 
               {/* Middle Section: Bill Content Details */}
-              <div className="flex-1 flex flex-col justify-between py-1.5 space-y-2">
+              <div className="flex-1 flex flex-col justify-between py-1.5 print:py-0.5 space-y-2 print:space-y-1">
                 {/* Counterparty Details: Customer (Sale & Installment) vs Supplier (Import) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 bg-zinc-50 rounded border border-black text-[10.5px]">
                   {selectedBillForPrint.billType === 'sale' || isInstallmentBill(selectedBillForPrint) ? (
@@ -1569,9 +1578,9 @@ export default function BillsManagementView({
               </div>
 
               {/* Bottom Section: Signatures & Seal Section */}
-              <div className="pt-2 border-t border-black grid grid-cols-2 gap-6 text-center text-[10.5px]">
+              <div className="pt-2 print:pt-1.5 border-t border-black grid grid-cols-2 gap-6 text-center text-[10.5px]">
                 <div>
-                  <span className="font-bold block mb-7">
+                  <span className="font-bold block mb-7 print:mb-4">
                     {isInstallmentBill(selectedBillForPrint)
                       ? 'ລາຍເຊັນລູກຄ້າຜູ້ຊື້ / ຜູ້ກູ້ຢືມ (Borrower)'
                       : selectedBillForPrint.billType === 'sale' 
@@ -1585,7 +1594,7 @@ export default function BillsManagementView({
                 </div>
 
                 <div>
-                  <span className="font-bold block mb-7">
+                  <span className="font-bold block mb-7 print:mb-4">
                     {isInstallmentBill(selectedBillForPrint)
                       ? 'ພະນັກງານສິນເຊື່ອ & ການເງິນ / ຕາປະທັບ'
                       : 'ຜູ້ຮັບຜິດຊອບອອກບິນ / ຕາປະທັບບໍລິສັດ'}

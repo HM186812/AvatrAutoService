@@ -33,6 +33,8 @@ export interface TranslationSchema {
   navStockInSub: string;
   navAlerts: string;
   navBills: string;
+  navInstallmentDashboard: string;
+  navInstallmentDashboardSub: string;
   navUsers: string;
   navProfile: string;
   navCurrencies: string;
@@ -43,6 +45,7 @@ export interface TranslationSchema {
 
   // Top Header Titles & Actions
   headerDashboard: string;
+  headerInstallmentDashboard: string;
   headerCustomers: string;
   headerInventory: string;
   headerStockIn: string;
@@ -521,6 +524,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     navStockInSub: 'ຮັບລົດ & ອອກໃບຮັບ',
     navAlerts: 'ແຈ້ງເຕືອນສະຕ໋ອກ',
     navBills: 'ບັນທຶກບິນ & ໃບຮັບ',
+    navInstallmentDashboard: 'ຜ່ອນຊຳລະ & ສິນເຊື່ອ (Leasing)',
+    navInstallmentDashboardSub: 'ສັນຍາຜ່ອນ & ດາວ',
     navUsers: 'ອະນຸຍາດ & ມອບສິດ',
     navProfile: 'ໂປຣໄຟລ໌ສ່ວນຕົວ',
     navCurrencies: 'ສະກຸນເງິນ (Currencies)',
@@ -531,6 +536,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Top Header Titles & Actions
     headerDashboard: 'Dashboard • ພາບລວມລະບົບ',
+    headerInstallmentDashboard: 'Dashboard ຜ່ອນຊຳລະ & ເງິນດາວ • Leasing Portfolio',
     headerCustomers: 'ລູກຄ້າ CRM • ຖານຂໍ້ມູນ & ຕິດຕາມ',
     headerInventory: 'ສະຕ໋ອກລົດ AVATR • ຄັງສິນຄ້າທັງໝົດ',
     headerStockIn: 'ປ້ອນນຳເຂົ້າລົດ • Stock-In Entry',
@@ -650,8 +656,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     posSubtitle: 'ລະບົບອອກໃບສັ່ງຊື້/ໃບຂາຍລົດ, ຄຳນວນສ່ວນຫຼຸດ, ຕັດສະຕ໋ອກ ແລະ ບັນທຶກລາຍຮັບທັນທີ',
     selectVehicleToSell: 'ເລືອກລົດໃນສະຕ໋ອກທີ່ຈະຂາຍ',
     buyerInfo: 'ຂໍ້ມູນຜູ້ຊື້ / ລູກຄ້າ',
-    buyerName: 'ຊື່ ແລະ ນາມສະກຸນ ລູກຄ້າ *',
-    buyerPhone: 'ເບີໂທລະສັບຕິດຕໍ່ *',
+    buyerName: 'ຊື່ ແລະ ນາມສະກຸນ ລູກຄ້າ',
+    buyerPhone: 'ເບີໂທລະສັບຕິດຕໍ່',
     buyerAddress: 'ທີ່ຢູ່ / ບ້ານ, ເມືອງ, ແຂວງ',
     buyerIDPassport: 'ເລກບັດປະຊາຊົນ / Passport',
     paymentType: 'ຮູບແບບການຊຳລະເງິນ',
@@ -763,7 +769,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     authEmailOrPhone: 'ອີເມວ ຫຼື ເບີໂທລະສັບ (Email / Phone)',
     authPassword: 'ລະຫັດຜ່ານ (Password)',
     authConfirmPassword: 'ຢືນຢັນລະຫັດຜ່ານ (Confirm Password)',
-    authFullName: 'ຊື່ ແລະ ນາມສະກຸນ (Full Name) *',
+    authFullName: 'ຊື່ ແລະ ນາມສະກຸນ (Full Name)',
     authRememberMe: 'ຈົດຈຳການເຂົ້າສູ່ລະບົບ (Remember Me)',
     authNoAccount: 'ຍັງບໍ່ມີບັນຊີ? ສ້າງບັນຊີໃໝ່',
     authHaveAccount: 'ມີບັນຊີແລ້ວ? ເຂົ້າສູ່ລະບົບ',
@@ -839,12 +845,12 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     customerViewSubtitle: 'ຖານຂໍ້ມູນລູກຄ້າ Walk-in, Online ແລະ Event ພ້ອມການຕິດຕາມສະຖານະການຂາຍ',
     assignedOfficer: 'ຜູ້ຮັບຜິດຊອບ:',
     inputFormHeader: 'ເພີ່ມຂໍ້ມູນລູກຄ້າໃໝ່ (Input Form)',
-    customerTypeLabel: 'ປະເພດລູກຄ້າ (3 ໝວດ) *',
-    customerNameLabel: 'ຊື່ ແລະ ນາມສະກຸນ *',
-    customerPhoneLabel: 'ເບີໂທລະສັບ (Laos Mobile) *',
+    customerTypeLabel: 'ປະເພດລູກຄ້າ (3 ໝວດ)',
+    customerNameLabel: 'ຊື່ ແລະ ນາມສະກຸນ',
+    customerPhoneLabel: 'ເບີໂທລະສັບ (Laos Mobile)',
     customerEmailLabel: 'ອີເມວ (Email)',
-    interestedModelLabel: 'ລຸ້ນລົດທີ່ສົນໃຈ *',
-    priorityLabel: 'ລະດັບຄວາມດ່ວນ *',
+    interestedModelLabel: 'ລຸ້ນລົດທີ່ສົນໃຈ',
+    priorityLabel: 'ລະດັບຄວາມດ່ວນ',
     budgetLabel: 'ງົບປະມານປະມານການ',
     notesLabel: 'ໝາຍເຫດ / ຄວາມຕ້ອງການເພີ່ມເຕີມ',
     saveCustomerBtn: 'ບັນທຶກຂໍ້ມູນລູກຄ້າ',
@@ -1006,6 +1012,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     navStockInSub: 'Receiving & Goods Receipts',
     navAlerts: 'Stock Alerts',
     navBills: 'Bills & Invoices',
+    navInstallmentDashboard: 'Installment & Leasing',
+    navInstallmentDashboardSub: 'Contracts & Down Payments',
     navUsers: 'User Governance',
     navProfile: 'User Profile',
     navCurrencies: 'Currencies & Rates',
@@ -1016,6 +1024,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Top Header Titles & Actions
     headerDashboard: 'Dashboard • Executive Overview',
+    headerInstallmentDashboard: 'Installment & Down Payment Dashboard • Portfolio Hub',
     headerCustomers: 'CRM Customers • Database & Tracking',
     headerInventory: 'AVATR Inventory • Live Stock Management',
     headerStockIn: 'Stock-In Entry • Vehicle Import',
@@ -1131,8 +1140,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     posSubtitle: 'Create sales orders, apply discounts, deduct inventory and record transactions instantly',
     selectVehicleToSell: 'Select Available Vehicle in Stock',
     buyerInfo: 'Buyer / Customer Information',
-    buyerName: 'Full Name of Buyer *',
-    buyerPhone: 'Contact Phone Number *',
+    buyerName: 'Full Name of Buyer',
+    buyerPhone: 'Contact Phone Number',
     buyerAddress: 'Residential Address / Province',
     buyerIDPassport: 'National ID / Passport Number',
     paymentType: 'Payment Method',
@@ -1244,7 +1253,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     authEmailOrPhone: 'Email Address or Phone Number',
     authPassword: 'Password',
     authConfirmPassword: 'Confirm Password',
-    authFullName: 'Full Name *',
+    authFullName: 'Full Name',
     authRememberMe: 'Remember Me on this device',
     authNoAccount: "Don't have an account? Sign Up",
     authHaveAccount: 'Already have an account? Sign In',
@@ -1318,12 +1327,12 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     customerViewSubtitle: 'Central database for Walk-in, Online, and Event leads with sales stage tracking',
     assignedOfficer: 'Assigned Officer:',
     inputFormHeader: 'Add New Customer (Input Form)',
-    customerTypeLabel: 'Customer Category (3 Types) *',
-    customerNameLabel: 'Full Name *',
-    customerPhoneLabel: 'Phone Number (Laos Mobile) *',
+    customerTypeLabel: 'Customer Category (3 Types)',
+    customerNameLabel: 'Full Name',
+    customerPhoneLabel: 'Phone Number (Laos Mobile)',
     customerEmailLabel: 'Email Address',
-    interestedModelLabel: 'Interested Vehicle Model *',
-    priorityLabel: 'Lead Priority *',
+    interestedModelLabel: 'Interested Vehicle Model',
+    priorityLabel: 'Lead Priority',
     budgetLabel: 'Estimated Budget',
     notesLabel: 'Notes / Special Requests',
     saveCustomerBtn: 'Save Customer Lead',
@@ -1487,6 +1496,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     navStockInSub: 'รับรถ & ออกใบรับ',
     navAlerts: 'แจ้งเตือนสต็อก',
     navBills: 'บันทึกบิล & ใบรับ',
+    navInstallmentDashboard: 'ผ่อนชำระ & สินเชื่อ (Leasing)',
+    navInstallmentDashboardSub: 'สัญญาผ่อน & ดาวน์',
     navUsers: 'อนุมัติ & สิทธิ์สมาชิก',
     navProfile: 'โปรไฟล์ส่วนตัว',
     navCurrencies: 'สกุลเงิน (Currencies)',
@@ -1497,6 +1508,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Top Header Titles & Actions
     headerDashboard: 'Dashboard • ภาพรวมระบบ',
+    headerInstallmentDashboard: 'Dashboard ผ่อนชำระ & เงินดาวน์ • Leasing Portfolio',
     headerCustomers: 'ลูกค้า CRM • ฐานข้อมูล & ติดตามงานขาย',
     headerInventory: 'สต็อกรถ AVATR • คลังสินค้าทั้งหมด',
     headerStockIn: 'บันทึกนำเข้ารถ • Stock-In Entry',
@@ -1616,8 +1628,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     posSubtitle: 'ระบบออกใบสั่งซื้อ/ใบขายรถ คำนวณส่วนลด ตัดสต็อก และบันทึกรายรับทันที',
     selectVehicleToSell: 'เลือกรถในสต็อกที่จะขาย',
     buyerInfo: 'ข้อมูลผู้ซื้อ / ลูกค้า',
-    buyerName: 'ชื่อ และ นามสกุล ลูกค้า *',
-    buyerPhone: 'เบอร์โทรศัพท์ติดต่อ *',
+    buyerName: 'ชื่อ และ นามสกุล ลูกค้า',
+    buyerPhone: 'เบอร์โทรศัพท์ติดต่อ',
     buyerAddress: 'ที่อยู่ / บ้าน, เมือง, แขวง/จังหวัด',
     buyerIDPassport: 'เลขบัตรประชาชน / Passport',
     paymentType: 'รูปแบบการชำระเงิน',
@@ -1729,7 +1741,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     authEmailOrPhone: 'อีเมล หรือ เบอร์โทรศัพท์ (Email / Phone)',
     authPassword: 'รหัสผ่าน (Password)',
     authConfirmPassword: 'ยืนยันรหัสผ่าน (Confirm Password)',
-    authFullName: 'ชื่อ และ นามสกุล (Full Name) *',
+    authFullName: 'ชื่อ และ นามสกุล (Full Name)',
     authRememberMe: 'จดจำการเข้าสู่ระบบ (Remember Me)',
     authNoAccount: 'ยังไม่มีบัญชี? สร้างบัญชีใหม่',
     authHaveAccount: 'มีบัญชีอยู่แล้ว? เข้าสู่ระบบ',
@@ -1805,12 +1817,12 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     customerViewSubtitle: 'ฐานข้อมูลลูกค้า Walk-in, Online และ Event พร้อมการติดตามสถานะการขายอย่างเป็นระบบ',
     assignedOfficer: 'ผู้รับผิดชอบ:',
     inputFormHeader: 'เพิ่มข้อมูลลูกค้าใหม่ (Input Form)',
-    customerTypeLabel: 'ประเภทลูกค้า (3 หมวด) *',
-    customerNameLabel: 'ชื่อ และ นามสกุล *',
-    customerPhoneLabel: 'เบอร์โทรศัพท์ติดต่อ *',
+    customerTypeLabel: 'ประเภทลูกค้า (3 หมวด)',
+    customerNameLabel: 'ชื่อ และ นามสกุล',
+    customerPhoneLabel: 'เบอร์โทรศัพท์ติดต่อ',
     customerEmailLabel: 'อีเมล (Email)',
-    interestedModelLabel: 'รุ่นรถที่สนใจ *',
-    priorityLabel: 'ระดับความสำคัญ *',
+    interestedModelLabel: 'รุ่นรถที่สนใจ',
+    priorityLabel: 'ระดับความสำคัญ',
     budgetLabel: 'งบประมาณโดยประมาณ',
     notesLabel: 'หมายเหตุ / ความต้องการเพิ่มเติม',
     saveCustomerBtn: 'บันทึกข้อมูลลูกค้า',

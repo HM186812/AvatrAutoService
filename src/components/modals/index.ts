@@ -8,3 +8,8 @@ export { default as ConfirmDeleteModal } from './ConfirmDeleteModal';
 export { default as CustomerDocumentsModal } from './CustomerDocumentsModal';
 export { default as InstallmentLedgerModal } from './InstallmentLedgerModal';
 export { default as PaymentConfirmModal } from './PaymentConfirmModal';
+export { default as QuickInstallmentPaymentModal } from './QuickInstallmentPaymentModal';
+export { default as ConfirmPayoffModal } from './ConfirmPayoffModal';
+export { default as CustomerAfterSalesModal } from './CustomerAfterSalesModal';
+export type { CustomerAfterSalesProfile } from './CustomerAfterSalesModal';
+export { default as EditVehicleModelModal } from './EditVehicleModelModal';

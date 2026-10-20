@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SystemUser, UserRole, UserPermissions, Language } from '../../types';
 import { translations } from '../../data/translations';
 import { createStaffAccount, deactivateStaffProfile, reactivateStaffProfile, deleteStaffProfile, saveStaffProfile } from '../../backend/data';
+import { showToast } from '../common';
 import { 
   UserPlus, 
   Trash2, 
@@ -90,7 +91,7 @@ export default function UserManagementView({
   // Toggle user active / suspended status
   const handleToggleUserStatus = async (userToToggle: SystemUser) => {
     if (userToToggle.id === currentUser.id) {
-      alert('ບໍ່ສາມາດລະງັບບັນຊີຂອງຕົນເອງໄດ້!');
+      showToast('ບໍ່ສາມາດລະງັບບັນຊີຂອງຕົນເອງໄດ້!', 'error');
       return;
     }
     const newStatus = userToToggle.status === 'suspended' ? 'active' : 'suspended';
@@ -102,7 +103,7 @@ export default function UserManagementView({
         await deactivateStaffProfile(updated.id);
       }
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not update account status.');
+      showToast(error instanceof Error ? error.message : 'Could not update account status.', 'error');
       return;
     }
     setUsers(prev => prev.map(u => u.id === userToToggle.id ? updated : u));
@@ -117,7 +118,7 @@ export default function UserManagementView({
   const handleConfirmDelete = async () => {
     if (!deletingUser || isDeleting) return;
     if (deletingUser.id === currentUser.id) {
-      alert('ບໍ່ສາມາດລົບຕົນເອງ (Admin ປະຈຸບັນ) ອອກຈາກລະບົບໄດ້!');
+      showToast('ບໍ່ສາມາດລົບຕົນເອງ (Admin ປະຈຸບັນ) ອອກຈາກລະບົບໄດ້!', 'error');
       setDeletingUser(null);
       return;
     }
@@ -128,7 +129,7 @@ export default function UserManagementView({
            u.id !== deletingUser.id
     );
     if ((deletingUser.role === 'admin' || deletingUser.role === 'super_admin') && remainingAdmins.length === 0) {
-      alert('ບໍ່ສາມາດລົບ Admin ຄົນສຸດທ້າຍອອກຈາກລະບົບໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນໃນລະບົບ.');
+      showToast('ບໍ່ສາມາດລົບ Admin ຄົນສຸດທ້າຍອອກຈາກລະບົບໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນໃນລະບົບ.', 'warning');
       setDeletingUser(null);
       return;
     }
@@ -148,7 +149,7 @@ export default function UserManagementView({
       } else if (msg.includes('not found') || msg.includes('404')) {
         msg = 'ບໍ່ພົບບັນຊີຜູ້ໃຊ້ນີ້ໃນລະບົບ.';
       }
-      alert(msg);
+      showToast(msg, 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -180,7 +181,7 @@ export default function UserManagementView({
       setEditingUser(null);
       setOriginalEditingRole(null);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not update this account.');
+      showToast(error instanceof Error ? error.message : 'Could not update this account.', 'error');
     } finally {
       setIsSavingUser(false);
     }
@@ -191,7 +192,7 @@ export default function UserManagementView({
     e.preventDefault();
     if (!newName.trim() || !newEmail.trim() || isSavingUser) return;
     if (newPassword.trim().length < 6) {
-      alert('ກະລຸນາຕັ້ງລະຫັດຜ່ານເລີ່ມຕົ້ນຢ່າງໜ້ອຍ 6 ຕົວອັກສອນ!');
+      showToast('ກະລຸນາຕັ້ງລະຫັດຜ່ານເລີ່ມຕົ້ນຢ່າງໜ້ອຍ 6 ຕົວອັກສອນ!', 'warning');
       return;
     }
     setIsSavingUser(true);
@@ -212,7 +213,7 @@ export default function UserManagementView({
       setNewPhone('');
       setNewPassword('');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not create this account.');
+      showToast(error instanceof Error ? error.message : 'Could not create this account.', 'error');
     } finally {
       setIsSavingUser(false);
     }
@@ -325,11 +326,11 @@ export default function UserManagementView({
               ADMIN CONSOLE • ລະບົບຈັດການບັນຊີຜູ້ໃຊ້
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             ຈັດການບັນຊີຜູ້ໃຊ້ & ມອບສິດ
           </h1>
-          <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-            Admin ປະຈຸບັນ: <strong className="text-white">{currentUser.name}</strong> | ຄວບຄຸມບົດບາດ, ສິດອະນຸຍາດ, ລະຫັດຜ່ານ ແລະ ສະຖານະບັນຊີທັງໝົດ
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-zinc-400 mt-1">
+            Admin ປະຈຸບັນ: <strong className="text-slate-900 dark:text-white">{currentUser.name}</strong> | ຄວບຄຸມບົດບາດ, ສິດອະນຸຍາດ, ລະຫັດຜ່ານ ແລະ ສະຖານະບັນຊີທັງໝົດ
           </p>
         </div>
 
@@ -343,30 +344,30 @@ export default function UserManagementView({
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="user-management-stat rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm">
+        <div className="user-management-stat rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="user-management-stat-icon user-management-stat-icon-blue"><UserCheck className="h-4 w-4" /></span>
             <div>
-              <p className="text-xs text-zinc-400">ບັນຊີທັງໝົດ</p>
-              <p className="mt-0.5 text-xl font-bold text-white">{activeUsers.length}</p>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">ບັນຊີທັງໝົດ</p>
+              <p className="mt-0.5 text-xl font-bold font-mono text-slate-900 dark:text-white">{activeUsers.length}</p>
             </div>
           </div>
         </div>
-        <div className="user-management-stat rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm">
+        <div className="user-management-stat rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="user-management-stat-icon user-management-stat-icon-green"><CheckCircle2 className="h-4 w-4" /></span>
             <div>
-              <p className="text-xs text-zinc-400">ບັນຊີທີ່ໃຊ້ງານຢູ່</p>
-              <p className="mt-0.5 text-xl font-bold text-white">{activeUsers.filter(user => user.status !== 'suspended').length}</p>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">ບັນຊີທີ່ໃຊ້ງານຢູ່</p>
+              <p className="mt-0.5 text-xl font-bold font-mono text-slate-900 dark:text-white">{activeUsers.filter(user => user.status !== 'suspended').length}</p>
             </div>
           </div>
         </div>
-        <div className="user-management-stat rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm">
+        <div className="user-management-stat rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="user-management-stat-icon user-management-stat-icon-amber"><Shield className="h-4 w-4" /></span>
             <div>
-              <p className="text-xs text-zinc-400">ຜູ້ດູແລລະບົບ (Admin)</p>
-              <p className="mt-0.5 text-xl font-bold text-white">{activeUsers.filter(user => user.role === 'admin' || user.role === 'super_admin').length}</p>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">ຜູ້ດູແລລະບົບ (Admin)</p>
+              <p className="mt-0.5 text-xl font-bold font-mono text-slate-900 dark:text-white">{activeUsers.filter(user => user.role === 'admin' || user.role === 'super_admin').length}</p>
             </div>
           </div>
         </div>
@@ -408,22 +409,22 @@ export default function UserManagementView({
       </div>
 
       {/* Users List: Table / Cards with Admin Actions */}
-      <div className="user-management-list bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-xl">
-        <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+      <div className="user-management-list bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-xl">
+        <div className="p-5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between">
           <div>
-            <h2 className="font-bold text-base text-white">ລາຍຊື່ບັນຊີຜູ້ໃຊ້ໃນລະບົບ ({filteredUsers.length})</h2>
-            <p className="text-xs text-zinc-400">ສະແດງບົດບາດ, ສະຖານະ, ສິດອະນຸຍາດ ແລະ ປຸ່ມຈັດການຂອງ Admin</p>
+            <h2 className="font-bold text-base text-slate-900 dark:text-white">ລາຍຊື່ບັນຊີຜູ້ໃຊ້ໃນລະບົບ ({filteredUsers.length})</h2>
+            <p className="text-xs text-slate-500 dark:text-zinc-400">ສະແດງບົດບາດ, ສະຖານະ, ສິດອະນຸຍາດ ແລະ ປຸ່ມຈັດການຂອງ Admin</p>
           </div>
         </div>
 
-        <div className="divide-y divide-zinc-800/80">
+        <div className="divide-y divide-slate-100 dark:divide-zinc-800/80">
           {filteredUsers.length === 0 && (
             <div className="user-management-empty-state px-6 py-12 text-center">
-              <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900 text-zinc-400">
+              <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-900 text-slate-400 dark:text-zinc-400">
                 <Search className="h-5 w-5" />
               </span>
-              <h3 className="text-sm font-semibold text-white">ບໍ່ພົບບັນຊີຜູ້ໃຊ້</h3>
-              <p className="mt-1 text-xs text-zinc-400">ລອງປ່ຽນຄຳຄົ້ນຫາ ຫຼື ຕົວກອງປະເພດບັນຊີ.</p>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">ບໍ່ພົບບັນຊີຜູ້ໃຊ້</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">ລອງປ່ຽນຄຳຄົ້ນຫາ ຫຼື ຕົວກອງປະເພດບັນຊີ.</p>
             </div>
           )}
           {filteredUsers.map((user) => {
@@ -433,7 +434,7 @@ export default function UserManagementView({
             return (
               <div
                 key={user.id}
-                className="user-management-account-row p-5 flex flex-wrap items-center justify-between gap-4 hover:bg-zinc-900/40 transition-colors text-xs"
+                className="user-management-account-row p-5 flex flex-wrap items-center justify-between gap-4 hover:bg-slate-50/80 dark:hover:bg-zinc-900/40 transition-colors text-xs"
               >
                 {/* User Identity with Role Gradient Avatar */}
                 <div className="flex items-center gap-3.5 min-w-65">
@@ -446,9 +447,9 @@ export default function UserManagementView({
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-sm text-white">{user.name}</h3>
+                      <h3 className="font-bold text-sm text-slate-900 dark:text-white">{user.name}</h3>
                       {isCurrentUser && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-bold">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 font-bold">
                           (ທ່ານເອງ)
                         </span>
                       )}
@@ -749,7 +750,7 @@ export default function UserManagementView({
 
             <form onSubmit={handleCreateUser} className="space-y-4 text-xs">
               <div>
-                <label className="block text-zinc-300 mb-1 font-medium">ຊື່ ແລະ ນາມສະກຸນ <span className="text-red-500">*</span></label>
+                <label className="block text-zinc-300 mb-1 font-medium">ຊື່ ແລະ ນາມສະກຸນ <span className="text-red-500 font-bold ml-1">*</span></label>
                 <input
                   type="text"
                   required
@@ -762,7 +763,7 @@ export default function UserManagementView({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-300 mb-1 font-medium">ເບີໂທລະສັບ <span className="text-red-500">*</span></label>
+                  <label className="block text-zinc-300 mb-1 font-medium">ເບີໂທລະສັບ <span className="text-red-500 font-bold ml-1">*</span></label>
                   <input
                     type="text"
                     required
@@ -774,7 +775,7 @@ export default function UserManagementView({
                 </div>
 
                 <div>
-                  <label className="block text-zinc-300 mb-1 font-medium">ອີເມວ <span className="text-red-500">*</span></label>
+                  <label className="block text-zinc-300 mb-1 font-medium">ອີເມວ <span className="text-red-500 font-bold ml-1">*</span></label>
                   <input
                     type="email"
                     required
@@ -787,7 +788,7 @@ export default function UserManagementView({
               </div>
 
               <div>
-                <label className="block text-zinc-300 mb-1 font-medium">ລະຫັດຜ່ານເລີ່ມຕົ້ນ (Initial Password) <span className="text-red-500">*</span></label>
+                <label className="block text-zinc-300 mb-1 font-medium">ລະຫັດຜ່ານເລີ່ມຕົ້ນ (Initial Password) <span className="text-red-500 font-bold ml-1">*</span></label>
                 <input
                   type="password"
                   required
@@ -801,7 +802,7 @@ export default function UserManagementView({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-zinc-300 mb-1 font-medium">ປະເພດບັນຊີ (Role) <span className="text-red-500">*</span></label>
+                  <label className="block text-zinc-300 mb-1 font-medium">ປະເພດບັນຊີ (Role) <span className="text-red-500 font-bold ml-1">*</span></label>
                   <select
                     value={newRole === 'super_admin' ? 'admin' : newRole}
                     onChange={(e) => setNewRole(e.target.value as UserRole)}

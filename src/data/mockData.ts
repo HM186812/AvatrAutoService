@@ -211,9 +211,89 @@ export const INITIAL_LEADS: Lead[] = [
   }
 ];
 
-export const INITIAL_SERVICES: ServiceAppointment[] = [];
+export const INITIAL_SERVICES: ServiceAppointment[] = [
+  {
+    id: 'SRV-2026-0001',
+    customerName: 'ທ່ານ ສົມສັກ ວົງວິຈິດ',
+    phone: '020 55112233',
+    model: 'AVATR 11',
+    plateNumber: 'ກງ-9988',
+    serviceType: 'battery_check',
+    scheduledDate: '2026-10-21',
+    scheduledTime: '10:00',
+    status: 'pending',
+    technician: 'ບຸນມີ (Master EV Tech)',
+    estimatedCostUSD: 120,
+    batteryHealthPercent: 99,
+    notes: 'ກວດເຊັກລະບົບສາກດ່ວນ 800V SiC ແລະ ສຸຂະພາບແບັດເຕີຣີ CATL 50,000 km',
+  },
+  {
+    id: 'SRV-2026-0002',
+    customerName: 'ທ່ານນາງ ໄພລິນ ພວງພິດອກ',
+    phone: '020 99887766',
+    model: 'AVATR 07',
+    plateNumber: 'ກງ-1022',
+    serviceType: 'periodic_maintenance',
+    scheduledDate: '2026-10-22',
+    scheduledTime: '14:30',
+    status: 'pending',
+    technician: 'ສົມພອນ (EV Specialist)',
+    estimatedCostUSD: 85,
+    batteryHealthPercent: 100,
+    notes: 'ປ່ຽນກອງແອ Cabin Filter ແລະ ອັບເດດ Software HarmonyOS 4.0',
+  },
+  {
+    id: 'SRV-2026-0003',
+    customerName: 'ທ່ານ ບຸນມີ ໄຊຍະວົງ',
+    phone: '020 22334455',
+    model: 'AVATR 12',
+    plateNumber: 'ປ້າຍແດງ-0012',
+    serviceType: 'periodic_maintenance',
+    scheduledDate: '2026-10-23',
+    scheduledTime: '09:00',
+    status: 'in_progress',
+    technician: 'ບຸນມີ (Master EV Tech)',
+    estimatedCostUSD: 60,
+    batteryHealthPercent: 98,
+    notes: 'ກວດເຊັກລະບົບກ້ອງດິຈິຕອນ ແລະ ເຊັນເຊີ LiDAR Huawei ADS 3.0',
+  }
+];
 
-export const INITIAL_TEST_DRIVES: TestDriveBooking[] = [];
+export const INITIAL_TEST_DRIVES: TestDriveBooking[] = [
+  {
+    id: 'TD-2026-0001',
+    customerName: 'ທ່ານ ແກ້ວມະນີ ທຳມະວົງ',
+    phone: '020 77889900',
+    model: 'AVATR 12',
+    date: '2026-10-20',
+    timeSlot: '09:30 - 10:30',
+    location: 'ໂຊຣູມໃຫຍ່ ຫຼັກ 7 ຖະໜົນ 450 ປີ',
+    salesRep: 'ທ້າວ ສົມພອນ ໄຊຍະສິດ',
+    status: 'confirmed',
+  },
+  {
+    id: 'TD-2026-0002',
+    customerName: 'ທ່ານ ບຸນມີ ໄຊຍະວົງ',
+    phone: '020 22334455',
+    model: 'AVATR 11',
+    date: '2026-10-21',
+    timeSlot: '13:00 - 14:00',
+    location: 'ເສັ້ນທາງດ່ວນ ວຽງຈັນ-ວັງວຽງ (Test ADS 3.0)',
+    salesRep: 'ທ້າວ ແສງອຸໄທ ສັນຕິສີໄວ',
+    status: 'pending',
+  },
+  {
+    id: 'TD-2026-0003',
+    customerName: 'ທ່ານນາງ ວຽງສະຫວັນ ພົມມະຈັນ',
+    phone: '020 55667788',
+    model: 'AVATR 07',
+    date: '2026-10-22',
+    timeSlot: '15:30 - 16:30',
+    location: 'ໂຊຣູມໃຫຍ່ ຫຼັກ 7 ຖະໜົນ 450 ປີ',
+    salesRep: 'ທ້າວ ສົມພອນ ໄຊຍະສິດ',
+    status: 'confirmed',
+  }
+];
 
 export const FAQ_LIST = [
   {

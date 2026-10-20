@@ -145,6 +145,7 @@ export function calculateInstallmentSummary(
     totalPaidInstallmentsLAK,
     remainingInstallmentsUSD,
     remainingInstallmentsLAK,
+    remainingPeriods: Math.max(0, totalCount - paidCount),
     dueNowCount: dueNowRecords.length,
     overdueCount: overdueRecords.length,
     isFullyPaid: totalCount > 0 && paidCount === totalCount,

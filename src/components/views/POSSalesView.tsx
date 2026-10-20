@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { InventoryItem, VehicleModel, Language, InvoiceBillRecord, StockLogRecord, SystemUser, Lead } from '../../types';
 import { getStoredCompanyBankInfo, saveStoredCompanyBankInfo, CompanyBankInfo } from '../../data/companySettings';
 import { translations } from '../../data/translations';
@@ -8,9 +8,11 @@ import {
   saveDealershipConfigToSupabase 
 } from '../../supabase';
 import { newRecordId } from '../../backend/ids';
-import { saveBillRecord } from '../../backend/data';
+import { saveBillRecord, saveLead } from '../../backend/data';
+import { generateInstallmentSchedule } from '../../utils/installment';
 import AvatrLogo from '../layout/AvatrLogo';
 import { ConfirmDeleteModal } from '../modals';
+import { showToast, ToastType } from '../common';
 import { 
   Receipt, 
   ShoppingBag, 
@@ -59,6 +61,7 @@ interface POSSalesViewProps {
   bills: InvoiceBillRecord[];
   setBills: React.Dispatch<React.SetStateAction<InvoiceBillRecord[]>>;
   leads: Lead[];
+  setLeads?: React.Dispatch<React.SetStateAction<Lead[]>>;
   stockLogs: StockLogRecord[];
   setStockLogs: React.Dispatch<React.SetStateAction<StockLogRecord[]>>;
   vehicles: VehicleModel[];
@@ -75,6 +78,7 @@ export default function POSSalesView({
   bills,
   setBills,
   leads,
+  setLeads,
   stockLogs,
   setStockLogs,
   vehicles,
@@ -90,6 +94,7 @@ export default function POSSalesView({
 
   const [selectedVin, setSelectedVin] = useState<string>(availableVehicles[0]?.vin || '');
   const [vehicleSearch, setVehicleSearch] = useState('');
+  const [selectedModelCategory, setSelectedModelCategory] = useState<string>('all');
 
   // Selected vehicle object
   const selectedVehicle = availableVehicles.find(v => v.vin === selectedVin) || availableVehicles[0];
@@ -188,7 +193,10 @@ export default function POSSalesView({
       }
       if (prefilledCustomer.interestedModel) {
         const matching = availableVehicles.find(v => v.model === prefilledCustomer.interestedModel);
-        if (matching) setSelectedVin(matching.vin);
+        if (matching) {
+          setSelectedVin(matching.vin);
+          setSelectedModelCategory(matching.model);
+        }
       }
       if (prefilledCustomer.province) {
         setCustomerProvince(prefilledCustomer.province);
@@ -336,11 +344,9 @@ export default function POSSalesView({
 
   // Generated Bill for Instant View Modal
   const [createdBill, setCreatedBill] = useState<InvoiceBillRecord | null>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const triggerToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 4000);
+  const triggerToast = (msg: string, type: ToastType = 'success') => {
+    showToast(msg, type);
   };
 
   // Calculations
@@ -409,15 +415,66 @@ export default function POSSalesView({
     }
   }, [netPriceUSD]);
 
-  // Filtered available vehicles list
+  // Unique vehicle models with stock counts and hero images
+  const modelCategories = useMemo(() => {
+    const modelMap = new Map<string, { name: string; image: string; count: number }>();
+
+    // Seed from registered vehicle models
+    vehicles.forEach(v => {
+      modelMap.set(v.name, {
+        name: v.name,
+        image: v.heroImage || '/avatr-logo.png',
+        count: 0,
+      });
+    });
+
+    // Count available vehicles in stock
+    availableVehicles.forEach(item => {
+      const existing = modelMap.get(item.model);
+      if (existing) {
+        existing.count += 1;
+        if ((!existing.image || existing.image.includes('avatr-logo')) && item.image) {
+          existing.image = item.image;
+        }
+      } else {
+        modelMap.set(item.model, {
+          name: item.model,
+          image: item.image || '/avatr-logo.png',
+          count: 1,
+        });
+      }
+    });
+
+    return Array.from(modelMap.values());
+  }, [vehicles, availableVehicles]);
+
+  // Handle switching model category with automatic first vehicle selection
+  const handleSelectModelCategory = (categoryName: string) => {
+    setSelectedModelCategory(categoryName);
+    const matchingCars = availableVehicles.filter(item =>
+      categoryName === 'all' ? true : item.model === categoryName
+    );
+    if (matchingCars.length > 0) {
+      const isCurrentInMatching = matchingCars.some(c => c.vin === selectedVin);
+      if (!isCurrentInMatching) {
+        setSelectedVin(matchingCars[0].vin);
+      }
+    }
+  };
+
+  // Filtered available vehicles list by category and search
   const filteredAvailableVehicles = availableVehicles.filter(item => {
+    if (selectedModelCategory !== 'all' && item.model !== selectedModelCategory) {
+      return false;
+    }
     if (!vehicleSearch.trim()) return true;
     const q = vehicleSearch.toLowerCase();
     return (
       item.vin.toLowerCase().includes(q) ||
       item.model.toLowerCase().includes(q) ||
       (item.plateNumber || '').toLowerCase().includes(q) ||
-      (item.color || '').toLowerCase().includes(q)
+      (item.color || '').toLowerCase().includes(q) ||
+      (item.trim || '').toLowerCase().includes(q)
     );
   });
 
@@ -460,14 +517,90 @@ export default function POSSalesView({
       reservedForCustomer: undefined,
     };
 
-    const linkedLead = prefilledCustomer
-      ? leads.find(lead => lead.id === prefilledCustomer.id) || prefilledCustomer
-      : (() => {
-          const normalizedPhone = customerPhone.replace(/\D/g, '');
-          if (!normalizedPhone) return undefined;
-          const matches = leads.filter(lead => lead.phone.replace(/\D/g, '') === normalizedPhone);
-          return matches.length === 1 ? matches[0] : undefined;
-        })();
+    const normalizedPhone = customerPhone.replace(/\D/g, '');
+    const matchedLead = prefilledCustomer
+      ? (leads.find(lead => lead.id === prefilledCustomer.id) || prefilledCustomer)
+      : (normalizedPhone
+          ? leads.find(lead => lead.phone.replace(/\D/g, '') === normalizedPhone)
+          : undefined);
+
+    let customerLead: Lead;
+    if (matchedLead) {
+      customerLead = {
+        ...matchedLead,
+        customerName: customerName.trim(),
+        phone: customerPhone.trim(),
+        idCardNumber: customerIDCard.trim() || matchedLead.idCardNumber,
+        province: customerProvince || matchedLead.province,
+        district: customerDistrict || matchedLead.district,
+        village: effectiveVillage || matchedLead.village,
+        interestedModel: selectedVehicle.model,
+        status: 'delivered',
+        lastFollowUp: saleDateTime,
+      };
+    } else {
+      customerLead = {
+        id: newRecordId(),
+        customerName: customerName.trim(),
+        phone: customerPhone.trim(),
+        idCardNumber: customerIDCard.trim() || undefined,
+        province: customerProvince || 'ນະຄອນຫຼວງວຽງຈັນ',
+        district: customerDistrict || '',
+        village: effectiveVillage || '',
+        category: 'walk_in',
+        source: 'POS Showroom Sale',
+        interestedModel: selectedVehicle.model,
+        status: 'delivered',
+        priority: 'high',
+        notes: `ຊື້ລົດຜ່ານ POS ໃບບິນ ${invoiceNum} | VIN: ${selectedVehicle.vin}`,
+        assignedTo: currentUser?.name || 'Admin',
+        createdAt: saleDateTime,
+        lastFollowUp: saleDateTime,
+      };
+    }
+
+    if (paymentMethod === 'finance') {
+      customerLead.paymentType = 'installment';
+      customerLead.downPaymentPercent = downPaymentPercent;
+      customerLead.downPaymentUSD = downPaymentUSD;
+      customerLead.tenureMonths = tenureMonths;
+      customerLead.monthlyPaymentLAK = monthlyPaymentLAK;
+      customerLead.installmentStatus = 'active_repaying';
+      customerLead.paymentReceiptNo = invoiceNum;
+      customerLead.paymentDate = saleDateTime;
+      customerLead.paidAmountUSD = downPaymentUSD;
+      customerLead.paidAmountLAK = downPaymentLAK;
+      customerLead.paymentTypeConfirmed = 'down_payment';
+      customerLead.paymentConfirmedBy = currentUser?.name || 'Admin';
+
+      // Generate complete installment repayment schedule (12, 24, 36, 48, 60 months)
+      const baseSchedule = generateInstallmentSchedule(
+        { ...customerLead, status: 'contract_signed' as any },
+        netPriceUSD,
+        effectiveExchangeRate,
+        0.075
+      );
+      customerLead.installmentRecords = baseSchedule.map(rec => {
+        const isPast = new Date(rec.dueDate) < new Date();
+        return {
+          ...rec,
+          status: isPast ? ('due' as const) : ('pending' as const),
+          paidDate: undefined,
+          paidAmountUSD: undefined,
+          paidAmountLAK: undefined,
+          receiptNo: undefined,
+          transferRef: undefined,
+        };
+      });
+    } else {
+      customerLead.paymentType = paymentMethod as any;
+      customerLead.paymentReceiptNo = invoiceNum;
+      customerLead.paymentDate = saleDateTime;
+      customerLead.paidAmountUSD = netPriceUSD;
+      customerLead.paidAmountLAK = netPriceLAK;
+      customerLead.paymentTypeConfirmed = 'full';
+      customerLead.paymentConfirmedBy = currentUser?.name || 'Admin';
+    }
 
     // 2. CREATE OFFICIAL INVOICE BILL RECORD
     const newBill: InvoiceBillRecord = {
@@ -494,7 +627,7 @@ export default function POSSalesView({
       amountLAK: netPriceLAK,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
-      leadId: linkedLead?.id,
+      leadId: customerLead.id,
       customerIDCard: customerIDCard.trim(),
       customerAddress: fullAddress || customerAddress.trim(),
       customerProvince,
@@ -517,6 +650,7 @@ export default function POSSalesView({
     try {
       if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
       await saveBillRecord(newBill, currentUser.id);
+      await saveLead(customerLead, currentUser.id);
     } catch (error) {
       const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Sale could not be saved.';
       if (msg.includes('already has a stock-out movement') || msg.includes('already sold') || msg.includes('not available')) {
@@ -534,11 +668,23 @@ export default function POSSalesView({
     setInventory(prev => prev.filter(item => item.vin !== selectedVehicle.vin));
     setBills(prev => [newBill, ...prev]);
 
+    if (setLeads) {
+      setLeads(prev => {
+        const idx = prev.findIndex(l => l.id === customerLead.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = customerLead;
+          return updated;
+        }
+        return [customerLead, ...prev];
+      });
+    }
+
     // 3. RECORD STOCK-OUT TRANSACTION LOG
     const newStockLog: StockLogRecord = {
       id: `LOG-OUT-${Date.now().toString().slice(-6)}`,
       billId: newBill.id,
-      leadId: linkedLead?.id,
+      leadId: customerLead.id,
       type: 'stock_out',
       vin: selectedVehicle.vin,
       model: selectedVehicle.model,
@@ -560,7 +706,11 @@ export default function POSSalesView({
 
     // Trigger Success UI & Open Printable Bill
     setCreatedBill(newBill);
-    triggerToast(`ຂາຍອອກສຳເລັດ! ຕັດສະຕ໋ອກລົດ ${selectedVehicle.model} ອອກແລ້ວ (ເຫຼືອ ${remainingQty} ຄັນ)`);
+    if (paymentMethod === 'finance') {
+      triggerToast(`ຂາຍອອກສຳເລັດ (ຜ່ອນຊຳລະ)! ເພີ່ມຂໍ້ມູນເຂົ້າໝວດຜ່ອນ & ດາວ ແລະ ຕັດສະຕ໋ອກລົດ ${selectedVehicle.model} ອອກແລ້ວ (ເຫຼືອ ${remainingQty} ຄັນ)`);
+    } else {
+      triggerToast(`ຂາຍອອກສຳເລັດ! ຕັດສະຕ໋ອກລົດ ${selectedVehicle.model} ອອກແລ້ວ (ເຫຼືອ ${remainingQty} ຄັນ)`);
+    }
 
     // Reset Form Fields for next transaction
     setCustomerName('');
@@ -570,6 +720,7 @@ export default function POSSalesView({
     setTransferRef('');
     setDiscountUSD(0);
     setSaleNotes('');
+    onClearPrefilledCustomer?.();
   };
 
   const [isExportingPosPdf, setIsExportingPosPdf] = useState(false);
@@ -589,7 +740,7 @@ export default function POSSalesView({
       });
     } catch (err) {
       console.error('Error generating POS receipt PDF:', err);
-      alert('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້');
+      showToast('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້', 'error');
     } finally {
       setIsExportingPosPdf(false);
     }
@@ -607,7 +758,7 @@ export default function POSSalesView({
       });
     } catch (err) {
       console.error('Error generating POS receipt DOCX:', err);
-      alert('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້');
+      showToast('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້', 'error');
     } finally {
       setIsExportingPosDocx(false);
     }
@@ -615,13 +766,6 @@ export default function POSSalesView({
 
   return (
     <div className="mx-auto max-w-screen-2xl space-y-6 pb-16">
-      {/* Toast Alert */}
-      {toastMsg && (
-        <div className="fixed top-20 right-6 z-50 bg-zinc-900 border border-zinc-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
-          <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
 
       {/* WRAPPER FOR POS VIEWS - SUPPRESSED DURING PRINT WHEN BILL IS BEING PRINTED */}
       <div className={createdBill ? "print:hidden hide-on-print-pos space-y-6" : "space-y-6"}>
@@ -673,26 +817,7 @@ export default function POSSalesView({
           </div>
         </div>
 
-        <nav aria-label="Sales workflow" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-          {[
-            { number: '01', label: lang === 'lo' ? 'ເລືອກລົດ' : lang === 'th' ? 'เลือกรถ' : 'Vehicle' },
-            { number: '02', label: lang === 'lo' ? 'ຂໍ້ມູນລູກຄ້າ' : lang === 'th' ? 'ข้อมูลลูกค้า' : 'Customer' },
-            { number: '03', label: lang === 'lo' ? 'ການຊຳລະ' : lang === 'th' ? 'การชำระเงิน' : 'Payment' },
-            { number: '04', label: lang === 'lo' ? 'ຂອງແຖມ' : lang === 'th' ? 'ของแถม' : 'Packages' },
-            { number: '05', label: lang === 'lo' ? 'ກວດສອບ & ອອກບິນ' : lang === 'th' ? 'ตรวจสอบและออกบิล' : 'Review & bill' },
-          ].map((step, index) => (
-            <div key={step.number} className={`flex min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 ${
-              index === 0
-                ? 'border-white/20 bg-white/[0.08] text-white'
-                : 'border-zinc-800 bg-zinc-950/70 text-zinc-400'
-            }`}>
-              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg font-mono text-[10px] font-bold ${
-                index === 0 ? 'bg-white text-black' : 'bg-zinc-900 text-zinc-400'
-              }`}>{step.number}</span>
-              <span className="truncate text-[11px] font-medium">{step.label}</span>
-            </div>
-          ))}
-        </nav>
+
 
       {availableVehicles.length === 0 ? (
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-12 text-center text-zinc-400 space-y-4">
@@ -716,11 +841,113 @@ export default function POSSalesView({
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <span className="font-bold text-sm text-white flex items-center gap-2">
                   <Car className="w-4 h-4 text-white" />
-                  <span>1. {t.selectVehicleToSell} <span className="text-red-500">*</span></span>
+                  <span>1. {t.selectVehicleToSell} <span className="text-red-500 font-bold ml-1">*</span></span>
                 </span>
                 <span className="text-[10px] font-mono text-zinc-400">
                   {t.stockAvailable}: {availableVehicles.length} {t.unitCars}
                 </span>
+              </div>
+
+              {/* 1.1 Category Cards: All Models + Each Model with Photo */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-400 font-medium flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-zinc-300" />
+                    <span>{lang === 'lo' ? 'ເລືອກໝວດລຸ້ນລົດ:' : lang === 'th' ? 'เลือกหมวดรุ่นรถ:' : 'Select Model Category:'}</span>
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    {modelCategories.length} {lang === 'lo' ? 'ໝວດ' : 'Models'}
+                  </span>
+                </div>
+
+                <div className="flex gap-2.5 overflow-x-auto pb-2 pt-0.5 scrollbar-thin">
+                  {/* Category Card: ALL (ໝວດທັງໝົດ) */}
+                  <button
+                    type="button"
+                    onClick={() => handleSelectModelCategory('all')}
+                    className={`relative flex-shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${
+                      selectedModelCategory === 'all'
+                        ? 'border-white bg-zinc-900 shadow-lg ring-2 ring-white/20'
+                        : 'border-zinc-800 bg-zinc-950/80 hover:border-zinc-700 hover:bg-zinc-900/60'
+                    }`}
+                  >
+                    <div className="relative h-16 w-full bg-zinc-900 overflow-hidden">
+                      <img
+                        src="https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=400&q=80"
+                        alt="All Models"
+                        className="w-full h-full object-cover transition-transform group-hover:scale-105 opacity-85"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                      {selectedModelCategory === 'all' && (
+                        <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-white text-black flex items-center justify-center shadow-md">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </span>
+                      )}
+                      <span className="absolute bottom-1.5 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/80 text-white border border-zinc-700 always-white-text">
+                        {availableVehicles.length} {t.unitCars}
+                      </span>
+                    </div>
+                    <div className="p-2">
+                      <strong className="block text-xs font-bold text-white truncate">
+                        {lang === 'lo' ? 'ທັງໝົດ' : lang === 'th' ? 'ทั้งหมด' : 'All Models'}
+                      </strong>
+                      <span className="block text-[10px] text-zinc-400 font-mono truncate">
+                        {lang === 'lo' ? 'ທຸກລຸ້ນໃນສະຕ໋ອກ' : 'All in Stock'}
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Category Cards: Each Registered Model with Photo */}
+                  {modelCategories.map((cat) => {
+                    const isSelected = selectedModelCategory === cat.name;
+                    return (
+                      <button
+                        type="button"
+                        key={cat.name}
+                        onClick={() => handleSelectModelCategory(cat.name)}
+                        className={`relative flex-shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${
+                          isSelected
+                            ? 'border-white bg-zinc-900 shadow-lg ring-2 ring-white/20'
+                            : 'border-zinc-800 bg-zinc-950/80 hover:border-zinc-700 hover:bg-zinc-900/60'
+                        }`}
+                      >
+                        <div className="relative h-16 w-full bg-zinc-900 overflow-hidden">
+                          <img
+                            src={cat.image}
+                            alt={cat.name}
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              target.onerror = null;
+                              target.src = '/avatr-logo.png';
+                            }}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                          {isSelected && (
+                            <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-white text-black flex items-center justify-center shadow-md">
+                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            </span>
+                          )}
+                          <span className={`absolute bottom-1.5 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border always-white-text ${
+                            cat.count > 0 
+                              ? 'bg-black/80 text-white border-zinc-700' 
+                              : 'bg-rose-950/80 text-rose-300 border-rose-800/60'
+                          }`}>
+                            {cat.count > 0 ? `${cat.count} ${t.unitCars}` : (lang === 'lo' ? 'ໝົດ' : 'Out')}
+                          </span>
+                        </div>
+                        <div className="p-2">
+                          <strong className="block text-xs font-bold text-white truncate">
+                            {cat.name}
+                          </strong>
+                          <span className="block text-[10px] text-zinc-400 font-mono truncate">
+                            {cat.count} {lang === 'lo' ? 'ຄັນພ້ອມສົ່ງ' : 'available'}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Search Available Stock */}
@@ -728,41 +955,80 @@ export default function POSSalesView({
                 <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder={t.searchPlaceholder}
+                  placeholder={lang === 'lo' ? 'ຄົ້ນຫາດ້ວຍ VIN, ລຸ້ນ, ສີ ຫຼື ປ້າຍທະບຽນ...' : t.searchPlaceholder}
                   value={vehicleSearch}
                   onChange={(e) => setVehicleSearch(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
                 />
               </div>
 
-              {/* Vehicle Options List */}
-              <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
+              {/* Vehicle Options List: Visual Car Cards */}
+              <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                 {filteredAvailableVehicles.map((item) => {
                   const isSelected = selectedVin === item.vin;
+                  const vehicleDef = vehicles.find(v => v.name === item.model);
+                  const displayImage = item.image || vehicleDef?.heroImage || '/avatr-logo.png';
+
                   return (
                     <button
                       type="button"
                       key={item.vin}
                       onClick={() => setSelectedVin(item.vin)}
                       aria-pressed={isSelected}
-                      className={`p-3 rounded-2xl border cursor-pointer transition-all ${
+                      className={`p-2.5 rounded-2xl border cursor-pointer transition-all ${
                         isSelected
-                          ? 'bg-zinc-900 border-white/70 shadow-md text-white ring-1 ring-white/10'
-                          : 'bg-zinc-900/40 border-zinc-800/80 hover:border-zinc-600 text-zinc-400'
-                      } w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70`}
+                          ? 'bg-zinc-900 border-white shadow-md text-white ring-2 ring-white/20'
+                          : 'bg-zinc-900/40 border-zinc-800/80 hover:border-zinc-700 text-zinc-400 hover:bg-zinc-900/70'
+                      } w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex gap-3 items-center`}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <strong className="text-white text-xs font-bold">{item.model}</strong>
-                        <span className="font-mono text-white text-xs font-bold">
-                          ${item.priceUSD.toLocaleString()}
-                        </span>
+                      {/* Car Thumbnail Image */}
+                      <div className="relative w-16 h-14 rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 flex-shrink-0">
+                        <img
+                          src={displayImage}
+                          alt={item.model}
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.onerror = null;
+                            target.src = '/avatr-logo.png';
+                          }}
+                          className="w-full h-full object-cover"
+                        />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <span className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shadow">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-[11px] font-mono text-zinc-400 truncate">
-                        VIN: {item.vin}
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-zinc-500 mt-1">
-                        <span>{item.color || '-'}</span>
-                        <span className="text-zinc-400 font-mono">{t.tableStock}: {item.stockQuantity} {t.unitCars}</span>
+
+                      {/* Details */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <strong className="text-white text-xs font-bold truncate">{item.model}</strong>
+                          <span className="font-mono text-white text-xs font-bold shrink-0 ml-1">
+                            ${item.priceUSD.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
+                          <span className="truncate">VIN: {item.vin}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1">
+                          <span className="flex items-center gap-1.5 truncate">
+                            {item.colorHex && (
+                              <span className="w-2 h-2 rounded-full border border-zinc-600 shrink-0" style={{ backgroundColor: item.colorHex }} />
+                            )}
+                            <span className="truncate">{item.color || '-'}</span>
+                            {item.plateNumber && (
+                              <span className="px-1 py-0.2 rounded bg-zinc-800 text-[9px] font-mono text-zinc-300">
+                                {item.plateNumber}
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-zinc-300 font-mono shrink-0 ml-1">
+                            {t.tableStock}: <strong>{item.stockQuantity}</strong>
+                          </span>
+                        </div>
                       </div>
                     </button>
                   );
@@ -828,49 +1094,78 @@ export default function POSSalesView({
           <div className="space-y-5 lg:col-span-7">
             {/* Step 2: Customer Details */}
             <div className="pos-customer-section theme-adaptive-dark-surface rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-6 space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
-                <User className="w-4 h-4 text-white" />
-                <span>2. {t.buyerInfo}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-white" />
+                  <span>2. {t.buyerInfo}</span>
+                </div>
+                {prefilledCustomer && (
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/30 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                      <span>CRM: {prefilledCustomer.customerName}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClearPrefilledCustomer?.();
+                        setCustomerName('');
+                        setCustomerPhone('');
+                        setCustomerIDCard('');
+                        setCustomerAddress('');
+                        setCustomerDistrict('');
+                        setCustomerVillage('');
+                        setCustomerCustomVillage('');
+                        setCustomerAddressDetail('');
+                      }}
+                      className="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors flex items-center gap-1 cursor-pointer"
+                      title={lang === 'lo' ? 'ຍົກເລີກການດຶງຂໍ້ມູນລູກຄ້າ CRM' : 'Clear prefilled customer'}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>{lang === 'lo' ? 'ລຶບອອກ' : 'Clear'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2 2xl:grid-cols-3">
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">{t.buyerName} <span className="text-red-500">*</span></label>
+                <div className="min-w-0">
+                  <label className="block text-zinc-400 mb-1 font-medium truncate">{t.buyerName} <span className="text-red-500 font-bold ml-1">*</span></label>
                   <input
                     type="text"
                     required
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: ທ່ານ ບຸນມີ ໄຊຍະວົງ' : lang === 'th' ? 'ตัวอย่าง: คุณ สมชาย ใจดี' : 'e.g. John Doe'}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                    placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: ທ່ານ ບຸນມີ ໄຊຍະວົງ' : lang === 'th' ? 'ตัวอย่าง: คุณ สมชาย ใจดี' : 'e.g. Mr. Somxay Phomvihane'}
+                    className="w-full min-w-0 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20 transition-colors"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-white" />
-                    <span>ວັນທີອອກບິນ (ວັນ/ເດືອນ/ປີ) <span className="text-red-500">*</span></span>
+                <div className="min-w-0">
+                  <label className="block text-zinc-400 mb-1 font-medium flex items-center gap-1.5 truncate">
+                    <Calendar className="w-3.5 h-3.5 text-white shrink-0" />
+                    <span className="truncate">ວັນທີອອກບິນ (ວັນ/ເດືອນ/ປີ) <span className="text-red-500 font-bold ml-1">*</span></span>
                   </label>
                   <input
                     type="date"
                     required
                     value={saleDate}
                     onChange={(e) => setSaleDate(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                    className="w-full min-w-0 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20 transition-colors"
                   />
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-zinc-400 font-medium">{t.buyerPhone} <span className="text-red-500">*</span></label>
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-1.5 mb-1 min-w-0">
+                    <label className="text-zinc-400 font-medium truncate">{t.buyerPhone} <span className="text-red-500 font-bold ml-1">*</span></label>
                     {canOpenWhatsApp && (
-                      <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                        <span>WA: {formatWhatsAppDisplay(customerPhone)}</span>
+                      <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50 shrink-0 max-w-[130px] truncate">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                        <span className="truncate">WA: {formatWhatsAppDisplay(customerPhone)}</span>
                       </span>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 min-w-0">
                     <input
                       type="tel"
                       inputMode="tel"
@@ -879,7 +1174,7 @@ export default function POSSalesView({
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                       placeholder="020 5xxxxxxx"
-                      className="min-w-0 flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                      className="min-w-0 flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20 transition-colors"
                     />
                     <button
                       type="button"
@@ -887,7 +1182,7 @@ export default function POSSalesView({
                       onClick={() => openWhatsApp(customerPhone, customerName, selectedVehicle?.model, lang)}
                       className={`pos-whatsapp-button inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-semibold transition-all shadow-sm sm:px-3 ${
                         canOpenWhatsApp
-                          ? 'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95'
+                          ? 'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 cursor-pointer'
                           : 'border-zinc-700 bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-60'
                       }`}
                       aria-label={lang === 'lo' ? 'ເປີດ WhatsApp ຫາລູກຄ້າ' : lang === 'th' ? 'เปิด WhatsApp ถึงลูกค้า' : 'Open WhatsApp for customer'}
@@ -896,13 +1191,13 @@ export default function POSSalesView({
                         : lang === 'lo' ? 'ປ້ອນເບີໂທທີ່ຖືກຕ້ອງກ່ອນ' : lang === 'th' ? 'กรอกหมายเลขโทรศัพท์ที่ถูกต้องก่อน' : 'Enter a valid phone number first'}
                     >
                       <WhatsAppIcon className="h-4 w-4 shrink-0" />
-                      <span>WhatsApp</span>
+                      <span className="hidden sm:inline lg:hidden 2xl:inline">WhatsApp</span>
                     </button>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">
+                <div className="min-w-0">
+                  <label className="block text-zinc-400 mb-1 font-medium truncate">
                     {lang === 'lo' ? 'ເລກບັດປະຊາຊົນ / Passport' : lang === 'th' ? 'เลขบัตรประจำตัว / Passport' : 'ID Card / Passport'}
                   </label>
                   <input
@@ -910,16 +1205,16 @@ export default function POSSalesView({
                     value={customerIDCard}
                     onChange={(e) => setCustomerIDCard(e.target.value)}
                     placeholder="ID-01-VTE-884920 / P0123456"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
+                    className="w-full min-w-0 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20 transition-colors"
                   />
                 </div>
 
                 {/* Province Selector (All 18 Provinces) */}
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">
-                    ແຂວງ / ນະຄອນຫຼວງ (18 ແຂວງ) <span className="text-red-500">*</span>
+                <div className="min-w-0">
+                  <label className="block text-zinc-400 mb-1 font-medium truncate">
+                    ແຂວງ / ນະຄອນຫຼວງ (18 ແຂວງ) <span className="text-red-500 font-bold ml-1">*</span>
                   </label>
-                  <div className="relative" ref={provinceDropdownRef}>
+                  <div className="relative min-w-0" ref={provinceDropdownRef}>
                     <button
                       type="button"
                       aria-haspopup="listbox"
@@ -975,11 +1270,11 @@ export default function POSSalesView({
                 </div>
 
                 {/* District Selector */}
-                <div>
-                  <label className="block text-zinc-400 mb-1 font-medium">
-                    ເມືອງ (District) <span className="text-red-500">*</span>
+                <div className="min-w-0">
+                  <label className="block text-zinc-400 mb-1 font-medium truncate">
+                    ເມືອງ (District) <span className="text-red-500 font-bold ml-1">*</span>
                   </label>
-                  <div className="relative" ref={districtDropdownRef}>
+                  <div className="relative min-w-0" ref={districtDropdownRef}>
                     <button
                       type="button"
                       aria-haspopup="listbox"
@@ -1030,9 +1325,9 @@ export default function POSSalesView({
                 </div>
 
                 {/* Village Selector */}
-                <div>
+                <div className="min-w-0">
                   <label className="block text-zinc-400 mb-1 font-medium">
-                    ບ້ານ (Village) <span className="text-red-500">*</span>
+                    ບ້ານ (Village) <span className="text-red-500 font-bold ml-1">*</span>
                   </label>
                   <div className="relative" ref={villageDropdownRef}>
                     <button

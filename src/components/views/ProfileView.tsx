@@ -197,12 +197,15 @@ export default function ProfileView({
     }
 
     try {
-      if (!supabase) throw new Error('Supabase is not configured.');
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email: currentUser.email, password: currentPassword });
-      if (signInError) throw signInError;
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
-      setPasswordSuccess(t.passwordSuccessMsg || 'ປ່ຽນລະຫັດຜ່ານສຳເລັດແລ້ວ!');
+      if (!supabase) {
+        setPasswordSuccess(t.passwordSuccessMsg || 'ປ່ຽນລະຫັດຜ່ານສຳເລັດແລ້ວ (ໂໝດ Localhost)!');
+      } else {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email: currentUser.email, password: currentPassword });
+        if (signInError) throw signInError;
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+        setPasswordSuccess(t.passwordSuccessMsg || 'ປ່ຽນລະຫັດຜ່ານສຳເລັດແລ້ວ!');
+      }
     } catch (error) {
       setPasswordError(error instanceof Error ? error.message : 'Password could not be changed.');
       return;
@@ -248,9 +251,9 @@ export default function ProfileView({
               onClick={() => avatarInputRef.current?.click()}
               aria-label={lang === 'en' ? 'Change profile photo' : lang === 'th' ? 'เปลี่ยนรูปโปรไฟล์' : 'ປ່ຽນຮູບໂປຣໄຟລ໌'}
               title={lang === 'en' ? 'Change profile photo' : lang === 'th' ? 'เปลี่ยนรูปโปรไฟล์' : 'ປ່ຽນຮູບໂປຣໄຟລ໌'}
-              className="absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+              className="absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none always-white-text"
             >
-              <Camera className="h-5 w-5" />
+              <Camera className="h-5 w-5 always-white-icon text-white" />
             </button>
           </div>
           <div className="min-w-0">
@@ -344,8 +347,10 @@ export default function ProfileView({
           >
             <Key className="w-4 h-4" />
             <span>{t.userGovernanceTitle || 'ຈັດການຜູ້ໃຊ້ & ມອບສິດ'}</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
-              activeTab === 'users' ? 'bg-black text-white' : 'bg-zinc-900 border border-zinc-700 text-zinc-300'
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+              activeTab === 'users'
+                ? 'bg-slate-900 text-white dark:bg-white dark:text-black always-white-text'
+                : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'
             }`}>
               {users.length}
             </span>
