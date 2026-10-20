@@ -97,30 +97,53 @@ export function mapStaffProfile(profile: DbRow, permissionRow?: DbRow): SystemUs
   };
 }
 
+let cachedStaffRoles: DbRow[] | null = null;
+let activeStaffPromise: { userId: string; promise: Promise<SystemUser> } | null = null;
+
+export function clearStaffCache() {
+  cachedStaffRoles = null;
+  activeStaffPromise = null;
+}
+
 export async function getSignedInStaff(userId: string): Promise<SystemUser> {
   if (!isSupabaseConfigured) {
     return offlineGetActiveUser() || DEFAULT_OFFLINE_USERS[0];
   }
-  const client = requireSupabase();
-  const { data: profile, error: profileError } = await client
-    .from('staff_profiles')
-    .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (profileError) throw profileError;
-  if (!profile || profile.status !== 'active') {
-    throw new Error('This login does not have an active staff profile. Ask the administrator to set up access.');
+  if (activeStaffPromise?.userId === userId) {
+    return activeStaffPromise.promise;
   }
 
-  const { data: roleRow, error: roleError } = await client
-    .from('staff_roles')
-    .select('role_code,permissions')
-    .eq('role_code', profile.role)
-    .maybeSingle();
+  const promise = (async () => {
+    const client = requireSupabase();
+    const [profileRes, rolesRes] = await Promise.all([
+      client
+        .from('staff_profiles')
+        .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
+        .eq('id', userId)
+        .maybeSingle(),
+      cachedStaffRoles
+        ? Promise.resolve({ data: cachedStaffRoles, error: null })
+        : client.from('staff_roles').select('role_code,permissions'),
+    ]);
 
-  if (roleError) throw roleError;
-  return mapStaffProfile(profile, roleRow?.permissions);
+    if (profileRes.error) throw profileRes.error;
+    const profile = profileRes.data;
+    if (!profile || profile.status !== 'active') {
+      throw new Error('This login does not have an active staff profile. Ask the administrator to set up access.');
+    }
+    if (rolesRes.error) throw rolesRes.error;
+    if (!cachedStaffRoles && rolesRes.data) cachedStaffRoles = rolesRes.data;
+
+    const matchedRole = (cachedStaffRoles || []).find((r: DbRow) => r.role_code === profile.role);
+    return mapStaffProfile(profile, matchedRole?.permissions);
+  })();
+
+  activeStaffPromise = { userId, promise };
+  try {
+    return await promise;
+  } finally {
+    if (activeStaffPromise?.userId === userId) activeStaffPromise = null;
+  }
 }
 
 export async function signInStaff(email: string, password: string, captchaToken?: string): Promise<SystemUser> {
@@ -330,7 +353,21 @@ function mapLead(row: DbRow, modelById: Map<string, VehicleModel>, staffById: Ma
     paymentReceiptNo: row.payment_receipt_no || undefined,
     paymentConfirmedBy: row.payment_confirmed_by || undefined,
     paymentTypeConfirmed: row.payment_type_confirmed || undefined,
+    paidDate: row.paid_date || undefined,
+    isPaymentCompleted: Boolean(row.is_payment_completed),
     installmentRecords: Array.isArray(row.installment_records) ? row.installment_records : undefined,
+    plateNumber: row.plate_number || undefined,
+    vin: row.vin || undefined,
+    engineNumber: row.engine_number || undefined,
+    color: row.color || undefined,
+    currentMileageKm: row.current_mileage_km == null ? undefined : Number(row.current_mileage_km),
+    batteryHealthSOH: row.battery_health_soh == null ? undefined : Number(row.battery_health_soh),
+    warrantyStartDate: row.warranty_start_date || undefined,
+    warrantyExpiryDate: row.warranty_expiry_date || undefined,
+    warrantyYears: row.warranty_years == null ? undefined : Number(row.warranty_years),
+    warrantyDistanceKm: row.warranty_distance_km == null ? undefined : Number(row.warranty_distance_km),
+    warrantyTerms: row.warranty_terms || undefined,
+    afterSalesNotes: row.after_sales_notes || undefined,
     assignedTo: staffById.get(row.assigned_to)?.name || '',
     createdAt: row.created_at || '',
     lastFollowUp: row.last_follow_up || undefined,
@@ -348,12 +385,12 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
     billType: row.type,
     billNumber: row.bill_number,
     date: row.bill_date || row.created_at || '',
-    vin: item?.vehicle_vin || '',
+    vin: item?.vehicle_vin || row.vin || '',
     engineNumber: item?.engine_number || undefined,
-    model: item?.model_name || '',
+    model: item?.model_name || row.model_name || '',
     trim: item?.trim || undefined,
-    plateNumber: item?.plate_number || undefined,
-    color: item?.color || undefined,
+    plateNumber: item?.plate_number || row.plate_number || undefined,
+    color: item?.color || row.color || undefined,
     interiorColor: item?.interior_color || undefined,
     battery: item?.battery || undefined,
     quantity: 1,
@@ -365,11 +402,12 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
     netTotalLAK: totalLak,
     amountUSD: totalUsd,
     amountLAK: totalLak,
+    leadId: row.customer_id || undefined,
     customerName: row.customer_name || undefined,
-    customerPhone: row.phone || undefined,
-    customerIDCard: row.id_card || undefined,
-    customerAddress: row.address || undefined,
-    customerProvince: row.province || undefined,
+    customerPhone: row.customer_phone || row.phone || undefined,
+    customerIDCard: row.customer_id_card || row.id_card || undefined,
+    customerAddress: row.customer_address || row.address || undefined,
+    customerProvince: row.customer_province || row.province || undefined,
     paymentMethod: row.payment_method || undefined,
     qrUsed: row.qr_used || undefined,
     bankName: row.bank_name || undefined,
@@ -379,8 +417,16 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
     downPaymentUSD: row.down_payment_usd == null ? undefined : Number(row.down_payment_usd),
     tenureMonths: row.tenure_months || undefined,
     monthlyPaymentLAK: row.monthly_payment_lak == null ? undefined : Number(row.monthly_payment_lak),
+    installmentPeriod: row.installment_period == null ? undefined : Number(row.installment_period),
     freeGifts: gifts,
     warrantyTerms: row.warranty_terms || undefined,
+    warrantyStartDate: row.warranty_start_date || undefined,
+    warrantyExpiryDate: row.warranty_expiry_date || undefined,
+    warrantyYears: row.warranty_years == null ? undefined : Number(row.warranty_years),
+    warrantyDistanceKm: row.warranty_distance_km == null ? undefined : Number(row.warranty_distance_km),
+    currentMileageKm: row.current_mileage_km == null ? undefined : Number(row.current_mileage_km),
+    batteryHealthSOH: row.battery_health_soh == null ? undefined : Number(row.battery_health_soh),
+    afterSalesNotes: row.after_sales_notes || undefined,
     paymentSlipPath: row.payment_slip_path || undefined,
     supplierName: row.supplier_name || undefined,
     customsDocNumber: row.customs_doc_number || undefined,
@@ -425,6 +471,7 @@ export async function loadBackendData(): Promise<BackendData> {
   // Unauthenticated visitors or staff who cannot view them should still load core catalog data.
   const profiles = profilesResult.error ? [] : (profilesResult.data || []);
   const roles = rolesResult.error ? [] : (rolesResult.data || []);
+  if (roles.length > 0) cachedStaffRoles = roles;
   const permissionsByRole = new Map(roles.map((row: DbRow) => [row.role_code, row.permissions]));
   const users = profiles.map((row: DbRow) => mapStaffProfile(row, permissionsByRole.get(row.role)));
   const staffById = new Map(users.map((user) => [user.id, user]));
@@ -453,6 +500,7 @@ export async function loadBackendData(): Promise<BackendData> {
     technician: row.technician || '',
     estimatedCostUSD: Number(row.estimated_cost_usd) || 0,
     batteryHealthPercent: row.battery_health_percent == null ? undefined : Number(row.battery_health_percent),
+    mileageKm: row.mileage_km == null ? undefined : Number(row.mileage_km),
     notes: row.notes || '',
   }));
   const testDrives = (testDrivesResult.error ? [] : (testDrivesResult.data || [])).map((row: DbRow): TestDriveBooking => ({
@@ -556,7 +604,7 @@ export async function saveServiceAppointment(appointment: ServiceAppointment, ac
   const client = requireSupabase();
   const safePhone = sanitizePhone(appointment.phone, 30);
   const customerId = await findCustomerId(safePhone);
-  const { error } = await client.from('service_appointments').insert({
+  const payload: Record<string, unknown> = {
     id: appointment.id,
     customer_id: customerId,
     customer_name: sanitizeText(appointment.customerName, 120),
@@ -570,9 +618,16 @@ export async function saveServiceAppointment(appointment: ServiceAppointment, ac
     technician: sanitizeText(appointment.technician, 100) || '',
     estimated_cost_usd: sanitizeNumber(appointment.estimatedCostUSD, 0),
     battery_health_percent: appointment.batteryHealthPercent != null ? sanitizeNumber(appointment.batteryHealthPercent, 0, 0, 100) : null,
+    mileage_km: appointment.mileageKm != null ? sanitizeNumber(appointment.mileageKm, 0) : null,
     notes: sanitizeText(appointment.notes, 1000) || '',
     created_by: actorId,
-  });
+  };
+  let { error } = await client.from('service_appointments').insert(payload);
+  if (error && error.message?.includes('mileage_km')) {
+    delete payload.mileage_km;
+    const retry = await client.from('service_appointments').insert(payload);
+    error = retry.error;
+  }
   if (error) throw error;
 }
 
@@ -715,7 +770,7 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
     }
   }
 
-  const { error } = await client.from('customers').upsert({
+  const baseLeadPayload: Record<string, unknown> = {
     id: safeLeadId,
     name: safeName,
     phone: safePhone,
@@ -751,7 +806,32 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
     payment_type_confirmed: lead.paymentTypeConfirmed || null,
     installment_records: Array.isArray(lead.installmentRecords) ? lead.installmentRecords : [],
     created_at: safeCreatedAt,
-  });
+  };
+
+  const extendedLeadPayload: Record<string, unknown> = {
+    ...baseLeadPayload,
+    paid_date: sanitizeText(lead.paidDate, 30) || null,
+    is_payment_completed: Boolean(lead.isPaymentCompleted),
+    plate_number: sanitizeText(lead.plateNumber, 30) || null,
+    vin: sanitizeText(lead.vin, 30) || null,
+    engine_number: sanitizeText(lead.engineNumber, 60) || null,
+    color: sanitizeText(lead.color, 60) || null,
+    current_mileage_km: lead.currentMileageKm != null ? sanitizeNumber(lead.currentMileageKm, 0) : null,
+    battery_health_soh: lead.batteryHealthSOH != null ? sanitizeNumber(lead.batteryHealthSOH, 0, 0, 100) : null,
+    warranty_start_date: sanitizeText(lead.warrantyStartDate, 30) || null,
+    warranty_expiry_date: sanitizeText(lead.warrantyExpiryDate, 30) || null,
+    warranty_years: lead.warrantyYears != null ? sanitizeNumber(lead.warrantyYears, 0, 1, 30) : null,
+    warranty_distance_km: lead.warrantyDistanceKm != null ? sanitizeNumber(lead.warrantyDistanceKm, 0) : null,
+    warranty_terms: sanitizeText(lead.warrantyTerms, 500) || null,
+    after_sales_notes: sanitizeText(lead.afterSalesNotes, 1000) || null,
+  };
+
+  let { error } = await client.from('customers').upsert(extendedLeadPayload);
+  if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
+    // Fallback if new after-sales columns have not been migrated on the remote DB yet
+    const retry = await client.from('customers').upsert(baseLeadPayload);
+    error = retry.error;
+  }
   if (error) throw error;
 
   // Sync offline store for instant local cache availability
@@ -863,7 +943,7 @@ export async function deleteInventoryItem(vin: string) {
   const billIds = Array.from(new Set((items || []).map((i: DbRow) => i.bill_id).filter(Boolean)));
   for (const billId of billIds) {
     const { error: billErr } = await client.rpc('delete_vehicle_bill', { p_bill_id: billId });
-    if (!billErr) return;
+    if (billErr) throw new Error(billErr.message);
   }
 
   const { data, error } = await client
@@ -935,9 +1015,85 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bill.id)) {
     throw new Error('Bill ID must be a UUID before it is saved.');
   }
-  const customerId = type === 'sale' && bill.leadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bill.leadId)
+  const customerId = (type === 'sale' || type === 'installment') && bill.leadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bill.leadId)
     ? bill.leadId
     : null;
+
+  // Handle installment payment receipts or updates to an already-recorded bill without re-triggering stock movement RPC
+  const { data: existingBill } = await client.from('bills').select('id').eq('id', bill.id).maybeSingle();
+  if (type === 'installment' || existingBill) {
+    const baseDirectBill: Record<string, unknown> = {
+      id: bill.id,
+      bill_number: sanitizeText(bill.billNumber, 60),
+      type,
+      bill_date: sanitizeText(bill.date?.slice(0, 10), 20) || new Date().toISOString().slice(0, 10),
+      customer_id: customerId,
+      customer_name: sanitizeText(bill.customerName, 120) || null,
+      customer_phone: sanitizePhone(bill.customerPhone, 30) || null,
+      customer_id_card: sanitizeText(bill.customerIDCard, 60) || null,
+      customer_address: sanitizeText(bill.customerAddress, 250) || null,
+      customer_province: sanitizeText(bill.customerProvince, 100) || null,
+      sales_rep: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId) ? actorId : null,
+      recorded_by: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId) ? actorId : null,
+      payment_method: sanitizeText(bill.paymentMethod, 30) || null,
+      qr_used: sanitizeText(bill.qrUsed, 60) || null,
+      bank_name: sanitizeText(bill.bankName, 100) || null,
+      transfer_ref: sanitizeText(bill.transferRef, 100) || null,
+      finance_company: sanitizeText(bill.financeCompany, 100) || null,
+      down_payment_percent: bill.downPaymentPercent != null ? sanitizeNumber(bill.downPaymentPercent, 0, 0, 100) : null,
+      down_payment_usd: bill.downPaymentUSD != null ? sanitizeNumber(bill.downPaymentUSD, 0) : null,
+      tenure_months: bill.tenureMonths != null ? sanitizeNumber(bill.tenureMonths, 0, 1, 120) : null,
+      monthly_payment_lak: bill.monthlyPaymentLAK != null ? sanitizeNumber(bill.monthlyPaymentLAK, 0) : null,
+      free_gifts: bill.freeGifts || [],
+      warranty_terms: sanitizeText(bill.warrantyTerms, 500) || null,
+      payment_slip_path: sanitizeText(bill.paymentSlipPath, 300) || null,
+      total_usd: sanitizeNumber(bill.netTotalUSD, 0),
+      total_lak: sanitizeNumber(bill.netTotalLAK, 0),
+      notes: sanitizeText(bill.notes, 1000) || null,
+    };
+
+    const extendedDirectBill: Record<string, unknown> = {
+      ...baseDirectBill,
+      installment_period: bill.installmentPeriod != null ? sanitizeNumber(bill.installmentPeriod, 0, 1, 120) : null,
+      warranty_start_date: sanitizeText(bill.warrantyStartDate, 30) || null,
+      warranty_expiry_date: sanitizeText(bill.warrantyExpiryDate, 30) || null,
+      warranty_years: bill.warrantyYears != null ? sanitizeNumber(bill.warrantyYears, 0, 1, 30) : null,
+      warranty_distance_km: bill.warrantyDistanceKm != null ? sanitizeNumber(bill.warrantyDistanceKm, 0) : null,
+      current_mileage_km: bill.currentMileageKm != null ? sanitizeNumber(bill.currentMileageKm, 0) : null,
+      battery_health_soh: bill.batteryHealthSOH != null ? sanitizeNumber(bill.batteryHealthSOH, 0, 0, 100) : null,
+      after_sales_notes: sanitizeText(bill.afterSalesNotes, 1000) || null,
+    };
+
+    // Editing an existing bill must not overwrite who originally sold/recorded it.
+    if (existingBill) {
+      for (const payload of [baseDirectBill, extendedDirectBill]) {
+        delete payload.sales_rep;
+        delete payload.recorded_by;
+      }
+    }
+
+    let { error: directErr } = await client.from('bills').upsert(extendedDirectBill);
+    if (directErr && (directErr.code === 'PGRST204' || directErr.message?.includes('column'))) {
+      const retry = await client.from('bills').upsert(baseDirectBill);
+      directErr = retry.error;
+    }
+    if (directErr) throw new Error(directErr.message || 'Bill could not be saved.');
+
+    if (existingBill && (bill.plateNumber || bill.model || bill.color)) {
+      await client
+        .from('bill_items')
+        .update({
+          model_name: sanitizeText(bill.model, 100) || undefined,
+          plate_number: sanitizeText(bill.plateNumber, 30) || null,
+          color: sanitizeText(bill.color, 60) || null,
+          engine_number: sanitizeText(bill.engineNumber, 60) || null,
+        })
+        .eq('bill_id', bill.id);
+    }
+
+    offlineSaveBill(bill);
+    return;
+  }
 
   let vehiclePayload: Record<string, unknown> | null = null;
   if (vehicle) {
@@ -1071,6 +1227,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
   if (error) {
     throw new Error(error.message || 'Sale could not be saved.');
   }
+  offlineSaveBill(bill);
 }
 
 export async function uploadPaymentSlip(file: File) {
@@ -1116,30 +1273,28 @@ export async function saveStaffProfile(user: SystemUser) {
   }
 
   // Fallback direct table update
-  try {
-    const { data: updatedProfile, error: updateError } = await client
-      .from('staff_profiles')
-      .update({
-        name: user.name,
-        phone: user.phone || null,
-        department: user.department || null,
-        role: user.role,
-        role_title: user.roleTitleLo || user.role,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', user.id)
-      .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
-      .maybeSingle();
+  const { data: updatedProfile, error: updateError } = await client
+    .from('staff_profiles')
+    .update({
+      name: user.name,
+      phone: user.phone || null,
+      department: user.department || null,
+      role: user.role,
+      role_title: user.roleTitleLo || user.role,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', user.id)
+    .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
+    .maybeSingle();
 
-    if (!updateError && updatedProfile) {
-      const mapped = mapStaffProfile(updatedProfile, user.permissions);
-      offlineSaveUser(mapped);
-      return mapped;
-    }
-  } catch {}
+  if (updateError) throw updateError;
+  if (!updatedProfile) {
+    throw new Error('Staff profile could not be updated. Check your permissions and try again.');
+  }
 
-  offlineSaveUser(user);
-  return user;
+  const mapped = mapStaffProfile(updatedProfile, user.permissions);
+  offlineSaveUser(mapped);
+  return mapped;
 }
 
 export async function deactivateStaffProfile(id: string) {
@@ -1156,14 +1311,21 @@ export async function deactivateStaffProfile(id: string) {
       offlineDeactivateUser(id);
       return;
     }
-  } catch {}
+  } catch (err) {
+    console.warn('manage-staff suspend invocation error, trying direct update fallback:', err);
+  }
 
-  try {
-    await client
-      .from('staff_profiles')
-      .update({ status: 'suspended', updated_at: new Date().toISOString() })
-      .eq('id', id);
-  } catch {}
+  const { data, error } = await client
+    .from('staff_profiles')
+    .update({ status: 'suspended', updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
+    throw new Error('Staff account could not be suspended. Check your permissions and try again.');
+  }
 
   offlineDeactivateUser(id);
 }
@@ -1282,7 +1444,7 @@ export async function deleteStaffProfile(id: string) {
 
 export async function updateServiceAppointment(appointment: ServiceAppointment) {
   const client = requireSupabase();
-  const { error } = await client.from('service_appointments').update({
+  const payload: Record<string, unknown> = {
     customer_name: appointment.customerName,
     phone: appointment.phone,
     model: appointment.model,
@@ -1294,9 +1456,16 @@ export async function updateServiceAppointment(appointment: ServiceAppointment) 
     technician: appointment.technician,
     estimated_cost_usd: appointment.estimatedCostUSD,
     battery_health_percent: appointment.batteryHealthPercent ?? null,
+    mileage_km: appointment.mileageKm ?? null,
     notes: appointment.notes,
     updated_at: new Date().toISOString(),
-  }).eq('id', appointment.id);
+  };
+  let { error } = await client.from('service_appointments').update(payload).eq('id', appointment.id);
+  if (error && error.message?.includes('mileage_km')) {
+    delete payload.mileage_km;
+    const retry = await client.from('service_appointments').update(payload).eq('id', appointment.id);
+    error = retry.error;
+  }
   if (error) throw error;
 }
 

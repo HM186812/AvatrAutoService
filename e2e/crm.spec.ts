@@ -20,9 +20,14 @@ test.describe('CRM & Customers', () => {
     // Verify CRM view loaded
     await expect(page.locator('main')).toContainText(/CUSTOMER RELATIONSHIP MANAGEMENT|CRM/i);
 
+    // Open new customer modal
+    const addLeadBtn = page.locator('button').filter({ hasText: /ເພີ່ມລູກຄ້າ|Add New Customer/i }).first();
+    await expect(addLeadBtn).toBeVisible({ timeout: 15_000 });
+    await addLeadBtn.click();
+
     // Fill new customer form
-    const nameInput = page.locator('input[placeholder*="ສົມສັກ"], input[placeholder*="สมศักดิ์"]').first();
-    const phoneInput = page.locator('input[placeholder*="020"]').first();
+    const nameInput = page.locator('#lead-customer-name, input[placeholder*="ສົມສັກ"], input[placeholder*="สมศักดิ์"]').first();
+    const phoneInput = page.locator('#lead-phone, input[placeholder*="020"]').first();
 
     await nameInput.fill(TEST_LEAD_NAME);
     await phoneInput.fill(TEST_LEAD_PHONE);

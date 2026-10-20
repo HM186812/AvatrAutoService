@@ -16,6 +16,28 @@ const isPlaceholder = (val?: string) =>
   val.includes('your-project-id') ||
   val.includes('your-anon-public-key');
 
+function assertNotServiceRoleKey(key?: string) {
+  if (!key || isPlaceholder(key)) return;
+  try {
+    const parts = key.split('.');
+    if (parts.length === 3) {
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(base64));
+      if (payload?.role === 'service_role') {
+        throw new Error(
+          'SECURITY HALT: Detected a Supabase "service_role" secret key in VITE_SUPABASE_ANON_KEY. Never expose service_role keys in the browser. Use the public "anon" key instead.'
+        );
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('SECURITY HALT:')) {
+      throw err;
+    }
+  }
+}
+
+assertNotServiceRoleKey(supabasePublishableKey);
+
 export const isSupabaseConfigured =
   !FORCE_OFFLINE_DATABASE &&
   !isPlaceholder(supabaseUrl) &&

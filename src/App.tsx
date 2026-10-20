@@ -15,6 +15,7 @@ import { translations } from './data/translations';
 import { getModelStockSummaries } from './data/stockSummary';
 import { isSupabaseConfigured, supabase } from './backend/client';
 import {
+  clearStaffCache,
   deleteBill,
   getSignedInStaff,
   loadBackendData,
@@ -265,6 +266,7 @@ export default function App() {
       if (!active) return;
 
       if (event === 'SIGNED_OUT' || !session?.user) {
+        clearStaffCache();
         setIsLoggedIn(false);
         setCurrentUser(FALLBACK_EMPTY_USER);
         setUsers([]);

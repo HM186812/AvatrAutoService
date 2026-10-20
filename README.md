@@ -73,10 +73,15 @@ VITE_SUPABASE_ANON_KEY="your-anon-key"
 ```
 
 ### 4. Database Setup
-1. Open your [Supabase Dashboard](https://supabase.com/dashboard).
-2. Go to **SQL Editor** -> **New Query**.
-3. Copy and paste the entire contents of `supabase_schema.sql` and click **Run**.
-   - This creates tables, RLS security policies, triggers, and the `avatr-assets` storage bucket.
+Apply the production migrations in `supabase/migrations/` using the Supabase CLI:
+```bash
+# Link your Supabase project (if not already linked)
+npx supabase link --project-ref your-project-ref
+
+# Push all database migrations, RLS policies, RPCs, and storage buckets
+npx supabase db push
+```
+> Note: Legacy `supabase_schema.sql` has been archived in `docs/legacy/` and should not be used for new deployments.
 
 ### 5. Run the Application
 ```bash

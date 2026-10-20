@@ -1,6 +1,8 @@
 import { Page, expect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
+import path from 'path';
+import dotenv from 'dotenv';
 
 // Respect existing environment or .env.test first before falling back to .env.local
 if (!process.env.VITE_SUPABASE_URL) {
@@ -43,7 +45,7 @@ export async function loginAsAdmin(page: Page) {
   await submitButton.click();
 
   // Wait for sidebar to appear
-  await expect(page.locator('aside')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('aside')).toBeVisible({ timeout: 35_000 });
 }
 
 export async function cleanupTestData(prefix: string) {

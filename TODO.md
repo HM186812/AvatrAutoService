@@ -1,0 +1,104 @@
+# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 13 จุด + งานค้าง)
+> **วันที่อัปเดตล่าสุด**: 2026-10-20  
+> **สถานะ**: แก้ไขโค้ดและอัปเดตฐานข้อมูลแล้ว แต่ยังต้อง commit และทดสอบจริง (ดูหมวดที่ 5)
+
+---
+
+## 🔴 หมวดที่ 1: วิกฤต / ต้องแก้ก่อนใช้งานจริงกับลูกค้า (High Priority)
+
+- [x] **1. แก้บั๊กข้อมูลลูกค้าบนบิลสูญหายในหน้าจอ**
+  - **ไฟล์**: `src/backend/data.ts` (ในฟังก์ชัน `mapBill`)
+  - **การแก้ไข**: ปรับให้อ่าน `row.customer_phone || row.phone`, `row.customer_id_card || row.id_card`, `row.customer_address || row.address`, `row.customer_province || row.province` และผูก `leadId: row.customer_id`
+
+- [x] **2. แก้การกลบ Error ตอนแก้ไข/ระงับบัญชีพนักงาน**
+  - **ไฟล์**: `src/backend/data.ts` (ใน `saveStaffProfile`, `deactivateStaffProfile`)
+  - **การแก้ไข**: เอา `catch {}` ที่กลืน error ออก และตรวจสอบผลลัพธ์ `error` / `data` จาก Supabase จริง หากล้มเหลวให้ Throw Error ออกมาแจ้งเตือนที่หน้าจอ Admin ทันที
+
+- [x] **3. สร้าง Storage Buckets สำหรับอัปโหลดสลิปเงินและรูปภาพ**
+  - **ไฟล์**: `supabase/migrations/20261020203000_after_sales_columns_and_storage_buckets.sql`
+  - **การแก้ไข**: สร้าง Bucket `dealership-assets`, `avatr-assets` และ `payment-slips` ใน `storage.buckets` พร้อมกำหนด RLS Policy บน `storage.objects`
+
+---
+
+## 🟠 หมวดที่ 2: ฟังก์ชันทำงานผิดพลาดในบางเงื่อนไข (Medium Priority)
+
+- [x] **4. แก้ไขโหมด Offline ของหน้า Stock-in ให้ทำงานได้**
+  - **ไฟล์**: `src/supabase.ts` (ใน `currentStaffId`)
+  - **การแก้ไข**: เพิ่มเงื่อนไข `if (!isSupabaseConfigured) return 'user-admin-01';` เรียบร้อยแล้ว
+
+- [x] **5. แก้บั๊ก Fallback ลบรถออกจากสต็อกไม่สำเร็จ**
+  - **ไฟล์**: `src/backend/data.ts` (ใน `deleteInventoryItem`)
+  - **การแก้ไข**: เปลี่ยน `if (!billErr) return;` ในลูปลบบิลเป็น `if (billErr) throw new Error(billErr.message);` เพื่อให้ทำงานต่อจนถึงบรรทัดลบรถยนต์ในตาราง `vehicles`
+
+---
+
+## 🟡 หมวดที่ 3: เอกสารและความปลอดภัยของโปรเจกต์ (Low / Maintenance Priority)
+
+- [x] **6. แก้ไขคู่มือ README.md เรื่องคำสั่งติดตั้งฐานข้อมูล**
+  - **ไฟล์**: `README.md`
+  - **การแก้ไข**: ปรับคู่มือการติดตั้งฐานข้อมูลให้ใช้ `npx supabase db push` อ้างอิงชุด Migration ใน `supabase/migrations/`
+
+- [x] **7. จัดการไฟล์เก่า `supabase_schema.sql` ที่มีช่องโหว่ Role Escalation**
+  - **ไฟล์**: ย้ายไปที่ `docs/legacy/supabase_schema.sql`
+  - **การแก้ไข**: ย้ายออกจาก Root directory ไปเก็บไว้ในโฟลเดอร์ `docs/legacy/` เพื่อป้องกันการนำไฟล์เก่าไปรันทับ
+
+- [x] **8. เพิ่ม Safeguard ตรวจจับ `service_role` key หน้าบ้านตามที่ README เคลม**
+  - **ไฟล์**: `src/backend/client.ts`
+  - **การแก้ไข**: เพิ่มฟังก์ชัน `assertNotServiceRoleKey` ตรวจสอบ JWT payload หากพบ `"role": "service_role"` จะหยุดการทำงานและ Throw SECURITY HALT ทันที
+
+---
+
+## 🔵 หมวดที่ 4: บั๊กเพิ่มเติมจากฟีเจอร์ใหม่ (Installment, After-Sales & Performance)
+
+- [x] **9. เชื่อมฟิลด์ใหม่ของระบบ "ดูแลหลังการขาย (After-Sales)" และ "ปิดสัญญาผ่อน (Payoff)" เข้ากับ Supabase**
+  - **ไฟล์**: `src/backend/data.ts` (`mapLead`, `saveLead`, `saveServiceAppointment`, `updateServiceAppointment`) และ `supabase/migrations/20261020203000_after_sales_columns_and_storage_buckets.sql`
+  - **การแก้ไข**: เพิ่มคอลัมน์ในตาราง `customers`, `bills`, `service_appointments` และปรับโค้ดรับ-ส่งข้อมูลให้ครบทุกฟิลด์พร้อม Fallback
+
+- [x] **10. แก้บั๊กการบันทึกแก้ไข After-Sales และการออกบิลรับเงินงวด (`type = 'installment'`) บน Supabase**
+  - **ไฟล์**: `src/backend/data.ts` (`saveBillRecord`) และ `supabase/migrations/20261020203000_after_sales_columns_and_storage_buckets.sql`
+  - **การแก้ไข**: รองรับการ Upsert บิลประเภท `installment` และการอัปเดตบิลเดิมโดยไม่ไปเรียก RPC ตัดสต็อกซ้ำ
+
+- [x] **11. แก้ลำดับการบันทึกขายหน้าร้าน POS สำหรับลูกค้าใหม่ไม่ให้ติด Foreign Key Error**
+  - **ไฟล์**: `src/components/views/POSSalesView.tsx` (`handleProcessSale`)
+  - **การแก้ไข**: สั่ง `await saveLead(customerLead)` ก่อน `await saveBillRecord(newBill)` เพื่อให้มี `customer_id` ในตาราง `customers` ก่อนผูกบิล และแนบ VIN/ทะเบียน/สีรถเข้าข้อมูลลูกค้าอัตโนมัติ
+
+- [x] **12. คืนค่าระบบ Cache & Request Deduplication ตอน Login (`getSignedInStaff`)**
+  - **ไฟล์**: `src/backend/data.ts` และ `src/App.tsx`
+  - **การแก้ไข**: ดึง `staff_profiles` และ `staff_roles` แบบ Parallel (`Promise.all`) พร้อม Cache สิทธิ์และล้าง Cache เมื่อ Sign-out
+
+- [x] **13. แก้ RLS บล็อกบิลค่างวด (`type = 'installment'`)**
+  - **ไฟล์**: `supabase/migrations/20261020204500_allow_installment_bills_rls.sql`
+  - **ปัญหา**: policy `bills_insert` / `bills_update` บน DB จริงอนุญาตแค่ `sale` กับ `import` ทำให้บันทึกบิลรับเงินงวดไม่ได้
+  - **การแก้ไข**: เพิ่ม `installment` ให้สิทธิ์ `canDeductPOS` และรัน `supabase db push` แล้ว
+  - **หมายเหตุ**: ตอนแก้บิลเดิม `saveBillRecord` ไม่เขียนทับ `sales_rep` / `recorded_by` แล้ว
+
+---
+
+## ⏳ หมวดที่ 5: งานที่ยังค้าง (Pending) — ต้องทำต่อ
+
+- [x] **14. Commit โค้ดและ migration ทั้งหมดเข้า Git**
+  - **สถานะ**: Commit ครบทุกไฟล์ รวมทั้ง migration ใหม่ 3 ไฟล์ และ e2e test fixes
+- [ ] **14.1 Push ขึ้น GitHub (`git push origin main`)**
+
+- [ ] **15. ทดสอบกดใช้งานจริงบนหน้าเว็บ (ยังไม่เคยรันฟลว์ใดเลย — ตรวจแค่ `tsc`, `build` และ schema/policy ของ DB)**
+  - [ ] **POS**: ขายให้ลูกค้าใหม่ (ต้องไม่ติด Foreign Key Error), ขายแบบผ่อน (finance) และขายสด
+  - [ ] **After-Sales**: เปิด Modal แก้ข้อมูลประกัน/เลขไมล์/SOH แล้วรีเฟรช ข้อมูลต้องไม่หาย
+  - [ ] **ค่างวด**: กดรับเงินงวด (สร้างบิล `installment`) และกดยืนยันปิดสัญญา (Payoff)
+  - [ ] **ลูกค้าบนบิล**: เบอร์/บัตรประชาชน/ที่อยู่/จังหวัดต้องแสดงในหน้าบิล
+  - [ ] **พนักงาน**: ระงับ/แก้ไขบัญชีพนักงาน ถ้า DB ปฏิเสธต้องเห็นข้อความ error ไม่ใช่ "สำเร็จ"
+  - [ ] **ลบรถออกจากสต็อก**: ทดสอบเส้นทาง Fallback เมื่อ RPC `delete_vehicle_from_inventory` ไม่พร้อมใช้งาน
+  - [ ] **อัปโหลด**: รูป QR/รูปรถ (bucket `dealership-assets`) และสลิปโอนเงิน (bucket `payment-slips`)
+  - [ ] **Login**: ทดสอบความเร็วและ Cache สิทธิ์หลัง Sign-out แล้ว Sign-in ด้วยบัญชีอื่น
+
+- [x] **16. รัน e2e test (`npm run test:e2e`)**
+  - **สถานะ**: ผ่านครบ 100% (19/19 การทดสอบ ใน 7 ไฟล์) เชื่อมต่อ Live Database และ Cloud Services สำเร็จเรียบร้อย
+
+- [ ] **17. ล้างโค้ดตายใน migration `20261020203000`**
+  - **ปัญหา**: ส่วน `DROP/ADD CONSTRAINT bills_type_check` ไม่ทำอะไร เพราะ DB จริงไม่มี constraint ชื่อนี้ (`bills.type` เป็น enum `bill_type` ที่มีค่า `installment` อยู่แล้ว)
+  - **ข้อควรระวัง**: migration นี้ถูกรันบน Cloud ไปแล้ว ห้ามแก้ไฟล์เดิม ถ้าจะล้างต้องสร้าง migration ใหม่ หรือปล่อยไว้ได้เพราะไม่มีผลเสีย
+
+- [ ] **18. ตรวจสอบ `bills_payment_method_check`**
+  - **ข้อสังเกต**: constraint บน DB จริงอนุญาต `payment_method` แค่ `transfer`, `cash`, `finance` ต้องยืนยันว่าบิลค่างวดไม่ส่งค่าอื่นเข้ามา (โค้ดปัจจุบัน fallback เป็น `transfer`)
+
+- [ ] **19. `supabase/.temp/cli-latest` ถูกไฟล์ CLI แก้เป็นไฟล์ว่าง**
+  - **สถานะ**: ก่อนหน้านี้ restore แล้ว ถ้า `git status` โชว์ว่าถูกแก้อีก ให้ `git checkout supabase/.temp/cli-latest` ก่อน commit
