@@ -169,15 +169,26 @@ export default function App() {
     createdAt: '',
   };
 
-  const [users, setUsers] = useState<SystemUser[]>([]);
+  const getCachedArray = <T,>(key: string): T[] => {
+    try {
+      const raw = localStorage.getItem('avatr_cached_backend_data');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed[key])) return parsed[key];
+      }
+    } catch {}
+    return [];
+  };
+
+  const [users, setUsers] = useState<SystemUser[]>(() => getCachedArray<SystemUser>('users'));
   const [currentUser, setCurrentUser] = useState<SystemUser>(FALLBACK_EMPTY_USER);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [services, setServices] = useState<ServiceAppointment[]>([]);
-  const [testDrives, setTestDrives] = useState<TestDriveBooking[]>([]);
-  const [stockLogs, setStockLogs] = useState<StockLogRecord[]>([]);
-  const [bills, setBills] = useState<InvoiceBillRecord[]>([]);
-  const [vehicles, setVehicles] = useState<VehicleModel[]>([]);
+  const [leads, setLeads] = useState<Lead[]>(() => getCachedArray<Lead>('leads'));
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => getCachedArray<InventoryItem>('inventory'));
+  const [services, setServices] = useState<ServiceAppointment[]>(() => getCachedArray<ServiceAppointment>('services'));
+  const [testDrives, setTestDrives] = useState<TestDriveBooking[]>(() => getCachedArray<TestDriveBooking>('testDrives'));
+  const [stockLogs, setStockLogs] = useState<StockLogRecord[]>(() => getCachedArray<StockLogRecord>('stockLogs'));
+  const [bills, setBills] = useState<InvoiceBillRecord[]>(() => getCachedArray<InvoiceBillRecord>('bills'));
+  const [vehicles, setVehicles] = useState<VehicleModel[]>(() => getCachedArray<VehicleModel>('vehicles'));
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -192,6 +203,20 @@ export default function App() {
     setStockLogs(data.stockLogs);
     setBills(data.bills);
     setVehicles(data.vehicles);
+    try {
+      localStorage.setItem('avatr_cached_backend_data', JSON.stringify({
+        users: data.users,
+        leads: data.leads,
+        inventory: data.inventory,
+        services: data.services,
+        testDrives: data.testDrives,
+        stockLogs: data.stockLogs,
+        bills: data.bills,
+        vehicles: data.vehicles,
+      }));
+    } catch {
+      // ignore quota or private mode errors
+    }
     if (data.settings && typeof data.settings === 'object') {
       const settings = data.settings as Record<string, unknown>;
       if (settings.companyBankInfo) {
@@ -277,17 +302,20 @@ export default function App() {
         setStockLogs([]);
         setBills([]);
         setVehicles([]);
+        try { localStorage.removeItem('avatr_cached_backend_data'); } catch {}
         setIsAuthLoading(false);
         return;
       }
 
       try {
         const user = await getSignedInStaff(session.user.id);
-        await refreshBackendData();
         if (!active) return;
         setCurrentUser(user);
         setIsLoggedIn(true);
         setBackendError(null);
+        setIsAuthLoading(false);
+        // Refresh full dataset in background (Stale-While-Revalidate)
+        void refreshBackendData();
       } catch (error: unknown) {
         if (!active) return;
         setBackendError(error instanceof Error ? error.message : 'Could not load Supabase session.');
@@ -359,6 +387,7 @@ export default function App() {
     setCurrentUser(FALLBACK_EMPTY_USER);
     try {
       localStorage.removeItem('avatr_offline_active_user');
+      localStorage.removeItem('avatr_cached_backend_data');
     } catch {}
     try {
       await supabase?.auth.signOut();

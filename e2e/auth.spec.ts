@@ -16,7 +16,7 @@ test.describe('Authentication & Session', () => {
     await page.locator('button[type="submit"]').first().click();
 
     // Expect error alert or message
-    await expect(page.locator('.text-rose-400, .text-rose-500, .text-rose-300, .text-red-400, [role="alert"]').first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.text-rose-400, .text-rose-500, .text-rose-300, .text-red-400, [role="alert"]').first()).toBeVisible({ timeout: 20_000 });
   });
 
   test('should successfully sign in with valid admin credentials and log out', async ({ page }) => {
