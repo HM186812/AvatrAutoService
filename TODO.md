@@ -1,6 +1,6 @@
 # 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 13 จุด + งานค้าง)
-> **วันที่อัปเดตล่าสุด**: 2026-10-20  
-> **สถานะ**: แก้ไขโค้ดและอัปเดตฐานข้อมูลแล้ว แต่ยังต้อง commit และทดสอบจริง (ดูหมวดที่ 5)
+> **วันที่อัปเดตล่าสุด**: 2026-10-21  
+> **สถานะ**: E2E ผ่าน 100% (19/19), Commit เรียบร้อย, ยังไม่ Push GitHub
 
 ---
 
@@ -101,3 +101,43 @@
 
 - [ ] **19. `supabase/.temp/cli-latest` ถูกไฟล์ CLI แก้เป็นไฟล์ว่าง**
   - **สถานะ**: ก่อนหน้านี้ restore แล้ว ถ้า `git status` โชว์ว่าถูกแก้อีก ให้ `git checkout supabase/.temp/cli-latest` ก่อน commit
+
+---
+
+## 🔍 หมวดที่ 6: ตรวจสอบสะพานข้อมูลหน้าบ้าน ↔ หลังบ้าน (Data Bridge Audit)
+
+> **วัตถุประสงค์**: ตรวจสอบว่าทุก Column ใน Supabase Cloud ถูกส่ง/รับอย่างถูกต้องตั้งแต่ DB → `data.ts` → Component → UI โดยใช้ webapp-testing (Playwright) ร่วมกับการอ่านโค้ด
+
+- [ ] **20. ตรวจสอบสะพาน Column ตาราง `customers` (After-Sales & Warranty Fields)**
+  - **คอลัมน์ที่เพิ่มใหม่ใน migration `20261020203000`**:
+    - `paid_date`, `is_payment_completed`, `plate_number`, `vin`, `engine_number`, `color`
+    - `current_mileage_km`, `battery_health_soh`
+    - `warranty_start_date`, `warranty_expiry_date`, `warranty_years`, `warranty_distance_km`, `warranty_terms`
+    - `after_sales_notes`
+  - **ตรวจว่า `mapLead` ใน `data.ts` ดึงครบไหม และ `saveLead` ส่งขึ้น DB ครบไหม**
+  - **ตรวจว่า `CustomerAfterSalesModal.tsx` เขียน/อ่านฟิลด์ถูกต้อง แล้วรีเฟรชแล้วข้อมูลไม่หาย**
+
+- [ ] **21. ตรวจสอบสะพาน Column ตาราง `bills` (Installment & After-Sales Fields)**
+  - **คอลัมน์ที่เพิ่มใหม่**:
+    - `installment_period`, `warranty_start_date`, `warranty_expiry_date`, `warranty_years`, `warranty_distance_km`
+    - `current_mileage_km`, `battery_health_soh`, `after_sales_notes`
+  - **ตรวจว่า `mapBill` ใน `data.ts` ดึงครบ และ `saveBillRecord` ส่งครบ**
+  - **ตรวจว่าบิลประเภท `installment` ผ่าน RLS ได้จริง (ไม่ติด 403)**
+
+- [ ] **22. ตรวจสอบสะพาน Column ตาราง `service_appointments` (Mileage Field)**
+  - **คอลัมน์ใหม่**: `mileage_km`
+  - **ตรวจว่า `saveServiceAppointment` ส่ง `mileage_km` ขึ้น DB และ `mapService` ดึงกลับมาถูก**
+
+- [ ] **23. ตรวจสอบ Storage Bucket ในระบบ Upload จริง**
+  - **ทดสอบอัปโหลดรูปภาพ QR/รูปรถ** ไปยัง `dealership-assets` ผ่านหน้า Stock-In
+  - **ทดสอบอัปโหลดสลิปโอนเงิน** ไปยัง `payment-slips` ผ่านหน้า POS
+  - **ตรวจว่า RLS Policy** อนุญาต Active Staff ได้อ่าน/เขียนถูกต้อง
+  - **ตรวจว่า Public URL** ของ `dealership-assets` ใช้งานได้จริงโดยไม่ต้อง Auth
+
+- [ ] **24. ตรวจสอบ `bills_payment_method_check` ไม่ให้บิล `installment` ติด DB Constraint**
+  - **constraint ปัจจุบัน**: อนุญาต `payment_method` แค่ `transfer`, `cash`, `finance`
+  - **ตรวจโค้ด `saveBillRecord`**: ยืนยันว่า fallback เป็น `transfer` ทำงานถูกต้องจริง
+  - **ทดสอบสร้างบิลรับเงินงวด** แล้ว verify ว่า `payment_method` ที่ส่งไป DB ไม่ใช่ค่าที่ constraint ปฏิเสธ
+
+- [ ] **14.1 Push โค้ดทั้งหมดขึ้น GitHub (`git push origin main`)**
+  - **Commits ที่ค้าง**: 3 commits (`bc12a99`, `119f778`, `13eff2f`) ยังไม่ได้ push
