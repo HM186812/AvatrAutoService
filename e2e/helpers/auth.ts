@@ -56,6 +56,12 @@ export async function loginAsAdmin(page: Page) {
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
 
+  // Clear any residual state from previous tests that may have tampered storage
+  await page.evaluate(() => {
+    try { localStorage.clear(); } catch (_) {}
+    try { sessionStorage.clear(); } catch (_) {}
+  });
+
   // Check if already logged in
   const alreadyLoggedIn = await page.locator('aside').isVisible().catch(() => false);
   if (alreadyLoggedIn) return;
