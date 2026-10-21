@@ -184,7 +184,14 @@ export default function App() {
   const [backendError, setBackendError] = useState<string | null>(null);
 
   const refreshBackendData = useCallback(async () => {
-    const data = await loadBackendData();
+    // Fast Progressive Loading: update critical catalog & leads as soon as Tier 1 completes
+    const data = await loadBackendData((tier1) => {
+      if (tier1.users) setUsers(tier1.users);
+      if (tier1.leads) setLeads(tier1.leads);
+      if (tier1.inventory) setInventory(tier1.inventory);
+      if (tier1.vehicles) setVehicles(tier1.vehicles);
+    });
+
     setUsers(data.users);
     setLeads(data.leads);
     setInventory(data.inventory);
@@ -305,7 +312,7 @@ export default function App() {
     }
 
     let active = true;
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
 
       if (event === 'SIGNED_OUT' || !session?.user) {
@@ -325,22 +332,26 @@ export default function App() {
         return;
       }
 
-      try {
-        const user = await getSignedInStaff(session.user.id);
+      // Defer async calls out of the synchronous onAuthStateChange notification loop
+      setTimeout(async () => {
         if (!active) return;
-        setCurrentUser(user);
-        setIsLoggedIn(true);
-        setBackendError(null);
-        setIsAuthLoading(false);
-        // Refresh full dataset in background (Stale-While-Revalidate)
-        void refreshBackendData();
-      } catch (error: unknown) {
-        if (!active) return;
-        setBackendError(error instanceof Error ? error.message : 'Could not load Supabase session.');
-        void supabase?.auth.signOut();
-      } finally {
-        if (active) setIsAuthLoading(false);
-      }
+        try {
+          const user = await getSignedInStaff(session.user.id);
+          if (!active) return;
+          setCurrentUser(user);
+          setIsLoggedIn(true);
+          setBackendError(null);
+          setIsAuthLoading(false);
+          // Progressive refresh in background
+          void refreshBackendData();
+        } catch (error: unknown) {
+          if (!active) return;
+          setBackendError(error instanceof Error ? error.message : 'Could not load Supabase session.');
+          void supabase?.auth.signOut();
+        } finally {
+          if (active) setIsAuthLoading(false);
+        }
+      }, 0);
     });
 
     return () => {
@@ -549,6 +560,7 @@ export default function App() {
           setCurrentUser(user);
           setIsLoggedIn(true);
           setBackendError(null);
+          void refreshBackendData();
         }}
         onRegisterUser={(newUser) => setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)])}
         lang={lang}

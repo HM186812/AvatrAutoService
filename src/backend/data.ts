@@ -469,32 +469,40 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
   };
 }
 
-export async function loadBackendData(): Promise<BackendData> {
+export async function loadBackendData(
+  onInitialTierLoaded?: (initial: Partial<BackendData>) => void
+): Promise<BackendData> {
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
-    return getOfflineBackendData();
+    const offlineData = getOfflineBackendData();
+    onInitialTierLoaded?.({
+      users: offlineData.users,
+      leads: offlineData.leads,
+      inventory: offlineData.inventory,
+      vehicles: offlineData.vehicles,
+    });
+    return offlineData;
   }
   const client = requireSupabase();
-  const [modelsResult, inventoryResult, customersResult, billsResult, itemsResult, movementsResult, profilesResult, rolesResult, servicesResult, testDrivesResult, settingsResult] = await Promise.all([
-    client.from('vehicle_models').select('*').order('name'),
+
+  // Tier 1: Core showroom catalog & leads (fast initial paint for Dashboard/POS)
+  const [modelsResult, inventoryResult, customersResult, profilesResult, rolesResult, settingsResult] = await Promise.all([
+    cachedVehicleModels
+      ? Promise.resolve({ data: cachedVehicleModels, error: null })
+      : client.from('vehicle_models').select('*').order('name'),
     client.from('vehicles').select('*').order('created_at', { ascending: false }),
     client.from('customers').select('*').order('created_at', { ascending: false }),
-    client.from('bills').select('*').order('bill_date', { ascending: false }),
-    client.from('bill_items').select('*'),
-    client.from('stock_movements').select('*').order('created_at', { ascending: false }),
     client.from('staff_profiles').select('id,email,name,phone,role,department,role_title,status,created_at,last_login'),
-    client.from('staff_roles').select('role_code,permissions'),
-    client.from('service_appointments').select('*').order('scheduled_date', { ascending: true }),
-    client.from('test_drives').select('*').order('drive_date', { ascending: true }),
+    cachedStaffRoles
+      ? Promise.resolve({ data: cachedStaffRoles, error: null })
+      : client.from('staff_roles').select('role_code,permissions'),
     client.from('dealership_settings').select('config').eq('id', true).maybeSingle(),
   ]);
 
-  for (const result of [modelsResult, inventoryResult, customersResult, billsResult, itemsResult]) {
+  for (const result of [modelsResult, inventoryResult, customersResult]) {
     if (result.error) throw result.error;
   }
 
-  // Directory access and operational logs can be restricted by RLS.
-  // Unauthenticated visitors or staff who cannot view them should still load core catalog data.
   const profiles = profilesResult.error ? [] : (profilesResult.data || []);
   const roles = rolesResult.error ? [] : (rolesResult.data || []);
   if (roles.length > 0) cachedStaffRoles = roles;
@@ -508,6 +516,29 @@ export async function loadBackendData(): Promise<BackendData> {
   const inventory = (inventoryResult.data || []).map((row: DbRow) => mapInventoryItem(row, modelById));
   const inventoryByVin = new Map((inventoryResult.data || []).map((row: DbRow) => [row.vin, row]));
   const leads = (customersResult.data || []).map((row: DbRow) => mapLead(row, modelById, staffById));
+
+  // Yield Tier 1 immediately so Dashboard, Inventory, and CRM display without waiting for heavy logs
+  onInitialTierLoaded?.({
+    users,
+    vehicles: models,
+    inventory,
+    leads,
+    settings: settingsResult.error ? {} : (settingsResult.data?.config || {}),
+  });
+
+  // Tier 2: Transactional logs, appointments, test drives, and bills
+  // shortcut: limit transactional logs to recent 300 records to prevent long cold-start transfers
+  const [billsResult, itemsResult, movementsResult, servicesResult, testDrivesResult] = await Promise.all([
+    client.from('bills').select('*').order('bill_date', { ascending: false }).limit(300),
+    client.from('bill_items').select('*').limit(500),
+    client.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(300),
+    client.from('service_appointments').select('*').order('scheduled_date', { ascending: true }),
+    client.from('test_drives').select('*').order('drive_date', { ascending: true }),
+  ]);
+
+  if (billsResult.error) throw billsResult.error;
+  if (itemsResult.error) throw itemsResult.error;
+
   const itemsByBill = new Map<string, DbRow[]>();
   for (const item of itemsResult.data || []) {
     const items = itemsByBill.get(item.bill_id) || [];
