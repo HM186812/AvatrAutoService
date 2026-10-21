@@ -1,14 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const env = (typeof import.meta !== 'undefined' && import.meta.env
+  ? import.meta.env
+  : (typeof process !== 'undefined' ? process.env : {})) as Record<string, string | undefined>;
+
+const supabaseUrl = env.VITE_SUPABASE_URL;
+const supabasePublishableKey = env.VITE_SUPABASE_ANON_KEY;
 
 // =========================================================================
 // ຕັ້ງຄ່າໂໝດຖານຂໍ້ມູນ (DATABASE CONNECTION MODE)
 // ຖ້າບໍ່ມີ .env ຫຼື ບໍ່ມີ Key ລະບົບຈະ Fallback ເປັນ LocalStorage Offline Mode ອັດຕະໂນມັດ
 // ຫາກຕ້ອງການບັງຄັບ Offline ຕະຫຼອດເວລາ ສາມາດໃສ່ VITE_FORCE_OFFLINE="true" ໃນ .env ໄດ້
 // =========================================================================
-export const FORCE_OFFLINE_DATABASE = import.meta.env.VITE_FORCE_OFFLINE === 'true';
+export const FORCE_OFFLINE_DATABASE = env.VITE_FORCE_OFFLINE === 'true';
 
 const isPlaceholder = (val?: string) =>
   !val ||
@@ -49,8 +53,8 @@ export const isSupabaseConfigured =
   !isPlaceholder(supabasePublishableKey);
 
 export const isOfflineDemoEnabled =
-  import.meta.env.DEV &&
-  import.meta.env.VITE_ENABLE_OFFLINE_DEMO === 'true' &&
+  Boolean(env.DEV || (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production')) &&
+  env.VITE_ENABLE_OFFLINE_DEMO === 'true' &&
   !isSupabaseConfigured;
 
 export const supabase = isSupabaseConfigured

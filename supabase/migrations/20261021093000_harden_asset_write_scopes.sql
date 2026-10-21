@@ -1,11 +1,9 @@
 -- Migration: 20261021093000_harden_asset_write_scopes.sql
 -- Description: Restrict storage writes in dealership-assets and avatr-assets by folder and permission.
 
-BEGIN;
-
-CREATE OR REPLACE FUNCTION public.asset_write_scope_ok(
+CREATE OR REPLACE FUNCTION public.avatr_asset_write_allowed(
   p_bucket text,
-  p_name text
+  p_path text
 )
 RETURNS boolean
 LANGUAGE sql
@@ -16,58 +14,56 @@ AS $$
   SELECT CASE
     WHEN p_bucket NOT IN ('dealership-assets', 'avatr-assets')
       THEN true
-    ELSE COALESCE(
-      public.is_active_staff()
-      AND (
-        (
-          (storage.foldername(p_name))[1] = 'qr'
-          AND public.has_permission('canUploadQR')
-        )
-        OR
-        (
-          (storage.foldername(p_name))[1] = 'vehicles'
-          AND public.has_permission('canEditInventory')
-        )
-      ),
-      false
-    )
+
+    WHEN NOT COALESCE(public.is_active_staff(), false)
+      THEN false
+
+    WHEN (storage.foldername(p_path))[1] = 'qr'
+      THEN COALESCE(public.has_permission('canUploadQR'), false)
+
+    WHEN (storage.foldername(p_path))[1] = 'vehicles'
+      THEN
+        COALESCE(public.has_permission('canEditInventory'), false)
+        OR COALESCE(public.has_permission('canAddModels'), false)
+
+    ELSE false
   END;
 $$;
 
-DROP POLICY IF EXISTS asset_scope_insert ON storage.objects;
+REVOKE ALL ON FUNCTION
+  public.avatr_asset_write_allowed(text, text)
+  FROM PUBLIC, anon;
 
-CREATE POLICY asset_scope_insert
+GRANT EXECUTE ON FUNCTION
+  public.avatr_asset_write_allowed(text, text)
+  TO authenticated;
+
+DROP POLICY IF EXISTS avatr_asset_insert_guard ON storage.objects;
+CREATE POLICY avatr_asset_insert_guard
 ON storage.objects
 AS RESTRICTIVE
-FOR INSERT
-TO PUBLIC
+FOR INSERT TO authenticated
 WITH CHECK (
-  public.asset_write_scope_ok(bucket_id, name)
+  public.avatr_asset_write_allowed(bucket_id, name)
 );
 
-DROP POLICY IF EXISTS asset_scope_update ON storage.objects;
-
-CREATE POLICY asset_scope_update
+DROP POLICY IF EXISTS avatr_asset_update_guard ON storage.objects;
+CREATE POLICY avatr_asset_update_guard
 ON storage.objects
 AS RESTRICTIVE
-FOR UPDATE
-TO PUBLIC
+FOR UPDATE TO authenticated
 USING (
-  public.asset_write_scope_ok(bucket_id, name)
+  public.avatr_asset_write_allowed(bucket_id, name)
 )
 WITH CHECK (
-  public.asset_write_scope_ok(bucket_id, name)
+  public.avatr_asset_write_allowed(bucket_id, name)
 );
 
-DROP POLICY IF EXISTS asset_scope_delete ON storage.objects;
-
-CREATE POLICY asset_scope_delete
+DROP POLICY IF EXISTS avatr_asset_delete_guard ON storage.objects;
+CREATE POLICY avatr_asset_delete_guard
 ON storage.objects
 AS RESTRICTIVE
-FOR DELETE
-TO PUBLIC
+FOR DELETE TO authenticated
 USING (
-  public.asset_write_scope_ok(bucket_id, name)
+  public.avatr_asset_write_allowed(bucket_id, name)
 );
-
-COMMIT;

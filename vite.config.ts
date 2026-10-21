@@ -47,9 +47,20 @@ function validateClientEnv(env: Record<string, string>): void {
   }
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
   validateClientEnv(env);
+
+  const frontendKey = (env.VITE_SUPABASE_ANON_KEY || '').trim();
+  if (
+    command === 'build' &&
+    env.VITE_FORCE_OFFLINE !== 'true' &&
+    (!env.VITE_SUPABASE_URL?.trim() || !frontendKey)
+  ) {
+    throw new Error(
+      'Missing Supabase configuration. Refusing an accidental offline build.'
+    );
+  }
   return {
     plugins: [react(), tailwindcss()],
     resolve: {

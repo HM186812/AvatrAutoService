@@ -54,7 +54,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev -- --mode test',
     url: 'http://localhost:3000',
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 });

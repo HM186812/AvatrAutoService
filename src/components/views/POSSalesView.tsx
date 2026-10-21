@@ -8,7 +8,7 @@ import {
   saveDealershipConfigToSupabase 
 } from '../../supabase';
 import { newRecordId } from '../../backend/ids';
-import { saveBillRecord, saveLead } from '../../backend/data';
+import { saveLead } from '../../backend/data';
 import { generateInstallmentSchedule } from '../../utils/installment';
 import AvatrLogo from '../layout/AvatrLogo';
 import { ConfirmDeleteModal } from '../modals';
@@ -539,7 +539,7 @@ export default function POSSalesView({
         engineNumber: selectedVehicle.engineNumber || matchedLead.engineNumber,
         plateNumber: selectedVehicle.plateNumber || matchedLead.plateNumber,
         color: selectedVehicle.color || matchedLead.color,
-        status: matchedLead.status || 'negotiation',
+        status: 'delivered',
         lastFollowUp: saleDateTime,
       };
     } else {
@@ -558,7 +558,7 @@ export default function POSSalesView({
         engineNumber: selectedVehicle.engineNumber,
         plateNumber: selectedVehicle.plateNumber,
         color: selectedVehicle.color,
-        status: 'negotiation',
+        status: 'delivered',
         priority: 'high',
         notes: `ຊື້ລົດຜ່ານ POS ໃບບິນ ${invoiceNum} | VIN: ${selectedVehicle.vin}`,
         assignedTo: currentUser?.name || 'Admin',
@@ -657,10 +657,7 @@ export default function POSSalesView({
     setIsProcessingSale(true);
     try {
       if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
-      await saveLead(customerLead, currentUser.id);
-      await saveBillRecord(newBill, currentUser.id);
-      customerLead.status = 'delivered';
-      await saveLead(customerLead, currentUser.id);
+      await saveLead(customerLead, currentUser.id, newBill);
     } catch (error) {
       const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Sale could not be saved.';
       if (msg.includes('already has a stock-out movement') || msg.includes('already sold') || msg.includes('not available')) {

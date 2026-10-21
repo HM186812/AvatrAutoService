@@ -704,7 +704,12 @@ export async function saveDealershipSettingsPatch(patch: Record<string, unknown>
   return config;
 }
 
-export async function saveLead(lead: Lead, assignedStaffId: string) {
+export async function saveLead(lead: Lead, assignedStaffId: string, saleBill?: InvoiceBillRecord) {
+  if (saleBill && !isSupabaseConfigured) {
+    throw new Error(
+      'Atomic POS sales require Supabase. Offline mode is demo-only.'
+    );
+  }
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
     offlineSaveLead(lead);
@@ -856,6 +861,17 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
     warranty_terms: sanitizeText(lead.warrantyTerms, 500) || null,
     after_sales_notes: sanitizeText(lead.afterSalesNotes, 1000) || null,
   };
+
+  if (saleBill) {
+    await saveBillRecord(
+      saleBill,
+      assignedStaffId,
+      undefined,
+      extendedLeadPayload
+    );
+    offlineSaveLead({ ...lead, id: safeLeadId });
+    return;
+  }
 
   let { error } = await client.from('customers').upsert(extendedLeadPayload);
   if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
@@ -1052,9 +1068,16 @@ export async function deleteVehicleModel(id: string) {
   if (!data) throw new Error('Vehicle model was not deleted. Check your access and try again.');
 }
 
-export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, vehicle?: InventoryItem) {
+export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, vehicle?: InventoryItem, customerPayload?: Record<string, unknown>) {
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
+    const inbound = (bill.billType || bill.type) === 'import';
+    if (inbound) {
+      if (!vehicle || vehicle.vin !== bill.vin) {
+        throw new Error('Stock-in requires a vehicle with a matching VIN.');
+      }
+      offlineSaveInventoryItem(vehicle);
+    }
     offlineSaveBill(bill);
     return;
   }
@@ -1277,6 +1300,22 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     event_end_date: sanitizeText(bill.eventEndDate, 30) || null,
     event_location: sanitizeText(bill.eventLocation, 100) || null,
   };
+
+  if (customerPayload) {
+    if (type !== 'sale') {
+      throw new Error('Combined customer transaction supports sales only.');
+    }
+
+    const result = await client.rpc('record_pos_sale', {
+      p_customer: customerPayload,
+      p_bill: billRow,
+      p_item: billItem,
+    });
+
+    if (result.error) throw result.error;
+    offlineSaveBill(bill);
+    return;
+  }
 
   const rpcParams: Record<string, unknown> = {
     p_bill: billRow,
