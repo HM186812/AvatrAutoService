@@ -48,6 +48,41 @@ export async function loginAsAdmin(page: Page) {
   await expect(page.locator('aside')).toBeVisible({ timeout: 35_000 });
 }
 
+export async function ensureSeedData() {
+  try {
+    const supabase = getSupabaseClient();
+    const { data: auth } = await supabase.auth.signInWithPassword({
+      email: TEST_CREDENTIALS.email,
+      password: TEST_CREDENTIALS.password,
+    });
+    if (!auth?.session) return;
+
+    const defaultModels = [
+      { id: 'avatr-12', name: 'AVATR 12', category: 'Grand Coupé', price_starting_usd: 46800, price_starting_lak: 1029600000 },
+      { id: 'avatr-11', name: 'AVATR 11', category: 'Luxury SUV Coupé', price_starting_usd: 43900, price_starting_lak: 965800000 },
+      { id: 'avatr-07', name: 'AVATR 07', category: 'Urban Smart SUV', price_starting_usd: 36500, price_starting_lak: 803000000 },
+    ];
+    await supabase.from('vehicle_models').upsert(defaultModels, { onConflict: 'id' });
+
+    const { data: existingVehicles } = await supabase.from('vehicles').select('vin').eq('status', 'ready').limit(1);
+    if (!existingVehicles || existingVehicles.length === 0) {
+      await supabase.from('vehicles').upsert({
+        vin: 'LVV9C12E7RA000001',
+        model_id: 'avatr-12',
+        engine_number: 'ENG-SEED-001',
+        plate_number: 'ກມ-9999',
+        color: 'Obsidian Black',
+        price_usd: 46800,
+        price_lak: 1029600000,
+        status: 'ready',
+        pdi_status: 'passed',
+      }, { onConflict: 'vin' });
+    }
+  } catch (err) {
+    console.warn('ensureSeedData error:', err);
+  }
+}
+
 export async function cleanupTestData(prefix: string) {
   try {
     const supabase = getSupabaseClient();

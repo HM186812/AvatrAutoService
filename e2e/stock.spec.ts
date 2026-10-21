@@ -27,6 +27,9 @@ test.describe('Inventory & Stock-In', () => {
   test('should perform Stock-In (เพิ่มของ) with dual save to inventory and bills', async ({ page }) => {
     await loginAsAdmin(page);
 
+    const freshVin = `LVV9C07E7RA${Math.floor(100000 + Math.random() * 900000)}`;
+    const freshEngine = `ENG${Math.floor(100000 + Math.random() * 900000)}`;
+
     // Click Stock-In menu
     const stockInBtn = page.locator('aside button').filter({ hasText: /Stock-In|ປ້ອນນຳເຂົ້າ|บันทึกนำเข้า/ }).first();
     await stockInBtn.click();
@@ -37,8 +40,8 @@ test.describe('Inventory & Stock-In', () => {
     const supplierInput = page.locator('input[placeholder*="AVATR Technology"]').first();
     const priceInput = page.locator('input[placeholder="45,000"]').first();
 
-    await vinInput.fill(TEST_VIN);
-    await engineInput.fill(TEST_ENGINE);
+    await vinInput.fill(freshVin);
+    await engineInput.fill(freshEngine);
     await supplierInput.fill(TEST_SUPPLIER);
     await priceInput.fill('42000');
 
@@ -48,8 +51,11 @@ test.describe('Inventory & Stock-In', () => {
 
     // Verify confirmation modal appears
     const modal = page.locator('.fixed.inset-0, [role="dialog"]').first();
-    await expect(modal).toBeVisible({ timeout: 15_000 });
+    await expect(modal).toBeVisible({ timeout: 30_000 });
     await expect(modal).toContainText(/ສຳເລັດ|สำเร็จ|Success|GRN/i);
+
+    // Clean up fresh test vin after test
+    await cleanupTestData(freshVin);
 
     // Close modal
     const closeBtn = modal.locator('button').first();

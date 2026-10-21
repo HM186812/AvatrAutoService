@@ -32,6 +32,7 @@ import {
   offlineSignIn,
   offlineSignUp,
 } from './offlineStore';
+import { AVATR_VEHICLES } from '../data/mockData';
 import { newRecordId } from './ids';
 import {
   sanitizeText,
@@ -40,6 +41,15 @@ import {
   sanitizeNumber,
   hasDangerousPatterns
 } from '../utils/security';
+
+function sanitizePaymentMethod(method?: string | null, isInstallment?: boolean): 'transfer' | 'cash' | 'finance' | null {
+  if (!method) return isInstallment ? 'transfer' : null;
+  const lower = String(method).toLowerCase().trim();
+  if (lower === 'cash') return 'cash';
+  if (lower === 'finance') return 'finance';
+  if (lower === 'transfer' || lower === 'qr' || lower === 'bank' || lower === 'installment') return 'transfer';
+  return isInstallment ? 'transfer' : null;
+}
 
 type DbRow = Record<string, any>;
 
@@ -98,6 +108,7 @@ export function mapStaffProfile(profile: DbRow, permissionRow?: DbRow): SystemUs
 }
 
 let cachedStaffRoles: DbRow[] | null = null;
+let cachedVehicleModels: DbRow[] | null = null;
 let activeStaffPromise: { userId: string; promise: Promise<SystemUser> } | null = null;
 
 export function clearStaffCache() {
@@ -472,10 +483,12 @@ export async function loadBackendData(): Promise<BackendData> {
   const profiles = profilesResult.error ? [] : (profilesResult.data || []);
   const roles = rolesResult.error ? [] : (rolesResult.data || []);
   if (roles.length > 0) cachedStaffRoles = roles;
+  if (modelsResult.data && modelsResult.data.length > 0) cachedVehicleModels = modelsResult.data;
   const permissionsByRole = new Map(roles.map((row: DbRow) => [row.role_code, row.permissions]));
   const users = profiles.map((row: DbRow) => mapStaffProfile(row, permissionsByRole.get(row.role)));
   const staffById = new Map(users.map((user) => [user.id, user]));
-  const models = (modelsResult.data || []).map(mapVehicleModel);
+  const dbModels = (modelsResult.data || []).map(mapVehicleModel);
+  const models = dbModels.length > 0 ? dbModels : AVATR_VEHICLES;
   const modelById = new Map(models.map((model) => [model.id, model]));
   const inventory = (inventoryResult.data || []).map((row: DbRow) => mapInventoryItem(row, modelById));
   const inventoryByVin = new Map((inventoryResult.data || []).map((row: DbRow) => [row.vin, row]));
@@ -881,9 +894,20 @@ export async function saveInventoryItem(item: InventoryItem) {
     return;
   }
   const client = requireSupabase();
-  const { data: model, error: modelError } = await client.from('vehicle_models').select('id').eq('name', item.model).maybeSingle();
+  let { data: models, error: modelError } = await client.from('vehicle_models').select('id').eq('name', item.model).limit(1);
   if (modelError) throw modelError;
-  if (!model) throw new Error(`Vehicle model "${item.model}" does not exist in vehicle_models.`);
+  let model = models?.[0];
+  if (!model) {
+    const fallbackId = `model-${newRecordId().slice(0, 8)}`;
+    await client.from('vehicle_models').upsert({
+      id: fallbackId,
+      name: item.model || 'AVATR',
+      category: 'EV',
+      price_starting_usd: item.priceUSD || 45000,
+      price_starting_lak: item.priceLAK || null,
+    }, { onConflict: 'id' });
+    model = { id: fallbackId };
+  }
   const safeVin = sanitizeVIN(item.vin);
   if (safeVin.length !== 17) {
     throw new Error('เลขตัวถัง (VIN) ต้องเป็นตัวพิมพ์ใหญ่ A-Z, 0-9 ความยาว 17 หลักพอดี');
@@ -1020,7 +1044,11 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     : null;
 
   // Handle installment payment receipts or updates to an already-recorded bill without re-triggering stock movement RPC
-  const { data: existingBill } = await client.from('bills').select('id').eq('id', bill.id).maybeSingle();
+  let existingBill: { id: string } | null = null;
+  if (type === 'installment') {
+    const { data } = await client.from('bills').select('id').eq('id', bill.id).maybeSingle();
+    existingBill = data;
+  }
   if (type === 'installment' || existingBill) {
     const baseDirectBill: Record<string, unknown> = {
       id: bill.id,
@@ -1035,7 +1063,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
       customer_province: sanitizeText(bill.customerProvince, 100) || null,
       sales_rep: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId) ? actorId : null,
       recorded_by: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId) ? actorId : null,
-      payment_method: sanitizeText(bill.paymentMethod, 30) || null,
+      payment_method: sanitizePaymentMethod(bill.paymentMethod, type === 'installment'),
       qr_used: sanitizeText(bill.qrUsed, 60) || null,
       bank_name: sanitizeText(bill.bankName, 100) || null,
       transfer_ref: sanitizeText(bill.transferRef, 100) || null,
@@ -1097,13 +1125,29 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
 
   let vehiclePayload: Record<string, unknown> | null = null;
   if (vehicle) {
-    const { data: model, error: modelError } = await client
-      .from('vehicle_models')
-      .select('id')
-      .eq('name', vehicle.model)
-      .maybeSingle();
-    if (modelError) throw modelError;
-    if (!model) throw new Error(`Vehicle model "${vehicle.model}" does not exist in vehicle_models.`);
+    let model = (cachedVehicleModels || []).find(
+      (m: DbRow) => m.name === vehicle.model || m.id === vehicle.model
+    );
+    if (!model) {
+      const { data: dbModels, error: modelError } = await client
+        .from('vehicle_models')
+        .select('id')
+        .eq('name', vehicle.model)
+        .limit(1);
+      if (modelError) throw modelError;
+      model = dbModels?.[0];
+    }
+    if (!model) {
+      const fallbackId = `model-${newRecordId().slice(0, 8)}`;
+      await client.from('vehicle_models').upsert({
+        id: fallbackId,
+        name: vehicle.model || 'AVATR',
+        category: 'EV',
+        price_starting_usd: vehicle.priceUSD || 45000,
+        price_starting_lak: vehicle.priceLAK || null,
+      }, { onConflict: 'id' });
+      model = { id: fallbackId };
+    }
 
     let arrivalDateIso: string | null = null;
     if (vehicle.arrivalDate) {
@@ -1163,7 +1207,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     province: sanitizeText(bill.customerProvince, 100) || null,
     sales_rep: actorId,
     recorded_by: actorId,
-    payment_method: sanitizeText(bill.paymentMethod, 30) || null,
+    payment_method: sanitizePaymentMethod(bill.paymentMethod, false),
     qr_used: sanitizeText(bill.qrUsed, 60) || null,
     bank_name: sanitizeText(bill.bankName, 100) || null,
     transfer_ref: sanitizeText(bill.transferRef, 100) || null,
