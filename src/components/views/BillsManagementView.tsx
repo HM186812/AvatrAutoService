@@ -139,17 +139,32 @@ export default function BillsManagementView({
   const totalImportValuationUSD = importBills.reduce((acc, curr) => acc + curr.netTotalUSD, 0);
   
   // Total collected from down payments & installment receipts
-  const totalInstallmentCollectionsUSD = installmentBills.reduce((acc, curr) => {
-    return acc + (curr.amountUSD || curr.downPaymentUSD || curr.netTotalUSD || 0);
-  }, 0);
+  const totalInstallmentCollectionsUSD = useMemo(() => {
+    return installmentBills.reduce((acc, curr) => {
+      const isReceipt = curr.billType === 'installment' || curr.type === 'installment';
+      if (isReceipt) {
+        return acc + (curr.netTotalUSD || curr.amountUSD || 0);
+      }
+      // For sales contract bills, only count the collected down payment
+      const fullPrice = curr.netTotalUSD || curr.amountUSD || curr.unitPriceUSD || 0;
+      const downUSD = curr.downPaymentUSD !== undefined && curr.downPaymentUSD !== null
+        ? curr.downPaymentUSD
+        : Math.round(fullPrice * ((curr.downPaymentPercent || 0) / 100));
+      return acc + downUSD;
+    }, 0);
+  }, [installmentBills]);
 
   // Total financed portfolio across installment bills and leads
   const totalFinancedLoanUSD = useMemo(() => {
-    return installmentBills.reduce((acc, curr) => {
-      const fullPrice = curr.netTotalUSD || curr.unitPriceUSD || 0;
-      const downUSD = curr.downPaymentUSD || Math.round(fullPrice * ((curr.downPaymentPercent || 30) / 100));
-      return acc + Math.max(0, fullPrice - downUSD);
-    }, 0);
+    return installmentBills
+      .filter(b => b.billType === 'sale' || (!b.billType && b.type !== 'installment'))
+      .reduce((acc, curr) => {
+        const fullPrice = curr.netTotalUSD || curr.unitPriceUSD || curr.amountUSD || 0;
+        const downUSD = curr.downPaymentUSD !== undefined && curr.downPaymentUSD !== null
+          ? curr.downPaymentUSD
+          : Math.round(fullPrice * ((curr.downPaymentPercent || 30) / 100));
+        return acc + Math.max(0, fullPrice - downUSD);
+      }, 0);
   }, [installmentBills]);
 
   // Filter bills based on search and selected filterType

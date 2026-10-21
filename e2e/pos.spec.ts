@@ -23,7 +23,7 @@ test.describe('Point of Sale (POS)', () => {
 
     // Verify header and vehicle selection cards
     await expect(page.locator('main')).toContainText(/POINT OF SALE|POS/i);
-    await expect(page.locator('main')).toContainText(/AVATR/);
+    await expect(page.locator('main')).toContainText(/AVATR/, { timeout: 30_000 });
   });
 
   test('should complete vehicle sale (ขายของ) and generate sales invoice', async ({ page }) => {

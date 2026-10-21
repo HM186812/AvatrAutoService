@@ -1442,6 +1442,7 @@ export async function deactivateStaffProfile(id: string) {
 
 export async function reactivateStaffProfile(id: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     return;
   }
   const client = requireSupabase();
@@ -1457,11 +1458,17 @@ export async function reactivateStaffProfile(id: string) {
     if (!rpcError) return;
   } catch {}
 
-  const { error } = await client
+  const { data, error } = await client
     .from('staff_profiles')
     .update({ status: 'active', updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
+
   if (error) throw error;
+  if (!data) {
+    throw new Error('Staff account could not be reactivated. Check your permissions and try again.');
+  }
 }
 
 export async function deleteStaffProfile(id: string) {

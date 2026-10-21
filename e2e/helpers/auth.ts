@@ -7,9 +7,15 @@ import dotenv from 'dotenv';
 const testEnvPath = path.resolve(process.cwd(), '.env.test');
 
 if (fs.existsSync(testEnvPath)) {
-  dotenv.config({ path: testEnvPath });
-} else {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+  const envContent = fs.readFileSync(testEnvPath, 'utf8');
+  const parsed = dotenv.parse(envContent);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+} else if (process.env.ALLOW_PROD_TEST !== 'true') {
+  throw new Error('E2E Safety Guard: .env.test not found. Refusing to fallback to .env.local without ALLOW_PROD_TEST=true');
 }
 
 function requiredTestEnv(name: string): string {
@@ -22,14 +28,27 @@ function requiredTestEnv(name: string): string {
   return value;
 }
 
+export function validateTestSupabaseOrigin(url: string) {
+  const allowed = process.env.E2E_ALLOWED_SUPABASE_ORIGIN;
+  if (!allowed || !allowed.trim()) return;
+  const targetOrigin = new URL(url).origin;
+  const allowedOrigin = new URL(allowed).origin;
+  if (targetOrigin !== allowedOrigin) {
+    throw new Error(
+      `[E2E SAFETY HALT] Target Supabase URL origin (${targetOrigin}) does not match E2E_ALLOWED_SUPABASE_ORIGIN (${allowedOrigin})`
+    );
+  }
+}
+
 export const TEST_CREDENTIALS = {
   email: requiredTestEnv('E2E_ADMIN_EMAIL'),
   password: requiredTestEnv('E2E_ADMIN_PASSWORD'),
 };
 
 export function getSupabaseClient() {
-  const url = process.env.VITE_SUPABASE_URL || '';
-  const key = process.env.VITE_SUPABASE_ANON_KEY || '';
+  const url = requiredTestEnv('VITE_SUPABASE_URL');
+  const key = requiredTestEnv('VITE_SUPABASE_ANON_KEY');
+  validateTestSupabaseOrigin(url);
   return createClient(url, key);
 }
 
@@ -54,6 +73,7 @@ export async function loginAsAdmin(page: Page) {
 
   // Wait for sidebar to appear
   await expect(page.locator('aside')).toBeVisible({ timeout: 35_000 });
+  await page.waitForLoadState('networkidle').catch(() => {});
 }
 
 export async function ensureSeedData() {

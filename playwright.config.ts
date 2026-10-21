@@ -5,10 +5,15 @@ import path from 'path';
 
 // Verify .env.test to prevent accidental test mutation on Production DB
 const envTestPath = path.resolve(process.cwd(), '.env.test');
-const hasEnvTest = fs.existsSync(envTestPath);
 
-if (hasEnvTest) {
-  dotenv.config({ path: envTestPath });
+if (fs.existsSync(envTestPath)) {
+  const envContent = fs.readFileSync(envTestPath, 'utf8');
+  const parsed = dotenv.parse(envContent);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
 } else if (process.env.ALLOW_PROD_TEST !== 'true') {
   console.warn(
     '\n⚠️  [PLAYWRIGHT E2E SAFETY GUARD] Missing .env.test file!\n' +
@@ -18,6 +23,19 @@ if (hasEnvTest) {
     'Or run with ALLOW_PROD_TEST=true if you explicitly intend to test against the current environment.\n'
   );
   throw new Error('E2E Test Aborted: .env.test not found. Run with .env.test or ALLOW_PROD_TEST=true');
+}
+
+// Origin guard to prevent executing tests against unintended databases
+const testSupabaseUrl = process.env.VITE_SUPABASE_URL;
+const allowedOrigin = process.env.E2E_ALLOWED_SUPABASE_ORIGIN;
+if (testSupabaseUrl && allowedOrigin && allowedOrigin.trim()) {
+  const targetOrigin = new URL(testSupabaseUrl).origin;
+  const expectedOrigin = new URL(allowedOrigin).origin;
+  if (targetOrigin !== expectedOrigin) {
+    throw new Error(
+      `[E2E SAFETY HALT] Target Supabase URL origin (${targetOrigin}) does not match E2E_ALLOWED_SUPABASE_ORIGIN (${expectedOrigin})`
+    );
+  }
 }
 
 // Check if existing cached Chromium or default browser is available

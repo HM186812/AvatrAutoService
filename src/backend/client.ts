@@ -58,7 +58,7 @@ export const isOfflineDemoEnabled =
   !isSupabaseConfigured;
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabasePublishableKey, {
+  ? createClient(supabaseUrl!, supabasePublishableKey!, {
       auth: {
         autoRefreshToken: true,
         persistSession: true,
@@ -78,7 +78,7 @@ export function createStatelessSupabaseClient() {
   if (!isSupabaseConfigured) {
     throw new Error('Supabase is not configured.');
   }
-  return createClient(supabaseUrl, supabasePublishableKey, {
+  return createClient(supabaseUrl!, supabasePublishableKey!, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

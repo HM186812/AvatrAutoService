@@ -250,7 +250,16 @@ export default function App() {
     if (!isOfflineDemoEnabled) {
       try {
         localStorage.removeItem('avatr_cached_backend_data');
-        localStorage.removeItem('avatr_offline_active_user');
+        const offlineKeysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('avatr_offline_') || key.startsWith('offline_'))) {
+            offlineKeysToRemove.push(key);
+          }
+        }
+        for (const key of offlineKeysToRemove) {
+          localStorage.removeItem(key);
+        }
       } catch {}
     }
 

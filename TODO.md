@@ -1,6 +1,6 @@
 # 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 13 จุด + งานค้าง)
-> **วันที่อัปเดตล่าสุด**: 2026-10-21 10:30  
-> **สถานะ**: E2E ผ่าน 100% (19/19 tests), Audit ครบ 34/35 จุด, Push ขึ้น GitHub `main` เรียบร้อยแล้ว (commit `93b880a`)
+> **วันที่อัปเดตล่าสุด**: 2026-10-21 11:20  
+> **สถานะ**: E2E ผ่าน 100% (19/19 tests), ปิดงานหมวด 9 ครบถ้วน (39/40 จุด, เหลือข้อ 35 รอยืนยันสลับบัญชี Supabase ใหม่)
 
 ---
 
@@ -186,4 +186,42 @@
 
 - [ ] **35. อัปเดต `.env.test` หลังผู้ใช้เปลี่ยนบัญชี Supabase**
   - **สถานะ**: ⏳ รอผู้ใช้เปลี่ยนบัญชีก่อน
+
+---
+
+## 🛡️ หมวดที่ 9: E2E Environment Isolation, ยอดเงินผ่อน & Fallback Audit (Session 2026-10-21 บ่าย)
+
+> **วัตถุประสงค์**: ป้องกัน E2E ยิงโดน Production, แก้ไขสูตรคำนวณเงินรับผ่อน และปิดช่องโหว่ fallback ตรวจสถานะพนักงาน
+
+- [x] **36. บังคับ E2E Isolation และ Guard ป้องกันการรันโดน Production DB**
+  - **ไฟล์**: `playwright.config.ts`, `e2e/helpers/auth.ts`, `.env.test.example`
+  - **การแก้ไข**: 
+    1. ใส่ตัวแปร `VITE_SUPABASE_URL` และ `VITE_SUPABASE_ANON_KEY` กลับเข้า `.env.test.example`
+    2. ใน `playwright.config.ts` บังคับอ่าน `.env.test` โดยตรงด้วย `fs.readFileSync` และตัด fallback ไป `.env.local`
+    3. เพิ่มตัวแปร `E2E_ALLOWED_SUPABASE_ORIGIN` ตรวจ origin ป้องกันการยิง DB ที่ไม่ใช่ staging/test
+    4. ใน `e2e/helpers/auth.ts` เปลี่ยน `getSupabaseClient()` ให้อ่านจาก `requiredTestEnv()` พร้อมเช็ก `validateTestSupabaseOrigin()`
+  - **สถานะ**: ✅ สำเร็จ — E2E Isolation และ Origin Guard พร้อม E2E Suite ผ่าน 19/19 tests
+
+- [x] **37. แก้ไขสูตรคำนวณยอดเงินผ่อนในหน้า BillsManagementView ไม่ให้นับราคารถเต็มคัน**
+  - **ไฟล์**: `src/components/views/BillsManagementView.tsx`
+  - **ปัญหา**: เดิมนำ `amountUSD` (ซึ่งเป็นราคาเต็มคัน) มาบวก ทำให้ยอดรับเงินผ่อนบวมเกินจริง
+  - **การแก้ไข**: แยกบิลสัญญา `sale` (นับเฉพาะเงินดาวน์ `downPaymentUSD`) ออกจากใบเสร็จค่างวด `installment` (นับเงินงวดจริง `netTotalUSD`) พร้อมคำนวณยอดเงินต้นจัดไฟแนนซ์เฉพาะสัญญาขายหลัก
+  - **สถานะ**: ✅ สำเร็จ — ตัวเลขยอดรับเงินผ่อนและเงินต้นสัญญาถูกต้องตรงตามความเป็นจริง
+
+- [x] **38. เสริมความปลอดภัย `reactivateStaffProfile()` direct-table fallback**
+  - **ไฟล์**: `src/backend/data.ts` (ใน `reactivateStaffProfile`)
+  - **ปัญหา**: fallback ตรงไปยังตาราง `staff_profiles` ตรวจแค่ `error` ไม่ได้ตรวจว่ามีแถวถูกอัปเดตจริงหรือไม่
+  - **การแก้ไข**: เติม `.select('id').maybeSingle()` และเช็ก `if (!data) throw new Error(...)` พร้อมตรวจ `requireOfflineDemo()` เพื่อยืนยันการเปิดใช้งานจริง
+  - **สถานะ**: ✅ สำเร็จ — ป้องกันการ bypass หรือ silent fail เมื่อ update ไม่สำเร็จ
+
+- [x] **39. กวาดล้างคีย์ Offline เก่าทั้งหมดออกจาก LocalStorage เมื่อปิด Demo Mode**
+  - **ไฟล์**: `src/App.tsx`
+  - **การแก้ไข**: วนลูปเคลียร์คีย์ที่ขึ้นต้นด้วย `avatr_offline_` และ `offline_` ทั้งหมดเมื่อ `!isOfflineDemoEnabled` ป้องกันข้อมูล Demo ค้างในเบราว์เซอร์
+  - **สถานะ**: ✅ สำเร็จ — เคลียร์ mock data ทุกตัวเมื่อเข้าใช้งาน Production mode
+
+- [x] **40. ปรับคำอธิบาย Offline Mode ใน README ให้ระบุว่าเป็นโหมดทดสอบเท่านั้น**
+  - **ไฟล์**: `README.md`
+  - **การแก้ไข**: แก้ไขข้อความจาก "100% Offline LocalStorage" ให้ระบุชัดเจนว่าเป็น Dev/Demo Mode ห้ามนำไปใช้กับข้อมูลลูกค้าจริง พร้อมระบุข้อกำหนดด้านความปลอดภัย
+  - **สถานะ**: ✅ สำเร็จ — ปรับปรุงเอกสารครบถ้วนชัดเจน
+
 
