@@ -18,6 +18,11 @@ const isPlaceholder = (val?: string) =>
 
 function assertNotServiceRoleKey(key?: string) {
   if (!key || isPlaceholder(key)) return;
+  if (key.startsWith('sb_secret_')) {
+    throw new Error(
+      'SECURITY HALT: A Supabase secret key must never be used in the browser.',
+    );
+  }
   try {
     const parts = key.split('.');
     if (parts.length === 3) {
@@ -42,6 +47,11 @@ export const isSupabaseConfigured =
   !FORCE_OFFLINE_DATABASE &&
   !isPlaceholder(supabaseUrl) &&
   !isPlaceholder(supabasePublishableKey);
+
+export const isOfflineDemoEnabled =
+  import.meta.env.DEV &&
+  import.meta.env.VITE_ENABLE_OFFLINE_DEMO === 'true' &&
+  !isSupabaseConfigured;
 
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabasePublishableKey, {

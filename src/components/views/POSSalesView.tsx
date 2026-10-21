@@ -539,7 +539,7 @@ export default function POSSalesView({
         engineNumber: selectedVehicle.engineNumber || matchedLead.engineNumber,
         plateNumber: selectedVehicle.plateNumber || matchedLead.plateNumber,
         color: selectedVehicle.color || matchedLead.color,
-        status: 'delivered',
+        status: matchedLead.status || 'negotiation',
         lastFollowUp: saleDateTime,
       };
     } else {
@@ -558,7 +558,7 @@ export default function POSSalesView({
         engineNumber: selectedVehicle.engineNumber,
         plateNumber: selectedVehicle.plateNumber,
         color: selectedVehicle.color,
-        status: 'delivered',
+        status: 'negotiation',
         priority: 'high',
         notes: `ຊື້ລົດຜ່ານ POS ໃບບິນ ${invoiceNum} | VIN: ${selectedVehicle.vin}`,
         assignedTo: currentUser?.name || 'Admin',
@@ -659,6 +659,8 @@ export default function POSSalesView({
       if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
       await saveLead(customerLead, currentUser.id);
       await saveBillRecord(newBill, currentUser.id);
+      customerLead.status = 'delivered';
+      await saveLead(customerLead, currentUser.id);
     } catch (error) {
       const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Sale could not be saved.';
       if (msg.includes('already has a stock-out movement') || msg.includes('already sold') || msg.includes('not available')) {

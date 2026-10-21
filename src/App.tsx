@@ -13,7 +13,7 @@ import {
 } from './types';
 import { translations } from './data/translations';
 import { getModelStockSummaries } from './data/stockSummary';
-import { isSupabaseConfigured, supabase } from './backend/client';
+import { isOfflineDemoEnabled, isSupabaseConfigured, supabase } from './backend/client';
 import {
   clearStaffCache,
   deleteBill,
@@ -169,26 +169,16 @@ export default function App() {
     createdAt: '',
   };
 
-  const getCachedArray = <T,>(key: string): T[] => {
-    try {
-      const raw = localStorage.getItem('avatr_cached_backend_data');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed[key])) return parsed[key];
-      }
-    } catch {}
-    return [];
-  };
 
-  const [users, setUsers] = useState<SystemUser[]>(() => getCachedArray<SystemUser>('users'));
+  const [users, setUsers] = useState<SystemUser[]>([]);
   const [currentUser, setCurrentUser] = useState<SystemUser>(FALLBACK_EMPTY_USER);
-  const [leads, setLeads] = useState<Lead[]>(() => getCachedArray<Lead>('leads'));
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => getCachedArray<InventoryItem>('inventory'));
-  const [services, setServices] = useState<ServiceAppointment[]>(() => getCachedArray<ServiceAppointment>('services'));
-  const [testDrives, setTestDrives] = useState<TestDriveBooking[]>(() => getCachedArray<TestDriveBooking>('testDrives'));
-  const [stockLogs, setStockLogs] = useState<StockLogRecord[]>(() => getCachedArray<StockLogRecord>('stockLogs'));
-  const [bills, setBills] = useState<InvoiceBillRecord[]>(() => getCachedArray<InvoiceBillRecord>('bills'));
-  const [vehicles, setVehicles] = useState<VehicleModel[]>(() => getCachedArray<VehicleModel>('vehicles'));
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [services, setServices] = useState<ServiceAppointment[]>([]);
+  const [testDrives, setTestDrives] = useState<TestDriveBooking[]>([]);
+  const [stockLogs, setStockLogs] = useState<StockLogRecord[]>([]);
+  const [bills, setBills] = useState<InvoiceBillRecord[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleModel[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [backendError, setBackendError] = useState<string | null>(null);
@@ -203,19 +193,25 @@ export default function App() {
     setStockLogs(data.stockLogs);
     setBills(data.bills);
     setVehicles(data.vehicles);
-    try {
-      localStorage.setItem('avatr_cached_backend_data', JSON.stringify({
-        users: data.users,
-        leads: data.leads,
-        inventory: data.inventory,
-        services: data.services,
-        testDrives: data.testDrives,
-        stockLogs: data.stockLogs,
-        bills: data.bills,
-        vehicles: data.vehicles,
-      }));
-    } catch {
-      // ignore quota or private mode errors
+    if (isOfflineDemoEnabled) {
+      try {
+        localStorage.setItem('avatr_cached_backend_data', JSON.stringify({
+          users: data.users,
+          leads: data.leads,
+          inventory: data.inventory,
+          services: data.services,
+          testDrives: data.testDrives,
+          stockLogs: data.stockLogs,
+          bills: data.bills,
+          vehicles: data.vehicles,
+        }));
+      } catch {
+        // ignore quota or private mode errors
+      }
+    } else {
+      try {
+        localStorage.removeItem('avatr_cached_backend_data');
+      } catch {}
     }
     if (data.settings && typeof data.settings === 'object') {
       const settings = data.settings as Record<string, unknown>;
@@ -251,8 +247,21 @@ export default function App() {
       }
     } catch {}
 
+    if (!isOfflineDemoEnabled) {
+      try {
+        localStorage.removeItem('avatr_cached_backend_data');
+        localStorage.removeItem('avatr_offline_active_user');
+      } catch {}
+    }
+
     if (!supabase || !isSupabaseConfigured) {
       setBackendError(null);
+      if (!isOfflineDemoEnabled) {
+        setIsLoggedIn(false);
+        setCurrentUser(FALLBACK_EMPTY_USER);
+        setIsAuthLoading(false);
+        return;
+      }
       void refreshBackendData();
       const savedOfflineUser = localStorage.getItem('avatr_offline_active_user');
       if (savedOfflineUser) {

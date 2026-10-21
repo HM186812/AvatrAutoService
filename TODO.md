@@ -138,3 +138,52 @@
   - **การแก้ไข**: เปลี่ยนจากการใช้ `.maybeSingle()` เป็น `.limit(1)` ทั้งใน `saveInventoryItem` และ `saveBillRecord` พร้อมทดสอบ `stock.spec.ts` ผ่าน 2/2 tests
 - [x] **26. Commit ทุก files ที่ค้างและ Push ขึ้น GitHub**
 
+---
+
+## 🔐 หมวดที่ 8: Security Hardening (Branch `fix/security-and-sale-consistency`) — Session 2026-10-21
+
+> **วัตถุประสงค์**: ปิดช่องโหว่ก่อนนำขึ้น production กับข้อมูลลูกค้าจริง
+
+- [x] **27. ลบ Hardcoded E2E Credentials ออกจากโค้ด**
+  - **ไฟล์**: `e2e/helpers/auth.ts`, `.env.test.example`
+  - **การแก้ไข**: อ่านจาก `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` via `requiredTestEnv()` แทน hardcode
+  - **สถานะ**: ✅ แก้แล้ว — พร้อม commit
+
+- [x] **28. Build-time Secret Key Validation**
+  - **ไฟล์**: `vite.config.ts`
+  - **การแก้ไข**: เพิ่ม `validateClientEnv()` ตรวจ JWT หาก `sb_secret_` หรือ `service_role` อยู่ใน anon key → build fail ทันที
+  - **สถานะ**: ✅ แก้แล้ว — พร้อม commit
+
+- [x] **29. Runtime Service-Role Key Guard**
+  - **ไฟล์**: `src/backend/client.ts`
+  - **การแก้ไข**: `assertNotServiceRoleKey()` + `isOfflineDemoEnabled` flag (DEV + env var + !Supabase)
+  - **สถานะ**: ✅ แก้แล้ว — พร้อม commit
+
+- [x] **30. Restrictive Storage Policy**
+  - **ไฟล์**: `supabase/migrations/20261021093000_harden_asset_write_scopes.sql`
+  - **การแก้ไข**: Policy `AS RESTRICTIVE` กำกับ `qr/` เฉพาะ `canUploadQR`, `vehicles/` เฉพาะ `canEditInventory`
+  - **สถานะ**: ✅ ไฟล์สร้างแล้ว — พร้อม commit + push
+
+- [x] **31. ปิด Offline Auto-Admin — `offlineStore.ts` + `data.ts`**
+  - **ไฟล์**: `src/backend/offlineStore.ts`, `src/backend/data.ts`
+  - **การแก้ไข**: `readStorage`/`writeStorage` no-op ถ้า `!isOfflineDemoEnabled`; auth/write paths require `requireOfflineDemo()` ครบทุกฟังก์ชัน
+  - **สถานะ**: ✅ แก้ครบทุกฟังก์ชันแล้ว — พร้อม commit
+
+- [x] **32. ปิด Demo Login UI + ล้าง PII Cache ใน App.tsx/LoginView.tsx**
+  - **ไฟล์**: `src/components/auth/LoginView.tsx`, `src/App.tsx`
+  - **การแก้ไข**: ซ่อนปุ่ม Demo เมื่อ `!isOfflineDemoEnabled`; ลบ `getCachedArray`; ล้าง `avatr_cached_backend_data` และ `avatr_offline_active_user` เมื่อปิดโหมด demo
+  - **สถานะ**: ✅ แก้ครบถ้วนแล้ว — พร้อม commit
+
+- [x] **33. POS Consistency Fix — ไม่ mark "delivered" ก่อนบิลบันทึกสำเร็จ**
+  - **ไฟล์**: `src/components/views/POSSalesView.tsx`
+  - **การแก้ไข**: Set `status = 'contract_signed'` ก่อน `saveBillRecord`, อัปเดตเป็น `'delivered'` เฉพาะหลัง `saveBillRecord` สำเร็จ
+  - **สถานะ**: ✅ แก้ไขเรียบร้อยแล้ว — พร้อม commit
+
+- [x] **34. Offline Stock-In Fix — ไม่ mark `sold` ทุก bill type**
+  - **ไฟล์**: `src/backend/offlineStore.ts`
+  - **การแก้ไข**: เช็ก `bill.billType === 'sale' || bill.type === 'sale'` ก่อน set `item.status = 'sold'`
+  - **สถานะ**: ✅ แก้ไขเรียบร้อยแล้ว — พร้อม commit
+
+- [ ] **35. อัปเดต `.env.test` หลังผู้ใช้เปลี่ยนบัญชี Supabase**
+  - **สถานะ**: ⏳ รอผู้ใช้เปลี่ยนบัญชีก่อน
+

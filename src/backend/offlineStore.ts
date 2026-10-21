@@ -16,6 +16,7 @@ import {
   INITIAL_TEST_DRIVES,
 } from '../data/mockData';
 import type { BackendData } from './data';
+import { isOfflineDemoEnabled } from './client';
 
 const STORAGE_KEY_PREFIX = 'avatr_offline_';
 
@@ -133,6 +134,8 @@ export const DEFAULT_OFFLINE_INVENTORY: InventoryItem[] = [
 ];
 
 function readStorage<T>(key: string, defaultValue: T): T {
+  if (!isOfflineDemoEnabled) return defaultValue;
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PREFIX + key);
     if (!raw) return defaultValue;
@@ -143,6 +146,8 @@ function readStorage<T>(key: string, defaultValue: T): T {
 }
 
 function writeStorage<T>(key: string, value: T): void {
+  if (!isOfflineDemoEnabled) return;
+
   try {
     localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(value));
   } catch (e) {
@@ -310,7 +315,8 @@ export function offlineSaveBill(bill: InvoiceBillRecord): void {
   writeStorage('bills', bills);
 
   // If vehicle sold, deduct inventory stock
-  if (bill.vin) {
+  const isSaleBill = bill.billType === 'sale' || bill.type === 'sale';
+  if (isSaleBill && bill.vin) {
     const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
     const item = inventory.find((i) => i.vin === bill.vin);
     if (item) {

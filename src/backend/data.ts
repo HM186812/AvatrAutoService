@@ -10,7 +10,17 @@ import type {
   UserRole,
   VehicleModel,
 } from '../types';
-import { isSupabaseConfigured, requireSupabase } from './client';
+import {
+  isOfflineDemoEnabled,
+  isSupabaseConfigured,
+  requireSupabase,
+} from './client';
+
+function requireOfflineDemo() {
+  if (!isOfflineDemoEnabled) {
+    throw new Error('Supabase is not configured. Offline Demo is disabled.');
+  }
+}
 import {
   DEFAULT_OFFLINE_USERS,
   getOfflineBackendData,
@@ -118,6 +128,7 @@ export function clearStaffCache() {
 
 export async function getSignedInStaff(userId: string): Promise<SystemUser> {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     return offlineGetActiveUser() || DEFAULT_OFFLINE_USERS[0];
   }
   if (activeStaffPromise?.userId === userId) {
@@ -159,6 +170,7 @@ export async function getSignedInStaff(userId: string): Promise<SystemUser> {
 
 export async function signInStaff(email: string, password: string, captchaToken?: string): Promise<SystemUser> {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     return offlineSignIn(email);
   }
   const client = requireSupabase();
@@ -186,6 +198,7 @@ export async function signUpStaff(
   captchaToken?: string
 ): Promise<SystemUser> {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     return offlineSignUp(email, name, phone);
   }
   const client = requireSupabase();
@@ -217,6 +230,7 @@ export async function createStaffAccount(input: {
   password?: string;
 }): Promise<SystemUser> {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     const isAdmin = input.role === 'admin' || input.role === 'super_admin';
     const newUser: SystemUser = {
       id: `offline-user-${Date.now()}`,
@@ -457,6 +471,7 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
 
 export async function loadBackendData(): Promise<BackendData> {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     return getOfflineBackendData();
   }
   const client = requireSupabase();
@@ -611,6 +626,7 @@ export async function removeDealershipAsset(path: string) {
 
 export async function saveServiceAppointment(appointment: ServiceAppointment, actorId: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineSaveService(appointment);
     return;
   }
@@ -646,6 +662,7 @@ export async function saveServiceAppointment(appointment: ServiceAppointment, ac
 
 export async function saveTestDriveBooking(booking: TestDriveBooking, actorId: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineSaveTestDrive(booking);
     return;
   }
@@ -689,6 +706,7 @@ export async function saveDealershipSettingsPatch(patch: Record<string, unknown>
 
 export async function saveLead(lead: Lead, assignedStaffId: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineSaveLead(lead);
     return;
   }
@@ -854,6 +872,7 @@ export async function saveLead(lead: Lead, assignedStaffId: string) {
 export async function updateLeadStatus(id: string, status: Lead['status']) {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
   if (!isSupabaseConfigured || !isUuid) {
+    requireOfflineDemo();
     const data = getOfflineBackendData();
     const target = data.leads.find((l) => l.id === id);
     if (target) {
@@ -875,6 +894,7 @@ export async function updateLeadStatus(id: string, status: Lead['status']) {
 export async function deleteLead(id: string) {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
   if (!isSupabaseConfigured || !isUuid) {
+    requireOfflineDemo();
     offlineDeleteLead(id);
     return;
   }
@@ -890,6 +910,7 @@ export async function deleteLead(id: string) {
 
 export async function saveInventoryItem(item: InventoryItem) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineSaveInventoryItem(item);
     return;
   }
@@ -952,6 +973,7 @@ export async function saveInventoryItem(item: InventoryItem) {
 
 export async function deleteInventoryItem(vin: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineDeleteInventoryItem(vin);
     return;
   }
@@ -982,6 +1004,7 @@ export async function deleteInventoryItem(vin: string) {
 
 export async function saveVehicleModel(model: VehicleModel, createdBy: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineSaveVehicleModel(model);
     return;
   }
@@ -1015,6 +1038,7 @@ export async function saveVehicleModel(model: VehicleModel, createdBy: string) {
 
 export async function deleteVehicleModel(id: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineDeleteVehicleModel(id);
     return;
   }
@@ -1030,6 +1054,7 @@ export async function deleteVehicleModel(id: string) {
 
 export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, vehicle?: InventoryItem) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineSaveBill(bill);
     return;
   }
@@ -1292,6 +1317,7 @@ export async function uploadPaymentSlip(file: File) {
 
 export async function saveStaffProfile(user: SystemUser) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineSaveUser(user);
     return user;
   }
@@ -1343,6 +1369,7 @@ export async function saveStaffProfile(user: SystemUser) {
 
 export async function deactivateStaffProfile(id: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineDeactivateUser(id);
     return;
   }
@@ -1400,6 +1427,7 @@ export async function reactivateStaffProfile(id: string) {
 
 export async function deleteStaffProfile(id: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineDeleteUser(id);
     return;
   }
@@ -1531,6 +1559,7 @@ export async function updateTestDriveBooking(booking: TestDriveBooking) {
 
 export async function deleteBill(id: string) {
   if (!isSupabaseConfigured) {
+    requireOfflineDemo();
     offlineDeleteBill(id);
     return;
   }

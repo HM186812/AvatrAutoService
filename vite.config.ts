@@ -1,9 +1,55 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, loadEnv} from 'vite';
 
-export default defineConfig(() => {
+function getJwtRole(value: string): string | undefined {
+  const parts = value.split('.');
+  if (parts.length !== 3) return undefined;
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(parts[1], 'base64url').toString('utf8'),
+    );
+
+    return typeof payload.role === 'string'
+      ? payload.role
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function validateClientEnv(env: Record<string, string>): void {
+  for (const [name, rawValue] of Object.entries(env)) {
+    const value = rawValue.trim();
+
+    if (
+      value.includes('sb_secret_') ||
+      getJwtRole(value) === 'service_role'
+    ) {
+      // ห้ามใส่ค่าของ key ลงใน error หรือ log
+      throw new Error(`SECURITY HALT: Secret key found in ${name}`);
+    }
+  }
+
+  const key = env.VITE_SUPABASE_ANON_KEY?.trim();
+
+  if (
+    env.VITE_FORCE_OFFLINE !== 'true' &&
+    key &&
+    !key.startsWith('sb_publishable_') &&
+    getJwtRole(key) !== 'anon'
+  ) {
+    throw new Error(
+      'VITE_SUPABASE_ANON_KEY must be a publishable key or legacy anon key.',
+    );
+  }
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
+  validateClientEnv(env);
   return {
     plugins: [react(), tailwindcss()],
     resolve: {

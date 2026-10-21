@@ -4,19 +4,27 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 
-// Respect existing environment or .env.test first before falling back to .env.local
-if (!process.env.VITE_SUPABASE_URL) {
-  const envTestPath = path.resolve(process.cwd(), '.env.test');
-  if (fs.existsSync(envTestPath)) {
-    dotenv.config({ path: envTestPath });
-  } else {
-    dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+const testEnvPath = path.resolve(process.cwd(), '.env.test');
+
+if (fs.existsSync(testEnvPath)) {
+  dotenv.config({ path: testEnvPath });
+} else {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+}
+
+function requiredTestEnv(name: string): string {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`Missing test environment variable: ${name}`);
   }
+
+  return value;
 }
 
 export const TEST_CREDENTIALS = {
-  email: 'test01@gmail.com',
-  password: '123456',
+  email: requiredTestEnv('E2E_ADMIN_EMAIL'),
+  password: requiredTestEnv('E2E_ADMIN_PASSWORD'),
 };
 
 export function getSupabaseClient() {
