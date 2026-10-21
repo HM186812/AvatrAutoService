@@ -21,6 +21,10 @@
 4. **[ສ່ວນທີ 4: ຄູ່ມືການຕິດຕັ້ງ ແລະ Deploy ເທິງ Cloudflare Pages (Part 4: Cloudflare Pages Deployment & Edge Infrastructure)](./04_cloudflare_deployment_guide.md)**
    - ຂັ້ນຕອນການ Deploy ຜ່ານ Cloudflare Dashboard (GUI) ແລະ Wrangler CLI
    - ການຕັ້ງຄ່າ Environment Variables, Turnstile Bot Defense, CSP Headers, ແລະ SPA Fallback
+5. **[ສ່ວນທີ 5: ສະຖາປັດຕະຍະກຳ RPCs ແລະ RLS Policies (Part 5: RPCs & Row Level Security)](./05_rpc_and_rls_policies_lo.md)**
+   - ລາຍລະອຽດ Stored Procedures/RPCs ທັງໝົດ: `record_pos_sale`, `record_vehicle_bill`, `delete_vehicle_bill`, `delete_staff_profile`
+   - ກົດລະບຽບ RLS Policies ທັງ 11 ຕາຕະລາງ ແລະ Private Storage Buckets
+   - ຕາຕະລາງສິດທິ RBAC Matrix 5 ບົດບາດ ແລະ ຄຳແນະນຳການບຳລຸງຮັກສາ
 
 ---
 
@@ -65,6 +69,7 @@ flowchart TB
 | **ສ່ວນທີ 2 (Part 2)** | [02_database_schema.md](./02_database_schema.md) | PostgreSQL Schema, ERD, Data Dictionary, Stored Procedures, Migrations, Backup SOP | ✅ ສຳເລັດ (Ready) |
 | **ສ່ວນທີ 3 (Part 3)** | [03_cybersecurity.md](./03_cybersecurity.md) | Zero-Leak Guard, RLS Matrix, RBAC, Definer Hardening, Turnstile, OWASP Top 10 | ✅ ສຳເລັດ (Ready) |
 | **ສ່ວນທີ 4 (Part 4)** | [04_cloudflare_deployment_guide.md](./04_cloudflare_deployment_guide.md) | ຄູ່ມື Deploy Cloudflare Pages (GUI + CLI), Turnstile Setup, Path ສຳຄັນ, ແກ້ໄຂ Error | ✅ ສຳເລັດ (Ready) |
+| **ສ່ວນທີ 5 (Part 5)** | [05_rpc_and_rls_policies_lo.md](./05_rpc_and_rls_policies_lo.md) | RPCs, Atomic POS Sale, RLS Policies 11 ຕາຕະລາງ, Storage Security, RBAC Matrix | ✅ ສຳເລັດ (Ready) |
 
 ---
 
