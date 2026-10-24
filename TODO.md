@@ -1,6 +1,6 @@
-# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 13 จุด + งานค้าง)
-> **วันที่อัปเดตล่าสุด**: 2026-10-22 10:50  
-> **สถานะ**: E2E 25/25 tests ผ่าน 100%, Audit ครบ 40 จุด, เพิ่มหมวดที่ 10 (Frontend/App Optimization) และหมวดที่ 11 (Supabase Database Optimization) ครบ 54 ข้อ
+# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 64 ข้อ + คู่มือย้ายเครื่องใหม่)
+> **วันที่อัปเดตล่าสุด**: 2026-10-24 14:20 (+07:00)  
+> **สถานะ**: ย้ายฐานข้อมูลไป Singapore (`ap-southeast-1`) สำเร็จ 100%, E2E Tests ผ่านครบทุกโมดูล, ครบ 64 ข้อ พร้อมคู่มือย้ายเครื่องใหม่และ Checklist ตรวจรับงาน (หมวดที่ 12)
 
 ---
 
@@ -306,6 +306,96 @@
 - [x] **58. ทดสอบความถูกต้องด้วย E2E Test Suite (Comprehensive Verification)**
   - **ไฟล์เป้าหมาย**: `e2e/storage-and-void-bill.spec.ts`, `e2e/test-account-creation.spec.ts`, `e2e/bills.spec.ts`
   - **ผลลัพธ์**: ผ่านการทดสอบครบ 100% ทั้งการบีบอัด WebP ในเบราว์เซอร์, การสร้างบัญชีผู้ใช้ใหม่, และการจัดการบิล
+
+- [x] **59. แก้ไขปัญหาคอขวด 17 วินาทีบน Tokyo Instance (Tokyo Latency Root Cause Fix)**
+  - **สาเหตุรากเหง้า**: ตรวจพบรูปรถยนต์โมเดลทดสอบใน `vehicle_models.hero_image` บันทึกเป็น Uncompressed Base64 Raw Data ขนาดใหญ่ถึง 11.5 MB ส่งผลให้ RPC `get_showroom_initial_data()` ดึงข้อมูลข้าม WAN นานถึง 16.2 วินาที
+  - **การแก้ไข**: 
+    1. สร้าง Migration `20261024124500_strip_base64_from_showroom_rpc.sql` กรองและตัดรูปภาพ Base64 เกิน 2000 ตัวอักษรออก
+    2. ทำ Stale-While-Revalidate และ Cache ข้อมูลสิทธิ์ผู้ใช้ใน `src/backend/data.ts`
+  - **ผลลัพธ์**: ความเร็ว RPC ลดจาก 16,245 ms เหลือ 568 ms (เร็วขึ้น 28 เท่า) และเวลา Login ลดจาก 17 วินาทีเหลือ 2.11 วินาที
+
+- [x] **60. สำรองข้อมูลครบ 100% ทุกตารางจาก Tokyo Database (Zero Data Loss Backup)**
+  - **ไฟล์สำรอง**: `docs/backup/tokyo_backup_data.json` และ `docs/backup/tokyo_backup_inserts.sql`
+  - **ผลลัพธ์**: สำรองข้อมูลครบ 11 ตาราง (ลูกค้า 13 คน, บิล 43 ใบ, รถยนต์ 24 คัน, สต็อก 43 รายการ) พร้อมตั้งค่า `.gitignore` ป้องกันข้อมูลรั่วไหล
+
+- [x] **61. จัดเตรียม Supabase Project ใหม่ที่ Singapore (`ap-southeast-1`)**
+  - **โปรเจกต์**: `AvatrAutoService-SG` (`ivybsqtzrfwdamibbumc`) ภายใต้องค์กร `Avatr-Singapore` (`egmrsctqcsvfupufwsdz`) ของบัญชี `pheuanggeogisid@gmail.com`
+  - **ผลลัพธ์**: รัน `supabase db push` ซิงก์ครบทั้ง 28 Schema Migrations พร้อม Deploy Edge Functions `create-staff` และ `manage-staff`
+
+- [x] **62. ย้ายบัญชีผู้ใช้ (Auth Users Migration) และ ข้อมูลทั้งหมดขึ้น Singapore (Zero Data Loss Restore)**
+  - **Auth Accounts**: ย้ายบัญชีผู้ใช้ครบ 16 บัญชีจาก `auth.users` & `auth.identities` พร้อม Bcrypt Password Hash เดิม (รวม `test01@gmail.com`, `test02@gmail.com`, `saysana3003@gmail.com`, `sengouthai.sonsivilay@gmail.com`) สามารถล็อกอินได้ทันทีโดยไม่ต้องรีเซ็ตรหัสผ่าน
+  - **Public Data**: Restore ข้อมูลทั้ง 11 ตารางครบถ้วน 100% ตัวเลขแถวตรงกันทุกตาราง
+  - **Storage & QR**: ซิงก์ไฟล์ QR Code ร้านค้าใน `dealership-assets` ไปยัง Singapore และอัปเดต URL ใน `dealership_settings`
+
+- [x] **63. ซิงก์นโยบายความปลอดภัย Row Level Security (RLS) ครบ 34 Policies**
+  - **ผลลัพธ์**: Replicate นโยบายความปลอดภัยครบ 34 ข้อบน Singapore ทำให้สิทธิ์การอ่าน-เขียนของแต่ละ Role (Super Admin, Admin, Sales, Technician) มีความปลอดภัยตามมาตรฐาน Enterprise
+
+- [x] **64. ยืนยันผลการทดสอบ Playwright E2E Suite บน Singapore Database ผ่าน 100%**
+  - **ผลลัพธ์**: ผ่านการทดสอบครบทุกโมดูล:
+    - `auth.spec.ts` (3/3 passed)
+    - `crm.spec.ts` (2/2 passed)
+    - `bills.spec.ts` (2/2 passed)
+    - `stock.spec.ts` (2/2 passed)
+    - `pos.spec.ts` (2/2 passed)
+    - `theme-lang.spec.ts` (2/2 passed)
+    - `storage-and-void-bill.spec.ts` (2/2 passed)
+    - `test-account-creation.spec.ts` (4/4 passed)
+
+---
+
+## 💻 หมวดที่ 12: คู่มือการย้ายเครื่องใหม่ & Checklist ตรวจรับงาน (New Machine Handover Guide)
+
+> 💡 **สำหรับผู้ใช้งาน/ผู้ดูแลระบบเมื่อเปิดโปรเจกต์บนคอมพิวเตอร์เครื่องใหม่**:
+
+### 1. การ Clone โปรเจกต์ & ติดตั้ง Dependencies
+```bash
+# 1. Clone repository
+git clone https://github.com/HM186812/AvatrAutoService.git
+cd AvatrAutoService
+
+# 2. ตั้งค่า Remote สำรอง (Fork ของ Keokisith)
+git remote add my-fork https://github.com/pheuangvichithkeokisith-del/AvatrAutoService.git
+
+# 3. ติดตั้ง Node Modules (ใช้ Node.js v20 ขึ้นไป)
+npm install
+```
+
+### 2. การตั้งค่า Environment Variables (`.env.local` & `.env.test`)
+สร้างไฟล์ `.env.local` ใน Root directory สำหรับรัน Development:
+```env
+VITE_SUPABASE_URL="https://ivybsqtzrfwdamibbumc.supabase.co"
+VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2eWJzcXR6cmZ3ZGFtaWJidW1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4MTU5NTAsImV4cCI6MjEwODM5MTk1MH0.iz7kRSsD4DQ4_P0cG2QYM8bjyOhGfSRllE3QyntOnn0"
+```
+
+สร้างไฟล์ `.env.test` สำหรับรัน Playwright E2E Tests:
+```env
+VITE_SUPABASE_URL="https://ivybsqtzrfwdamibbumc.supabase.co"
+VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2eWJzcXR6cmZ3ZGFtaWJidW1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4MTU5NTAsImV4cCI6MjEwODM5MTk1MH0.iz7kRSsD4DQ4_P0cG2QYM8bjyOhGfSRllE3QyntOnn0"
+E2E_ADMIN_EMAIL="test01@gmail.com"
+E2E_ADMIN_PASSWORD="123456"
+E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
+```
+
+### 3. Checklist การตรวจสอบความพร้อมบนเครื่องใหม่ (Verification Checklist)
+- [ ] **Lint & Type Check**: รัน `npm run lint` (ต้องได้ Exit Code 0 ไม่มี Type Error)
+- [ ] **Production Build**: รัน `npm run build` (Vite Build ต้องผ่านเรียบร้อย)
+- [ ] **E2E Test Suite**: รัน `npx playwright test e2e/auth.spec.ts` (ทดสอบเชื่อมต่อ Database Singapore)
+- [ ] **Development Server**: รัน `npm run dev` แล้วเข้าเว็บที่ `http://localhost:3000`
+- [ ] **เข้าสู่ระบบจริง**: ทดสอบล็อกอินด้วย `test01@gmail.com` / `123456` (เวลาโหลดต้องไม่เกิน 1.5 วินาที)
+
+### 4. การตั้งค่าบน Cloudflare Pages (Production Deploy Checklist)
+เมื่อพร้อมนำหน้าเว็บ Production ขึ้น Cloudflare Pages ให้เข้าไปที่ Dashboard:
+1. เข้าไปที่ **Cloudflare Dashboard** ➔ **Workers & Pages** ➔ เลือกโปรเจกต์ `avatr-auto-service`
+2. ไปที่แท็บ **Settings** ➔ **Environment variables**
+3. ปรับค่าตัวแปรเป็น Singapore Instance:
+   - `VITE_SUPABASE_URL` = `https://ivybsqtzrfwdamibbumc.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY` = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2eWJzcXR6cmZ3ZGFtaWJidW1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4MTU5NTAsImV4cCI6MjEwODM5MTk1MH0.iz7kRSsD4DQ4_P0cG2QYM8bjyOhGfSRllE3QyntOnn0`
+4. กด **Save** และสั่ง **Retry Deployment** หรือ Push Commit ใหม่เพื่อ Trigger Build
+
+### 5. แผนการ Rollback กลับ Tokyo (Safety Rollback)
+หากในอนาคตต้องการสลับกลับไปใช้ฐานข้อมูลเดิมที่ Tokyo:
+* ฐานข้อมูล Tokyo (`ybzylmboyqqnvtzdkpkg`) ยังอยู่ครบถ้วน 100% ไม่ได้ถูกแตะต้อง
+* เพียงแค่แก้ `VITE_SUPABASE_URL` และ `VITE_SUPABASE_ANON_KEY` กลับเป็นค่าของ Tokyo ระบบจะทำงานต่อได้ทันที 100%
 
 ---
 
