@@ -28,7 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_test_drives_date_asc ON public.test_drives (drive
 -- 3. STABLE HELPER FUNCTIONS FOR RLS OPTIMIZATION (ITEM 51)
 -- ============================================================
 CREATE OR REPLACE FUNCTION public.get_current_user_role()
-RETURNS public.staff_role
+RETURNS text
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
@@ -53,7 +53,7 @@ AS $$
     FROM public.staff_profiles
     WHERE id = auth.uid()
       AND status = 'active'
-      AND role IN ('super_admin'::public.staff_role, 'admin'::public.staff_role)
+      AND role IN ('super_admin', 'admin')
   );
 $$;
 
@@ -69,7 +69,7 @@ AS $$
     FROM public.staff_profiles
     WHERE id = auth.uid()
       AND status = 'active'
-      AND role = 'super_admin'::public.staff_role
+      AND role = 'super_admin'
   );
 $$;
 

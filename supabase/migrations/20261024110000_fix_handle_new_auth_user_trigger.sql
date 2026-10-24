@@ -11,7 +11,7 @@ SECURITY DEFINER
 SET search_path = public, pg_catalog
 AS $$
 DECLARE
-  v_role public.staff_role := 'general_user'::public.staff_role;
+  v_role text := 'general_user';
   v_meta_role text;
   v_department text;
   v_initial_status text := 'active';
@@ -22,7 +22,7 @@ BEGIN
     IF EXISTS (
       SELECT 1 FROM public.staff_roles WHERE role_code::text = v_meta_role AND is_active = TRUE
     ) THEN
-      v_role := v_meta_role::public.staff_role;
+      v_role := v_meta_role;
     END IF;
   END IF;
 
@@ -36,14 +36,14 @@ BEGIN
     NULLIF(pg_catalog.btrim(NEW.raw_user_meta_data ->> 'phone'), ''),
     v_role,
     v_department,
-    v_role::text,
+    v_role,
     v_initial_status
   )
   ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     name = CASE WHEN EXCLUDED.name <> 'Staff' THEN EXCLUDED.name ELSE public.staff_profiles.name END,
     phone = COALESCE(EXCLUDED.phone, public.staff_profiles.phone),
-    role = CASE WHEN EXCLUDED.role <> 'general_user'::public.staff_role THEN EXCLUDED.role ELSE public.staff_profiles.role END,
+    role = CASE WHEN EXCLUDED.role <> 'general_user' THEN EXCLUDED.role ELSE public.staff_profiles.role END,
     department = COALESCE(EXCLUDED.department, public.staff_profiles.department),
     role_title = CASE WHEN EXCLUDED.role_title <> 'general_user' THEN EXCLUDED.role_title ELSE public.staff_profiles.role_title END,
     updated_at = pg_catalog.now();

@@ -1,6 +1,18 @@
 -- 20261017203000_fix_enum_casting_in_record_vehicle_bill.sql
 -- Fix enum casting for pdi_status and vehicle_status with hardened search_path = public, pg_temp
 
+DO $$ BEGIN
+  CREATE TYPE public.vehicle_status AS ENUM ('ready', 'pdi', 'imported', 'reserved', 'sold', 'event', 'promotion');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE public.pdi_status AS ENUM ('pending', 'passed', 'failed', 'in_progress');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.record_vehicle_bill(
   p_bill jsonb,
   p_item jsonb,
