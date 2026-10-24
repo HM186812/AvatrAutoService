@@ -121,16 +121,21 @@ export function mapStaffProfile(profile: DbRow, permissionRow?: DbRow): SystemUs
 let cachedStaffRoles: DbRow[] | null = null;
 let cachedVehicleModels: DbRow[] | null = null;
 let activeStaffPromise: { userId: string; promise: Promise<SystemUser> } | null = null;
+let cachedStaffUser: { userId: string; user: SystemUser; timestamp: number } | null = null;
 
 export function clearStaffCache() {
   cachedStaffRoles = null;
   activeStaffPromise = null;
+  cachedStaffUser = null;
 }
 
 export async function getSignedInStaff(userId: string): Promise<SystemUser> {
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
     return offlineGetActiveUser() || DEFAULT_OFFLINE_USERS[0];
+  }
+  if (cachedStaffUser && cachedStaffUser.userId === userId && Date.now() - cachedStaffUser.timestamp < 30_000) {
+    return cachedStaffUser.user;
   }
   if (activeStaffPromise?.userId === userId) {
     return activeStaffPromise.promise;
@@ -158,7 +163,9 @@ export async function getSignedInStaff(userId: string): Promise<SystemUser> {
     if (!cachedStaffRoles && rolesRes.data) cachedStaffRoles = rolesRes.data;
 
     const matchedRole = (cachedStaffRoles || []).find((r: DbRow) => r.role_code === profile.role);
-    return mapStaffProfile(profile, matchedRole?.permissions);
+    const mapped = mapStaffProfile(profile, matchedRole?.permissions);
+    cachedStaffUser = { userId, user: mapped, timestamp: Date.now() };
+    return mapped;
   })();
 
   activeStaffPromise = { userId, promise };
@@ -471,6 +478,9 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
   };
 }
 
+let activeLoadBackendPromise: Promise<BackendData> | null = null;
+let activeTier1Listeners: Array<(initial: Partial<BackendData>) => void> = [];
+
 export async function loadBackendData(
   onInitialTierLoaded?: (initial: Partial<BackendData>) => void
 ): Promise<BackendData> {
@@ -485,158 +495,178 @@ export async function loadBackendData(
     });
     return offlineData;
   }
-  const client = requireSupabase();
 
-  // Tier 1: Core showroom catalog & leads (1-RTT RPC with fallback for fast initial paint)
-  let modelsData: DbRow[] = [];
-  let inventoryData: DbRow[] = [];
-  let customersData: DbRow[] = [];
-  let rolesData: DbRow[] = [];
-  let settingsConfig: Record<string, unknown> = {};
-
-  const [rpcInit, profilesResult] = await Promise.all([
-    client.rpc('get_showroom_initial_data'),
-    client.from('staff_profiles').select('id,email,name,phone,role,department,role_title,status,created_at,last_login'),
-  ]);
-
-  if (!rpcInit.error && rpcInit.data) {
-    modelsData = rpcInit.data.models || [];
-    inventoryData = rpcInit.data.vehicles || [];
-    customersData = rpcInit.data.customers || [];
-    rolesData = rpcInit.data.roles || [];
-    settingsConfig = rpcInit.data.settings?.config || rpcInit.data.settings || {};
-  } else {
-    // Graceful fallback to individual queries if RPC is not available
-    const [modelsResult, inventoryResult, customersResult, rolesResult, settingsResult] = await Promise.all([
-      cachedVehicleModels
-        ? Promise.resolve({ data: cachedVehicleModels, error: null })
-        : client.from('vehicle_models').select('id,name,subtitle,tagline,category,price_starting_usd,price_starting_lak,hero_image,is_custom,colors,features,description,created_at').order('name'),
-      client.from('vehicles').select('*').order('created_at', { ascending: false }),
-      client.from('customers').select('*').order('created_at', { ascending: false }).limit(250),
-      cachedStaffRoles
-        ? Promise.resolve({ data: cachedStaffRoles, error: null })
-        : client.from('staff_roles').select('role_code,permissions'),
-      client.from('dealership_settings').select('config').eq('id', true).maybeSingle(),
-    ]);
-
-    if (modelsResult.error) throw modelsResult.error;
-    if (inventoryResult.error) throw inventoryResult.error;
-    if (customersResult.error) throw customersResult.error;
-
-    modelsData = modelsResult.data || [];
-    inventoryData = inventoryResult.data || [];
-    customersData = customersResult.data || [];
-    rolesData = rolesResult.data || [];
-    settingsConfig = settingsResult.data?.config || {};
+  if (onInitialTierLoaded) {
+    activeTier1Listeners.push(onInitialTierLoaded);
   }
 
-  const profiles = profilesResult.error ? [] : (profilesResult.data || []);
-  if (rolesData.length > 0) cachedStaffRoles = rolesData;
-  if (modelsData.length > 0) cachedVehicleModels = modelsData;
-  const permissionsByRole = new Map(rolesData.map((row: DbRow) => [row.role_code, row.permissions]));
-  const users = profiles.map((row: DbRow) => mapStaffProfile(row, permissionsByRole.get(row.role)));
-  const staffById = new Map(users.map((user) => [user.id, user]));
-  const dbModels = modelsData.map(mapVehicleModel);
-  const models = dbModels.length > 0 ? dbModels : AVATR_VEHICLES;
-  const modelById = new Map(models.map((model) => [model.id, model]));
-  const inventory = inventoryData.map((row: DbRow) => mapInventoryItem(row, modelById));
-  const inventoryByVin = new Map(inventoryData.map((row: DbRow) => [row.vin, row]));
-  const leads = customersData.map((row: DbRow) => mapLead(row, modelById, staffById));
+  if (activeLoadBackendPromise) {
+    return activeLoadBackendPromise;
+  }
 
-  // Yield Tier 1 immediately so Dashboard, Inventory, and CRM display without waiting for heavy logs
-  onInitialTierLoaded?.({
-    users,
-    vehicles: models,
-    inventory,
-    leads,
-    settings: settingsConfig,
-  });
+  activeLoadBackendPromise = (async () => {
+    try {
+      const client = requireSupabase();
 
-  // Tier 2: Transactional logs, appointments, test drives, and bills
-  // Optimized: use PostgREST FK embedding 'bills(*, bill_items(*))' to eliminate extra roundtrip
-  const [billsResult, movementsResult, servicesResult, testDrivesResult] = await Promise.all([
-    client.from('bills').select('*, bill_items(*)').order('bill_date', { ascending: false }).limit(300),
-    client.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(300),
-    client.from('service_appointments').select('*').order('scheduled_date', { ascending: true }),
-    client.from('test_drives').select('*').order('drive_date', { ascending: true }),
-  ]);
+      // Tier 1: Core showroom catalog & leads (1-RTT RPC with fallback for fast initial paint)
+      let modelsData: DbRow[] = [];
+      let inventoryData: DbRow[] = [];
+      let customersData: DbRow[] = [];
+      let rolesData: DbRow[] = [];
+      let settingsConfig: Record<string, unknown> = {};
 
-  if (billsResult.error) throw billsResult.error;
+      const [rpcInit, profilesResult] = await Promise.all([
+        client.rpc('get_showroom_initial_data'),
+        client.from('staff_profiles').select('id,email,name,phone,role,department,role_title,status,created_at,last_login'),
+      ]);
 
-  const bills = (billsResult.data || []).map((row: DbRow) => {
-    const firstItem = Array.isArray(row.bill_items) ? row.bill_items[0] : undefined;
-    return mapBill(row, firstItem);
-  });
-  const services = (servicesResult.error ? [] : (servicesResult.data || [])).map((row: DbRow): ServiceAppointment => ({
-    id: row.id,
-    customerName: row.customer_name,
-    phone: row.phone,
-    model: row.model,
-    plateNumber: row.plate_number || '',
-    serviceType: row.service_type,
-    scheduledDate: row.scheduled_date,
-    scheduledTime: row.scheduled_time,
-    status: row.status,
-    technician: row.technician || '',
-    estimatedCostUSD: Number(row.estimated_cost_usd) || 0,
-    batteryHealthPercent: row.battery_health_percent == null ? undefined : Number(row.battery_health_percent),
-    mileageKm: row.mileage_km == null ? undefined : Number(row.mileage_km),
-    notes: row.notes || '',
-  }));
-  const testDrives = (testDrivesResult.error ? [] : (testDrivesResult.data || [])).map((row: DbRow): TestDriveBooking => ({
-    id: row.id,
-    customerName: row.customer_name,
-    phone: row.phone,
-    model: row.model,
-    date: row.drive_date,
-    timeSlot: row.time_slot,
-    location: row.location,
-    salesRep: row.sales_rep || '',
-    status: row.status,
-  }));
-  const billById = new Map((billsResult.data || []).map((bill: DbRow) => [bill.id, bill]));
-  const stockLogs = (movementsResult.error ? [] : (movementsResult.data || [])).map((movement: DbRow): StockLogRecord => {
-    const bill = billById.get(movement.bill_id) as DbRow | undefined;
-    const item = Array.isArray(bill?.bill_items) ? bill.bill_items[0] : undefined;
-    const vehicle = inventoryByVin.get(movement.vehicle_vin);
-    const model = vehicle ? modelById.get(vehicle.model_id)?.name : item?.model_name;
-    const staff = staffById.get(movement.recorded_by);
-    return {
-      id: movement.id,
-      type: movement.movement_type,
-      vin: movement.vehicle_vin,
-      model: model || '',
-      plateNumber: vehicle?.plate_number || item?.plate_number || '',
-      color: vehicle?.color || item?.color || '',
-      quantity: 1,
-      priceUSD: Number(item?.unit_price_usd) || 0,
-      priceLAK: Number(item?.unit_price_lak) || 0,
-      timestamp: movement.created_at,
-      recordedBy: staff?.name || movement.recorded_by || '',
-      customerName: bill?.customer_name || undefined,
-      customerPhone: bill?.customer_phone || undefined,
-      paymentMethod: bill?.payment_method || undefined,
-      notes: movement.notes || bill?.notes || undefined,
-    };
-  });
+      if (!rpcInit.error && rpcInit.data) {
+        modelsData = rpcInit.data.models || [];
+        inventoryData = rpcInit.data.vehicles || [];
+        customersData = rpcInit.data.customers || [];
+        rolesData = rpcInit.data.roles || [];
+        settingsConfig = rpcInit.data.settings?.config || rpcInit.data.settings || {};
+      } else {
+        // Graceful fallback to individual queries if RPC is not available
+        const [modelsResult, inventoryResult, customersResult, rolesResult, settingsResult] = await Promise.all([
+          cachedVehicleModels
+            ? Promise.resolve({ data: cachedVehicleModels, error: null })
+            : client.from('vehicle_models').select('id,name,subtitle,tagline,category,price_starting_usd,price_starting_lak,is_custom,colors,features,description,created_at').order('name'),
+          client.from('vehicles').select('*').order('created_at', { ascending: false }),
+          client.from('customers').select('*').order('created_at', { ascending: false }).limit(250),
+          cachedStaffRoles
+            ? Promise.resolve({ data: cachedStaffRoles, error: null })
+            : client.from('staff_roles').select('role_code,permissions'),
+          client.from('dealership_settings').select('config').eq('id', true).maybeSingle(),
+        ]);
 
-  const warnings = [
-    servicesResult.error ? `Service appointments could not be loaded: ${servicesResult.error.message}` : null,
-    testDrivesResult.error ? `Test drives could not be loaded: ${testDrivesResult.error.message}` : null,
-  ].filter((warning): warning is string => Boolean(warning));
+        if (modelsResult.error) throw modelsResult.error;
+        if (inventoryResult.error) throw inventoryResult.error;
+        if (customersResult.error) throw customersResult.error;
 
-  return {
-    users,
-    leads,
-    inventory,
-    stockLogs,
-    bills,
-    vehicles: models,
-    services: servicesResult.error ? [] : services,
-    testDrives: testDrivesResult.error ? [] : testDrives,
-    settings: settingsConfig,
-    warnings,
-  };
+        modelsData = modelsResult.data || [];
+        inventoryData = inventoryResult.data || [];
+        customersData = customersResult.data || [];
+        rolesData = rolesResult.data || [];
+        settingsConfig = settingsResult.data?.config || {};
+      }
+
+      const profiles = profilesResult.error ? [] : (profilesResult.data || []);
+      if (rolesData.length > 0) cachedStaffRoles = rolesData;
+      if (modelsData.length > 0) cachedVehicleModels = modelsData;
+      const permissionsByRole = new Map(rolesData.map((row: DbRow) => [row.role_code, row.permissions]));
+      const users = profiles.map((row: DbRow) => mapStaffProfile(row, permissionsByRole.get(row.role)));
+      const staffById = new Map(users.map((user) => [user.id, user]));
+      const dbModels = modelsData.map(mapVehicleModel);
+      const models = dbModels.length > 0 ? dbModels : AVATR_VEHICLES;
+      const modelById = new Map(models.map((model) => [model.id, model]));
+      const inventory = inventoryData.map((row: DbRow) => mapInventoryItem(row, modelById));
+      const inventoryByVin = new Map(inventoryData.map((row: DbRow) => [row.vin, row]));
+      const leads = customersData.map((row: DbRow) => mapLead(row, modelById, staffById));
+
+      // Yield Tier 1 immediately to all listeners
+      const tier1Payload = {
+        users,
+        vehicles: models,
+        inventory,
+        leads,
+        settings: settingsConfig,
+      };
+      for (const listener of activeTier1Listeners) {
+        try { listener(tier1Payload); } catch (_) {}
+      }
+
+      // Tier 2: Transactional logs, appointments, test drives, and bills
+      const [billsResult, movementsResult, servicesResult, testDrivesResult] = await Promise.all([
+        client.from('bills').select('*, bill_items(*)').order('bill_date', { ascending: false }).limit(300),
+        client.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(300),
+        client.from('service_appointments').select('*').order('scheduled_date', { ascending: true }),
+        client.from('test_drives').select('*').order('drive_date', { ascending: true }),
+      ]);
+
+      if (billsResult.error) throw billsResult.error;
+
+      const bills = (billsResult.data || []).map((row: DbRow) => {
+        const firstItem = Array.isArray(row.bill_items) ? row.bill_items[0] : undefined;
+        return mapBill(row, firstItem);
+      });
+      const services = (servicesResult.error ? [] : (servicesResult.data || [])).map((row: DbRow): ServiceAppointment => ({
+        id: row.id,
+        customerName: row.customer_name,
+        phone: row.phone,
+        model: row.model,
+        plateNumber: row.plate_number || '',
+        serviceType: row.service_type,
+        scheduledDate: row.scheduled_date,
+        scheduledTime: row.scheduled_time,
+        status: row.status,
+        technician: row.technician || '',
+        estimatedCostUSD: Number(row.estimated_cost_usd) || 0,
+        batteryHealthPercent: row.battery_health_percent == null ? undefined : Number(row.battery_health_percent),
+        mileageKm: row.mileage_km == null ? undefined : Number(row.mileage_km),
+        notes: row.notes || '',
+      }));
+      const testDrives = (testDrivesResult.error ? [] : (testDrivesResult.data || [])).map((row: DbRow): TestDriveBooking => ({
+        id: row.id,
+        customerName: row.customer_name,
+        phone: row.phone,
+        model: row.model,
+        date: row.drive_date,
+        timeSlot: row.time_slot,
+        location: row.location,
+        salesRep: row.sales_rep || '',
+        status: row.status,
+      }));
+      const billById = new Map((billsResult.data || []).map((bill: DbRow) => [bill.id, bill]));
+      const stockLogs = (movementsResult.error ? [] : (movementsResult.data || [])).map((movement: DbRow): StockLogRecord => {
+        const bill = billById.get(movement.bill_id) as DbRow | undefined;
+        const item = Array.isArray(bill?.bill_items) ? bill.bill_items[0] : undefined;
+        const vehicle = inventoryByVin.get(movement.vehicle_vin);
+        const model = vehicle ? modelById.get(vehicle.model_id)?.name : item?.model_name;
+        const staff = staffById.get(movement.recorded_by);
+        return {
+          id: movement.id,
+          type: movement.movement_type,
+          vin: movement.vehicle_vin,
+          model: model || '',
+          plateNumber: vehicle?.plate_number || item?.plate_number || '',
+          color: vehicle?.color || item?.color || '',
+          quantity: 1,
+          priceUSD: Number(item?.unit_price_usd) || 0,
+          priceLAK: Number(item?.unit_price_lak) || 0,
+          timestamp: movement.created_at,
+          recordedBy: staff?.name || movement.recorded_by || '',
+          customerName: bill?.customer_name || undefined,
+          customerPhone: bill?.customer_phone || undefined,
+          paymentMethod: bill?.payment_method || undefined,
+          notes: movement.notes || bill?.notes || undefined,
+        };
+      });
+
+      const warnings = [
+        servicesResult.error ? `Service appointments could not be loaded: ${servicesResult.error.message}` : null,
+        testDrivesResult.error ? `Test drives could not be loaded: ${testDrivesResult.error.message}` : null,
+      ].filter((warning): warning is string => Boolean(warning));
+
+      return {
+        users,
+        leads,
+        inventory,
+        stockLogs,
+        bills,
+        vehicles: models,
+        services: servicesResult.error ? [] : services,
+        testDrives: testDrivesResult.error ? [] : testDrives,
+        settings: settingsConfig,
+        warnings,
+      };
+    } finally {
+      activeLoadBackendPromise = null;
+      activeTier1Listeners = [];
+    }
+  })();
+
+  return activeLoadBackendPromise;
 }
 
 async function findCustomerId(phone: string): Promise<string | null> {
