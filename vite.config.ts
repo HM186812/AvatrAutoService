@@ -76,7 +76,8 @@ export default defineConfig(({ mode, command }) => {
             if (
               id.includes('node_modules/jspdf') ||
               id.includes('node_modules/html2canvas') ||
-              id.includes('node_modules/html2pdf')
+              id.includes('node_modules/html2pdf') ||
+              id.includes('node_modules/docx')
             ) {
               return 'vendor-pdf';
             }
@@ -90,10 +91,7 @@ export default defineConfig(({ mode, command }) => {
             ) {
               return 'vendor-react';
             }
-            if (
-              id.includes('node_modules/@supabase') ||
-              id.includes('node_modules/@google/genai')
-            ) {
+            if (id.includes('node_modules/@supabase')) {
               return 'vendor-backend';
             }
           },

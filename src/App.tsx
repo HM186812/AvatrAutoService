@@ -41,13 +41,13 @@ const StockAlertsView = lazy(() => import('./components/views/StockAlertsView'))
 const UserManagementView = lazy(() => import('./components/views/UserManagementView'));
 const ProfileView = lazy(() => import('./components/views/ProfileView'));
 const InstallmentDashboardView = lazy(() => import('./components/views/InstallmentDashboardView'));
-import {
-  NewLeadModal,
-  QuotationModal,
-  ServiceModal,
-  TestDriveModal,
-  VehicleModal,
-} from './components/modals';
+
+// Lazy load heavy modals to shrink main bundle size
+const NewLeadModal = lazy(() => import('./components/modals/NewLeadModal'));
+const QuotationModal = lazy(() => import('./components/modals/QuotationModal'));
+const ServiceModal = lazy(() => import('./components/modals/ServiceModal'));
+const TestDriveModal = lazy(() => import('./components/modals/TestDriveModal'));
+const VehicleModal = lazy(() => import('./components/modals/VehicleModal'));
 import { 
   Menu, 
   LayoutDashboard, 
@@ -435,7 +435,7 @@ export default function App() {
     try {
       const targetBill = bills.find(b => b.id === billId);
       await deleteBill(billId);
-      setBills(prev => prev.filter(b => b.id !== billId));
+      setBills(prev => prev.map(b => b.id === billId ? { ...b, status: 'voided' } : b));
       if (targetBill?.vin) {
         const billType = targetBill.billType || targetBill.type;
         if (billType === 'sale') {
@@ -443,14 +443,13 @@ export default function App() {
             item.vin === targetBill.vin ? { ...item, status: 'ready', stockQuantity: 1 } : item
           ));
         } else if (billType === 'import') {
-          const hasOtherBills = bills.some(b => b.id !== billId && b.vin === targetBill.vin);
+          const hasOtherBills = bills.some(b => b.id !== billId && b.vin === targetBill.vin && b.status !== 'voided');
           if (!hasOtherBills) {
             setInventory(prev => prev.filter(item => item.vin !== targetBill.vin));
           }
         }
-        setStockLogs(prev => prev.filter(log => !(log.vin === targetBill.vin && log.type === (billType === 'import' ? 'stock_in' : 'stock_out'))));
       }
-      triggerToast('ລົບບິນສຳເລັດແລ້ວ!');
+      triggerToast(lang === 'lo' ? 'ຍົກເລີກບິນ ແລະ ຄືນສະຕ໋ອກລົດຮຽບຮ້ອຍແລ້ວ!' : 'ยกเลิกบิลและคืนสต็อกรถเรียบร้อยแล้ว!');
     } catch (error) {
       triggerToast(error instanceof Error ? error.message : 'Bill could not be deleted.');
     }
@@ -853,49 +852,59 @@ export default function App() {
 
 
 
-      {/* Modals */}
-      <NewLeadModal
-        isOpen={isNewLeadOpen}
-        onClose={() => setIsNewLeadOpen(false)}
-        onAddLead={handleAddLead}
-        vehicles={vehicles}
-        currentUser={currentUser}
-        lang={lang}
-      />
+      {/* Lazy-loaded Modals with Suspense */}
+      <Suspense fallback={null}>
+        {isNewLeadOpen && (
+          <NewLeadModal
+            isOpen={isNewLeadOpen}
+            onClose={() => setIsNewLeadOpen(false)}
+            onAddLead={handleAddLead}
+            vehicles={vehicles}
+            currentUser={currentUser}
+            lang={lang}
+          />
+        )}
 
-      <ServiceModal
-        isOpen={isServiceOpen}
-        onClose={() => setIsServiceOpen(false)}
-        onAddService={handleAddService}
-        lang={lang}
-      />
+        {isServiceOpen && (
+          <ServiceModal
+            isOpen={isServiceOpen}
+            onClose={() => setIsServiceOpen(false)}
+            onAddService={handleAddService}
+            lang={lang}
+          />
+        )}
 
-      <TestDriveModal
-        isOpen={isTestDriveOpen}
-        onClose={() => setIsTestDriveOpen(false)}
-        onAddTestDrive={handleAddTestDrive}
-        initialModel={testDriveInitialModel}
-        lang={lang}
-      />
+        {isTestDriveOpen && (
+          <TestDriveModal
+            isOpen={isTestDriveOpen}
+            onClose={() => setIsTestDriveOpen(false)}
+            onAddTestDrive={handleAddTestDrive}
+            initialModel={testDriveInitialModel}
+            lang={lang}
+          />
+        )}
 
-      <VehicleModal
-        vehicle={selectedVehicleForModal}
-        isOpen={isVehicleModalOpen}
-        onClose={() => setIsVehicleModalOpen(false)}
-        onOpenQuote={handleOpenQuoteForVehicle}
-        onOpenTestDrive={handleOpenTestDriveForModel}
-        lang={lang}
-      />
+        {isVehicleModalOpen && (
+          <VehicleModal
+            vehicle={selectedVehicleForModal}
+            isOpen={isVehicleModalOpen}
+            onClose={() => setIsVehicleModalOpen(false)}
+            onOpenQuote={handleOpenQuoteForVehicle}
+            onOpenTestDrive={handleOpenTestDriveForModel}
+            lang={lang}
+          />
+        )}
 
-      {quoteVehicle && (
-        <QuotationModal
-          isOpen={isQuoteOpen}
-          onClose={() => setIsQuoteOpen(false)}
-          vehicle={quoteVehicle}
-          customerName={quoteCustomerName}
-          lang={lang}
-        />
-      )}
+        {quoteVehicle && isQuoteOpen && (
+          <QuotationModal
+            isOpen={isQuoteOpen}
+            onClose={() => setIsQuoteOpen(false)}
+            vehicle={quoteVehicle}
+            customerName={quoteCustomerName}
+            lang={lang}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

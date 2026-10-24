@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   InvoiceBillRecord, 
   Language, 
@@ -186,6 +186,20 @@ export default function BillsManagementView({
     }
     return true;
   });
+
+  // Pagination for high scalability and reduced RAM usage (Surface Pro friendly)
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
+  const totalPages = Math.max(1, Math.ceil(filteredBills.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterType, searchQuery]);
+
+  const paginatedBills = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredBills.slice(start, start + PAGE_SIZE);
+  }, [filteredBills, currentPage]);
 
   // Filtered installment customer contracts
   const filteredInstallmentContracts = installmentLeads.filter(lead => {
@@ -994,6 +1008,32 @@ export default function BillsManagementView({
                   )}
                 </tbody>
               </table>
+              {filteredBills.length > PAGE_SIZE && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800 text-xs text-zinc-400 bg-zinc-950/60">
+                  <span>
+                    {lang === 'th' ? `แสดง ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} จาก ${filteredBills.length} รายการ`
+                      : lang === 'lo' ? `ສະແດງ ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} ຈາກ ${filteredBills.length} ລາຍການ`
+                      : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} of ${filteredBills.length}`}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {lang === 'th' ? 'ก่อนหน้า' : lang === 'lo' ? 'ກ່ອນໜ້າ' : 'Previous'}
+                    </button>
+                    <span className="font-mono text-zinc-300">{currentPage} / {totalPages}</span>
+                    <button
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {lang === 'th' ? 'ถัดไป' : lang === 'lo' ? 'ຖັດໄປ' : 'Next'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -1054,7 +1094,7 @@ export default function BillsManagementView({
                       </td>
                     </tr>
                   ) : (
-                    filteredBills.map((bill) => {
+                    paginatedBills.map((bill) => {
                       const isInstallment = isInstallmentBill(bill);
 
                       return (
@@ -1100,7 +1140,14 @@ export default function BillsManagementView({
 
                           {/* Bill No & Date */}
                           <td className="py-2.5 px-2.5 whitespace-nowrap">
-                            <span className="text-white font-bold text-xs block">{bill.billNumber}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-white font-bold text-xs block">{bill.billNumber}</span>
+                              {bill.status === 'voided' && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
+                                  {lang === 'lo' ? 'ຍົກເລີກແລ້ວ' : lang === 'th' ? 'ยกเลิกแล้ว' : 'VOIDED'}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-zinc-500 font-sans block">{bill.date}</span>
                           </td>
 
@@ -1243,7 +1290,7 @@ export default function BillsManagementView({
                                 <FileCheck className="w-3 h-3" />
                               </button>
 
-                              {isSuperAdmin && onDeleteBill && (
+                              {isSuperAdmin && onDeleteBill && bill.status !== 'voided' && (
                                 <button
                                   onClick={() => {
                                     if (window.confirm(`${t.confirmDeleteBill} (${bill.billNumber})?`)) {
@@ -1251,7 +1298,7 @@ export default function BillsManagementView({
                                     }
                                   }}
                                   className="p-1 bg-zinc-900 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 border border-zinc-700 rounded-lg transition-colors cursor-pointer"
-                                  title="Delete Bill"
+                                  title={lang === 'lo' ? 'ຍົກເລີກບິນ' : lang === 'th' ? 'ยกเลิกบิล' : 'Void Bill'}
                                 >
                                   <Trash2 className="w-3 h-3" />
                                 </button>
@@ -1264,6 +1311,32 @@ export default function BillsManagementView({
                   )}
                 </tbody>
               </table>
+              {filteredBills.length > PAGE_SIZE && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800 text-xs text-zinc-400 bg-zinc-950/60">
+                  <span>
+                    {lang === 'th' ? `แสดง ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} จาก ${filteredBills.length} รายการ`
+                      : lang === 'lo' ? `ສະແດງ ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} ຈາກ ${filteredBills.length} ລາຍການ`
+                      : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} of ${filteredBills.length}`}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {lang === 'th' ? 'ก่อนหน้า' : lang === 'lo' ? 'ກ່ອນໜ້າ' : 'Previous'}
+                    </button>
+                    <span className="font-mono text-zinc-300">{currentPage} / {totalPages}</span>
+                    <button
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {lang === 'th' ? 'ถัดไป' : lang === 'lo' ? 'ຖັດໄປ' : 'Next'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

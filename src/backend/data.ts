@@ -51,6 +51,7 @@ import {
   sanitizeNumber,
   hasDangerousPatterns
 } from '../utils/security';
+import { compressImageToWebP } from '../utils/imageCompressor';
 
 function sanitizePaymentMethod(method?: string | null, isInstallment?: boolean): 'transfer' | 'cash' | 'finance' | null {
   if (!method) return isInstallment ? 'transfer' : null;
@@ -466,6 +467,7 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
     eventLocation: item?.event_location || undefined,
     recordedBy: row.recorded_by || undefined,
     notes: row.notes || undefined,
+    status: (row.status as 'completed' | 'voided') || 'completed',
   };
 }
 
@@ -485,37 +487,61 @@ export async function loadBackendData(
   }
   const client = requireSupabase();
 
-  // Tier 1: Core showroom catalog & leads (fast initial paint for Dashboard/POS)
-  const [modelsResult, inventoryResult, customersResult, profilesResult, rolesResult, settingsResult] = await Promise.all([
-    cachedVehicleModels
-      ? Promise.resolve({ data: cachedVehicleModels, error: null })
-      : client.from('vehicle_models').select('*').order('name'),
-    client.from('vehicles').select('*').order('created_at', { ascending: false }),
-    client.from('customers').select('*').order('created_at', { ascending: false }),
+  // Tier 1: Core showroom catalog & leads (1-RTT RPC with fallback for fast initial paint)
+  let modelsData: DbRow[] = [];
+  let inventoryData: DbRow[] = [];
+  let customersData: DbRow[] = [];
+  let rolesData: DbRow[] = [];
+  let settingsConfig: Record<string, unknown> = {};
+
+  const [rpcInit, profilesResult] = await Promise.all([
+    client.rpc('get_showroom_initial_data'),
     client.from('staff_profiles').select('id,email,name,phone,role,department,role_title,status,created_at,last_login'),
-    cachedStaffRoles
-      ? Promise.resolve({ data: cachedStaffRoles, error: null })
-      : client.from('staff_roles').select('role_code,permissions'),
-    client.from('dealership_settings').select('config').eq('id', true).maybeSingle(),
   ]);
 
-  for (const result of [modelsResult, inventoryResult, customersResult]) {
-    if (result.error) throw result.error;
+  if (!rpcInit.error && rpcInit.data) {
+    modelsData = rpcInit.data.models || [];
+    inventoryData = rpcInit.data.vehicles || [];
+    customersData = rpcInit.data.customers || [];
+    rolesData = rpcInit.data.roles || [];
+    settingsConfig = rpcInit.data.settings?.config || rpcInit.data.settings || {};
+  } else {
+    // Graceful fallback to individual queries if RPC is not available
+    const [modelsResult, inventoryResult, customersResult, rolesResult, settingsResult] = await Promise.all([
+      cachedVehicleModels
+        ? Promise.resolve({ data: cachedVehicleModels, error: null })
+        : client.from('vehicle_models').select('id,name,subtitle,tagline,category,price_starting_usd,price_starting_lak,hero_image,is_custom,colors,features,description,created_at').order('name'),
+      client.from('vehicles').select('*').order('created_at', { ascending: false }),
+      client.from('customers').select('*').order('created_at', { ascending: false }).limit(250),
+      cachedStaffRoles
+        ? Promise.resolve({ data: cachedStaffRoles, error: null })
+        : client.from('staff_roles').select('role_code,permissions'),
+      client.from('dealership_settings').select('config').eq('id', true).maybeSingle(),
+    ]);
+
+    if (modelsResult.error) throw modelsResult.error;
+    if (inventoryResult.error) throw inventoryResult.error;
+    if (customersResult.error) throw customersResult.error;
+
+    modelsData = modelsResult.data || [];
+    inventoryData = inventoryResult.data || [];
+    customersData = customersResult.data || [];
+    rolesData = rolesResult.data || [];
+    settingsConfig = settingsResult.data?.config || {};
   }
 
   const profiles = profilesResult.error ? [] : (profilesResult.data || []);
-  const roles = rolesResult.error ? [] : (rolesResult.data || []);
-  if (roles.length > 0) cachedStaffRoles = roles;
-  if (modelsResult.data && modelsResult.data.length > 0) cachedVehicleModels = modelsResult.data;
-  const permissionsByRole = new Map(roles.map((row: DbRow) => [row.role_code, row.permissions]));
+  if (rolesData.length > 0) cachedStaffRoles = rolesData;
+  if (modelsData.length > 0) cachedVehicleModels = modelsData;
+  const permissionsByRole = new Map(rolesData.map((row: DbRow) => [row.role_code, row.permissions]));
   const users = profiles.map((row: DbRow) => mapStaffProfile(row, permissionsByRole.get(row.role)));
   const staffById = new Map(users.map((user) => [user.id, user]));
-  const dbModels = (modelsResult.data || []).map(mapVehicleModel);
+  const dbModels = modelsData.map(mapVehicleModel);
   const models = dbModels.length > 0 ? dbModels : AVATR_VEHICLES;
   const modelById = new Map(models.map((model) => [model.id, model]));
-  const inventory = (inventoryResult.data || []).map((row: DbRow) => mapInventoryItem(row, modelById));
-  const inventoryByVin = new Map((inventoryResult.data || []).map((row: DbRow) => [row.vin, row]));
-  const leads = (customersResult.data || []).map((row: DbRow) => mapLead(row, modelById, staffById));
+  const inventory = inventoryData.map((row: DbRow) => mapInventoryItem(row, modelById));
+  const inventoryByVin = new Map(inventoryData.map((row: DbRow) => [row.vin, row]));
+  const leads = customersData.map((row: DbRow) => mapLead(row, modelById, staffById));
 
   // Yield Tier 1 immediately so Dashboard, Inventory, and CRM display without waiting for heavy logs
   onInitialTierLoaded?.({
@@ -523,29 +549,24 @@ export async function loadBackendData(
     vehicles: models,
     inventory,
     leads,
-    settings: settingsResult.error ? {} : (settingsResult.data?.config || {}),
+    settings: settingsConfig,
   });
 
   // Tier 2: Transactional logs, appointments, test drives, and bills
-  // shortcut: limit transactional logs to recent 300 records to prevent long cold-start transfers
-  const [billsResult, itemsResult, movementsResult, servicesResult, testDrivesResult] = await Promise.all([
-    client.from('bills').select('*').order('bill_date', { ascending: false }).limit(300),
-    client.from('bill_items').select('*').limit(500),
+  // Optimized: use PostgREST FK embedding 'bills(*, bill_items(*))' to eliminate extra roundtrip
+  const [billsResult, movementsResult, servicesResult, testDrivesResult] = await Promise.all([
+    client.from('bills').select('*, bill_items(*)').order('bill_date', { ascending: false }).limit(300),
     client.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(300),
     client.from('service_appointments').select('*').order('scheduled_date', { ascending: true }),
     client.from('test_drives').select('*').order('drive_date', { ascending: true }),
   ]);
 
   if (billsResult.error) throw billsResult.error;
-  if (itemsResult.error) throw itemsResult.error;
 
-  const itemsByBill = new Map<string, DbRow[]>();
-  for (const item of itemsResult.data || []) {
-    const items = itemsByBill.get(item.bill_id) || [];
-    items.push(item);
-    itemsByBill.set(item.bill_id, items);
-  }
-  const bills = (billsResult.data || []).map((row: DbRow) => mapBill(row, (itemsByBill.get(row.id) || [])[0]));
+  const bills = (billsResult.data || []).map((row: DbRow) => {
+    const firstItem = Array.isArray(row.bill_items) ? row.bill_items[0] : undefined;
+    return mapBill(row, firstItem);
+  });
   const services = (servicesResult.error ? [] : (servicesResult.data || [])).map((row: DbRow): ServiceAppointment => ({
     id: row.id,
     customerName: row.customer_name,
@@ -576,7 +597,7 @@ export async function loadBackendData(
   const billById = new Map((billsResult.data || []).map((bill: DbRow) => [bill.id, bill]));
   const stockLogs = (movementsResult.error ? [] : (movementsResult.data || [])).map((movement: DbRow): StockLogRecord => {
     const bill = billById.get(movement.bill_id) as DbRow | undefined;
-    const item = (itemsByBill.get(movement.bill_id) || [])[0];
+    const item = Array.isArray(bill?.bill_items) ? bill.bill_items[0] : undefined;
     const vehicle = inventoryByVin.get(movement.vehicle_vin);
     const model = vehicle ? modelById.get(vehicle.model_id)?.name : item?.model_name;
     const staff = staffById.get(movement.recorded_by);
@@ -602,7 +623,6 @@ export async function loadBackendData(
   const warnings = [
     servicesResult.error ? `Service appointments could not be loaded: ${servicesResult.error.message}` : null,
     testDrivesResult.error ? `Test drives could not be loaded: ${testDrivesResult.error.message}` : null,
-    settingsResult.error ? `Dealership settings could not be loaded: ${settingsResult.error.message}` : null,
   ].filter((warning): warning is string => Boolean(warning));
 
   return {
@@ -614,7 +634,7 @@ export async function loadBackendData(
     vehicles: models,
     services: servicesResult.error ? [] : services,
     testDrives: testDrivesResult.error ? [] : testDrives,
-    settings: settingsResult.error ? {} : (settingsResult.data?.config || {}),
+    settings: settingsConfig,
     warnings,
   };
 }
@@ -634,14 +654,16 @@ async function findCustomerId(phone: string): Promise<string | null> {
 
 export async function uploadDealershipAsset(file: File, folder: 'vehicles' | 'qr') {
   if (!file.type.startsWith('image/')) throw new Error('Choose a valid image file.');
-  if (file.size > 5 * 1024 * 1024) throw new Error('Image files must be 5 MB or smaller.');
-  const extension = file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1];
+  if (file.size > 10 * 1024 * 1024) throw new Error('Image files must be 10 MB or smaller before compression.');
+
+  const targetFile = await compressImageToWebP(file, { maxDimension: 1200, quality: 0.8, maxSizeBytes: 300 * 1024 });
+  const extension = targetFile.type === 'image/webp' ? 'webp' : (targetFile.type === 'image/jpeg' ? 'jpg' : targetFile.type.split('/')[1]);
   if (!['jpg', 'png', 'webp'].includes(extension)) throw new Error('Use a JPG, PNG, or WebP image.');
 
   const client = requireSupabase();
   const path = `${folder}/${newRecordId()}.${extension}`;
-  const { error } = await client.storage.from('dealership-assets').upload(path, file, {
-    contentType: file.type,
+  const { error } = await client.storage.from('dealership-assets').upload(path, targetFile, {
+    contentType: targetFile.type,
     upsert: false,
     cacheControl: '3600',
   });
@@ -1373,11 +1395,19 @@ export async function uploadPaymentSlip(file: File) {
   if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
     throw new Error('Payment slips must be JPG, PNG, WebP, or PDF.');
   }
-  if (file.size > 5 * 1024 * 1024) throw new Error('Payment slips must be 5 MB or smaller.');
-  const extension = file.type === 'application/pdf' ? 'pdf' : file.type.split('/')[1];
+  if (file.size > 10 * 1024 * 1024) throw new Error('Payment slips must be 10 MB or smaller before compression.');
+
+  let targetFile = file;
+  if (file.type.startsWith('image/')) {
+    targetFile = await compressImageToWebP(file, { maxDimension: 1200, quality: 0.8, maxSizeBytes: 300 * 1024 });
+  }
+
+  const extension = targetFile.type === 'application/pdf'
+    ? 'pdf'
+    : (targetFile.type === 'image/webp' ? 'webp' : (targetFile.type === 'image/jpeg' ? 'jpg' : targetFile.type.split('/')[1]));
   const path = `sales/${newRecordId()}.${extension}`;
-  const { error } = await requireSupabase().storage.from('payment-slips').upload(path, file, {
-    contentType: file.type,
+  const { error } = await requireSupabase().storage.from('payment-slips').upload(path, targetFile, {
+    contentType: targetFile.type,
     upsert: false,
     cacheControl: '3600',
   });

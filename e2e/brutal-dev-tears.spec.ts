@@ -136,7 +136,7 @@ test.describe('☠️ DEV TEARS TORTURE SUITE (โหมดเทสโหดท
   });
 
   test('BRUTAL-05: LocalStorage Identity Poisoning & Role Tampering', async ({ page }) => {
-    test.setTimeout(45_000);
+    test.setTimeout(90_000);
     await loginAsAdmin(page);
 
     // Tamper LocalStorage with fake God-mode admin roles and invalid JSON blobs

@@ -792,6 +792,20 @@ export default function CustomerView({
     });
   }, [prospectiveLeads, channelFilter, selectedStatus, searchQuery]);
 
+  // Pagination for high scalability & Surface Pro friendly RAM usage
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [channelFilter, selectedStatus, searchQuery]);
+
+  const paginatedLeads = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredLeads.slice(start, start + PAGE_SIZE);
+  }, [filteredLeads, currentPage]);
+
   // Export Customer CRM to CSV File (ນຳອອກ)
   const handleExportCSV = () => {
     const headers = [
@@ -1287,7 +1301,7 @@ export default function CustomerView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
-                  {filteredLeads.map((lead) => {
+                  {paginatedLeads.map((lead) => {
                     return (
                       <tr
                         key={lead.id}
@@ -1429,7 +1443,7 @@ export default function CustomerView({
           ) : (
             /* VIEW MODE 2: MODERN HIGH-AESTHETIC BENTO STREAMLINE CARD VIEW */
             <div className="space-y-4">
-              {filteredLeads.map((lead) => {
+              {paginatedLeads.map((lead) => {
                 return (
                   <div
                     key={lead.id}
@@ -1622,6 +1636,33 @@ export default function CustomerView({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {filteredLeads.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-4 py-3 rounded-2xl border border-zinc-800 text-xs text-zinc-400 bg-zinc-950">
+              <span>
+                {lang === 'th' ? `แสดง ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} จาก ${filteredLeads.length} รายการ`
+                  : lang === 'lo' ? `ສະແດງ ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} ຈາກ ${filteredLeads.length} ລາຍການ`
+                  : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} of ${filteredLeads.length}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {lang === 'th' ? 'ก่อนหน้า' : lang === 'lo' ? 'ກ່ອນໜ້າ' : 'Previous'}
+                </button>
+                <span className="font-mono text-zinc-300">{currentPage} / {totalPages}</span>
+                <button
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {lang === 'th' ? 'ถัดไป' : lang === 'lo' ? 'ຖັດໄປ' : 'Next'}
+                </button>
+              </div>
             </div>
           )}
       </div>

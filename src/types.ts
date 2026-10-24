@@ -206,6 +206,7 @@ export interface InvoiceBillRecord {
   paymentSlipPath?: string;
   recordedBy?: string;
   notes?: string;
+  status?: 'completed' | 'voided' | string;
 }
 
 export interface DealershipConfig {

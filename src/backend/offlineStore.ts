@@ -329,7 +329,22 @@ export function offlineSaveBill(bill: InvoiceBillRecord): void {
 
 export function offlineDeleteBill(id: string): void {
   const bills = readStorage<InvoiceBillRecord[]>('bills', INITIAL_BILLS);
-  writeStorage('bills', bills.filter((b) => b.id !== id));
+  const target = bills.find((b) => b.id === id);
+  if (target) {
+    target.status = 'voided';
+    writeStorage('bills', bills);
+    if (target.vin && (target.billType === 'sale' || target.type === 'sale')) {
+      const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
+      const item = inventory.find((i) => i.vin === target.vin);
+      if (item) {
+        item.status = 'ready';
+        item.stockQuantity = 1;
+        writeStorage('inventory', inventory);
+      }
+    }
+  } else {
+    writeStorage('bills', bills.filter((b) => b.id !== id));
+  }
 }
 
 export function offlineSaveInventoryItem(item: InventoryItem): void {
