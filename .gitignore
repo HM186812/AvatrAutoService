@@ -62,6 +62,7 @@ supabase-service-key*
 # Local Supabase & Firebase Residuals
 .supabase/
 supabase/.temp/
+docs/backup/
 .firebaserc
 firebase.json
 firestore.rules
