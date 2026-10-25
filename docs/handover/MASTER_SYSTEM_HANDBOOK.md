@@ -38,9 +38,9 @@ flowchart TB
     end
 
     subgraph CloudflareEdge["☁️ Cloudflare Global Edge Network"]
-        CFPages["Cloudflare Pages (Hosting & Static Assets)"]
+        CFPages["Cloudflare Pages and Workers Static Assets"]
         CFHeaders["public/_headers (Strict CSP, HSTS, XFO)"]
-        CFRedirects["public/_redirects (SPA Fallback 200)"]
+        CFRedirects["public/_redirects and wrangler.jsonc (SPA Fallback 200)"]
     end
 
     subgraph SupabaseCloud["🗄️ Supabase Cloud (Enterprise Backend)"]
@@ -118,6 +118,9 @@ npm run build
 - **Build Output Directory:** `dist`
 - **Node.js Version:** `20+` ຫຼື `24`
 - **ການຕັ້ງຄ່າ Routing & Headers (ຢູ່ໃນໂຟລເດີ public/):**
+  - **`public/_redirects` & `wrangler.jsonc` (SPA Fallback):**
+    ຮອງຮັບ SPA Fallback ທັງ Cloudflare Pages (`public/_redirects`) ແລະ Cloudflare Workers Static Assets (`wrangler.jsonc` ຜ່ານ `not_found_handling: "single-page-application"`)
+
   - **`public/_redirects`:**
     ```text
     /* /index.html 200
@@ -218,6 +221,17 @@ erDiagram
 - **`record_vehicle_bill`:** ບັນທຶກການຂາຍ, ຕັດສະຕັອກລົດ, ອອກບິນ, ສ້າງ stock movement, ແລະ ອັບເດດລູກຄ້າໃນ Transaction ດຽວ (Atomic)
 - **`delete_vehicle_bill`:** ຍົກເລີກບິນ ແລະ ຄືນສະຕັອກລົດກັບມາເປັນ `ready` (ສະເພາະ Admin)
 - **Security Hardening:** ທຸກຟັງຊັນລັອກ `SET search_path = public` ປ້ອງກັນ Search-path Injection 100%
+
+---
+
+### 4.6 ຂໍ້ຈຳກັດທີ່ຄວນຊາບ ແລະ ແຜນພັດທະນາຕໍ່ຍອດ (Known Limitations & Scalability Notes)
+
+1. **Showroom Initial Data RPC (Unbounded Load):**
+   - ໃນ Migration `20261025152000_bills_and_customers_date_range_indexes.sql` ໄດ້ປົດລັອກ Hardcoded LIMIT (500 ຄັນ ແລະ 250 ລູກຄ້າ) ອອກ ເພື່ອໃຫ້ສະແດງລົດ ແລະ ລູກຄ້າທັງໝົດໃນລະບົບປັດຈຸບັນ
+   - **ໝາຍເຫດ:** ຫາກຂໍ້ມູນລົດ ແລະ ລູກຄ້າເຕີບໂຕເກີນ 10,000+ ລາຍການ ຂຶ້ນໄປ, ຄວນເພີ່ມ Server-side Pagination ຕາມແຜນທີ່ວາງໄວ້ໃນ `docs/superpowers/plans/2026-10-25-backend-modularization.md`
+
+2. **Backend Data Access Layer Modularization:**
+   - ໄຟລ໌ `src/backend/data.ts` ໄດ້ກຽມແຜນແຍກ Domain Services ໄວ້ຮອງຮັບທີມພັດທະນາຫຼາຍຄົນໃນ Phase 2 ໂດຍບໍ່ກະທົບ Callers ເດີມ
 
 ---
 
