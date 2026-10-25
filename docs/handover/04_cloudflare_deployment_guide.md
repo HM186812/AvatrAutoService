@@ -31,7 +31,7 @@ flowchart LR
 | ລຳດັບ | ໄຟລ໌ / ໂຟລເດີ (File Path) | ໜ້າທີ່ ແລະ ຄວາມສຳຄັນໃນການ Deploy |
 | :---: | :--- | :--- |
 | 1 | [`public/_headers`](file:///home/pheuang01/Projects/AvatrAutoService/public/_headers) | **Security Headers:** ບັນຈຸຄ່າ Content-Security-Policy (CSP), HSTS, X-Frame-Options: DENY, Cache-Control ມາດຕະฐาน Cloudflare A+ |
-| 2 | [`public/_redirects`](file:///home/pheuang01/Projects/AvatrAutoService/public/_redirects) | **SPA Fallback Routing:** ກຳນົດ `/* /index.html 200` ເພື່ອປ້ອງກັນບໍ່ໃຫ້ເກີດ Error 404 ເມື່ອຜູ້ໃຊ້ Refresh ໜ້າຕ່າງໆ |
+| 2 | [`wrangler.jsonc`](file:///C:/Users/HP/Projects/AvatrAutoService/wrangler.jsonc) | **SPA Fallback Routing:** ກຳນົດ `not_found_handling: "single-page-application"` ສຳລັບ Cloudflare Workers Assets (ຫ້າມໃສ່ `_redirects` ເພາະຈະຊົນ Loop 100324) |
 | 3 | [`.env.example`](file:///home/pheuang01/Projects/AvatrAutoService/.env.example) | **Env Template:** ແມ່ແບບຕົວແປສະພາບແວດລ້ອມທີ່ຕ້ອງນຳໄປປ້ອນໃນ Cloudflare Pages Settings |
 | 4 | [`package.json`](file:///home/pheuang01/Projects/AvatrAutoService/package.json) | **Build & Scripts:** ບັນຈຸຄຳສັ່ງ `npm run build` (`vite build`) ແລະ `npm run lint` (`tsc --noEmit`) |
 | 5 | [`vite.config.ts`](file:///home/pheuang01/Projects/AvatrAutoService/vite.config.ts) | **Vite Config:** ໂຄງສ້າງການ Bundle, Chunking ແລະ Static Asset Handling |
@@ -199,7 +199,7 @@ npm run lint
 npm run build
 ```
 
-ກວດສອບວ່າໂຟລເດີ [`dist/`](file:///home/pheuang01/Projects/AvatrAutoService/dist) ຖືກສ້າງຂຶ້ນ ແລະ ມີໄຟລ໌ `_headers` ແລະ `_redirects` ຢູ່ພາຍໃນ:
+ກວດສອບວ່າໂຟລເດີ [`dist/`](file:///home/pheuang01/Projects/AvatrAutoService/dist) ຖືກສ້າງຂຶ້ນ ແລະ ມີໄຟລ໌ `_headers` ຢູ່ພາຍໃນ:
 
 ```bash
 ls -la dist/
@@ -269,7 +269,7 @@ sequenceDiagram
 | ລ/ດ | ລາຍການທົດສອບ (Verification Task) | ວິທີການກວດສອບ (How to Verify) | ຜົນທີ່ຖືກຕ້ອງ (Expected Behavior) | ສະຖານະ |
 | :---: | :--- | :--- | :--- | :---: |
 | 1 | **ການເຂົ້າເຖິງຜ່ານ HTTPS** | ເປີດ `https://avatr-auto-service.pages.dev` | ເວັບໄຊໂຫຼດຂຶ້ນຢ່າງວ່ອງໄວ ມີກຸນແຈສີຂຽວ SSL/TLS 100% | [ ] ຜ່ານ |
-| 2 | **ທົດສອບ SPA Routing & Refresh** | ກົດເຂົ້າໜ້າ `/inventory` ຫຼື `/customers` ແລ້ວກົດ **F5 (Refresh)** | ບໍ່ເກີດ Error 404 (ຍ້ອນມີ `_redirects` ຮອງຮັບ) | [ ] ຜ່ານ |
+| 2 | **ທົດສອບ SPA Routing & Refresh** | ກົດເຂົ້າໜ້າ `/inventory` ຫຼື `/customers` ແລ້ວກົດ **F5 (Refresh)** | ບໍ່ເກີດ Error 404 (ຍ້ອນມີ `wrangler.jsonc` SPA fallback ຮອງຮັບ) | [ ] ຜ່ານ |
 | 3 | **ທົດສອບ Security Headers** | ເປີດ DevTools (F12) > Network > ເລືອກ `index.html` > ເບິ່ງ Response Headers | ພົບຄ່າ `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` | [ ] ຜ່ານ |
 | 4 | **ທົດສອບ Turnstile Bot Guard** | ເບິ່ງໜ້າ Login ພົບ Widget "Cloudflare Turnstile Verified" | ກວດສອບຜ່ານອັດຕະໂນມັດ ປຸ່ມເຂົ້າສູ່ລະບົບພ້ອມກົດ | [ ] ຜ່ານ |
 | 5 | **ທົດສອບການດຶງຂໍ້ມູນ Supabase** | ລັອກອິນດ້ວຍບັນຊີພະນັກງານຕົວຈິງ | ດຶງລາຍການລົດ, ລາຍການຂາຍ ແລະ ສະຕັອກຂຶ້ນມາໄດ້ປົກກະຕິ | [ ] ຜ່ານ |
@@ -278,14 +278,11 @@ sequenceDiagram
 
 ## 8. ຄູ່ມືແກ້ໄຂບັນຫາທີ່ພົບເລື້ອຍ (Troubleshooting Guide)
 
-### ບັນຫາທີ 1: Refresh ໜ້າເວັບແລ້ວຂຶ້ນ "Page Not Found" (404 Error)
-- **ສາເຫດ:** Single Page Application (SPA) ຕ້ອງການໃຫ້ Server ສົ່ງທຸກ Route ກັບມາຍັງ `index.html`
+### ບັນຫາທີ 1: Deploy Error 100324 (Infinite loop in _redirects) ຫຼື 404 Error
+- **ສາເຫດ:** Cloudflare Workers Static Assets ຮອງຮັບ Single Page Application ຜ່ານ `wrangler.jsonc` ຢູ່ແລ້ວ ຫາກມີໄຟລ໌ `_redirects` ຈະເກີດ Infinite Loop code 100324
 - **ວິທີແກ້ໄຂ:**
-  1. ກວດສອບໄຟລ໌ [`public/_redirects`](file:///home/pheuang01/Projects/AvatrAutoService/public/_redirects) ວ່າຕ້ອງມີຂໍ້ຄວາມ:
-     ```text
-     /* /index.html 200
-     ```
-  2. ໝັ້ນໃຈວ່າຕອນ Build ໄຟລ໌ນີ້ຖືກ Copy ໄປໄວ້ໃນ `dist/_redirects`
+  1. ໝັ້ນໃຈວ່າໄຟລ໌ `wrangler.jsonc` ມີການກຳນົດ `"not_found_handling": "single-page-application"`
+  2. ຫ້າມສ້າງໄຟລ໌ `public/_redirects` ເດັດຂາດ
 
 ### ບັນຫາທີ 2: Cloudflare Build ລົ້ມເຫຼວ (Build Failure / Node Mismatch)
 - **ສາເຫດ:** Cloudflare Pages ຄ່າ Default ບາງຄັ້ງໃຊ້ Node.js ເວີຊັນເກົ່າ

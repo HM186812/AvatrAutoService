@@ -92,7 +92,7 @@ flowchart TD
 - **Build Environment:** Node.js version `20+` ຫຼື `24`
 - **Build Command:** `npm run build`
 - **Output Directory:** [`dist/`](file:///home/pheuang01/Projects/AvatrAutoService/dist)
-- **Single Page Redirect:** [`public/_redirects`](file:///home/pheuang01/Projects/AvatrAutoService/public/_redirects) (`/* /index.html 200`)
+- **Single Page Application Routing:** กำหนดใน [`wrangler.jsonc`](file:///C:/Users/HP/Projects/AvatrAutoService/wrangler.jsonc) (`"not_found_handling": "single-page-application"`) สำหรับ Cloudflare Workers Static Assets (ບໍ່ໃຊ້ໄຟລ໌ `_redirects` ເພື່ອປ້ອງກັນ Infinite Loop code: 100324)
 - **Security & Cache Headers:** [`public/_headers`](file:///home/pheuang01/Projects/AvatrAutoService/public/_headers) (Content-Security-Policy, HSTS, X-Frame-Options: DENY, Cache-Control)
 - **Static Asset Optimization:**
   - Font ໄຟລ໌ພາສາລາວ WOFF2 ຝັງຢູ່ໃນ `public/fonts/` ພ້ອມ HTTP Header: `Cache-Control: public, max-age=31536000, immutable`

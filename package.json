@@ -10,7 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "prebuild": "node -e \"const fs=require('fs');if(fs.existsSync('dist')){fs.rmSync('dist',{recursive:true,force:true})}\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",

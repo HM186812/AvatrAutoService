@@ -40,7 +40,7 @@ flowchart TB
     subgraph CloudflareEdge["☁️ Cloudflare Global Edge Network"]
         CFPages["Cloudflare Pages and Workers Static Assets"]
         CFHeaders["public/_headers (Strict CSP, HSTS, XFO)"]
-        CFRedirects["public/_redirects and wrangler.jsonc (SPA Fallback 200)"]
+        CFSPA["wrangler.jsonc (SPA Fallback: single-page-application)"]
     end
 
     subgraph SupabaseCloud["🗄️ Supabase Cloud (Enterprise Backend)"]
@@ -117,15 +117,9 @@ npm run build
 - **Build Command:** `npm run build`
 - **Build Output Directory:** `dist`
 - **Node.js Version:** `20+` ຫຼື `24`
-- **ການຕັ້ງຄ່າ Routing & Headers (ຢູ່ໃນໂຟລເດີ public/):**
-  - **`public/_redirects` & `wrangler.jsonc` (SPA Fallback):**
-    ຮອງຮັບ SPA Fallback ທັງ Cloudflare Pages (`public/_redirects`) ແລະ Cloudflare Workers Static Assets (`wrangler.jsonc` ຜ່ານ `not_found_handling: "single-page-application"`)
-
-  - **`public/_redirects`:**
-    ```text
-    /* /index.html 200
-    ```
-    *(ຮັບປະກັນການເຮັດວຽກຂອງ Single Page Application ບໍ່ໃຫ້ເກີດ 404 ເມື່ອ Refresh ໜ້າ)*
+- **ການຕັ້ງຄ່າ Routing & Headers:**
+  - **`wrangler.jsonc` (Single Page Application Fallback):**
+    ກຳນົດ `not_found_handling: "single-page-application"` ເພື່ອໃຫ້ Cloudflare Workers Static Assets ສົ່ງທຸກ Route ກັບມາຍັງ `index.html` (ຫ້າມສ້າງໄຟລ໌ `_redirects` ເພື່ອປ້ອງກັນ Cloudflare Error 100324 Infinite Loop)
   - **`public/_headers`:**
     ບັນຈຸ HTTP Security Headers ຄົບຊຸດ (CSP, HSTS, X-Frame-Options: DENY, nosniff, Cache-Control)
 
@@ -277,7 +271,7 @@ erDiagram
 ### 6.1 ຕຳແໜ່ງໄຟລ໌ ແລະ Path ສຳຄັນໃນລະບົບ (Key Configuration Paths)
 
 - **HTTP Security Headers:** [`public/_headers`](file:///home/pheuang01/Projects/AvatrAutoService/public/_headers) (ກຳນົດ CSP, HSTS, X-Frame-Options: DENY)
-- **SPA Fallback Redirects:** [`public/_redirects`](file:///home/pheuang01/Projects/AvatrAutoService/public/_redirects) (ກຳນົດ `/* /index.html 200` ປ້ອງກັນ 404 ເມື່ອ Refresh ໜ້າ)
+- **SPA Fallback Config:** [`wrangler.jsonc`](file:///C:/Users/HP/Projects/AvatrAutoService/wrangler.jsonc) (ກຳນົດ `not_found_handling: "single-page-application"` ປ້ອງກັນ 404 ເມື່ອ Refresh ໜ້າ)
 - **Environment Template:** [`.env.example`](file:///home/pheuang01/Projects/AvatrAutoService/.env.example) (ແມ່ແບບຕົວແປສະພາບແວດລ້ອມສຳລັບ Cloudflare Pages)
 - **Output Build Directory:** [`dist/`](file:///home/pheuang01/Projects/AvatrAutoService/dist) (ໄຟລ໌ Production Bundle ຫຼັງ Build)
 - **Bot Guard Integration:** [`src/components/common/TurnstileWidget.tsx`](file:///home/pheuang01/Projects/AvatrAutoService/src/components/common/TurnstileWidget.tsx)
@@ -354,7 +348,7 @@ npx wrangler pages deploy dist --project-name=avatr-auto-service --branch=main
 | :---: | :--- | :--- | :--- | :---: |
 | 1 | **Frontend Build** | ຮັນ `npm run build` | ສຳເລັດໃນ 1.65 ວິນາທີ ໄຮ້ Error | ✅ ຜ່ານ |
 | 2 | **Cloudflare Headers** | ກວດສອບໄຟລ໌ `public/_headers` | ມີ CSP, HSTS, XFO ຄົບຖ້ວນ | ✅ ຜ່ານ |
-| 3 | **Cloudflare Redirects**| ກວດສອບ `public/_redirects` | ມີ SPA fallback `/* /index.html 200` | ✅ ຜ່ານ |
+| 3 | **SPA Routing Fallback**| ກວດສອບ `wrangler.jsonc` | ມີ `not_found_handling: "single-page-application"` | ✅ ຜ່ານ |
 | 4 | **Database Connectivity**| ທົດສອບ Query Supabase Cloud | Latency ສະເລ່ຍ 160-360ms ເຊື່ອມຕໍ່ປົກກະຕິ | ✅ ຜ່ານ |
 | 5 | **RLS Security Policy** | ທົດສອບ Query ແບບ Anonymous | ລະບົບບຼັອກຕາຕະລາງພາຍໃນ (401) ຕາມສິດ | ✅ ຜ່ານ |
 | 6 | **A4 Documents Suite** | ທົດສອບພິມເອກະສານ 5 ສະບັບ | ສະແດງ Preview A4 ໜ້າດຽວຄົມຊັດ ສົ່ງອອກ PDF ໄດ້ | ✅ ຜ່ານ |
