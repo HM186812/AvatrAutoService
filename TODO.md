@@ -1,6 +1,24 @@
 # 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 78 ข้อ + แผนงาน Phase 2 & Smart Ranking)
-> **วันที่อัปเดตล่าสุด**: 2026-10-25 15:50 (+07:00)  
-> **สถานะ**: ปลดล็อกขีดจำกัดฐานข้อมูล Supabase และอัปเกรดระบบค้นหา/ช่วงวันครบวงจร, ย้ายฐานข้อมูลไป Singapore (`ap-southeast-1`) สำเร็จ 100%, E2E Tests และ Production Build ผ่านครบทุกโมดูล, ครบ 67 ข้อ พร้อม Checklist ตรวจรับงานและแผนขยายระยะยาว (หมวดที่ 14)
+> **วันที่อัปเดตล่าสุด**: 2026-10-25 21:55 (+07:00)  
+> **สถานะ**: ระบบ Phase 1 และการปรับปรุงความเสถียร/ขีดจำกัดฐานข้อมูลเสร็จสิ้น 100% (ข้อ 1-74 ผ่านการทดสอบและ Deploy ขึ้น Cloudflare เรียบร้อย), เพิ่มแผนงาน Phase 2 หมวดที่ 15 (ข้อ 75-78) สำหรับ Staff Offboarding, RBAC Boundaries และ Smart Showroom 360° Ranking
+
+---
+
+## ⚡ กฎเหล็กและคำสั่งบังคับสำหรับ AI Agent ทุกตัวก่อนเริ่มทำงาน (Mandatory Agent Protocols)
+
+> ⚠️ **คำสั่งสำคัญสูงสุด**: เมื่อผู้ใช้แจ้งให้อ่านไฟล์ `TODO.md` ก่อนเริ่มงาน AI Agent ทุกตัวต้องเปิดใช้งานโหมดและปฏิบัติตาม 4 คำสั่งนี้อย่างเคร่งครัด:
+
+1. **`/caveman` (Terse & High Technical Substance)**:
+   - ตอบตรงประเด็น สั้น กระชับ สไตล์ Caveman วิศวกรอาวุโส (Answer first, then reason, then next step)
+   - ตัดคำทักทาย คำอวย และบทนำเยิ่นเย้อออกทั้งหมด (No greetings, no fluff, no ceremony) รักษาเนื้อหาเทคนิค โค้ด คำสั่ง และพารามิเตอร์ให้ครบถ้วน 100%
+2. **`/ponytail` (Lazy Senior Dev Mode)**:
+   - โค้ดที่ดีที่สุดคือโค้ดที่ไม่ต้องเขียน (Smallest working diff wins) ห้ามสร้าง Abstraction, Wrapper, Config หรือ Boilerplate เกินจำเป็น
+   - ก่อนแก้โค้ด ต้อง Grep ดู Caller ทุกจุด และปิดท้ายคำตอบด้วย 1-2 บรรทัดเสมอ: *สิ่งที่ข้าม/ยังไม่ได้ตรวจ (What was skipped)* และ *ความเสี่ยงที่ผู้ใช้ต้องทราบ (Known risks)*
+3. **`/using-superpowers` (Skill-First Workflow)**:
+   - ค้นหาและเรียกใช้ Skill ที่ตรงกับงานก่อนลงมือเสมอ (เช่น `systematic-debugging`, `test-driven-development`, `verification-before-completion`, `code-review-and-quality`)
+   - ต้องรันคำสั่งทดสอบจริงและยืนยันผลลัพธ์ด้วยหลักฐาน (Evidence before assertion) ก่อนประกาศว่างานเสร็จสิ้นเสมอ
+4. **`/grill-me` (Interactive Design & Requirement Interview)**:
+   - ก่อนเริ่มลงมือทำฟีเจอร์ใหญ่ งานใหม่ หรือมีทางแยกในการตัดสินใจ ให้สัมภาษณ์ผู้ใช้เพื่อ Align ความต้องการทีละคำถาม (One question at a time) พร้อมเสนอคำแนะนำที่เหมาะสมที่สุด (Recommended option) จนกว่าจะได้ข้อสรุปสถาปัตยกรรมที่ชัดเจนก่อนแตะต้องโค้ด
 
 ---
 
