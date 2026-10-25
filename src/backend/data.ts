@@ -120,6 +120,7 @@ export function mapStaffProfile(profile: DbRow, permissionRow?: DbRow): SystemUs
 
 let cachedStaffRoles: DbRow[] | null = null;
 let cachedVehicleModels: DbRow[] | null = null;
+let cachedStaffUsers: SystemUser[] | null = null;
 let activeStaffPromise: { userId: string; promise: Promise<SystemUser> } | null = null;
 let cachedStaffUser: { userId: string; user: SystemUser; timestamp: number } | null = null;
 
@@ -478,6 +479,90 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
   };
 }
 
+export async function fetchBillsByDateRange(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<InvoiceBillRecord[]> {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    return getOfflineBackendData().bills;
+  }
+  const client = requireSupabase();
+  const pageSize = 1000;
+  let offset = 0;
+  const allRows: DbRow[] = [];
+
+  while (true) {
+    let query = client
+      .from('bills')
+      .select('*, bill_items(*)')
+      .order('bill_date', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (params?.dateFrom) {
+      query = query.gte('bill_date', params.dateFrom);
+    }
+    if (params?.dateTo) {
+      query = query.lte('bill_date', `${params.dateTo}T23:59:59`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    const batch = data || [];
+    allRows.push(...batch);
+    if (batch.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return allRows.map((row: DbRow) => {
+    const firstItem = Array.isArray(row.bill_items) ? row.bill_items[0] : undefined;
+    return mapBill(row, firstItem);
+  });
+}
+
+export async function fetchLeadsByDateRange(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<Lead[]> {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    return getOfflineBackendData().leads;
+  }
+  const client = requireSupabase();
+  const pageSize = 1000;
+  let offset = 0;
+  const allRows: DbRow[] = [];
+
+  while (true) {
+    let query = client
+      .from('customers')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (params?.dateFrom) {
+      query = query.gte('created_at', params.dateFrom);
+    }
+    if (params?.dateTo) {
+      query = query.lte('created_at', `${params.dateTo}T23:59:59`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    const batch = data || [];
+    allRows.push(...batch);
+    if (batch.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  const dbModels = (cachedVehicleModels || []).map(mapVehicleModel);
+  const models = dbModels.length > 0 ? dbModels : AVATR_VEHICLES;
+  const modelById = new Map(models.map((model) => [model.id, model]));
+  const staffById = new Map((cachedStaffUsers || []).map((user) => [user.id, user]));
+
+  return allRows.map((row: DbRow) => mapLead(row, modelById, staffById));
+}
+
 let activeLoadBackendPromise: Promise<BackendData> | null = null;
 let activeTier1Listeners: Array<(initial: Partial<BackendData>) => void> = [];
 
@@ -533,7 +618,7 @@ export async function loadBackendData(
             ? Promise.resolve({ data: cachedVehicleModels, error: null })
             : client.from('vehicle_models').select('id,name,subtitle,tagline,category,price_starting_usd,price_starting_lak,is_custom,colors,features,description,created_at').order('name'),
           client.from('vehicles').select('*').order('created_at', { ascending: false }),
-          client.from('customers').select('*').order('created_at', { ascending: false }).limit(250),
+          client.from('customers').select('*').order('created_at', { ascending: false }),
           cachedStaffRoles
             ? Promise.resolve({ data: cachedStaffRoles, error: null })
             : client.from('staff_roles').select('role_code,permissions'),
@@ -556,6 +641,7 @@ export async function loadBackendData(
       if (modelsData.length > 0) cachedVehicleModels = modelsData;
       const permissionsByRole = new Map(rolesData.map((row: DbRow) => [row.role_code, row.permissions]));
       const users = profiles.map((row: DbRow) => mapStaffProfile(row, permissionsByRole.get(row.role)));
+      if (users.length > 0) cachedStaffUsers = users;
       const staffById = new Map(users.map((user) => [user.id, user]));
       const dbModels = modelsData.map(mapVehicleModel);
       const models = dbModels.length > 0 ? dbModels : AVATR_VEHICLES;
@@ -578,8 +664,8 @@ export async function loadBackendData(
 
       // Tier 2: Transactional logs, appointments, test drives, and bills
       const [billsResult, movementsResult, servicesResult, testDrivesResult] = await Promise.all([
-        client.from('bills').select('*, bill_items(*)').order('bill_date', { ascending: false }).limit(300),
-        client.from('stock_movements').select('*').order('created_at', { ascending: false }).limit(300),
+        client.from('bills').select('*, bill_items(*)').order('bill_date', { ascending: false }),
+        client.from('stock_movements').select('*').order('created_at', { ascending: false }),
         client.from('service_appointments').select('*').order('scheduled_date', { ascending: true }),
         client.from('test_drives').select('*').order('drive_date', { ascending: true }),
       ]);

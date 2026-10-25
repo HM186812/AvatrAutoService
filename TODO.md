@@ -1,6 +1,6 @@
-# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 64 ข้อ + คู่มือย้ายเครื่องใหม่)
-> **วันที่อัปเดตล่าสุด**: 2026-10-24 14:20 (+07:00)  
-> **สถานะ**: ย้ายฐานข้อมูลไป Singapore (`ap-southeast-1`) สำเร็จ 100%, E2E Tests ผ่านครบทุกโมดูล, ครบ 64 ข้อ พร้อมคู่มือย้ายเครื่องใหม่และ Checklist ตรวจรับงาน (หมวดที่ 12)
+# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 74 ข้อ + คู่มือย้ายเครื่องใหม่ + แผนระยะยาว)
+> **วันที่อัปเดตล่าสุด**: 2026-10-25 15:50 (+07:00)  
+> **สถานะ**: ปลดล็อกขีดจำกัดฐานข้อมูล Supabase และอัปเกรดระบบค้นหา/ช่วงวันครบวงจร, ย้ายฐานข้อมูลไป Singapore (`ap-southeast-1`) สำเร็จ 100%, E2E Tests และ Production Build ผ่านครบทุกโมดูล, ครบ 67 ข้อ พร้อม Checklist ตรวจรับงานและแผนขยายระยะยาว (หมวดที่ 14)
 
 ---
 
@@ -424,3 +424,87 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
 
 
 
+
+
+---
+
+## 🛡️ หมวดที่ 13: แผนยุทธศาสตร์บริการหลังการขายระยะยาว & การควบคุมทรัพยากรฐานข้อมูล (Long-Term After-Sales Lifecycle & Supabase Zero-Cost Retention)
+
+> **วัตถุประสงค์**: ควบคุมทรัพยากรบน Supabase Free Tier ให้อยู่ได้ตลอดไปโดยไม่มีวันเต็ม รองรับวงจรชีวิตรถยนต์ไฟฟ้า (EV Lifecycle 8–10 ปี) ตั้งแต่ส่งมอบ, ตรวจเช็คสภาพตามระยะ, เคลมประกันแบตเตอรี่ SOH, และกำจัดข้อมูลขยะแบบอัตโนมัติ
+
+- [ ] **65. สร้าง Database Retention Function (`purge_old_ephemeral_data`)**
+  - **ไฟล์เป้าหมาย**: `supabase/migrations/20261025000000_data_retention_and_purge_cron.sql`
+  - **รายละเอียด**:
+    1. สร้าง Stored Procedure ลบข้อมูลนัดหมายสถานะ `cancelled` หรือ `failed` ที่เก่าเกิน 90 วัน
+    2. ลบประวัติการนัดหมายทดลองขับ `test_drives` ที่เก่าเกิน 1 ปี
+    3. ตั้งค่า `pg_cron` รันสคริปต์อัตโนมัติทุกวันอาทิตย์เวลาเที่ยงคืน คืนพื้นที่ตารางอย่างสม่ำเสมอ
+
+- [ ] **66. สร้าง Auto-Ping Keep-Alive ป้องกันฐานข้อมูล Supabase หลับ (7-Day Auto-Pause Prevention)**
+  - **ไฟล์เป้าหมาย**: `.github/workflows/supabase-keepalive.yml`
+  - **รายละเอียด**:
+    1. สร้าง GitHub Actions Workflow ตั้งเวลาทำงานแบบ Cron (`0 0 */3 * *`) ทุก 3 วัน
+    2. ส่ง HTTP GET request เบาๆ ไปที่ Endpoint `/rest/v1/dealership_settings?select=id&limit=1`
+    3. ป้องกันไม่ให้โปรเจกต์ Supabase ถูก Freeze / Pause ในช่วงเทศกาลหรือวันหยุดยาวของศูนย์บริการ
+
+- [ ] **67. ปรับปรุงระบบบีบอัดรูปถ่ายตรวจเช็คสภาพรถ PDI และงานซ่อม (After-Sales Inspection WebP Compression)**
+  - **ไฟล์เป้าหมาย**: `src/utils/imageCompressor.ts`, `src/backend/data.ts`
+  - **รายละเอียด**:
+    1. ตรวจสอบให้มั่นใจว่ารูปที่ช่างถ่ายจากโทรศัพท์มือถือเข้าสู่ฟังก์ชัน `uploadDealershipAsset` จะถูกย่อเหลือความกว้างไม่เกิน 1280px และแปลงเป็น WebP คุณภาพ 80% (ขนาด <= 150 KB เสมอ)
+    2. ป้องกันไม่ให้รูปสภาพรถขนาด 5-10 MB กินพื้นที่ Storage 1 GB จนเต็ม
+
+- [ ] **68. นโยบายหมุนเวียนสลิปการเงินและการสำรองข้อมูลระยะยาว (Payment Slip 90-Day Rolling Policy)**
+  - **ไฟล์เป้าหมาย**: `src/backend/data.ts`, `src/components/views/BillsManagementView.tsx`
+  - **รายละเอียด**:
+    1. มาร์กสถานะสลิปที่ผ่านการตรวจสอบปิดงบและบิลที่ชำระเงินเสร็จสิ้นเกิน 90-180 วัน
+    2. เพิ่มปุ่มในหน้า BillsManagementView สำหรับดาวน์โหลดรวมชุดสลิปเก่า (Export ZIP ลง Drive E:)
+    3. ลบไฟล์สลิปที่สำรองแล้วออกจาก Supabase Storage เพื่อคืนโควตา 1 GB ให้อยู่ในระดับปลอดภัย (< 300 MB) เสมอ
+
+- [ ] **69. ระบบแจ้งเตือนรอบเข้าเช็คระยะอัตโนมัติ (EV Periodic Maintenance & Warranty Alert)**
+  - **ไฟล์เป้าหมาย**: `src/components/views/AppointmentsView.tsx`, `src/components/modals/CustomerAfterSalesModal.tsx`
+  - **รายละเอียด**:
+    1. นำข้อมูล `currentMileageKm` และ `warrantyStartDate` มาคำนวณรอบเช็คระยะถัดไป (เช่น ทุก 6 เดือน หรือทุก 10,000 กม.)
+    2. แสดง Badge สถานะเตือน "ใกล้ถึงรอบเช็คระยะ" หรือ "แจ้งเตือนตรวจสุขภาพแบตเตอรี่ (SOH)"
+    3. เพิ่มปุ่มคลิกส่งข้อความแจ้งเตือนผ่าน WhatsApp API ไปยังลูกค้าได้ในคลิกเดียว
+
+- [ ] **70. สรุปประวัติการซ่อมบำรุงเก่าเข้าสมุดประจำรถ (Service History Aggregator & Cold Archive)**
+  - **ไฟล์เป้าหมาย**: `src/backend/data.ts`
+  - **รายละเอียด**:
+    1. สำหรับรถที่มีประวัติเข้าซ่อมยาวนานเกิน 3 ปี มีฟังก์ชันสรุปประวัติภาพรวม (Summary Matrix) บันทึกเข้า `after_sales_notes` ของลูกค้า
+    2. Archive รายการซ่อมย่อยๆ ที่เก่าเกิน 5 ปี ออกเป็นไฟล์สำรอง เพื่อรักษาขนาดตาราง `service_appointments` ให้เบาและโหลดเร็วระดับ O(1) ตลอดไป
+
+---
+
+## ⚡ หมวดที่ 14: ปลดล็อกขีดจำกัดฐานข้อมูล & อัปเกรดระบบค้นหา/ช่วงเวลา/การส่งออกข้อมูล (Database Scalability, Date Range & High-Volume Export)
+
+> **วัตถุประสงค์**: ปลดล็อกขีดจำกัดจำนวนข้อมูล (เดิมติด Limit 250/300/500), รองรับการดึงข้อมูลตามช่วงวัน/เวลาแบบไม่จำกัดจำนวน, เพิ่มประสิทธิภาพความเร็วด้วย Database Index และปรับปรุงระบบ Export CSV ให้รองรับภาษาลาวและข้อมูลขนาดใหญ่ได้อย่างสมบูรณ์
+
+- [x] **71. ปลดล็อกขีดจำกัดฐานข้อมูล Supabase และเพิ่มฟังก์ชันดึงบิล/ลูกค้าตามช่วงวันแบบไม่จำกัด (Unlimited Range Fetching)**
+  - **ไฟล์**: `src/backend/data.ts`
+  - **การแก้ไข**: 
+    1. ถอดขีดจำกัด `.limit(250)`, `.limit(300)` และ `.limit(500)` ออกจาก `fetchInitialData`, `fetchTabData`, `loadBackendData` (`stock_movements`)
+    2. เพิ่มฟังก์ชัน `fetchBillsByDateRange` และ `fetchLeadsByDateRange` ดึงข้อมูลผ่าน `.range()` pagination loop ทีละ 1,000 แถวจนครบทุกรายการโดยไม่ติดเพดาน Supabase PostgREST
+    3. แคช `cachedStaffUsers` และ `cachedVehicleModels` เพื่อให้การแมปพนักงานและรุ่นรถยนต์ครบถ้วนสมบูรณ์
+
+- [x] **72. เพิ่ม Database Index รองรับการค้นหาและเรียงลำดับช่วงวัน/เวลาในระดับมิลลิวินาที**
+  - **ไฟล์**: `supabase/migrations/20261025152000_bills_and_customers_date_range_indexes.sql`
+  - **การแก้ไข**: 
+    1. สร้าง Index: `idx_bills_bill_date_desc` บน `bills(bill_date DESC)`
+    2. สร้าง Composite Index: `idx_bills_type_bill_date_desc` บน `bills(type, bill_date DESC)`
+    3. สร้าง Index: `idx_customers_payment_date_desc` บน `customers(payment_date DESC)`
+    4. อัปเดต SQL RPC `get_showroom_initial_data()` ปลดล็อก `LIMIT 500` บน `vehicles` และ `LIMIT 250` บน `customers`
+    5. ซิงค์ขึ้นรีโมตเรียบร้อย 100% ผ่าน `npx supabase db push`
+
+- [x] **73. อัปเกรดระบบค้นหา คัดกรองช่วงเวลา และ Pagination ในหน้าการเงิน & บิล (BillsManagementView)**
+  - **ไฟล์**: `src/components/views/BillsManagementView.tsx`
+  - **การแก้ไข**: 
+    1. ใช้แถบตัวกรองแบบ Compact 2-Row Bar พร้อมระบบค้นหาหลายคำพร้อมกัน (Multi-Keyword AND Search) ข้ามทุกฟิลด์ และแปลงเบอร์โทร `020`/`+856 20` อัตโนมัติ
+    2. เชื่อมโยง KPI 4 กล่องด้านบน (`saleBills`, `importBills`, `installmentBills`, `totalDocuments`) ให้คำนวณจาก `timeFilteredBills` ตามช่วงเวลาที่เลือก
+    3. บันทึกสถานะตัวกรองใน `sessionStorage` (`avatr_bills_filter_v1`) และใช้ `useDeferredValue` ป้องกันหน้าจอกระตุกตอนพิมพ์ค้นหา
+    4. เพิ่มระบบแบ่งหน้า (`PAGE_SIZE = 50`) ให้กับตารางสัญญาผ่อนชำระ (`paginatedContracts`) และตารางบิล
+
+- [x] **74. ปรับปรุงระบบ Export CSV ให้รองรับภาษาลาว ตัวอักษรพิเศษ และส่งออกตามแท็บ/ช่วงวันที่เลือก**
+  - **ไฟล์**: `src/components/views/BillsManagementView.tsx`, `src/components/views/CustomerView.tsx`
+  - **การแก้ไข**: 
+    1. เปลี่ยนจากการใช้ `encodeURI` มาใช้ `Blob` + UTF-8 BOM (`\uFEFF`) และสร้างฟังก์ชัน `csvCell()` Escape เครื่องหมายคำพูด (`"`), อักขระพิเศษ (`#`, `&`) และการขึ้นบรรทัดใหม่ (`\n`) เปิดใน Microsoft Excel ได้ถูกต้อง 100%
+    2. หน้าบิล: เพิ่มปุ่ม Export CSV ตามรายการที่กรอง (`filteredBills.length`) และส่งออกข้อมูลแยกตามแท็บบิลหรือตารางสัญญาผ่อนอัตโนมัติ
+    3. หน้า CRM ลูกค้า: ปรับปุ่ม Export CSV ให้ส่งออกตามแท็บที่เปิดอยู่ (ลูกค้าใหม่, ลูกค้าที่ชำระสำเร็จแล้วพร้อมข้อมูลรถ/ประกัน, หรือลูกค้าผ่อนชำระ) และผูกตัวกรองช่วงวันให้ตัวเลข Badge และข้อมูลส่งออกตรงกันทุกจุด

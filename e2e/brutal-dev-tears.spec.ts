@@ -30,7 +30,7 @@ test.describe('☠️ DEV TEARS TORTURE SUITE (โหมดเทสโหดท
 
     await page.waitForTimeout(1500);
     // App must remain alive with sidebar and content container visible
-    await expect(page.locator('aside')).toBeVisible();
+    await expect(page.locator('aside.app-sidebar')).toBeVisible();
     await expect(page.locator('.app-shell').first()).toBeVisible();
 
     const criticalErrors = unhandledErrors.filter(e => !e.includes('ResizeObserver') && !e.includes('Failed to fetch'));
@@ -130,7 +130,7 @@ test.describe('☠️ DEV TEARS TORTURE SUITE (โหมดเทสโหดท
 
       // App must survive network drop without White Screen of Death
       await expect(page.locator('main')).toBeVisible();
-      await expect(page.locator('aside')).toBeVisible();
+      await expect(page.locator('aside.app-sidebar')).toBeVisible();
       console.log('✅ BRUTAL-04 PASSED: App survived sudden connection termination without crash');
     }
   });
