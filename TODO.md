@@ -1,5 +1,5 @@
 # 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 78 ข้อ + แผนงาน Phase 2 & Smart Ranking)
-> **วันที่อัปเดตล่าสุด**: 2026-10-25 21:55 (+07:00)  
+> **วันที่อัปเดตล่าสุด**: 2026-10-27 19:50 (+07:00)  
 > **สถานะ**: ระบบ Phase 1 และการปรับปรุงความเสถียร/ขีดจำกัดฐานข้อมูลเสร็จสิ้น 100% (ข้อ 1-74 ผ่านการทดสอบและ Deploy ขึ้น Cloudflare เรียบร้อย), เพิ่มแผนงาน Phase 2 หมวดที่ 15 (ข้อ 75-78) สำหรับ Staff Offboarding, RBAC Boundaries และ Smart Showroom 360° Ranking
 
 ---
@@ -470,12 +470,17 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
     1. ตรวจสอบให้มั่นใจว่ารูปที่ช่างถ่ายจากโทรศัพท์มือถือเข้าสู่ฟังก์ชัน `uploadDealershipAsset` จะถูกย่อเหลือความกว้างไม่เกิน 1280px และแปลงเป็น WebP คุณภาพ 80% (ขนาด <= 150 KB เสมอ)
     2. ป้องกันไม่ให้รูปสภาพรถขนาด 5-10 MB กินพื้นที่ Storage 1 GB จนเต็ม
 
-- [ ] **68. นโยบายหมุนเวียนสลิปการเงินและการสำรองข้อมูลระยะยาว (Payment Slip 90-Day Rolling Policy)**
+- [x] **68.1 ระบบแนบสลิปการโอนเงิน, ตรวจสอบผ่าน Signed URL และแนบสลิปย้อนหลัง (Payment Slip Upload & Lazy Viewer)**
+  - **ไฟล์**: `src/backend/data.ts`, `src/components/views/POSSalesView.tsx`, `src/components/views/BillsManagementView.tsx`, `src/components/modals/SlipPreviewModal.tsx`
+  - **ผลลัพธ์**: 
+    1. เพิ่มฟังก์ชัน `uploadPaymentSlip` (บีบอัด WebP <= 300KB, ตั้งชื่อไฟล์ unique timestamp ป้องกันชน RLS 403), `getPaymentSlipUrl` (ขอ Signed URL 1 ชม.), และ `attachSlipToBill`
+    2. หน้า POS: เพิ่มช่องกรอก `transferRef` และตัวเลือกแนบสลิปพร้อมรูป Thumbnail Preview อัปโหลดอัตโนมัติตอนบันทึกการขาย
+    3. หน้าบิล: เพิ่มระบบ Lazy Signing (ตารางไม่โหลด URL ล่วงหน้า), แสดง Badge `[ 📄 ສະລິບ ]` คลิกเปิด `SlipPreviewModal`, และมีปุ่ม `[ + ສະລິບ ]` สำหรับแนบสลิปย้อนหลัง
+    4. ผ่านการทดสอบจริงบน Supabase Singapore (`ivybsqtzrfwdamibbumc`) อัปโหลดและขอ Signed URL สำเร็จ HTTP 200 OK
+
+- [ ] **68.2 นโยบายหมุนเวียนสลิปการเงินและการสำรองข้อมูลระยะยาว (Payment Slip 90-Day Rolling Policy & Export ZIP)**
   - **ไฟล์เป้าหมาย**: `src/backend/data.ts`, `src/components/views/BillsManagementView.tsx`
-  - **รายละเอียด**:
-    1. มาร์กสถานะสลิปที่ผ่านการตรวจสอบปิดงบและบิลที่ชำระเงินเสร็จสิ้นเกิน 90-180 วัน
-    2. เพิ่มปุ่มในหน้า BillsManagementView สำหรับดาวน์โหลดรวมชุดสลิปเก่า (Export ZIP ลง Drive E:)
-    3. ลบไฟล์สลิปที่สำรองแล้วออกจาก Supabase Storage เพื่อคืนโควตา 1 GB ให้อยู่ในระดับปลอดภัย (< 300 MB) เสมอ
+  - **รายละเอียด**: ดำเนินการเมื่อมีสลิปสะสมเกิน 90 วัน สำหรับดาวน์โหลดรวมชุดสลิป ZIP เก็บลงฮาร์ดดิสก์ และลบไฟล์ออกจาก Storage
 
 - [ ] **69. ระบบแจ้งเตือนรอบเข้าเช็คระยะอัตโนมัติ (EV Periodic Maintenance & Warranty Alert)**
   - **ไฟล์เป้าหมาย**: `src/components/views/AppointmentsView.tsx`, `src/components/modals/CustomerAfterSalesModal.tsx`

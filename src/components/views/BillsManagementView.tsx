@@ -42,7 +42,9 @@ import {
   TrendingUp,
   SlidersHorizontal,
   Clock,
-  FileCheck
+  FileCheck,
+  ReceiptText,
+  UploadCloud
 } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { exportElementToDocx } from '../../utils/docxExport';
@@ -52,7 +54,8 @@ import { saveBillToSupabase } from '../../supabase';
 import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
 import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
-import { saveLead, deleteBill, fetchBillsByDateRange } from '../../backend/data';
+import { saveLead, deleteBill, fetchBillsByDateRange, attachSlipToBill } from '../../backend/data';
+import SlipPreviewModal from '../modals/SlipPreviewModal';
 
 interface BillsManagementViewProps {
   bills: InvoiceBillRecord[];
@@ -126,6 +129,35 @@ export default function BillsManagementView({
   // Modal states for Installment Ledger & Documents
   const [selectedCustomerForLedger, setSelectedCustomerForLedger] = useState<Lead | null>(null);
   const [selectedCustomerForDocs, setSelectedCustomerForDocs] = useState<{ customer: Lead; docType?: DocumentType } | null>(null);
+  const [selectedBillForSlip, setSelectedBillForSlip] = useState<InvoiceBillRecord | null>(null);
+  const [isUploadingSlipId, setIsUploadingSlipId] = useState<string | null>(null);
+
+  const handleOpenSlipModal = (bill: InvoiceBillRecord) => {
+    setSelectedBillForSlip(bill);
+  };
+
+  const handlePostAttachSlip = async (bill: InvoiceBillRecord, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert(lang === 'lo' ? 'ໄຟລ໌ໃຫຍ່ເກີນ 10 MB' : 'ไฟล์มีขนาดใหญ่เกิน 10 MB');
+      return;
+    }
+    try {
+      setIsUploadingSlipId(bill.id);
+      const slipPath = await attachSlipToBill(bill.id, file);
+      setBills?.(prev => prev.map(b => b.id === bill.id ? { ...b, paymentSlipPath: slipPath } : b));
+      if (selectedBillForPrint?.id === bill.id) {
+        setSelectedBillForPrint(prev => prev ? { ...prev, paymentSlipPath: slipPath } : null);
+      }
+    } catch (err) {
+      console.error('Failed to attach slip:', err);
+      alert(err instanceof Error ? err.message : 'Could not attach slip');
+    } finally {
+      setIsUploadingSlipId(null);
+      e.target.value = '';
+    }
+  };
 
   // Helper: Detect if a bill belongs to the installment & down payment category
   const isInstallmentBill = (bill: InvoiceBillRecord) => {
@@ -1662,6 +1694,41 @@ export default function BillsManagementView({
                                 Ref: {bill.transferRef}
                               </button>
                             )}
+                            {/* Payment Slip Badge or Post-Attach button */}
+                            {bill.paymentSlipPath ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSlipModal(bill)}
+                                className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                                title={lang === "lo" ? "ເບິ່ງສະລິບການໂອນ" : "ดูสลิปการโอน"}
+                              >
+                                <ReceiptText className="w-2.5 h-2.5 text-emerald-400" />
+                                <span>{lang === "lo" ? "ສະລິບ" : "สลิป"}</span>
+                              </button>
+                            ) : (
+                              <label
+                                className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors cursor-pointer ${
+                                  isUploadingSlipId === bill.id
+                                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 border border-zinc-700"
+                                }`}
+                                title={lang === "lo" ? "ແນບສະລິບການໂອນ" : "แนบสลิปการโอน"}
+                              >
+                                {isUploadingSlipId === bill.id ? (
+                                  <Loader2 className="w-2.5 h-2.5 animate-spin text-amber-400" />
+                                ) : (
+                                  <UploadCloud className="w-2.5 h-2.5 text-zinc-400" />
+                                )}
+                                <span>{isUploadingSlipId === bill.id ? "Uploading..." : (lang === "lo" ? "+ ສະລິບ" : "+ สลิป")}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*,application/pdf"
+                                  disabled={isUploadingSlipId === bill.id}
+                                  className="hidden"
+                                  onChange={(e) => handlePostAttachSlip(bill, e)}
+                                />
+                              </label>
+                            )}
                           </td>
 
                           {/* Vehicle Details */}
@@ -2043,6 +2110,16 @@ export default function BillsManagementView({
                         {selectedBillForPrint.transferRef && (
                           <div className="text-black font-mono text-[10px]">Ref: {selectedBillForPrint.transferRef}</div>
                         )}
+                        {selectedBillForPrint.paymentSlipPath && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSlipModal(selectedBillForPrint)}
+                            className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 transition-colors cursor-pointer"
+                          >
+                            <ReceiptText className="w-3 h-3 text-emerald-700" />
+                            <span>{lang === 'lo' ? 'ເບິ່ງສະລິບການໂອນ' : 'ดูสลิปการโอน'}</span>
+                          </button>
+                        )}
                       </div>
                     </>
                   ) : (
@@ -2253,6 +2330,14 @@ export default function BillsManagementView({
           onUpdateCustomerRecords={handleUpdateCustomerRecords}
         />
       )}
+
+      {/* MODAL 4: PAYMENT SLIP PREVIEW MODAL */}
+      <SlipPreviewModal
+        isOpen={Boolean(selectedBillForSlip)}
+        onClose={() => setSelectedBillForSlip(null)}
+        bill={selectedBillForSlip}
+        lang={lang}
+      />
 
       {/* MODAL 3: CUSTOMER DOCUMENTS MODAL */}
       {selectedCustomerForDocs && (

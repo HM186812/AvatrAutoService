@@ -8,7 +8,7 @@ import {
   saveDealershipConfigToSupabase 
 } from '../../supabase';
 import { newRecordId } from '../../backend/ids';
-import { saveLead } from '../../backend/data';
+import { saveLead, uploadPaymentSlip } from '../../backend/data';
 import { generateInstallmentSchedule } from '../../utils/installment';
 import AvatrLogo from '../layout/AvatrLogo';
 import { ConfirmDeleteModal } from '../modals';
@@ -173,6 +173,8 @@ export default function POSSalesView({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'finance'>('transfer');
   const [bankName, setBankName] = useState('ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ');
   const [transferRef, setTransferRef] = useState('');
+  const [slipFile, setSlipFile] = useState<File | null>(null);
+  const [slipPreviewUrl, setSlipPreviewUrl] = useState<string | null>(null);
   
   // Finance Options
   const [downPaymentPercent, setDownPaymentPercent] = useState<number>(30);
@@ -657,6 +659,15 @@ export default function POSSalesView({
     setIsProcessingSale(true);
     try {
       if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
+
+      if (paymentMethod === 'transfer' && slipFile) {
+        try {
+          const uploadedPath = await uploadPaymentSlip(slipFile, newBill.billNumber || selectedVehicle.vin);
+          newBill.paymentSlipPath = uploadedPath;
+        } catch (slipErr) {
+          console.warn('Payment slip upload warning:', slipErr);
+        }
+      }
       await saveLead(customerLead, currentUser.id, newBill);
     } catch (error) {
       const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Sale could not be saved.';
@@ -725,6 +736,8 @@ export default function POSSalesView({
     setCustomerIDCard('');
     setCustomerAddress('');
     setTransferRef('');
+    setSlipFile(null);
+    setSlipPreviewUrl(null);
     setDiscountUSD(0);
     setSaleNotes('');
     onClearPrefilledCustomer?.();
@@ -1676,6 +1689,82 @@ export default function POSSalesView({
                         <Maximize2 className="w-3.5 h-3.5 text-white" />
                         <span>ຂະຫຍາຍເບິ່ງ QR ເຕັມຈໍ</span>
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Transfer Reference & Payment Slip Upload Inputs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-zinc-800">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-zinc-300 mb-1">
+                        {lang === 'lo' ? 'ເລກອ້າງອີງການໂອນ (BCEL Ref / Slip No.)' : lang === 'th' ? 'เลขอ้างอิงการโอนเงิน (BCEL Ref / Slip No.)' : 'Transfer Ref / Slip No.'}
+                      </label>
+                      <input
+                        type="text"
+                        value={transferRef}
+                        onChange={(e) => setTransferRef(e.target.value)}
+                        placeholder="e.g. TX-982341..."
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white transition-colors"
+                      />
+                      <span className="text-[10px] text-zinc-500 mt-1 block">
+                        {lang === 'lo' ? 'ໃສ່ເລກອ້າງອີງຈາກໃບບິນໂອນເງິນ ຫຼື ປ່ອຍວ່າງ' : 'ใส่เลขอ้างอิงจากสลิปหรือปล่อยว่าง'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-zinc-300 mb-1">
+                        {lang === 'lo' ? 'ແນບສະລິບການໂອນເງິນ (ບໍ່ບັງຄັບ)' : lang === 'th' ? 'แนบสลิปการโอนเงิน (ไม่บังคับ)' : 'Payment Slip (Optional)'}
+                      </label>
+                      {!slipPreviewUrl ? (
+                        <label className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-zinc-950 hover:bg-zinc-800 border border-dashed border-zinc-700 hover:border-zinc-500 rounded-xl text-xs text-zinc-300 cursor-pointer transition-colors">
+                          <Upload className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>{lang === 'lo' ? 'ເລືອກຮູບສະລິບ (WebP <= 300KB)' : 'เลือกรูปสลิป (WebP <= 300KB)'}</span>
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 10 * 1024 * 1024) {
+                                  alert('File exceeds 10MB limit');
+                                  return;
+                                }
+                                setSlipFile(file);
+                                if (file.type.startsWith('image/')) {
+                                  setSlipPreviewUrl(URL.createObjectURL(file));
+                                } else {
+                                  setSlipPreviewUrl('pdf');
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                      ) : (
+                        <div className="flex items-center justify-between p-1.5 bg-zinc-950 border border-zinc-700 rounded-xl">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            {slipPreviewUrl !== 'pdf' ? (
+                              <img src={slipPreviewUrl} alt="Slip" className="w-8 h-8 object-cover rounded-lg border border-zinc-800" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-red-400">PDF</div>
+                            )}
+                            <span className="text-[11px] text-zinc-300 truncate max-w-[120px]">{slipFile?.name}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSlipFile(null);
+                              setSlipPreviewUrl(null);
+                            }}
+                            className="p-1 text-zinc-400 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                            title="ລຶບຮູບສະລິບ"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      <span className="text-[10px] text-zinc-500 mt-1 block">
+                        {lang === 'lo' ? 'ລະບົບຈະບີບອັດ WebP <= 300KB ອັດຕະໂນມັດ' : 'ระบบบีบอัดเป็น WebP <= 300KB อัตโนมัติ'}
+                      </span>
                     </div>
                   </div>
                 </div>

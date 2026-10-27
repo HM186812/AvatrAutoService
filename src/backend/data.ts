@@ -1507,7 +1507,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
   offlineSaveBill(bill);
 }
 
-export async function uploadPaymentSlip(file: File) {
+export async function uploadPaymentSlip(file: File, referenceId?: string): Promise<string> {
   if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
     throw new Error('Payment slips must be JPG, PNG, WebP, or PDF.');
   }
@@ -1521,12 +1521,43 @@ export async function uploadPaymentSlip(file: File) {
   const extension = targetFile.type === 'application/pdf'
     ? 'pdf'
     : (targetFile.type === 'image/webp' ? 'webp' : (targetFile.type === 'image/jpeg' ? 'jpg' : targetFile.type.split('/')[1]));
-  const path = `sales/${newRecordId()}.${extension}`;
+  
+  const safeRef = referenceId ? referenceId.replace(/[^a-zA-Z0-9_-]/g, '') : newRecordId();
+  const path = `sales/slip_${safeRef}_${Date.now()}.${extension}`;
+
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    return path;
+  }
+
   const { error } = await requireSupabase().storage.from('payment-slips').upload(path, targetFile, {
     contentType: targetFile.type,
     upsert: false,
     cacheControl: '3600',
   });
+  if (error) throw error;
+  return path;
+}
+
+export async function getPaymentSlipUrl(path?: string): Promise<string> {
+  if (!path || path.trim() === '') return '';
+  if (!isSupabaseConfigured || path.startsWith('offline_') || path.startsWith('data:') || path.startsWith('blob:')) {
+    return path;
+  }
+  const client = requireSupabase();
+  const { data, error } = await client.storage.from('payment-slips').createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+export async function attachSlipToBill(billId: string, file: File): Promise<string> {
+  const path = await uploadPaymentSlip(file, billId);
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    return path;
+  }
+  const client = requireSupabase();
+  const { error } = await client.from('bills').update({ payment_slip_path: path }).eq('id', billId);
   if (error) throw error;
   return path;
 }
