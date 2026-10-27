@@ -70,7 +70,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- --mode test',
+    command: 'node ./node_modules/vite/bin/vite.js --port=3000 --host=0.0.0.0 --mode test',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

@@ -1,6 +1,6 @@
-# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 78 ข้อ + แผนงาน Phase 2 & Smart Ranking)
-> **วันที่อัปเดตล่าสุด**: 2026-10-27 19:50 (+07:00)  
-> **สถานะ**: ระบบ Phase 1 และการปรับปรุงความเสถียร/ขีดจำกัดฐานข้อมูลเสร็จสิ้น 100% (ข้อ 1-74 ผ่านการทดสอบและ Deploy ขึ้น Cloudflare เรียบร้อย), เพิ่มแผนงาน Phase 2 หมวดที่ 15 (ข้อ 75-78) สำหรับ Staff Offboarding, RBAC Boundaries และ Smart Showroom 360° Ranking
+﻿# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 83 ข้อ + แผนงาน Phase 2 & รายการแก้ไขเร่งด่วน)
+> **วันที่อัปเดตล่าสุด**: 2026-10-27 22:25 (+07:00)
+> **สถานะ**: ระบบ Phase 1 และการปรับปรุงความเสถียร/ขีดจำกัดฐานข้อมูลเสร็จสิ้น 100% (ข้อ 1-74 ผ่านการทดสอบและ Deploy ขึ้น Cloudflare เรียบร้อย), เพิ่มแผนงาน Phase 2 หมวดที่ 15 (ข้อ 75-78) สำหรับ Staff Offboarding, RBAC Boundaries และ Smart Showroom 360° Ranking, หมวดที่ 16 (ข้อ 79-83) บันทึก 5 ปัญหาฐานข้อมูลและสภาพแวดล้อมที่ต้องแก้
 
 ---
 
@@ -578,3 +578,28 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
        - กระดาน Top 3 ประจำเดือน: แสดงรูป Avatar, ชื่อเพื่อนร่วมงาน, และจำนวนคันที่ส่งมอบ (ซ่อนยอดเงินขายรวมของเพื่อน เพื่อรักษาความเป็นส่วนตัวและป้องกันความขัดแย้งในทีม)
     2. **มุมมองผู้ดูแลระบบ (Admin View)**:
        - แสดงผลงานครบทุกมิติของทั้งทีม (จำนวนคัน, ยอดขายรวม USD, ส่วนลดเฉลี่ย, และเหรียญรางวัล)
+---
+
+## 🚨 หมวดที่ 16: ปัญหาสำคัญที่ตรวจพบล่าสุดจากการตรวจสอบระบบจริง (System & Database Issues Discovered - 2026-10-27)
+
+> **วัตถุประสงค์**: บันทึก 5 ปัญหาเชิงโครงสร้างฐานข้อมูลและสภาพแวดล้อมที่พบจากการทดสอบ End-to-End เพื่อรอการยืนยันจากทีมและดำเนินการแก้ไข
+
+- [ ] **79. แก้ไข Row Level Security (RLS) Policy ตาราง `service_appointments` และ `test_drives` (Critical DB Bug)**
+  - **ปัญหา**: ใน Migration `20261019220000` มีคำสั่ง `ENABLE ROW LEVEL SECURITY` แต่ไม่ได้สร้าง Policy สำหรับ `INSERT` และ `UPDATE` ทำให้เมื่อหน้าบ้านบันทึกนัดหมายซ่อมบำรุงหรือทดลองขับ จะติด Error `code: 42501 (new row violates row-level security policy)` ส่งผลให้ตารางทั้งสองว่างเปล่า (0 แถว)
+  - **แนวทางแก้ไข**: สร้าง SQL Migration เพิ่ม Policy `service_appointments_insert`, `service_appointments_update`, `test_drives_insert`, `test_drives_update` ให้พนักงานที่มีสิทธิ์ (`canUpdatePDI`, `technician`, `admin`) บันทึกและแก้ไขข้อมูลได้
+
+- [ ] **80. ทำความสะอาดข้อมูลขยะและรุ่นรถซ้ำซ้อนในตาราง `vehicle_models` (Data Hygiene & Integrity)**
+  - **ปัญหา**: พบโมเดลรถทดสอบในอดีตตกค้างบนฐานข้อมูล Singapore เช่น `"Ding Dong"`, `"ABADABOWL"`, `"oefwojfiwejfiwefjh"`, `"27842432184793"` และมีชื่อรุ่นจริงซ้ำซ้อน (`AVATR 12` 2 แถว, `AVATR 11` 2 แถว, `AVATR 07` 2 แถว)
+  - **แนวทางแก้ไข**: ลบโมเดลทดสอบออก และรวมแถวรุ่นที่ซ้ำกันให้เหลือเฉพาะรุ่นมาตรฐานจริง 4 รุ่น พร้อมตรวจสอบไม่ให้กระทบ Foreign Key ในตาราง `vehicles`
+
+- [ ] **81. เชื่อมโยงข้อมูลรถยนต์และการรับประกันให้ลูกค้าเก่า 11 คน (Customer Data Completeness)**
+  - **ปัญหา**: ลูกค้าในระบบ 12 คน มีเพียง 1 คนที่มีเลขตัวถัง (`vin`) และทะเบียนรถยนต์ อีก 11 คนยังไม่มีข้อมูลรถ เลขไมล์ หรือวันหมดประกันแบตเตอรี่ (SOH) ผูกอยู่ ทำให้แท็บ After-Sales แสดงผลไม่สมบูรณ์
+  - **แนวทางแก้ไข**: จับคู่บิลขายเดิมเข้ากับลูกค้า และอัปเดตฟิลด์ `vin`, `plate_number`, `warranty_start_date`, `warranty_years` เข้าตาราง `customers` อัตโนมัติ
+
+- [ ] **82. จัดระเบียบบัญชีพนักงานและเพิ่มบัญชีพนักงานขาย (Staff Role Realignment)**
+  - **ปัญหา**: ปัจจุบันในระบบมีพนักงานบทบาท `sales` เพียง 1 คน (`test02@gmail.com`) แต่มี `general_user` ที่เป็นบัญชี Dummy QA ถึง 9 คน ทำให้ไม่สามารถทดสอบ Flow การโอนเคสระหว่างเซลส์ (ข้อ 75) ได้อย่างสมบูรณ์
+  - **แนวทางแก้ไข**: สร้างหรือปรับสิทธิ์บัญชีพนักงานขายเพิ่มอีก 1-2 บัญชี และเคลียร์หรือปิดการใช้งานบัญชีทดสอบที่ไม่ได้ใช้งานจริง
+
+- [ ] **83. ปรับแต่ง Playwright E2E Runner สำหรับ Node.js v22.17.1 (Test Environment Compatibility)**
+  - **ปัญหา**: การรัน `npx playwright test` ใน Node v22.17.1 ติดขัดข้อผิดพลาด `Unexpected module status 3 from @supabase/auth-js/src/lib/webauthn.errors.ts`
+  - **แนวทางแก้ไข**: ปรับปรุงการ Import หรือตั้งค่า Pre-bundle / Babel transform ใน `playwright.config.ts` ให้ข้ามการคอมไพล์ TypeScript source ตรงของ auth-js ใน Node 22
