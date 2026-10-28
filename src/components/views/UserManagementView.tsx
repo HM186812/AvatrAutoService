@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { SystemUser, UserRole, UserPermissions, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { createStaffAccount, deactivateStaffProfile, reactivateStaffProfile, deleteStaffProfile, saveStaffProfile } from '../../backend/data';
+import { createStaffAccount, deactivateStaffProfile, reactivateStaffProfile, deleteStaffProfile, saveStaffProfile, handoverStaffPendingLeads } from '../../backend/data';
+import type { Lead } from '../../types';
 import { showToast } from '../common';
 import { 
   UserPlus, 
@@ -18,13 +19,16 @@ import {
   Crown,
   UserCheck,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  ArrowRightLeft
 } from 'lucide-react';
 
 interface UserManagementViewProps {
   currentUser: SystemUser;
   users: SystemUser[];
   setUsers: React.Dispatch<React.SetStateAction<SystemUser[]>>;
+  leads?: Lead[];
+  setLeads?: React.Dispatch<React.SetStateAction<Lead[]>>;
   lang: Language;
 }
 
@@ -56,6 +60,8 @@ export default function UserManagementView({
   currentUser,
   users,
   setUsers,
+  leads = [],
+  setLeads,
   lang,
 }: UserManagementViewProps) {
   const t = translations[lang] || translations.lo;
@@ -70,6 +76,72 @@ export default function UserManagementView({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
+  // 1-Click Pending Deals Handover state
+  const [handoverUser, setHandoverUser] = useState<SystemUser | null>(null);
+  const [selectedTargetUserId, setSelectedTargetUserId] = useState<string>('');
+  const [isHandingOver, setIsHandingOver] = useState(false);
+
+  const getUserPendingLeads = (user: SystemUser): Lead[] => {
+    if (!leads || leads.length === 0) return [];
+    return leads.filter((lead) => {
+      const isAssigned =
+        lead.assignedTo === user.name ||
+        lead.assignedTo === user.id ||
+        lead.assignedTo === user.email;
+      return isAssigned && lead.status !== 'delivered' && lead.status !== 'lost';
+    });
+  };
+
+  const handleConfirmHandover = async () => {
+    if (!handoverUser || !selectedTargetUserId || isHandingOver) return;
+    const targetStaff = users.find(u => u.id === selectedTargetUserId);
+    if (!targetStaff) {
+      showToast('ກະລຸນາເລືອກເພື່ອນຮ່ວມງານປາຍທາງ!', 'warning');
+      return;
+    }
+
+    const pending = getUserPendingLeads(handoverUser);
+    if (pending.length === 0) {
+      showToast('ບໍ່ມີເຄສຄັ່ງຄ້າງທີ່ຕ້ອງໂອນ!', 'info');
+      setHandoverUser(null);
+      return;
+    }
+
+    setIsHandingOver(true);
+    try {
+      const pendingIds = pending.map(l => l.id);
+      await handoverStaffPendingLeads(
+        { id: handoverUser.id, name: handoverUser.name },
+        { id: targetStaff.id, name: targetStaff.name },
+        pendingIds
+      );
+
+      if (setLeads) {
+        setLeads(prev =>
+          prev.map(l => {
+            if (pendingIds.includes(l.id)) {
+              return {
+                ...l,
+                assignedTo: targetStaff.name,
+                notes: ((l.notes || '') + ' [ໂອນເຄສຈາກ ' + handoverUser.name + ' ໃຫ້ ' + targetStaff.name + ']').trim(),
+              };
+            }
+            return l;
+          })
+        );
+      }
+
+      triggerFeedback('ໂອນຍ້າຍ ' + pending.length + ' ເຄສໃຫ້ "' + targetStaff.name + '" ສຳເລັດແລ້ວ!');
+      showToast('ໂອນຍ້າຍ ' + pending.length + ' ເຄສໃຫ້ "' + targetStaff.name + '" ສຳເລັດແລ້ວ!', 'success');
+      setHandoverUser(null);
+      setSelectedTargetUserId('');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to handover deals', 'error');
+    } finally {
+      setIsHandingOver(false);
+    }
+  };
 
   // New user form state
   const [newName, setNewName] = useState('');
@@ -572,6 +644,117 @@ export default function UserManagementView({
           })}
         </div>
       </div>
+
+
+      {/* MODAL: 1-CLICK PENDING DEALS HANDOVER */}
+      {handoverUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 text-white max-h-[92vh] overflow-y-auto space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-400">
+                  <ArrowRightLeft className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">ໂອນເຄສຄັ່ງຄ້າງ (1-Click Handover)</h3>
+                  <p className="text-xs text-zinc-400">ໂອນເຄສລູກຄ້າທີ່ຍັງລໍຖ້າສົ່ງມອບລົດໃຫ້ເພື່ອນຮ່ວມງານ</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setHandoverUser(null); setSelectedTargetUserId(''); }}
+                className="p-1.5 rounded-xl hover:bg-zinc-800 text-zinc-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Source User Card */}
+            <div className="p-3.5 bg-zinc-900/80 border border-zinc-800 rounded-2xl flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-mono text-zinc-400 block">ພະນັກງານຕົ້ນທາງ</span>
+                <span className="font-bold text-sm text-white">{handoverUser.name}</span>
+                <span className="text-xs text-zinc-400 block font-mono">{handoverUser.phone} • {handoverUser.role}</span>
+              </div>
+              <div className="text-right">
+                <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  {getUserPendingLeads(handoverUser).length} ເຄສຄ້າງ
+                </span>
+                <span className="text-[10px] text-zinc-500 block mt-1 font-mono">
+                  {handoverUser.status === 'suspended' ? '🔴 ຖືກລະງັບແລ້ວ' : '🟢 ພ້ອມໂອນ'}
+                </span>
+              </div>
+            </div>
+
+            {/* Pending Deals List Preview */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-300 block">
+                ລາຍການລູກຄ້າທີ່ຍັງເຈລະຈາ / ລໍຖ້າສົ່ງມອບ ({getUserPendingLeads(handoverUser).length} ລາຍ)
+              </label>
+              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                {getUserPendingLeads(handoverUser).map((lead) => (
+                  <div key={lead.id} className="p-2.5 bg-zinc-900 border border-zinc-800/80 rounded-xl flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-bold text-white block">{lead.customerName}</span>
+                      <span className="text-[11px] text-zinc-400 font-mono">{lead.phone} • {lead.interestedModel}</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-300 border border-zinc-700">
+                      {lead.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Target Colleague Selection */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-300 block">
+                ເລືອກເພື່ອນຮ່ວມງານປາຍທາງ (Active Sales / Admin) <span className="text-rose-400">*</span>
+              </label>
+              <select
+                value={selectedTargetUserId}
+                onChange={(e) => setSelectedTargetUserId(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="" className="bg-zinc-900 text-zinc-400">-- ເລືອກພະນັກງານຂາຍທີ່ມີສະຖານະ Active --</option>
+                {users
+                  .filter(u => u.id !== handoverUser.id && u.status === 'active' && (u.role === 'sales' || u.role === 'admin' || u.role === 'super_admin'))
+                  .map(target => (
+                    <option key={target.id} value={target.id} className="bg-zinc-900 text-white">
+                      {target.name} ({target.role === 'super_admin' || target.role === 'admin' ? 'Admin' : 'Sales'}) - {target.phone}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => { setHandoverUser(null); setSelectedTargetUserId(''); }}
+                className="px-4 py-2 rounded-xl border border-zinc-800 hover:bg-zinc-900 text-zinc-300 text-xs font-semibold"
+              >
+                ຍົກເລີກ
+              </button>
+              <button
+                type="button"
+                disabled={!selectedTargetUserId || isHandingOver}
+                onClick={handleConfirmHandover}
+                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-lg shadow-amber-500/20"
+              >
+                {isHandingOver ? (
+                  <span>ກຳລັງໂອນຍ້າຍ...</span>
+                ) : (
+                  <>
+                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                    <span>ຢືນຢັນການໂອນ 1-Click</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: GRANT ROLE & PERMISSIONS */}
       {editingUser && (

@@ -29,6 +29,7 @@ import {
   offlineDeleteBill,
   offlineDeleteInventoryItem,
   offlineDeleteLead,
+  offlineHandoverStaffLeads,
   offlineDeleteUser,
   offlineDeleteVehicleModel,
   offlineGetActiveUser,
@@ -44,6 +45,8 @@ import {
 } from './offlineStore';
 import { AVATR_VEHICLES } from '../data/mockData';
 import { newRecordId } from './ids';
+
+const isUuid = (val?: string | null): val is string => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val));
 import {
   sanitizeText,
   sanitizePhone,
@@ -920,47 +923,43 @@ export async function saveLead(lead: Lead, assignedStaffId: string, saleBill?: I
   const safeLeadId = isUuid(lead.id) ? lead.id : newRecordId();
 
   let finalAssignedStaffId: string | null = null;
-  let isExistingCustomer = false;
 
-  if (isUuid(lead.id)) {
+  if (lead.assignedTo) {
+    if (isUuid(lead.assignedTo)) {
+      finalAssignedStaffId = lead.assignedTo;
+    } else {
+      try {
+        const { data: matchedStaff } = await client
+          .from('staff_profiles')
+          .select('id')
+          .or('name.eq."' + lead.assignedTo + '",email.eq."' + lead.assignedTo + '"')
+          .maybeSingle();
+        if (matchedStaff?.id) {
+          finalAssignedStaffId = matchedStaff.id;
+        }
+      } catch {
+        // Ignore matching error
+      }
+    }
+  }
+
+  if (!finalAssignedStaffId && isUuid(lead.id)) {
     try {
       const { data: existingLead, error: existingError } = await client
         .from('customers')
         .select('assigned_to')
         .eq('id', lead.id)
         .maybeSingle();
-      if (!existingError && existingLead !== null) {
-        isExistingCustomer = true;
-        finalAssignedStaffId = existingLead.assigned_to ?? null;
+      if (!existingError && existingLead?.assigned_to) {
+        finalAssignedStaffId = existingLead.assigned_to;
       }
     } catch {
       // Ignore if table query fails
     }
   }
 
-  if (!isExistingCustomer) {
-    if (lead.assignedTo) {
-      if (isUuid(lead.assignedTo)) {
-        finalAssignedStaffId = lead.assignedTo;
-      } else {
-        try {
-          const { data: matchedStaff } = await client
-            .from('staff_profiles')
-            .select('id')
-            .eq('name', lead.assignedTo)
-            .maybeSingle();
-          if (matchedStaff?.id) {
-            finalAssignedStaffId = matchedStaff.id;
-          }
-        } catch {
-          // Ignore matching error
-        }
-      }
-    }
-
-    if (!finalAssignedStaffId && isUuid(assignedStaffId)) {
-      finalAssignedStaffId = assignedStaffId;
-    }
+  if (!finalAssignedStaffId && isUuid(assignedStaffId)) {
+    finalAssignedStaffId = assignedStaffId;
   }
 
   // Ensure staff ID is valid UUID if set, otherwise fallback to null to protect foreign keys
@@ -1821,4 +1820,46 @@ export async function deleteBill(id: string) {
   const client = requireSupabase();
   const { error } = await client.rpc('delete_vehicle_bill', { p_bill_id: id });
   if (error) throw error;
+}
+
+export async function handoverStaffPendingLeads(
+  fromStaff: { id: string; name: string },
+  toStaff: { id: string; name: string },
+  leadIds?: string[]
+): Promise<number> {
+  const offlineCount = offlineHandoverStaffLeads(fromStaff.name, toStaff.name, leadIds);
+  if (!isSupabaseConfigured) {
+    return offlineCount;
+  }
+  const client = requireSupabase();
+  try {
+    let query = client
+      .from('customers')
+      .update({
+        assigned_to: toStaff.id,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (leadIds && leadIds.length > 0) {
+      const validUuids = leadIds.filter(isUuid);
+      if (validUuids.length > 0) {
+        query = query.in('id', validUuids);
+      } else {
+        return offlineCount;
+      }
+    } else if (isUuid(fromStaff.id)) {
+      query = query
+        .eq('assigned_to', fromStaff.id)
+        .not('status', 'in', '("delivered","lost")');
+    }
+
+    const { error, count } = await query;
+    if (error) {
+      console.warn('Supabase handoverStaffPendingLeads notice:', error.message);
+    }
+    return count ?? offlineCount;
+  } catch (err) {
+    console.warn('Supabase handoverStaffPendingLeads error:', err);
+    return offlineCount;
+  }
 }

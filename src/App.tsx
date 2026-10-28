@@ -750,6 +750,7 @@ export default function App() {
               setStockLogs={setStockLogs}
               vehicles={vehicles}
               currentUser={currentUser}
+              users={users}
               lang={lang}
               onNavigateToBills={() => setCurrentMenu('bills')}
               prefilledCustomer={prefilledCustomerForPOS}
@@ -876,6 +877,8 @@ export default function App() {
               currentUser={currentUser}
               users={users}
               setUsers={setUsers}
+              leads={leads}
+              setLeads={setLeads}
               lang={lang}
             />
           )}

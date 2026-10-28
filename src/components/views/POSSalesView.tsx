@@ -68,6 +68,7 @@ interface POSSalesViewProps {
   setStockLogs: React.Dispatch<React.SetStateAction<StockLogRecord[]>>;
   vehicles: VehicleModel[];
   currentUser?: SystemUser;
+  users?: SystemUser[];
   lang: Language;
   onNavigateToBills: () => void;
   prefilledCustomer?: Lead | null;
@@ -85,6 +86,7 @@ export default function POSSalesView({
   setStockLogs,
   vehicles,
   currentUser,
+  users = [],
   lang,
   onNavigateToBills,
   prefilledCustomer,
@@ -111,24 +113,29 @@ export default function POSSalesView({
   );
 
   const salesRepSuggestions = useMemo(() => {
-    const names = new Set<string>([
+    const suspendedNames = new Set(
+      users.filter((u) => u.status === 'suspended').map((u) => u.name.trim())
+    );
+    const activeStaffNames = users
+      .filter((u) => u.status === 'active' && (u.role === 'sales' || u.role === 'admin' || u.role === 'super_admin'))
+      .map((u) => u.name.trim());
+
+    const names = new Set<string>(activeStaffNames.length > 0 ? activeStaffNames : [
       'ທ້າວ ແສງອຸໄທ ສັນຕິສີໄວ',
       'ທ້າວ ສົມພອນ ໄຊຍະສິດ',
       'ນາງ ມາລີ ວົງພະຈັນ',
     ]);
-    if (currentUser?.name) names.add(currentUser.name);
+    if (currentUser?.name && currentUser.status !== 'suspended') names.add(currentUser.name.trim());
+
     leads.forEach(l => {
-      if (l.assignedTo && l.assignedTo.trim() && l.assignedTo.trim() !== 'Admin') {
-        names.add(l.assignedTo.trim());
+      const trimmed = l.assignedTo ? l.assignedTo.trim() : '';
+      if (trimmed && trimmed !== 'Admin' && !suspendedNames.has(trimmed)) {
+        names.add(trimmed);
       }
     });
-    bills.forEach(b => {
-      if (b.salesRep && b.salesRep.trim() && b.salesRep.trim() !== 'Admin') {
-        names.add(b.salesRep.trim());
-      }
-    });
-    return Array.from(names);
-  }, [leads, bills, currentUser?.name]);
+
+    return Array.from(names).filter((name) => !suspendedNames.has(name));
+  }, [leads, users, currentUser?.name, currentUser?.status]);
   const [customerAddress, setCustomerAddress] = useState('');
   const [customerProvince, setCustomerProvince] = useState('ນະຄອນຫຼວງວຽງຈັນ');
   const [isProvinceDropdownOpen, setIsProvinceDropdownOpen] = useState(false);

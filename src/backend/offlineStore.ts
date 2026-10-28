@@ -362,6 +362,33 @@ export function offlineDeleteLead(id: string): void {
   writeStorage('leads', leads.filter((l) => l.id !== id));
 }
 
+export function offlineHandoverStaffLeads(
+  fromStaffName: string,
+  toStaffName: string,
+  leadIds?: string[]
+): number {
+  const leads = readStorage<Lead[]>('leads', INITIAL_LEADS);
+  let count = 0;
+  const updated = leads.map((lead) => {
+    const isTarget = leadIds
+      ? leadIds.includes(lead.id)
+      : (lead.assignedTo === fromStaffName && lead.status !== 'delivered' && lead.status !== 'lost');
+    if (isTarget) {
+      count++;
+      return {
+        ...lead,
+        assignedTo: toStaffName,
+        notes: (lead.notes || '') + ' [ໂອນເຄສຈາກ ' + fromStaffName + ' ໃຫ້ ' + toStaffName + ']',
+      };
+    }
+    return lead;
+  });
+  if (count > 0) {
+    writeStorage('leads', updated);
+  }
+  return count;
+}
+
 export function offlineSaveBill(bill: InvoiceBillRecord, vehicle?: InventoryItem): void {
   const bills = readStorage<InvoiceBillRecord[]>('bills', INITIAL_BILLS);
   const idx = bills.findIndex((b) => b.id === bill.id);
