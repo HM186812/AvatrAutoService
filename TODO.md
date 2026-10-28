@@ -1,6 +1,6 @@
 ﻿# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 85 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
-> **วันที่อัปเดตล่าสุด**: 2026-10-28 23:55 (+07:00)
-> **สถานะ**: ระบบ Phase 1 และ Phase 2 ส่วนจัดอันดับ Top Sales (ข้อ 77-78) และระบบ Cloud Document Audit Log (ข้อ 85) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC & RLS Policies เรียบร้อย, ระบบ Phase 1 ข้อ 1-74 และการแก้ปัญหาโครงสร้างฐานข้อมูลข้อ 79, 80, 83, 84 ผ่านการทดสอบครบถ้วน
+> **วันที่อัปเดตล่าสุด**: 2026-10-29 01:06 (+07:00)
+> **สถานะ**: ระบบ Phase 1 และ Phase 2 ส่วนจัดอันดับ Top Sales (ข้อ 77-78), ระบบโอนเคสพนักงานลาออก (ข้อ 75) และระบบ Cloud Document Audit Log (ข้อ 85) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC & RLS Policies เรียบร้อย, ข้อ 81 มาร์กข้าม (เป็น Dummy Data), งาน Phase 2 ที่เหลือ (ข้อ 76) พักไว้ตามคำสั่งเพื่อรักษาขอบเขตงาน
 
 ---
 
@@ -540,14 +540,17 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
 > ออกแบบเพื่อพนักงานขาย (Sales) ถือมือถือเครื่องเดียว และเจ้าของโชว์รูม (Admin) ที่ต้องการความคล่องตัว ตัดขั้นตอนเอกสารที่ซ้ำซ้อนออกทั้งหมด
 
 - [x] **75. ระบบจัดการพนักงานลาออก & โอนเฉพาะเคสค้าง (1-Click Pending Deals Handover)**
-  - **ไฟล์เป้าหมาย**: `src/components/views/UserManagementView.tsx`, `src/backend/data.ts`
-  - **รายละเอียด**:
-    1. ปรับสถานะบัญชีเป็น `suspended` ทันทีเมื่อพนักงานลาออก เพื่อระงับสิทธิ์ Login แต่เก็บประวัติการขายและบิลเดิมไว้ครบ 100%
-    2. หน้าจอ Admin สรุปจำนวนเคสที่ "ยังคุยค้างอยู่ (Active / In-progress Deals)" ของพนักงานที่ลาออก
-    3. ปุ่ม 1-Click "โอนเคสค้างให้เพื่อนร่วมงาน": เลือกเซลส์คนใหม่ที่มีสถานะ `active` แล้วโอนย้ายเฉพาะเคสที่ยังไม่ส่งมอบรถ เพื่อให้ติดตามงานต่อได้ทันทีโดยไม่ตกหล่น
-    4. กรอง Dropdown รายชื่อพนักงานขายในทุกหน้าจอ ให้แสดงเฉพาะพนักงานสถานะ `active` เท่านั้น
+  - **ไฟล์เป้าหมาย**: `src/components/views/UserManagementView.tsx`, `src/backend/data.ts`, `src/backend/offlineStore.ts`, `src/components/views/POSSalesView.tsx`
+  - **สถานะ**: ✅ เสร็จสมบูรณ์ 100% (Commit `1e9c5b4`)
+  - **การดำเนินการ**:
+    1. เพิ่มฟังก์ชัน `getUserPendingLeads` และป้ายเตือน `⏳ X ເຄສຄ້າງ` พร้อมปุ่ม `🔄 ໂອນເຄສ` ใน `UserManagementView.tsx`
+    2. สร้างหน้าต่าง 1-Click Handover Modal พรีวิวรายชื่อลูกค้าที่คุยค้างอยู่ และให้เลือกเซลส์ปลายทางที่มีสถานะ `active` เท่านั้น
+    3. เมื่อ Admin กดระงับบัญชี (`suspended`) ระบบจะเปิดหน้าต่างโอนเคสให้เลือกเพื่อนร่วมงานส่งต่องานได้ทันที
+    4. สร้างฟังก์ชัน `handoverStaffPendingLeads` ใน `data.ts` และ `offlineStore.ts` ย้าย `assigned_to` บน Supabase พร้อมแสตมป์บันทึกประวัติการโอน
+    5. อัปเกรด `saveLead` ให้ปลดล็อกการเปลี่ยน `assignedTo` ของลูกค้าเดิมได้อย่างถูกต้อง
+    6. กรองตัดชื่อเซลส์ที่ถูก `suspended` ออกจาก Dropdown ในหน้าขาย POS (`POSSalesView.tsx`) อัตโนมัติ
 
-- [ ] **76. การแบ่งสิทธิ์และระบบช่วยงานหน้าร้าน (Field-First RBAC & On-Floor CRM)**
+- [ ] **76. [PAUSED] การแบ่งสิทธิ์และระบบช่วยงานหน้าร้าน (Field-First RBAC & On-Floor CRM - พักไว้ตามคำสั่งเพื่อรักษาขอบเขตงาน)**
   - **ไฟล์เป้าหมาย**: `src/components/views/CustomerView.tsx`, `src/components/views/BillsManagementView.tsx`, `src/App.tsx`
   - **รายละเอียด**:
     1. **หน้า CRM ลูกค้า (Floor Check & Quick Note)**:
