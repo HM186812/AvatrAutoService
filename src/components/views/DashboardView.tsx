@@ -186,11 +186,13 @@ export default function DashboardView({
 
   // Sale & Delivery Bills (Includes Full Sales & Installment Down Payments)
   const saleBills = useMemo(() => {
-    return (bills || []).filter(b =>
-      b.billType === 'sale' ||
-      b.billType === 'installment' ||
-      b.type === 'sale' ||
-      b.type === 'installment'
+    return (bills || []).filter(b => 
+      b.status !== 'voided' && (
+        b.billType === 'sale' || 
+        b.billType === 'installment' || 
+        b.type === 'sale' || 
+        b.type === 'installment'
+      )
     );
   }, [bills]);
 
@@ -213,11 +215,13 @@ export default function DashboardView({
 
   // Filter installment bills
   const installmentBills = useMemo(() => {
-    return bills.filter(b =>
-      b.billType === 'installment' ||
-      b.paymentMethod === 'finance' ||
-      Boolean(b.financeCompany) ||
-      Boolean(b.downPaymentPercent && b.downPaymentPercent > 0)
+    return bills.filter(b => 
+      b.status !== 'voided' && (
+        b.billType === 'installment' || 
+        b.paymentMethod === 'finance' || 
+        Boolean(b.financeCompany) || 
+        Boolean(b.downPaymentPercent && b.downPaymentPercent > 0)
+      )
     );
   }, [bills]);
 

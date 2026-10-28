@@ -71,7 +71,7 @@ import {
 } from '../modals';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
-import { deleteLead, saveLead, updateLeadStatus, saveBillRecord } from '../../backend/data';
+import { deleteLead, saveLead, updateLeadStatus, saveBillRecord, fetchLeadsByDateRange } from '../../backend/data';
 import { newRecordId } from '../../backend/ids';
 import InstallmentDashboardView from './InstallmentDashboardView';
 import { IssuedDocumentRecord } from '../../types';
@@ -150,6 +150,89 @@ export default function CustomerView({
   // 2. Status Filter (ສະຖານະລູກຄ້າ / ຊ່ອງຈ່າຍແລ້ວ)
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [crmTimePreset, setCrmTimePreset] = useState<'all' | 'today' | '7d' | 'month' | 'year' | 'custom'>('all');
+  const [crmDateFrom, setCrmDateFrom] = useState('');
+  const [crmDateTo, setCrmDateTo] = useState('');
+  const [isLoadingRangeLeads, setIsLoadingRangeLeads] = useState(false);
+
+  const formatLocalYMD = (d: Date): string => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  useEffect(() => {
+    const now = new Date();
+    const todayStr = formatLocalYMD(now);
+    let from: string | undefined;
+    let to: string | undefined;
+    if (crmTimePreset === 'today') {
+      from = todayStr;
+      to = todayStr;
+    } else if (crmTimePreset === '7d') {
+      const start = new Date(now);
+      start.setDate(now.getDate() - 6);
+      from = formatLocalYMD(start);
+      to = todayStr;
+    } else if (crmTimePreset === 'month') {
+      from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      to = todayStr;
+    } else if (crmTimePreset === 'year') {
+      from = `${now.getFullYear()}-01-01`;
+      to = todayStr;
+    } else if (crmTimePreset === 'custom') {
+      from = crmDateFrom || undefined;
+      to = crmDateTo || undefined;
+    }
+
+    let cancelled = false;
+    setIsLoadingRangeLeads(true);
+    fetchLeadsByDateRange({ dateFrom: from, dateTo: to })
+      .then((fetched) => {
+        if (!cancelled && fetched.length > 0) {
+          setLeads((prev) => {
+            const map = new Map<string, Lead>();
+            prev.forEach((l) => map.set(l.id, l));
+            fetched.forEach((l) => map.set(l.id, l));
+            return Array.from(map.values());
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsLoadingRangeLeads(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [crmTimePreset, crmDateFrom, crmDateTo]);
+
+  const matchesCrmTime = (dateStr?: string): boolean => {
+    if (crmTimePreset === 'all' && !crmDateFrom && !crmDateTo) return true;
+    const raw = (dateStr || '').slice(0, 10);
+    if (!raw) return false;
+    const now = new Date();
+    const todayStr = formatLocalYMD(now);
+    if (crmTimePreset === 'today') return raw === todayStr;
+    if (crmTimePreset === '7d') {
+      const start = new Date(now);
+      start.setDate(now.getDate() - 6);
+      return raw >= formatLocalYMD(start) && raw <= todayStr;
+    }
+    if (crmTimePreset === 'month') {
+      const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      return raw.startsWith(prefix);
+    }
+    if (crmTimePreset === 'year') {
+      return raw.startsWith(`${now.getFullYear()}-`);
+    }
+    if (crmTimePreset === 'custom') {
+      if (crmDateFrom && raw < crmDateFrom) return false;
+      if (crmDateTo && raw > crmDateTo) return false;
+    }
+    return true;
+  };
 
   // Toast notification feedback
   const triggerLocalToast = (msg: string) => {
@@ -208,11 +291,13 @@ export default function CustomerView({
       const isConfirmedInstallment =
         Boolean(lead.installmentRecords && lead.installmentRecords.length > 0) ||
         lead.installmentStatus === 'active_repaying' ||
-        lead.installmentStatus === 'completed';
+        lead.installmentStatus === 'completed' ||
+        lead.installmentStatus === 'approved' ||
+        lead.installmentStatus === 'pending_approval';
       if (isConfirmedInstallment) return false;
-      return true;
+      return matchesCrmTime(lead.createdAt || lead.paymentDate);
     });
-  }, [leads, bills]);
+  }, [leads, bills, crmTimePreset, crmDateFrom, crmDateTo]);
 
   // Separated Counts (calculated exclusively for prospective leads):
   // 1. Acquisition Channel counts
@@ -732,12 +817,13 @@ export default function CustomerView({
       }
     });
 
-    return list;
-  }, [bills, leads, services]);
+    return list.filter(item => matchesCrmTime(item.purchaseDate));
+  }, [bills, leads, services, crmTimePreset, crmDateFrom, crmDateTo]);
 
   // Filtered Existing Customers (Car Owners for After-Sales: Strictly 100% Cash/Transfer)
   const filteredExistingCustomers = useMemo(() => {
     return existingCustomers.filter(item => {
+      if (!matchesCrmTime(item.purchaseDate)) return false;
       if (existingModelFilter !== 'all' && item.model !== existingModelFilter) return false;
       if (existingServiceFilter === 'has_service' && (item.services?.length ?? 0) === 0) return false;
       if (existingServiceFilter === 'no_service' && (item.services?.length ?? 0) > 0) return false;
@@ -756,7 +842,7 @@ export default function CustomerView({
       }
       return true;
     });
-  }, [existingCustomers, existingModelFilter, existingServiceFilter, existingSearchQuery]);
+  }, [existingCustomers, existingModelFilter, existingServiceFilter, existingSearchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
 
   // Dedicated Installment Customers (For Tab 3 - All Installment & Financing Customers)
   const installmentCustomers = useMemo(() => {
@@ -770,7 +856,7 @@ export default function CustomerView({
         l.installmentStatus === 'completed' ||
         l.installmentStatus === 'approved' ||
         l.installmentStatus === 'pending_approval';
-      return isInstallment;
+      return isInstallment && matchesCrmTime(l.paymentDate || l.createdAt);
     });
 
     const seenPhones = new Set(matchedLeads.map(l => (l.phone || '').replace(/\D/g, '')).filter(Boolean));
@@ -778,7 +864,7 @@ export default function CustomerView({
       const isInstBill = b.paymentMethod === 'finance' || 
         b.billType === 'installment' || 
         Boolean(b.downPaymentPercent);
-      if (!isInstBill) return false;
+      if (!isInstBill || !matchesCrmTime(b.date)) return false;
       const cleanPhone = (b.customerPhone || '').replace(/\D/g, '');
       if (cleanPhone && seenPhones.has(cleanPhone)) return false;
       if (matchedLeads.some(l => l.id === b.leadId)) return false;
@@ -786,11 +872,13 @@ export default function CustomerView({
     });
 
     return [...matchedLeads, ...extraBills];
-  }, [leads, bills]);
+  }, [leads, bills, crmTimePreset, crmDateFrom, crmDateTo]);
 
   // Filtered Leads (For prospective Leads CRM - Strictly customers who have not yet purchased)
   const filteredLeads = useMemo(() => {
     return prospectiveLeads.filter(lead => {
+      if (!matchesCrmTime(lead.createdAt || lead.paymentDate)) return false;
+
       // 1. Channel Filter (ໝວດຊ່ອງທາງລູກຄ້າ)
       if (channelFilter !== 'all' && lead.category !== channelFilter) return false;
 
@@ -813,10 +901,62 @@ export default function CustomerView({
       }
       return true;
     });
-  }, [prospectiveLeads, channelFilter, selectedStatus, searchQuery]);
+  }, [prospectiveLeads, channelFilter, selectedStatus, searchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
+
+  // Pagination for high scalability & Surface Pro friendly RAM usage
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [channelFilter, selectedStatus, searchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
+
+  const paginatedLeads = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredLeads.slice(start, start + PAGE_SIZE);
+  }, [filteredLeads, currentPage]);
 
   // Export Customer CRM to CSV File (ນຳອອກ)
   const handleExportCSV = () => {
+    const csvCell = (val: unknown): string => {
+      const str = String(val ?? '').replace(/\r?\n/g, ' ');
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    if (customerClassificationTab === 'existing_customers') {
+      const eHeaders = [
+        'Customer Name', 'Phone', 'ID Card / Passport', 'Province', 'Model', 'Plate Number', 'VIN',
+        'Purchase Date', 'Payment Type', 'Mileage (km)', 'Battery SOH (%)', 'Warranty Expiry', 'Warranty Status', 'Service Count', 'Notes'
+      ];
+      const eRows = filteredExistingCustomers.map(item => [
+        csvCell(item.customerName), csvCell(item.phone), csvCell(item.idCardNumber), csvCell(item.province),
+        csvCell(item.model), csvCell(item.plateNumber), csvCell(item.vin), csvCell(item.purchaseDate),
+        csvCell(item.paymentType), item.currentMileageKm ?? '', item.batteryHealthSOH ?? '',
+        csvCell(item.warrantyExpiryDate), csvCell(item.warrantyStatus), item.services?.length ?? 0, csvCell(item.afterSalesNotes)
+      ]);
+      const eContent = '\uFEFF' + [eHeaders.join(','), ...eRows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([eContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `avatr_crm_existing_owners_${formatLocalYMD(new Date())}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    const exportTargetLeads = customerClassificationTab === 'installment_customers'
+      ? leads.filter(l => {
+          const isInst = l.paymentType === 'installment' || l.paymentType === 'finance' || Boolean(l.downPaymentPercent) ||
+            Boolean(l.financeCompany) || Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
+            l.installmentStatus === 'active_repaying' || l.installmentStatus === 'completed' ||
+            l.installmentStatus === 'approved' || l.installmentStatus === 'pending_approval';
+          return isInst && matchesCrmTime(l.paymentDate || l.createdAt);
+        })
+      : filteredLeads;
     const headers = [
       'Customer ID',
       'Customer Name',
@@ -839,7 +979,7 @@ export default function CustomerView({
       'Notes'
     ];
 
-    const rows = filteredLeads.map(lead => [
+    const rows = exportTargetLeads.map(lead => [
       lead.id,
       `"${(lead.customerName || '').replace(/"/g, '""')}"`,
       `"${lead.phone || ''}"`,
@@ -866,7 +1006,7 @@ export default function CustomerView({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `avatr_crm_customers_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `avatr_crm_${customerClassificationTab}_${formatLocalYMD(new Date())}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -955,6 +1095,63 @@ export default function CustomerView({
       </div>
 
       {/* Primary Classification Tabs: 3 Separated Customer Categories */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 pr-1 font-semibold text-zinc-400">
+            <Calendar className="h-3.5 w-3.5 text-amber-400" />
+            <span>{lang === 'lo' ? 'ຊ່ວງວັນທີ:' : 'Date Range:'}</span>
+          </span>
+          {([
+            { id: 'all', label: lang === 'lo' ? 'ທັງໝົດ' : 'All' },
+            { id: 'today', label: lang === 'lo' ? 'ມື້ນີ້' : 'Today' },
+            { id: '7d', label: lang === 'lo' ? '7 ວັນ' : '7 Days' },
+            { id: 'month', label: lang === 'lo' ? 'ເດືອນນີ້' : 'This Month' },
+            { id: 'year', label: lang === 'lo' ? 'ປີນີ້' : 'This Year' },
+            { id: 'custom', label: lang === 'lo' ? 'ກຳນົດວັນທີ' : 'Custom' },
+          ] as const).map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => {
+                setCrmTimePreset(preset.id);
+                if (preset.id === 'all') {
+                  setCrmDateFrom('');
+                  setCrmDateTo('');
+                }
+              }}
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
+                crmTimePreset === preset.id
+                  ? 'bg-amber-400 text-black'
+                  : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+          {crmTimePreset === 'custom' && (
+            <div className="flex flex-wrap items-center gap-1.5 pl-1">
+              <input
+                type="date"
+                aria-label="Date from"
+                value={crmDateFrom}
+                onChange={(e) => setCrmDateFrom(e.target.value)}
+                className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-mono text-white"
+              />
+              <span className="text-zinc-500">-</span>
+              <input
+                type="date"
+                aria-label="Date to"
+                value={crmDateTo}
+                onChange={(e) => setCrmDateTo(e.target.value)}
+                className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-mono text-white"
+              />
+            </div>
+          )}
+        </div>
+        {isLoadingRangeLeads && (
+          <span className="text-[11px] text-amber-400 font-semibold">ກຳລັງດຶງຂໍ້ມູນຕາມຊ່ວງເວລາ...</span>
+        )}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* Tab 1: ລູກຄ້າໃໝ່ (Leads) */}
@@ -1310,7 +1507,7 @@ export default function CustomerView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
-                  {filteredLeads.map((lead) => {
+                  {paginatedLeads.map((lead) => {
                     return (
                       <tr
                         key={lead.id}
@@ -1471,7 +1668,7 @@ export default function CustomerView({
           ) : (
             /* VIEW MODE 2: MODERN HIGH-AESTHETIC BENTO STREAMLINE CARD VIEW */
             <div className="space-y-4">
-              {filteredLeads.map((lead) => {
+              {paginatedLeads.map((lead) => {
                 return (
                   <div
                     key={lead.id}
@@ -1689,6 +1886,33 @@ export default function CustomerView({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {filteredLeads.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-4 py-3 rounded-2xl border border-zinc-800 text-xs text-zinc-400 bg-zinc-950">
+              <span>
+                {lang === 'th' ? `แสดง ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} จาก ${filteredLeads.length} รายการ`
+                  : lang === 'lo' ? `ສະແດງ ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} ຈາກ ${filteredLeads.length} ລາຍການ`
+                  : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} of ${filteredLeads.length}`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {lang === 'th' ? 'ก่อนหน้า' : lang === 'lo' ? 'ກ່ອນໜ້າ' : 'Previous'}
+                </button>
+                <span className="font-mono text-zinc-300">{currentPage} / {totalPages}</span>
+                <button
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {lang === 'th' ? 'ถัดไป' : lang === 'lo' ? 'ຖັດໄປ' : 'Next'}
+                </button>
+              </div>
             </div>
           )}
       </div>
@@ -2245,9 +2469,9 @@ export default function CustomerView({
         /* DEDICATED TAB 3: INSTALLMENT & FINANCE CUSTOMERS VIEW */
         <div className="space-y-6">
           <InstallmentDashboardView
-            leads={leads}
+            leads={leads.filter(l => matchesCrmTime(l.paymentDate || l.createdAt))}
             setLeads={setLeads}
-            bills={bills}
+            bills={bills.filter(b => matchesCrmTime(b.date))}
             setBills={setBills}
             vehicles={vehicles}
             currentUser={currentUser}

@@ -13,3 +13,4 @@ export { default as ConfirmPayoffModal } from './ConfirmPayoffModal';
 export { default as CustomerAfterSalesModal } from './CustomerAfterSalesModal';
 export type { CustomerAfterSalesProfile } from './CustomerAfterSalesModal';
 export { default as EditVehicleModelModal } from './EditVehicleModelModal';
+export { default as SlipPreviewModal } from './SlipPreviewModal';

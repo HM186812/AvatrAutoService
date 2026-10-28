@@ -1,11 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin, cleanupTestData } from './helpers/auth';
+import { loginAsAdmin, cleanupTestData, ensureSeedData } from './helpers/auth';
 
 const TEST_PREFIX = `AUTOPOS_${Date.now()}`;
 const TEST_BUYER_NAME = `${TEST_PREFIX} Buyer`;
 const TEST_BUYER_PHONE = `020${Math.floor(10000000 + Math.random() * 90000000)}`;
 
 test.describe('Point of Sale (POS)', () => {
+  test.beforeAll(async () => {
+    await ensureSeedData();
+  });
+
   test.afterAll(async () => {
     await cleanupTestData(TEST_PREFIX);
   });
@@ -19,7 +23,7 @@ test.describe('Point of Sale (POS)', () => {
 
     // Verify header and vehicle selection cards
     await expect(page.locator('main')).toContainText(/POINT OF SALE|POS/i);
-    await expect(page.locator('main')).toContainText(/AVATR/);
+    await expect(page.locator('main')).toContainText(/AVATR/, { timeout: 30_000 });
   });
 
   test('should complete vehicle sale (ขายของ) and generate sales invoice', async ({ page }) => {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { SystemUser, Language } from '../../types';
 import { translations } from '../../data/translations';
 import { signInStaff, signUpStaff } from '../../backend/data';
-import { isSupabaseConfigured } from '../../backend/client';
+import { isOfflineDemoEnabled, isSupabaseConfigured } from '../../backend/client';
 import { DEFAULT_OFFLINE_USERS } from '../../backend/offlineStore';
 import AvatrLogo from '../layout/AvatrLogo';
 import TurnstileWidget from '../common/TurnstileWidget';
@@ -401,8 +401,8 @@ export default function LoginView({
         </div>
 
         {/* Feedback Banners with High Visibility */}
-        {/* Offline Demo Mode Quick Access */}
-        {!isSupabaseConfigured && (
+        {/* Offline Demo Mode Quick Access — only in DEV with VITE_ENABLE_OFFLINE_DEMO=true */}
+        {isOfflineDemoEnabled && !isSupabaseConfigured && (
           <div
             className={`p-4 border rounded-2xl text-xs space-y-3 ${
               isDark

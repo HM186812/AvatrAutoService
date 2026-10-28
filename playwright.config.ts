@@ -5,10 +5,15 @@ import path from 'path';
 
 // Verify .env.test to prevent accidental test mutation on Production DB
 const envTestPath = path.resolve(process.cwd(), '.env.test');
-const hasEnvTest = fs.existsSync(envTestPath);
 
-if (hasEnvTest) {
-  dotenv.config({ path: envTestPath });
+if (fs.existsSync(envTestPath)) {
+  const envContent = fs.readFileSync(envTestPath, 'utf8');
+  const parsed = dotenv.parse(envContent);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
 } else if (process.env.ALLOW_PROD_TEST !== 'true') {
   console.warn(
     '\n⚠️  [PLAYWRIGHT E2E SAFETY GUARD] Missing .env.test file!\n' +
@@ -20,15 +25,28 @@ if (hasEnvTest) {
   throw new Error('E2E Test Aborted: .env.test not found. Run with .env.test or ALLOW_PROD_TEST=true');
 }
 
+// Origin guard to prevent executing tests against unintended databases
+const testSupabaseUrl = process.env.VITE_SUPABASE_URL;
+const allowedOrigin = process.env.E2E_ALLOWED_SUPABASE_ORIGIN;
+if (testSupabaseUrl && allowedOrigin && allowedOrigin.trim()) {
+  const targetOrigin = new URL(testSupabaseUrl).origin;
+  const expectedOrigin = new URL(allowedOrigin).origin;
+  if (targetOrigin !== expectedOrigin) {
+    throw new Error(
+      `[E2E SAFETY HALT] Target Supabase URL origin (${targetOrigin}) does not match E2E_ALLOWED_SUPABASE_ORIGIN (${expectedOrigin})`
+    );
+  }
+}
+
 // Check if existing cached Chromium or default browser is available
 const cachedChromium = path.join(process.env.HOME || '', '.cache/ms-playwright/chromium-1243/chrome-linux64/chrome');
 const hasCachedChromium = fs.existsSync(cachedChromium);
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 45_000,
+  timeout: 60_000,
   expect: {
-    timeout: 10_000,
+    timeout: 15_000,
   },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
@@ -48,13 +66,13 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
   ],
   webServer: {
-    command: 'npm run dev -- --mode test',
+    command: 'node ./node_modules/vite/bin/vite.js --port=3000 --host=0.0.0.0 --mode test',
     url: 'http://localhost:3000',
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },
 });

@@ -14,8 +14,9 @@ import {
 } from './types';
 import { translations } from './data/translations';
 import { getModelStockSummaries } from './data/stockSummary';
-import { isSupabaseConfigured, supabase } from './backend/client';
+import { isOfflineDemoEnabled, isSupabaseConfigured, supabase } from './backend/client';
 import {
+  clearStaffCache,
   deleteBill,
   getSignedInStaff,
   loadBackendData,
@@ -42,13 +43,13 @@ const UserManagementView = lazy(() => import('./components/views/UserManagementV
 const ProfileView = lazy(() => import('./components/views/ProfileView'));
 const InstallmentDashboardView = lazy(() => import('./components/views/InstallmentDashboardView'));
 const SalesLeaderboardView = lazy(() => import('./components/views/SalesLeaderboardView'));
-import {
-  NewLeadModal,
-  QuotationModal,
-  ServiceModal,
-  TestDriveModal,
-  VehicleModal,
-} from './components/modals';
+
+// Lazy load heavy modals to shrink main bundle size
+const NewLeadModal = lazy(() => import('./components/modals/NewLeadModal'));
+const QuotationModal = lazy(() => import('./components/modals/QuotationModal'));
+const ServiceModal = lazy(() => import('./components/modals/ServiceModal'));
+const TestDriveModal = lazy(() => import('./components/modals/TestDriveModal'));
+const VehicleModal = lazy(() => import('./components/modals/VehicleModal'));
 import { 
   Menu, 
   LayoutDashboard, 
@@ -172,6 +173,7 @@ export default function App() {
     createdAt: '',
   };
 
+
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [currentUser, setCurrentUser] = useState<SystemUser>(FALLBACK_EMPTY_USER);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -186,7 +188,14 @@ export default function App() {
   const [backendError, setBackendError] = useState<string | null>(null);
 
   const refreshBackendData = useCallback(async () => {
-    const data = await loadBackendData();
+    // Fast Progressive Loading: update critical catalog & leads as soon as Tier 1 completes
+    const data = await loadBackendData((tier1) => {
+      if (tier1.users) setUsers(tier1.users);
+      if (tier1.leads) setLeads(tier1.leads);
+      if (tier1.inventory) setInventory(tier1.inventory);
+      if (tier1.vehicles) setVehicles(tier1.vehicles);
+    });
+
     setUsers(data.users);
     setLeads(data.leads);
     setInventory(data.inventory);
@@ -195,6 +204,26 @@ export default function App() {
     setStockLogs(data.stockLogs);
     setBills(data.bills);
     setVehicles(data.vehicles);
+    if (isOfflineDemoEnabled) {
+      try {
+        localStorage.setItem('avatr_cached_backend_data', JSON.stringify({
+          users: data.users,
+          leads: data.leads,
+          inventory: data.inventory,
+          services: data.services,
+          testDrives: data.testDrives,
+          stockLogs: data.stockLogs,
+          bills: data.bills,
+          vehicles: data.vehicles,
+        }));
+      } catch {
+        // ignore quota or private mode errors
+      }
+    } else {
+      try {
+        localStorage.removeItem('avatr_cached_backend_data');
+      } catch {}
+    }
     if (data.settings && typeof data.settings === 'object') {
       const settings = data.settings as Record<string, unknown>;
       if (settings.companyBankInfo) {
@@ -229,8 +258,30 @@ export default function App() {
       }
     } catch {}
 
+    if (!isOfflineDemoEnabled) {
+      try {
+        localStorage.removeItem('avatr_cached_backend_data');
+        const offlineKeysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('avatr_offline_') || key.startsWith('offline_'))) {
+            offlineKeysToRemove.push(key);
+          }
+        }
+        for (const key of offlineKeysToRemove) {
+          localStorage.removeItem(key);
+        }
+      } catch {}
+    }
+
     if (!supabase || !isSupabaseConfigured) {
       setBackendError(null);
+      if (!isOfflineDemoEnabled) {
+        setIsLoggedIn(false);
+        setCurrentUser(FALLBACK_EMPTY_USER);
+        setIsAuthLoading(false);
+        return;
+      }
       void refreshBackendData();
       const savedOfflineUser = localStorage.getItem('avatr_offline_active_user');
       if (savedOfflineUser) {
@@ -265,10 +316,11 @@ export default function App() {
     }
 
     let active = true;
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
 
       if (event === 'SIGNED_OUT' || !session?.user) {
+        clearStaffCache();
         setIsLoggedIn(false);
         setCurrentUser(FALLBACK_EMPTY_USER);
         setUsers([]);
@@ -279,24 +331,31 @@ export default function App() {
         setStockLogs([]);
         setBills([]);
         setVehicles([]);
+        try { localStorage.removeItem('avatr_cached_backend_data'); } catch {}
         setIsAuthLoading(false);
         return;
       }
 
-      try {
-        const user = await getSignedInStaff(session.user.id);
-        await refreshBackendData();
+      // Defer async calls out of the synchronous onAuthStateChange notification loop
+      setTimeout(async () => {
         if (!active) return;
-        setCurrentUser(user);
-        setIsLoggedIn(true);
-        setBackendError(null);
-      } catch (error: unknown) {
-        if (!active) return;
-        setBackendError(error instanceof Error ? error.message : 'Could not load Supabase session.');
-        void supabase?.auth.signOut();
-      } finally {
-        if (active) setIsAuthLoading(false);
-      }
+        try {
+          const user = await getSignedInStaff(session.user.id);
+          if (!active) return;
+          setCurrentUser(user);
+          setIsLoggedIn(true);
+          setBackendError(null);
+          setIsAuthLoading(false);
+          // Progressive refresh in background
+          void refreshBackendData();
+        } catch (error: unknown) {
+          if (!active) return;
+          setBackendError(error instanceof Error ? error.message : 'Could not load Supabase session.');
+          void supabase?.auth.signOut();
+        } finally {
+          if (active) setIsAuthLoading(false);
+        }
+      }, 0);
     });
 
     return () => {
@@ -361,6 +420,7 @@ export default function App() {
     setCurrentUser(FALLBACK_EMPTY_USER);
     try {
       localStorage.removeItem('avatr_offline_active_user');
+      localStorage.removeItem('avatr_cached_backend_data');
     } catch {}
     try {
       await supabase?.auth.signOut();
@@ -379,7 +439,7 @@ export default function App() {
     try {
       const targetBill = bills.find(b => b.id === billId);
       await deleteBill(billId);
-      setBills(prev => prev.filter(b => b.id !== billId));
+      setBills(prev => prev.map(b => b.id === billId ? { ...b, status: 'voided' } : b));
       if (targetBill?.vin) {
         const billType = targetBill.billType || targetBill.type;
         if ((billType === 'sale' || billType === 'installment') && targetBill.installmentType !== 'monthly_installment') {
@@ -414,14 +474,14 @@ export default function App() {
             ];
           });
         } else if (billType === 'import') {
-          const hasOtherBills = bills.some(b => b.id !== billId && b.vin === targetBill.vin);
+          const hasOtherBills = bills.some(b => b.id !== billId && b.vin === targetBill.vin && b.status !== 'voided');
           if (!hasOtherBills) {
             setInventory(prev => prev.filter(item => item.vin !== targetBill.vin));
           }
         }
         setStockLogs(prev => prev.filter(log => !(log.billId === billId || (log.vin === targetBill.vin && log.type === (billType === 'import' ? 'stock_in' : 'stock_out')))));
       }
-      triggerToast('ລົບບິນສຳເລັດແລ້ວ!');
+      triggerToast(lang === 'lo' ? 'ຍົກເລີກບິນ ແລະ ຄືນສະຕ໋ອກລົດຮຽບຮ້ອຍແລ້ວ!' : 'ยกเลิกบิลและคืนสต็อกรถเรียบร้อยแล้ว!');
     } catch (error) {
       triggerToast(error instanceof Error ? error.message : 'Bill could not be deleted.');
     }
@@ -531,6 +591,7 @@ export default function App() {
           setCurrentUser(user);
           setIsLoggedIn(true);
           setBackendError(null);
+          void refreshBackendData();
         }}
         onRegisterUser={(newUser) => setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)])}
         lang={lang}
@@ -840,50 +901,60 @@ export default function App() {
 
 
 
-      {/* Modals */}
-      <NewLeadModal
-        isOpen={isNewLeadOpen}
-        onClose={() => setIsNewLeadOpen(false)}
-        onAddLead={handleAddLead}
-        vehicles={vehicles}
-        inventory={inventory}
-        currentUser={currentUser}
-        lang={lang}
-      />
+      {/* Lazy-loaded Modals with Suspense */}
+      <Suspense fallback={null}>
+        {isNewLeadOpen && (
+          <NewLeadModal
+            isOpen={isNewLeadOpen}
+            onClose={() => setIsNewLeadOpen(false)}
+            onAddLead={handleAddLead}
+            vehicles={vehicles}
+            inventory={inventory}
+            currentUser={currentUser}
+            lang={lang}
+          />
+        )}
 
-      <ServiceModal
-        isOpen={isServiceOpen}
-        onClose={() => setIsServiceOpen(false)}
-        onAddService={handleAddService}
-        lang={lang}
-      />
+        {isServiceOpen && (
+          <ServiceModal
+            isOpen={isServiceOpen}
+            onClose={() => setIsServiceOpen(false)}
+            onAddService={handleAddService}
+            lang={lang}
+          />
+        )}
 
-      <TestDriveModal
-        isOpen={isTestDriveOpen}
-        onClose={() => setIsTestDriveOpen(false)}
-        onAddTestDrive={handleAddTestDrive}
-        initialModel={testDriveInitialModel}
-        lang={lang}
-      />
+        {isTestDriveOpen && (
+          <TestDriveModal
+            isOpen={isTestDriveOpen}
+            onClose={() => setIsTestDriveOpen(false)}
+            onAddTestDrive={handleAddTestDrive}
+            initialModel={testDriveInitialModel}
+            lang={lang}
+          />
+        )}
 
-      <VehicleModal
-        vehicle={selectedVehicleForModal}
-        isOpen={isVehicleModalOpen}
-        onClose={() => setIsVehicleModalOpen(false)}
-        onOpenQuote={handleOpenQuoteForVehicle}
-        onOpenTestDrive={handleOpenTestDriveForModel}
-        lang={lang}
-      />
+        {isVehicleModalOpen && (
+          <VehicleModal
+            vehicle={selectedVehicleForModal}
+            isOpen={isVehicleModalOpen}
+            onClose={() => setIsVehicleModalOpen(false)}
+            onOpenQuote={handleOpenQuoteForVehicle}
+            onOpenTestDrive={handleOpenTestDriveForModel}
+            lang={lang}
+          />
+        )}
 
-      {quoteVehicle && (
-        <QuotationModal
-          isOpen={isQuoteOpen}
-          onClose={() => setIsQuoteOpen(false)}
-          vehicle={quoteVehicle}
-          customerName={quoteCustomerName}
-          lang={lang}
-        />
-      )}
+        {quoteVehicle && isQuoteOpen && (
+          <QuotationModal
+            isOpen={isQuoteOpen}
+            onClose={() => setIsQuoteOpen(false)}
+            vehicle={quoteVehicle}
+            customerName={quoteCustomerName}
+            lang={lang}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

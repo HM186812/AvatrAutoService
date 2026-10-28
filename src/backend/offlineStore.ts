@@ -16,6 +16,7 @@ import {
   INITIAL_TEST_DRIVES,
 } from '../data/mockData';
 import type { BackendData } from './data';
+import { isOfflineDemoEnabled } from './client';
 
 const STORAGE_KEY_PREFIX = 'avatr_offline_';
 
@@ -158,6 +159,8 @@ export const DEFAULT_OFFLINE_INVENTORY: InventoryItem[] = [
 ];
 
 function readStorage<T>(key: string, defaultValue: T): T {
+  if (!isOfflineDemoEnabled) return defaultValue;
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PREFIX + key);
     if (!raw) return defaultValue;
@@ -168,6 +171,8 @@ function readStorage<T>(key: string, defaultValue: T): T {
 }
 
 function writeStorage<T>(key: string, value: T): void {
+  if (!isOfflineDemoEnabled) return;
+
   try {
     localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(value));
   } catch (e) {
@@ -454,55 +459,21 @@ export function offlineSaveBill(bill: InvoiceBillRecord, vehicle?: InventoryItem
 
 export function offlineDeleteBill(id: string): void {
   const bills = readStorage<InvoiceBillRecord[]>('bills', INITIAL_BILLS);
-  const targetBill = bills.find((b) => b.id === id);
-  const remainingBills = bills.filter((b) => b.id !== id);
-  writeStorage('bills', remainingBills);
-
-  const deletedBillIds = new Set(readStorage<string[]>('deleted_bill_ids', []));
-  deletedBillIds.add(id);
-  writeStorage('deleted_bill_ids', Array.from(deletedBillIds));
-
-  if (targetBill?.vin) {
-    const billType = targetBill.billType || targetBill.type;
-    const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
-    if ((billType === 'sale' || billType === 'installment') && targetBill.installmentType !== 'monthly_installment') {
-      const idx = inventory.findIndex((i) => i.vin === targetBill.vin);
-      if (idx >= 0) {
-        inventory[idx] = { ...inventory[idx], status: 'ready', stockQuantity: 1 };
-      } else {
-        inventory.unshift({
-          vin: targetBill.vin,
-          engineNumber: targetBill.engineNumber || '',
-          model: targetBill.model,
-          trim: targetBill.trim || '',
-          plateNumber: targetBill.plateNumber || 'ລໍຖ້າຂຶ້ນທະບຽນ',
-          color: targetBill.color || '-',
-          colorHex: '#18181b',
-          interiorColor: targetBill.interiorColor || 'Black',
-          battery: targetBill.battery || 'CATL Ternary Lithium',
-          priceUSD: targetBill.unitPriceUSD || targetBill.netTotalUSD || 0,
-          priceLAK: targetBill.unitPriceLAK || targetBill.netTotalLAK || 0,
-          stockQuantity: 1,
-          status: 'ready',
-          pdiStatus: 'passed',
-          location: 'ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ',
-          arrivalDate: (targetBill.date || new Date().toISOString()).slice(0, 10),
-          mileageKm: 0,
-        });
-      }
-      writeStorage('inventory', inventory);
-    } else if (billType === 'import') {
-      const hasOtherBills = remainingBills.some((b) => b.vin === targetBill.vin);
-      if (!hasOtherBills) {
-        writeStorage('inventory', inventory.filter((i) => i.vin !== targetBill.vin));
+  const target = bills.find((b) => b.id === id);
+  if (target) {
+    target.status = 'voided';
+    writeStorage('bills', bills);
+    if (target.vin && (target.billType === 'sale' || target.type === 'sale' || target.billType === 'installment')) {
+      const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
+      const item = inventory.find((i) => i.vin === target.vin);
+      if (item) {
+        item.status = 'ready';
+        item.stockQuantity = 1;
+        writeStorage('inventory', inventory);
       }
     }
-
-    const stockLogs = readStorage<StockLogRecord[]>('stockLogs', []);
-    writeStorage(
-      'stockLogs',
-      stockLogs.filter((log) => !(log.billId === id || (log.vin === targetBill.vin && log.type === (billType === 'import' ? 'stock_in' : 'stock_out'))))
-    );
+  } else {
+    writeStorage('bills', bills.filter((b) => b.id !== id));
   }
 }
 

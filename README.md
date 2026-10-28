@@ -18,7 +18,7 @@ A modern, high-performance Dealership CRM, POS, and Auto Service Management Syst
   - **Supabase Realtime**: Instant multi-device state updates via WebSockets.
   - **Supabase Storage**: Secure cloud storage for company payment assets & BCEL QR images (`avatr-assets` bucket).
   - **Supabase Authentication**: Email & password / Phone login with JWT sessions and role assignment.
-  - **Offline LocalStorage Fallback**: 100% functional even when offline or without cloud connection.
+  - **Offline Demo Mode (Dev / Demo Only)**: Available in development environments for preview and UI testing (`VITE_ENABLE_OFFLINE_DEMO=true`); strictly isolated and disabled in production to protect real customer records.
 
 ---
 
@@ -35,13 +35,16 @@ A modern, high-performance Dealership CRM, POS, and Auto Service Management Syst
    - **Anti-Tamper User Roles**: Regular users cannot escalate their own privileges or promote themselves to `super_admin`.
    - **Storage Object Protection**: Unauthenticated users cannot upload or delete files in the `avatr-assets` storage bucket.
 
+3. **Offline Demo Mode Isolation (ການຈຳກັດສິດ Offline Demo)**:
+   - The offline mode is restricted to local development/sandbox environments (`VITE_ENABLE_OFFLINE_DEMO=true`). It must never be used with real customer data in production.
+
 ---
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons, Canvas Confetti
 - **Backend & Cloud**: Supabase (PostgreSQL, Supabase Auth, Supabase Storage, Realtime Subscriptions)
-- **Local Persistence**: LocalStorage Cache & Offline Resilience
+- **Local Persistence**: Browser Session & Development Demo Storage (Dev Sandbox Only)
 
 ---
 
@@ -73,10 +76,15 @@ VITE_SUPABASE_ANON_KEY="your-anon-key"
 ```
 
 ### 4. Database Setup
-1. Open your [Supabase Dashboard](https://supabase.com/dashboard).
-2. Go to **SQL Editor** -> **New Query**.
-3. Copy and paste the entire contents of `supabase_schema.sql` and click **Run**.
-   - This creates tables, RLS security policies, triggers, and the `avatr-assets` storage bucket.
+Apply the production migrations in `supabase/migrations/` using the Supabase CLI:
+```bash
+# Link your Supabase project (if not already linked)
+npx supabase link --project-ref your-project-ref
+
+# Push all database migrations, RLS policies, RPCs, and storage buckets
+npx supabase db push
+```
+> Note: Legacy `supabase_schema.sql` has been archived in `docs/legacy/` and should not be used for new deployments.
 
 ### 5. Run the Application
 ```bash

@@ -18,6 +18,7 @@ playwright-report/
 .DS_Store
 Thumbs.db
 *.log
+*.cjs
 
 # IDE & Editor files
 .vscode/
@@ -61,6 +62,8 @@ supabase-service-key*
 
 # Local Supabase & Firebase Residuals
 .supabase/
+supabase/.temp/
+docs/backup/
 .firebaserc
 firebase.json
 firestore.rules
