@@ -214,7 +214,17 @@ export async function fetchDocumentLogsFromCloud(): Promise<IssuedDocumentRecord
       }));
       const local = getIssuedDocumentLogs();
       const mergedMap = new Map<string, IssuedDocumentRecord>();
-      [...cloudLogs, ...local].forEach((item) => mergedMap.set(item.id, item));
+      // Deduplicate by docNumber or id to avoid duplicates between client and cloud
+      cloudLogs.forEach((item) => {
+        const key = item.docNumber || item.id;
+        mergedMap.set(key, item);
+      });
+      local.forEach((item) => {
+        const key = item.docNumber || item.id;
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, item);
+        }
+      });
       const merged = Array.from(mergedMap.values());
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       return merged;
@@ -227,6 +237,7 @@ export async function fetchDocumentLogsFromCloud(): Promise<IssuedDocumentRecord
 
 export function deleteIssuedDocumentLog(id: string): IssuedDocumentRecord[] {
   const currentLogs = getIssuedDocumentLogs();
+  const target = currentLogs.find((l) => l.id === id);
   const filtered = currentLogs.filter((l) => l.id !== id);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
@@ -239,7 +250,12 @@ export function deleteIssuedDocumentLog(id: string): IssuedDocumentRecord[] {
   if (isSupabaseConfigured && supabase) {
     void (async () => {
       try {
-        await supabase.from('document_issuance_logs').delete().eq('id', id);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        if (isUuid) {
+          await supabase.from('document_issuance_logs').delete().eq('id', id);
+        } else if (target?.docNumber) {
+          await supabase.from('document_issuance_logs').delete().eq('serial_number', target.docNumber);
+        }
       } catch (err) {
         console.warn('Failed to delete document log from Supabase:', err);
       }
