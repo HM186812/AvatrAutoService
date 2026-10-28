@@ -73,3 +73,6 @@ firestore.indexes.json
 .agents/
 skills-lock.json
 
+
+.superpowers/
+docs/superpowers/

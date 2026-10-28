@@ -54,6 +54,7 @@ Deno.serve(async (req) => {
     } else {
       const { data: invited, error: inviteError } = await access.admin.auth.admin.inviteUserByEmail(email, {
         data: { name, phone, department, role },
+        redirectTo: 'https://avatrautoservice.pheuangkeokisith.workers.dev/',
       });
       if (inviteError) throw inviteError;
       if (!invited.user) throw new Error('Supabase did not return the invited account.');
