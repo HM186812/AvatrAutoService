@@ -27,7 +27,7 @@ export async function exportElementToPdf(
 
     const {
     filename = 'avatr-document.pdf',
-    margin = [4, 4, 4, 4],
+    margin = [0, 0, 0, 0],
     orientation = 'portrait',
     scale = 2.5,
     singlePage = true,
@@ -35,7 +35,9 @@ export async function exportElementToPdf(
 
   // Temporarily apply clean export class
   const exportClass = 'exporting-pdf-single-page';
+  const orientationClass = orientation === 'landscape' ? 'exporting-pdf-landscape' : '';
   element.classList.add(exportClass);
+  if (orientationClass) element.classList.add(orientationClass);
 
   // Force layout reflow for clean rendering
   await new Promise((resolve) => setTimeout(resolve, 80));
@@ -53,7 +55,7 @@ export async function exportElementToPdf(
       allowTaint: true,
       logging: false,
       backgroundColor: '#ffffff',
-      windowWidth: 794,
+      windowWidth: orientation === 'portrait' ? 794 : 1123,
       scrollX: 0,
       scrollY: 0,
       ignoreElements: (el) =>
@@ -74,9 +76,14 @@ export async function exportElementToPdf(
       compress: true,
     });
 
-    const [marginTop, marginRight, marginBottom, marginLeft] = Array.isArray(margin)
+    const rawMargin = Array.isArray(margin)
       ? margin
       : [margin, margin, margin, margin];
+    // Enforce standard A4 safe print margins (min 8mm top/bottom, 10mm left/right) so content never touches page edges
+    const marginTop = Math.max(8, rawMargin[0]);
+    const marginRight = Math.max(10, rawMargin[1]);
+    const marginBottom = Math.max(8, rawMargin[2]);
+    const marginLeft = Math.max(10, rawMargin[3]);
 
     const availableWidth = pageWidth - (marginLeft + marginRight);
     const availableHeight = pageHeight - (marginTop + marginBottom);
@@ -84,11 +91,11 @@ export async function exportElementToPdf(
     const canvasAspect = canvas.height / canvas.width;
 
     if (singlePage) {
-      // Scale dimensions to fit perfectly within 1 page
+      // Scale dimensions to fit perfectly within 1 page with standard top alignment
       let targetWidth = availableWidth;
       let targetHeight = availableWidth * canvasAspect;
       let posX = marginLeft;
-      let posY = marginTop + Math.max(0, (availableHeight - targetHeight) / 2);
+      let posY = marginTop;
 
       if (targetHeight > availableHeight) {
         targetHeight = availableHeight;
@@ -143,5 +150,6 @@ export async function exportElementToPdf(
     throw error;
   } finally {
     element.classList.remove(exportClass);
+    if (orientationClass) element.classList.remove(orientationClass);
   }
 }

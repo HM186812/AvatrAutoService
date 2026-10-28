@@ -10,6 +10,7 @@ import {
   Car, 
   FileCheck, 
   Printer, 
+  Download,
   Loader2,
   Check
 } from 'lucide-react';
@@ -18,6 +19,9 @@ import {
   generateInstallmentSchedule, 
   DEFAULT_EXCHANGE_RATE_LAK 
 } from '../../utils/installment';
+import { logIssuedDocument } from '../../utils/documentLogger';
+import { exportElementToPdf } from '../../utils/pdfExport';
+import { showToast } from '../common';
 
 interface QuickInstallmentPaymentModalProps {
   isOpen: boolean;
@@ -113,7 +117,64 @@ export default function QuickInstallmentPaymentModal({
     }
   };
 
+  const [isExportingReceiptPdf, setIsExportingReceiptPdf] = useState(false);
+
+  const handleDownloadReceiptPdf = async () => {
+    if (!receiptCreated) return;
+    try {
+      setIsExportingReceiptPdf(true);
+      const cleanName = customer.customerName.replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+      const filename = `AVATR_Installment_Receipt_${receiptCreated.receiptNo}_${cleanName}.pdf`;
+      await exportElementToPdf('printable-quick-installment-receipt', {
+        filename,
+        margin: [10, 10, 10, 10],
+        orientation: 'portrait',
+        singlePage: true,
+      });
+      logIssuedDocument({
+        docType: 'receipt',
+        docTitle: `ໃບຮັບເງິນຄ່າງວດລົດ ${customer.interestedModel} (ງວດທີ ${receiptCreated.period})`,
+        docNumber: receiptCreated.receiptNo,
+        customerName: customer.customerName,
+        customerPhone: customer.phone,
+        leadId: customer.id,
+        vin: customer.vin,
+        model: customer.interestedModel,
+        action: 'export_pdf',
+        formatLabel: 'PDF (A4)',
+        issuedBy: currentUser?.name || 'Admin Showroom',
+        amountUSD: receiptCreated.amountUSD,
+        amountLAK: receiptCreated.amountLAK,
+        notes: `ດາວໂຫຼດ PDF ໃບຮັບເງິນຄ່າງວດ ${customer.interestedModel} ງວດທີ ${receiptCreated.period} ປະຈຳວັນທີ ${receiptCreated.date}`,
+      });
+      showToast(`ດາວໂຫຼດ PDF ໃບຮັບເງິນງວດ ${receiptCreated.receiptNo} ສຳເລັດ`, 'success');
+    } catch (err) {
+      console.error('Error generating installment receipt PDF:', err);
+      showToast('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້', 'error');
+    } finally {
+      setIsExportingReceiptPdf(false);
+    }
+  };
+
   const handlePrintReceipt = () => {
+    if (receiptCreated) {
+      logIssuedDocument({
+        docType: 'receipt',
+        docTitle: `ໃບຮັບເງິນຄ່າງວດລົດ ${customer.interestedModel} (ງວດທີ ${receiptCreated.period})`,
+        docNumber: receiptCreated.receiptNo,
+        customerName: customer.customerName,
+        customerPhone: customer.phone,
+        leadId: customer.id,
+        vin: customer.vin,
+        model: customer.interestedModel,
+        action: 'print',
+        formatLabel: 'Print / ພິມ',
+        issuedBy: currentUser?.name || 'Admin Showroom',
+        amountUSD: receiptCreated.amountUSD,
+        amountLAK: receiptCreated.amountLAK,
+        notes: `ໃບຮັບເງິນຄ່າງວດ ${customer.interestedModel} ງວດທີ ${receiptCreated.period} ປະຈຳວັນທີ ${receiptCreated.date}`,
+      });
+    }
     window.print();
   };
 
@@ -147,7 +208,7 @@ export default function QuickInstallmentPaymentModal({
 
         {receiptCreated ? (
           /* Receipt Success View */
-          <div className="py-6 text-center space-y-5 animate-scaleUp">
+          <div id="printable-quick-installment-receipt" className="py-6 text-center space-y-5 animate-scaleUp">
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 grid place-items-center mx-auto border border-emerald-500/40">
               <Check className="w-8 h-8 stroke-[3]" />
             </div>
@@ -181,7 +242,20 @@ export default function QuickInstallmentPaymentModal({
               </div>
             </div>
 
-            <div className="flex items-center justify-center gap-3 pt-2">
+            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2 print:hidden">
+              <button
+                type="button"
+                onClick={handleDownloadReceiptPdf}
+                disabled={isExportingReceiptPdf}
+                className="px-4 py-2.5 bg-zinc-100 hover:bg-white text-black font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-60"
+              >
+                {isExportingReceiptPdf ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-black" />
+                ) : (
+                  <Download className="w-4 h-4 text-black" />
+                )}
+                <span>ດາວໂຫຼດ PDF</span>
+              </button>
               <button
                 type="button"
                 onClick={handlePrintReceipt}

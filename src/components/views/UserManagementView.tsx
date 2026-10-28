@@ -316,7 +316,7 @@ export default function UserManagementView({
       )}
 
       {/* Top Banner: Admin Executive Privileges */}
-      <div className="user-management-hero bg-zinc-950 border border-zinc-800 p-6 sm:p-7 rounded-3xl flex flex-wrap items-center justify-between gap-4 shadow-xl">
+      <div className="user-management-hero theme-adaptive-dark-surface bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-6 sm:p-7 rounded-3xl text-slate-900 dark:text-white flex flex-wrap items-center justify-between gap-4 shadow-xl">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="user-management-hero-icon p-1.5 rounded-lg font-black">
@@ -374,7 +374,7 @@ export default function UserManagementView({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="user-management-toolbar bg-zinc-950 border border-zinc-800 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
+      <div className="user-management-toolbar theme-adaptive-dark-surface bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-4 rounded-2xl text-slate-900 dark:text-white flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
         <div className="flex flex-wrap items-center gap-3 flex-1">
           <div className="relative flex-1 min-w-55">
             <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />

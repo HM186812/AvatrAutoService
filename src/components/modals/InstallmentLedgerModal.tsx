@@ -19,12 +19,12 @@ import {
   Check, 
   RotateCcw,
   BadgePercent,
-  Loader2,
-  FileCheck
+  Loader2
 } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
-import { exportElementToDocx } from '../../utils/docxExport';
 import { showToast } from '../common';
+import { logIssuedDocument } from '../../utils/documentLogger';
+import AvatrLogo from '../layout/AvatrLogo';
 import { 
   generateInstallmentSchedule, 
   calculateInstallmentSummary,
@@ -217,10 +217,25 @@ export default function InstallmentLedgerModal({
     a.download = `Installment_Ledger_${customer.customerName.replace(/\s+/g, '_')}_${customer.id}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    logIssuedDocument({
+      docType: 'installment_schedule',
+      docTitle: `ຕາຕະລາງຜ່ອນຊຳລະຄ່າງວດລົດ ${customer.interestedModel} (CSV)`,
+      docNumber: `SCH-${customer.id.replace(/\D/g, '') || '01'}`,
+      customerName: customer.customerName,
+      customerPhone: customer.phone,
+      leadId: customer.id,
+      vin: customer.vin,
+      model: customer.interestedModel,
+      action: 'export_csv',
+      formatLabel: 'CSV',
+      issuedBy: currentUser?.name || customer.assignedTo || 'Admin',
+      amountUSD: summary.remainingInstallmentsUSD || 0,
+      amountLAK: summary.remainingInstallmentsLAK || 0,
+      notes: `ດາວໂຫຼດ CSV ຕາຕະລາງຜ່ອນລົດ ${customer.interestedModel} ທັງໝົດ ${records.length} ງວດ`,
+    });
   };
 
   const [isExportingLedgerPdf, setIsExportingLedgerPdf] = useState(false);
-  const [isExportingLedgerDocx, setIsExportingLedgerDocx] = useState(false);
 
   const handleExportPDF = async () => {
     try {
@@ -229,10 +244,27 @@ export default function InstallmentLedgerModal({
       const filename = `AVATR_Installment_Ledger_${cleanName}.pdf`;
       await exportElementToPdf('printable-installment-ledger', {
         filename,
-        margin: [6, 6, 6, 6],
+        margin: [8, 10, 8, 10],
         orientation: 'landscape',
-        singlePage: false,
+        singlePage: true,
       });
+      logIssuedDocument({
+        docType: 'installment_schedule',
+        docTitle: `ຕາຕະລາງຜ່ອນຊຳລະຄ່າງວດລົດ ${customer.interestedModel}`,
+        docNumber: `SCH-${customer.id.replace(/\D/g, '') || '01'}`,
+        customerName: customer.customerName,
+        customerPhone: customer.phone,
+        leadId: customer.id,
+        vin: customer.vin,
+        model: customer.interestedModel,
+        action: 'export_pdf',
+        formatLabel: 'PDF (Landscape)',
+        issuedBy: currentUser?.name || customer.assignedTo || 'Admin',
+        amountUSD: summary.remainingInstallmentsUSD || 0,
+        amountLAK: summary.remainingInstallmentsLAK || 0,
+        notes: `ດາວໂຫຼດ PDF ຕາຕະລາງຜ່ອນລົດ ${customer.interestedModel} ທັງໝົດ ${records.length} ງວດ`,
+      });
+      showToast('ດາວໂຫຼດ PDF ຕາຕະລາງຜ່ອນ ແລະ ບັນທຶກປະຫວັດສຳເລັດ', 'success');
     } catch (err) {
       console.error('Error generating ledger PDF:', err);
       showToast('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້', 'error');
@@ -241,29 +273,67 @@ export default function InstallmentLedgerModal({
     }
   };
 
-  const handleExportDocx = async () => {
-    try {
-      setIsExportingLedgerDocx(true);
-      const cleanName = customer.customerName.replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
-      const filename = `AVATR_Installment_Ledger_${cleanName}.docx`;
-      await exportElementToDocx('printable-installment-ledger', {
-        filename,
-        title: `AVATR Installment Ledger - ${customer.customerName}`,
-      });
-    } catch (err) {
-      console.error('Error generating ledger DOCX:', err);
-      showToast('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້', 'error');
-    } finally {
-      setIsExportingLedgerDocx(false);
-    }
+
+
+  const handlePrintLedger = () => {
+    logIssuedDocument({
+      docType: 'installment_schedule',
+      docTitle: `ຕາຕະລາງຜ່ອນຊຳລະຄ່າງວດລົດ ${customer.interestedModel}`,
+      docNumber: `SCH-${customer.id.replace(/\D/g, '') || '01'}`,
+      customerName: customer.customerName,
+      customerPhone: customer.phone,
+      leadId: customer.id,
+      vin: customer.vin,
+      model: customer.interestedModel,
+      action: 'print',
+      formatLabel: 'Print / ພິມ',
+      issuedBy: currentUser?.name || customer.assignedTo || 'Admin',
+      amountUSD: summary.remainingInstallmentsUSD || 0,
+      amountLAK: summary.remainingInstallmentsLAK || 0,
+      notes: `ພິມຕາຕະລາງຜ່ອນລົດ ${customer.interestedModel}`,
+    });
+    window.print();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div id="printable-installment-ledger" className="relative w-full max-w-5xl bg-zinc-950 border border-zinc-800 rounded-3xl p-4 sm:p-6 text-white space-y-5 max-h-[95vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:max-w-none print:shadow-none">
+      <div id="printable-installment-ledger" className="official-dealer-document relative w-full max-w-6xl bg-zinc-950 border border-zinc-800 rounded-3xl p-4 sm:p-6 text-white space-y-5 max-h-[95vh] overflow-y-auto shadow-2xl print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0 print:max-h-none print:max-w-none print:w-full print:overflow-visible print-modal-container print-page-landscape">
         
+        {/* Official Document Header (Visible in Print & PDF Export, plus clean top header) */}
+        <div className="hidden print:block border-b-2 border-black pb-2 mb-3 text-black">
+          <div className="flex items-start justify-between gap-4">
+            <div className="shrink-0 flex items-start justify-start">
+              <AvatrLogo variant="document" />
+            </div>
+            <div className="flex-1 text-center pt-1">
+              <p className="text-[10.5px] font-bold tracking-wide text-black">
+                ສາທາລະນະລັດ ປະຊາທິປະໄຕ ປະຊາຊົນລາວ
+              </p>
+              <p className="text-[10px] font-semibold text-black mb-1.5">
+                ສັນຕິພາບ ເອກະລາດ ປະຊາທິປະໄຕ ເອກະພາບ ວັດທະນາຖາວອນ
+              </p>
+              <h2 className="text-base font-black tracking-widest text-black uppercase leading-tight">
+                AVATR AUTO SERVICE SOLE CO., LTD
+              </h2>
+              <p className="text-[10.5px] font-semibold text-black">
+                ສູນຈຳໜ່າຍ ແລະ ບໍລິການລົດຍົນໄຟຟ້າ AVATR ຢ່າງເປັນທາງການ ປະຈຳ ສປປ ລາວ
+              </p>
+            </div>
+            <div className="shrink-0 w-[3cm]" aria-hidden="true" />
+          </div>
+          <div className="flex justify-end items-center gap-6 mt-1 text-[11px] font-mono text-black border-t border-black/20 pt-1">
+            <span>ເລກທີ / Ref No: <strong>SCH-{customer.id.replace(/\D/g, '') || '01'}</strong></span>
+            <span>ວັນທີພິມ / Date: <strong>{new Date().toLocaleDateString('lo-LA')}</strong></span>
+          </div>
+          <div className="text-center pt-1.5">
+            <h1 className="text-base font-black text-black uppercase tracking-wide">
+              ໃບຕາຕະລາງການຜ່ອນຊຳລະ ແລະ ຕິດຕາມຄ່າງວດລົດ EV ({customer.customerName})
+            </h1>
+          </div>
+        </div>
+
         {/* Top Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-800 print:hidden">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="p-1 bg-white text-black font-black text-[10px] tracking-wider rounded">
@@ -310,24 +380,7 @@ export default function InstallmentLedgerModal({
               )}
             </button>
 
-            <button
-              onClick={handleExportDocx}
-              disabled={isExportingLedgerDocx}
-              className="px-3 py-1.5 bg-zinc-100 hover:bg-white text-black rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-zinc-300 disabled:opacity-60 cursor-pointer"
-              title="ບັນທຶກເປັນ Word DOCX"
-            >
-              {isExportingLedgerDocx ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
-                  <span>Word...</span>
-                </>
-              ) : (
-                <>
-                  <FileCheck className="w-3.5 h-3.5 text-black" />
-                  <span>DOCX</span>
-                </>
-              )}
-            </button>
+
 
             <button
               onClick={handleExportCSV}
@@ -338,7 +391,7 @@ export default function InstallmentLedgerModal({
               <span>CSV</span>
             </button>
             <button
-              onClick={() => window.print()}
+              onClick={handlePrintLedger}
               className="px-3.5 py-1.5 bg-white text-black hover:bg-zinc-200 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-colors cursor-pointer"
               title="ພິມຕາຕະລາງ"
             >
@@ -356,7 +409,7 @@ export default function InstallmentLedgerModal({
         </div>
 
         {/* Financial KPI Dashboard Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 print:hidden">
           <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 space-y-1">
             <span className="text-[11px] text-zinc-400 font-medium block">ມູນຄ່າລົດທັງໝົດ</span>
             <div className="font-mono font-bold text-sm text-white">${summary.vehiclePriceUSD.toLocaleString()}</div>
@@ -401,7 +454,7 @@ export default function InstallmentLedgerModal({
         </div>
 
         {/* Progress Bar */}
-        <div className="space-y-1.5 bg-zinc-900/50 p-3 rounded-2xl border border-zinc-800">
+        <div className="space-y-1.5 bg-zinc-900/50 p-3 rounded-2xl border border-zinc-800 print:hidden">
           <div className="flex justify-between items-center text-xs">
             <span className="text-zinc-400 font-semibold flex items-center gap-1.5">
               <span>ຄວາມຄືບໜ້າການຊຳລະເງິນງວດທັງໝົດ</span>
@@ -423,7 +476,7 @@ export default function InstallmentLedgerModal({
         </div>
 
         {/* Filter and Search Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs print:hidden">
           <div className="flex items-center gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
             {[
               { key: 'all' as const, label: 'ທັງໝົດ', count: records.length, icon: null },
@@ -478,7 +531,7 @@ export default function InstallmentLedgerModal({
                   <th className="py-2.5 px-3 text-right text-zinc-400 font-mono text-[11px]">ເງິນຕົ້ນ / ດອກເບ້ຍ</th>
                   <th className="py-2.5 px-3 text-center">ສະຖານະ</th>
                   <th className="py-2.5 px-3">ຂໍ້ມູນການຊຳລະ / ໃບຮັບເງິນ</th>
-                  <th className="py-2.5 px-3 text-center w-32">ຈັດການ</th>
+                  <th className="py-2.5 px-3 text-center w-32 print:hidden">ຈັດການ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/80 font-mono">
@@ -546,7 +599,7 @@ export default function InstallmentLedgerModal({
                             <span className="text-zinc-600">-</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
+                        <td className="py-2.5 px-3 text-center print:hidden">
                           {isPaid ? (
                             <button
                               type="button"
@@ -579,7 +632,7 @@ export default function InstallmentLedgerModal({
 
         {/* Record Payment Sub-Modal Popover */}
         {recordingPeriod && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm animate-fadeIn print:hidden">
             <div className="bg-zinc-950 border border-zinc-700 rounded-3xl p-5 text-white max-w-md w-full space-y-4 shadow-2xl">
               <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <div className="space-y-0.5">

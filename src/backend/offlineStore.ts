@@ -129,6 +129,31 @@ export const DEFAULT_OFFLINE_INVENTORY: InventoryItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=800&q=80',
     arrivalDate: '2026-10-10',
     mileageKm: 8,
+  },
+  {
+    vin: 'AVATR12-EVENT-2026',
+    model: 'AVATR 12',
+    trim: 'Grand Coupé Flagship Edition (Lao Motor Expo)',
+    color: 'Liquid Titanium',
+    colorHex: '#71717a',
+    interiorColor: 'Full Caramel Luxe',
+    battery: '94.5 kWh CATL Ternary',
+    priceUSD: 46800,
+    priceLAK: 1029600000,
+    stockQuantity: 1,
+    status: 'event',
+    pdiStatus: 'passed',
+    pdiInspector: 'ບຸນມີ (Master EV Tech)',
+    location: 'ສູນການຄ້າ ລາວ-ໄອເຕັກ (Lao-ITECC Mall)',
+    imageUrl: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80',
+    arrivalDate: '2026-10-15',
+    mileageKm: 5,
+    eventCampaign: 'Lao Motor Expo 2026',
+    eventStartDate: '2026-10-15',
+    eventEndDate: '2026-11-15',
+    eventLocation: 'ສູນການຄ້າ ລາວ-ໄອເຕັກ (Lao-ITECC Mall) ບູດ A-01',
+    promotionDiscountUSD: 2000,
+    promotionNotes: 'ຟຣີຕູ້ສາກ Home Charger 7kW ຕິດຕັ້ງຮອດບ້ານ + ຟຣີປະກັນໄພຊັ້ນ 1 ດົນ 1 ປີ + ຟຣີຟີມກັນຄວາມຮ້ອນ Ceramic ຮອບຄັນ',
   }
 ];
 
@@ -160,9 +185,42 @@ export function getOfflineBackendData(): BackendData {
       roleTitleLo: u.roleTitleLo === 'Super Admin' ? 'Admin' : u.roleTitleLo,
     }));
   const vehicles = readStorage<VehicleModel[]>('vehicles', AVATR_VEHICLES);
-  const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
-  const leads = readStorage<Lead[]>('leads', INITIAL_LEADS);
-  const bills = readStorage<InvoiceBillRecord[]>('bills', INITIAL_BILLS);
+  const rawLeads = readStorage<Lead[]>('leads', INITIAL_LEADS);
+  const leads = [...rawLeads];
+  INITIAL_LEADS.forEach((initLead) => {
+    if (!leads.some((l) => l.id === initLead.id)) {
+      leads.push(initLead);
+    }
+  });
+
+  const deletedBillIds = new Set(readStorage<string[]>('deleted_bill_ids', []));
+  const rawBills = readStorage<InvoiceBillRecord[]>('bills', INITIAL_BILLS);
+  const seenBillKeys = new Set<string>();
+  const bills: InvoiceBillRecord[] = [];
+  rawBills.forEach((b) => {
+    if (deletedBillIds.has(b.id)) return;
+    const fixedBill = b.id === 'BILL-2026-0005' && b.billNumber === '011/KM7'
+      ? { ...b, id: 'BILL-2026-0006' }
+      : b;
+    const key = `${fixedBill.id}|${fixedBill.billNumber}`;
+    if (!seenBillKeys.has(key)) {
+      seenBillKeys.add(key);
+      bills.push(fixedBill);
+    }
+  });
+  INITIAL_BILLS.forEach((initBill) => {
+    if (deletedBillIds.has(initBill.id)) return;
+    if (!bills.some((b) => b.id === initBill.id || b.billNumber === initBill.billNumber)) {
+      bills.push(initBill);
+    }
+  });
+  const rawInventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
+  const inventory = [...rawInventory];
+  DEFAULT_OFFLINE_INVENTORY.forEach((defItem) => {
+    if (!inventory.some((i) => i.vin === defItem.vin) && !bills.some((b) => b.vin === defItem.vin && (b.billType === 'sale' || b.billType === 'installment'))) {
+      inventory.push(defItem);
+    }
+  });
   const stockLogs = readStorage<StockLogRecord[]>('stockLogs', []);
   const services = readStorage<ServiceAppointment[]>('services', INITIAL_SERVICES);
   const testDrives = readStorage<TestDriveBooking[]>('testDrives', INITIAL_TEST_DRIVES);
@@ -299,7 +357,7 @@ export function offlineDeleteLead(id: string): void {
   writeStorage('leads', leads.filter((l) => l.id !== id));
 }
 
-export function offlineSaveBill(bill: InvoiceBillRecord): void {
+export function offlineSaveBill(bill: InvoiceBillRecord, vehicle?: InventoryItem): void {
   const bills = readStorage<InvoiceBillRecord[]>('bills', INITIAL_BILLS);
   const idx = bills.findIndex((b) => b.id === bill.id);
   if (idx >= 0) {
@@ -309,8 +367,58 @@ export function offlineSaveBill(bill: InvoiceBillRecord): void {
   }
   writeStorage('bills', bills);
 
-  // If vehicle sold, deduct inventory stock
-  if (bill.vin) {
+  const billType = bill.billType || bill.type;
+  const stockLogs = readStorage<StockLogRecord[]>('stockLogs', []);
+
+  if (billType === 'import') {
+    const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
+    const newItem: InventoryItem = vehicle || {
+      vin: bill.vin,
+      engineNumber: bill.engineNumber || '',
+      model: bill.model,
+      trim: bill.trim || '',
+      plateNumber: bill.plateNumber || 'ລໍຖ້າຂຶ້ນທະບຽນ',
+      color: bill.color || '-',
+      colorHex: '#18181b',
+      interiorColor: bill.interiorColor || 'Black',
+      battery: bill.battery || 'CATL Ternary Lithium',
+      priceUSD: bill.unitPriceUSD || bill.netTotalUSD || 0,
+      priceLAK: bill.unitPriceLAK || bill.netTotalLAK || 0,
+      stockQuantity: bill.quantity || 1,
+      status: bill.statusInitial || 'ready',
+      pdiStatus: (bill.pdiStatusInitial as InventoryItem['pdiStatus']) || 'passed',
+      pdiInspector: bill.inspectorName,
+      location: bill.destinationWarehouse || 'ສາງໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ',
+      arrivalDate: (bill.date || new Date().toISOString()).slice(0, 10),
+      mileageKm: 0,
+    };
+    const vIdx = inventory.findIndex((i) => i.vin === newItem.vin);
+    if (vIdx >= 0) {
+      inventory[vIdx] = { ...inventory[vIdx], ...newItem, stockQuantity: newItem.stockQuantity || 1 };
+    } else {
+      inventory.unshift(newItem);
+    }
+    writeStorage('inventory', inventory);
+
+    const logEntry: StockLogRecord = {
+      id: `LOG-IN-${Date.now().toString().slice(-6)}`,
+      billId: bill.id,
+      type: 'stock_in',
+      vin: bill.vin,
+      model: bill.model,
+      plateNumber: newItem.plateNumber,
+      color: newItem.color,
+      quantity: bill.quantity || 1,
+      priceUSD: bill.unitPriceUSD || bill.netTotalUSD || 0,
+      priceLAK: bill.unitPriceLAK || bill.netTotalLAK || 0,
+      timestamp: bill.date || new Date().toISOString(),
+      recordedBy: bill.recordedBy || 'Admin',
+      remainingStock: inventory.filter((i) => i.model === bill.model && i.status !== 'sold' && i.stockQuantity > 0).length,
+      notes: bill.notes || `ນຳເຂົ້າລົດໃໝ່ ໃບຮັບເລກທີ ${bill.billNumber}`,
+    };
+    stockLogs.unshift(logEntry);
+    writeStorage('stockLogs', stockLogs);
+  } else if ((billType === 'sale' || billType === 'installment') && bill.installmentType !== 'monthly_installment' && bill.vin) {
     const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
     const item = inventory.find((i) => i.vin === bill.vin);
     if (item) {
@@ -318,12 +426,84 @@ export function offlineSaveBill(bill: InvoiceBillRecord): void {
       item.stockQuantity = 0;
       writeStorage('inventory', inventory);
     }
+    const remainingQty = inventory.filter((i) => i.model === bill.model && i.status !== 'sold' && i.stockQuantity > 0).length;
+    const logEntry: StockLogRecord = {
+      id: `LOG-OUT-${Date.now().toString().slice(-6)}`,
+      billId: bill.id,
+      leadId: bill.leadId,
+      type: 'stock_out',
+      vin: bill.vin,
+      model: bill.model,
+      plateNumber: bill.plateNumber || item?.plateNumber || '',
+      color: bill.color || item?.color || '',
+      quantity: bill.quantity || 1,
+      priceUSD: bill.netTotalUSD || bill.amountUSD || 0,
+      priceLAK: bill.netTotalLAK || bill.amountLAK || 0,
+      timestamp: bill.date || new Date().toISOString(),
+      recordedBy: bill.recordedBy || 'Admin',
+      customerName: bill.customerName,
+      customerPhone: bill.customerPhone,
+      paymentMethod: bill.paymentMethod,
+      remainingStock: remainingQty,
+      notes: bill.notes || `ຂາຍອອກຜ່ານ POS ໃບບິນເລກທີ ${bill.billNumber}`,
+    };
+    stockLogs.unshift(logEntry);
+    writeStorage('stockLogs', stockLogs);
   }
 }
 
 export function offlineDeleteBill(id: string): void {
   const bills = readStorage<InvoiceBillRecord[]>('bills', INITIAL_BILLS);
-  writeStorage('bills', bills.filter((b) => b.id !== id));
+  const targetBill = bills.find((b) => b.id === id);
+  const remainingBills = bills.filter((b) => b.id !== id);
+  writeStorage('bills', remainingBills);
+
+  const deletedBillIds = new Set(readStorage<string[]>('deleted_bill_ids', []));
+  deletedBillIds.add(id);
+  writeStorage('deleted_bill_ids', Array.from(deletedBillIds));
+
+  if (targetBill?.vin) {
+    const billType = targetBill.billType || targetBill.type;
+    const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
+    if ((billType === 'sale' || billType === 'installment') && targetBill.installmentType !== 'monthly_installment') {
+      const idx = inventory.findIndex((i) => i.vin === targetBill.vin);
+      if (idx >= 0) {
+        inventory[idx] = { ...inventory[idx], status: 'ready', stockQuantity: 1 };
+      } else {
+        inventory.unshift({
+          vin: targetBill.vin,
+          engineNumber: targetBill.engineNumber || '',
+          model: targetBill.model,
+          trim: targetBill.trim || '',
+          plateNumber: targetBill.plateNumber || 'ລໍຖ້າຂຶ້ນທະບຽນ',
+          color: targetBill.color || '-',
+          colorHex: '#18181b',
+          interiorColor: targetBill.interiorColor || 'Black',
+          battery: targetBill.battery || 'CATL Ternary Lithium',
+          priceUSD: targetBill.unitPriceUSD || targetBill.netTotalUSD || 0,
+          priceLAK: targetBill.unitPriceLAK || targetBill.netTotalLAK || 0,
+          stockQuantity: 1,
+          status: 'ready',
+          pdiStatus: 'passed',
+          location: 'ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ',
+          arrivalDate: (targetBill.date || new Date().toISOString()).slice(0, 10),
+          mileageKm: 0,
+        });
+      }
+      writeStorage('inventory', inventory);
+    } else if (billType === 'import') {
+      const hasOtherBills = remainingBills.some((b) => b.vin === targetBill.vin);
+      if (!hasOtherBills) {
+        writeStorage('inventory', inventory.filter((i) => i.vin !== targetBill.vin));
+      }
+    }
+
+    const stockLogs = readStorage<StockLogRecord[]>('stockLogs', []);
+    writeStorage(
+      'stockLogs',
+      stockLogs.filter((log) => !(log.billId === id || (log.vin === targetBill.vin && log.type === (billType === 'import' ? 'stock_in' : 'stock_out'))))
+    );
+  }
 }
 
 export function offlineSaveInventoryItem(item: InventoryItem): void {

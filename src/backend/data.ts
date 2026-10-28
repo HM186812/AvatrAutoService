@@ -926,7 +926,7 @@ export async function deleteVehicleModel(id: string) {
 
 export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, vehicle?: InventoryItem) {
   if (!isSupabaseConfigured) {
-    offlineSaveBill(bill);
+    offlineSaveBill(bill, vehicle);
     return;
   }
   const client = requireSupabase();

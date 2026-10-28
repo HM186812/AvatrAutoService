@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Lead,
   ServiceAppointment,
@@ -57,6 +57,8 @@ import { DEFAULT_EXCHANGE_RATE_LAK, calculateInstallmentSummary, generateInstall
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
 import { saveLead } from '../../backend/data';
+import TopSalesWidget from './TopSalesWidget';
+import { parseBillDate } from '../../utils/salesLeaderboard';
 
 interface DashboardViewProps {
   leads: Lead[];
@@ -69,6 +71,8 @@ interface DashboardViewProps {
   currentUser?: SystemUser | null;
   lang: Language;
   isAdmin?: boolean;
+  activeTimeframe?: KPITimeframe;
+  onTimeframeChange?: (tf: KPITimeframe) => void;
   onNavigateMenu: (menu: ActiveMenu) => void;
   onOpenNewLead: () => void;
   onOpenQuote: (vehicle: VehicleModel, customerName?: string) => void;
@@ -87,6 +91,8 @@ export default function DashboardView({
   currentUser,
   lang,
   isAdmin = false,
+  activeTimeframe,
+  onTimeframeChange,
   onNavigateMenu,
   onOpenNewLead,
   onOpenQuote,
@@ -94,7 +100,18 @@ export default function DashboardView({
   onOpenNewTestDrive,
 }: DashboardViewProps) {
   const t = translations[lang];
-  const [timeframe, setTimeframe] = useState<KPITimeframe>('month');
+  const [timeframe, setTimeframeState] = useState<KPITimeframe>(activeTimeframe || 'month');
+
+  useEffect(() => {
+    if (activeTimeframe) {
+      setTimeframeState(activeTimeframe);
+    }
+  }, [activeTimeframe]);
+
+  const setTimeframe = (tf: KPITimeframe) => {
+    setTimeframeState(tf);
+    onTimeframeChange?.(tf);
+  };
   const [salesFilter, setSalesFilter] = useState<'all' | 'transfer' | 'finance' | 'cash'>('all');
 
   // Customer Category Breakdown (Walk in, Online, Event)
@@ -118,6 +135,46 @@ export default function DashboardView({
   const promoCars = inventory.filter(i => i.status === 'promotion');
   const soldCars = inventory.filter(i => i.status === 'sold');
 
+  // Dynamic Event & Promotion Campaigns derived from active inventory + static campaigns
+  const displayedPromotions = useMemo(() => {
+    const dynamicItems = inventory
+      .filter(item => item.status !== 'sold' && item.stockQuantity > 0 && (item.status === 'event' || item.status === 'promotion' || Boolean(item.eventCampaign)))
+      .map(item => {
+        const matchedModel = vehicles.find(v => v.name === item.model);
+        const discount = item.promotionDiscountUSD || 0;
+        const netPrice = Math.max(0, item.priceUSD - discount);
+        const perks = item.promotionNotes
+          ? item.promotionNotes.split(/[+,•|]/).map(s => s.trim()).filter(Boolean)
+          : [
+              'ຟຣີຕູ້ສາກໄວ Home Charger 7kW ພ້ອມຕິດຕັ້ງມາດຕະຖານ CATL',
+              'ຟຣີປະກັນໄພຊັ້ນ 1 (First Class Insurance) 1 ປີເຕັມ',
+              'ຮັບປະກັນແບັດເຕີຣີ CATL 8 ປີ / 160,000 km',
+            ];
+        return {
+          id: `inv-promo-${item.vin}`,
+          titleLo: item.eventCampaign || (item.status === 'event' ? `ງານວາງສະແດງ ${item.model} (${item.color})` : `ແຄມເປນໂປຣໂມຊັນ ${item.model}`),
+          titleEn: item.eventCampaign || `${item.model} Showcase Campaign`,
+          badge: `${item.status === 'event' ? 'EVENT' : 'PROMO'} • ${item.model}`,
+          badgeColor: item.status === 'event' ? 'purple' : 'amber',
+          type: (item.status === 'event' ? 'event' : 'discount') as 'event' | 'discount',
+          applicableModels: [item.model as 'AVATR 11' | 'AVATR 12' | 'AVATR 07'],
+          period: item.eventStartDate && item.eventEndDate
+            ? `${item.eventStartDate} ຫາ ${item.eventEndDate}`
+            : item.arrivalDate?.slice(0, 10) || 'ກຳລັງດຳເນີນການ',
+          eventLocation: item.eventLocation || item.location || 'ໂຊຣູມໃຫຍ່ AVATR',
+          highlightBenefit: discount > 0
+            ? `ສ່ວນຫຼຸດພິເສດ $${discount.toLocaleString()} USD • ລາຄາພິເສດ $${netPrice.toLocaleString()} USD (VIN: ${item.vin})`
+            : `ລາຄາພິເສດໃນງານ $${item.priceUSD.toLocaleString()} USD • ພ້ອມສົ່ງມອບທັນທີ (VIN: ${item.vin})`,
+          freeGifts: perks,
+          discountAmountUSD: discount,
+          descriptionLo: item.notes || '',
+          imageUrl: item.image || item.imageUrl || matchedModel?.heroImage || '/avatr-logo.png',
+          featuredVin: item.vin,
+        };
+      });
+    return [...dynamicItems, ...ACTIVE_PROMOTIONS];
+  }, [inventory, vehicles]);
+
   // Model-level stock aggregation (< 5 units alert)
   const modelSummaries = useMemo(() => {
     return getModelStockSummaries(vehicles, inventory);
@@ -129,10 +186,10 @@ export default function DashboardView({
 
   // Sale & Delivery Bills (Includes Full Sales & Installment Down Payments)
   const saleBills = useMemo(() => {
-    return (bills || []).filter(b => 
-      b.billType === 'sale' || 
-      b.billType === 'installment' || 
-      b.type === 'sale' || 
+    return (bills || []).filter(b =>
+      b.billType === 'sale' ||
+      b.billType === 'installment' ||
+      b.type === 'sale' ||
       b.type === 'installment'
     );
   }, [bills]);
@@ -145,10 +202,10 @@ export default function DashboardView({
 
   // Filter installment leads (leads with installment type or finance info)
   const installmentLeads = useMemo(() => {
-    return leads.filter(l => 
-      l.paymentType === 'installment' || 
-      l.paymentType === 'finance' || 
-      Boolean(l.downPaymentPercent) || 
+    return leads.filter(l =>
+      l.paymentType === 'installment' ||
+      l.paymentType === 'finance' ||
+      Boolean(l.downPaymentPercent) ||
       Boolean(l.financeCompany) ||
       Boolean(l.installmentRecords && l.installmentRecords.length > 0)
     );
@@ -156,10 +213,10 @@ export default function DashboardView({
 
   // Filter installment bills
   const installmentBills = useMemo(() => {
-    return bills.filter(b => 
-      b.billType === 'installment' || 
-      b.paymentMethod === 'finance' || 
-      Boolean(b.financeCompany) || 
+    return bills.filter(b =>
+      b.billType === 'installment' ||
+      b.paymentMethod === 'finance' ||
+      Boolean(b.financeCompany) ||
       Boolean(b.downPaymentPercent && b.downPaymentPercent > 0)
     );
   }, [bills]);
@@ -314,30 +371,31 @@ export default function DashboardView({
     URL.revokeObjectURL(url);
   };
 
-  // Timestamp filtering for Day, Week, Month, Year
+  // Timestamp filtering for Day, Week, Month, Year (Local time aware)
   const now = new Date();
 
   const isWithinTimeframe = (dateVal?: string | null, tf: KPITimeframe = timeframe): boolean => {
-    if (!dateVal) return false;
-    const d = new Date(dateVal);
+    const d = parseBillDate(dateVal);
+    if (!d) return false;
     const time = d.getTime();
     if (isNaN(time)) return false;
 
     if (tf === 'day') {
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      return time >= startOfDay;
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
     }
     if (tf === 'week') {
       const past7Days = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-      return time >= past7Days;
+      return time >= past7Days && time <= now.getTime() + 24 * 60 * 60 * 1000;
     }
     if (tf === 'month') {
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      return time >= startOfMonth;
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     }
     if (tf === 'year') {
-      const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
-      return time >= startOfYear;
+      return d.getFullYear() === now.getFullYear();
     }
     return true;
   };
@@ -346,20 +404,37 @@ export default function DashboardView({
     const tfLeads = leads.filter(l => isWithinTimeframe(l.createdAt, tf));
     const tfBills = saleBills.filter(b => isWithinTimeframe(b.date || b.timestamp, tf));
     const tfTestDrives = testDrives.filter(td => isWithinTimeframe(td.date, tf));
-    const tfRevenue = tfBills.reduce((sum, b) => sum + (b.netTotalUSD || b.amountUSD || 0), 0);
-    const tfDeliveries = tfBills.length + tfLeads.filter(l => l.status === 'delivered').length;
 
-    // Fallback if test databases have un-timestamped older items or if bills are empty
-    const fallbackSoldRev = soldCars.reduce((sum, i) => sum + (i.priceUSD || 0), 0);
-    const finalRevenue = tfRevenue > 0 ? tfRevenue : (tf === 'year' || tf === 'month' ? fallbackSoldRev : 0);
-    const finalSales = tfBills.length > 0 ? tfBills.length : (tf === 'year' || tf === 'month' ? soldCars.length : 0);
+    // Separate new vehicle sale deals (1 VIN = 1 vehicle) from monthly installment receipts
+    const seenDealKeys = new Set<string>();
+    let vehicleSalesUnits = 0;
+    let vehicleSalesRevenueUSD = 0;
+    let monthlyInstallmentCollectedUSD = 0;
+
+    tfBills.forEach(b => {
+      if (b.installmentType === 'monthly_installment') {
+        monthlyInstallmentCollectedUSD += Number(b.amountUSD || 0);
+      } else {
+        const key = b.vin ? `vin:${b.vin}` : `bill:${b.id}`;
+        if (!seenDealKeys.has(key)) {
+          seenDealKeys.add(key);
+          vehicleSalesUnits += Math.max(1, Number(b.quantity) || 1);
+          vehicleSalesRevenueUSD += Number(b.netTotalUSD || b.amountUSD || 0);
+        }
+      }
+    });
+
+    const totalRevenueUSD = vehicleSalesRevenueUSD + monthlyInstallmentCollectedUSD;
+    const tfDeliveredLeads = tfLeads.filter(l => l.status === 'delivered').length;
 
     return {
-      leads: tfLeads.length > 0 ? tfLeads.length : (tf === 'year' ? leads.length : Math.ceil(leads.length * (tf === 'month' ? 0.8 : tf === 'week' ? 0.4 : 0.2))),
-      revenueUSD: finalRevenue,
-      testDrives: tfTestDrives.length > 0 ? tfTestDrives.length : (tf === 'year' ? testDrives.length : Math.ceil(testDrives.length * 0.5)),
-      deliveries: tfDeliveries > 0 ? tfDeliveries : finalSales,
-      salesCount: finalSales,
+      leads: tfLeads.length,
+      revenueUSD: totalRevenueUSD,
+      vehicleSalesRevenueUSD,
+      monthlyInstallmentCollectedUSD,
+      testDrives: tfTestDrives.length,
+      deliveries: Math.max(vehicleSalesUnits, tfDeliveredLeads),
+      salesCount: vehicleSalesUnits,
       label: {
         day: t.tfDay,
         week: t.tfWeek,
@@ -376,11 +451,16 @@ export default function DashboardView({
     year: getMetrics('year'),
   }[timeframe];
 
+  // Timeframe-filtered sales bills for the live sales table
+  const timeframeSaleBills = useMemo(() => {
+    return saleBills.filter(b => isWithinTimeframe(b.date || b.timestamp, timeframe));
+  }, [saleBills, timeframe]);
+
   // Filtered sales for the sales display section
-  const filteredSales = saleBills.filter(b => {
+  const filteredSales = timeframeSaleBills.filter(b => {
     if (salesFilter === 'all') return true;
     if (salesFilter === 'transfer') return b.paymentMethod === 'transfer';
-    if (salesFilter === 'finance') return b.paymentMethod === 'finance';
+    if (salesFilter === 'finance') return b.paymentMethod === 'finance' || b.billType === 'installment';
     if (salesFilter === 'cash') return b.paymentMethod === 'cash';
     return true;
   });
@@ -390,17 +470,10 @@ export default function DashboardView({
       {/* Top Bar with Timeframe Selector */}
       <div className="dashboard-hero bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 p-6 rounded-3xl flex flex-wrap items-center justify-between gap-4 shadow-sm">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-[11px] font-mono tracking-widest uppercase text-slate-500 dark:text-zinc-400">
-              {t.consoleSubtitle}
-            </span>
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             {t.dashboardTitle}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-1">
-            {t.dashboardSubtitle} • ໄລຍະເວລາ: <span className="text-blue-600 dark:text-white font-bold">{kpiData.label}</span>
           </p>
         </div>
 
@@ -454,46 +527,25 @@ export default function DashboardView({
         {/* KPI 2: ຈຳນວນລົດພ້ອມຂາຍ (Vehicles Ready For Sale) */}
         <div
           onClick={isAdmin ? () => onNavigateMenu('alerts') : undefined}
-          className={`dashboard-kpi-card bento-card bg-white dark:bg-zinc-950 border ${
-            lowStockModels.length > 0 ? 'border-amber-500/40 hover:border-amber-500' : 'border-slate-200/90 dark:border-zinc-800 hover:border-blue-500/50'
-          } rounded-3xl p-5 transition-all ${
-            isAdmin ? 'cursor-pointer hover:shadow-md group' : ''
-          }`}
+          className={`dashboard-kpi-card bento-card bg-white dark:bg-zinc-950 border ${lowStockModels.length > 0 ? 'border-amber-500/40 hover:border-amber-500' : 'border-slate-200/90 dark:border-zinc-800 hover:border-emerald-500/50 dark:hover:border-zinc-500'
+            } rounded-3xl p-5 transition-all ${isAdmin ? 'cursor-pointer hover:shadow-md group' : ''}`}
         >
           <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 text-xs mb-3">
             <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${lowStockModels.length > 0 ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse`}></span>
               <span>ຈຳນວນລົດພ້ອມຂາຍ</span>
             </span>
-            <span className={`p-2.5 rounded-2xl transition-colors ${
-              lowStockModels.length > 0 
-                ? 'bg-amber-50 dark:bg-zinc-900 text-amber-600 dark:text-amber-400' 
-                : 'bg-emerald-50 dark:bg-zinc-900 text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white'
-            }`}>
+            <span className="p-2.5 bg-emerald-50 dark:bg-zinc-900 text-emerald-600 dark:text-white rounded-2xl">
               <Car className="w-4 h-4" />
             </span>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black font-mono text-slate-900 dark:text-white">{readyCars.length}</span>
-            <span className="text-xs text-emerald-600 font-semibold font-mono">
+            <span className="text-xs text-emerald-600 dark:text-white font-semibold font-mono">
               ຄັນ {inventory.length > 0 ? `(${Math.round((readyCars.length / inventory.length) * 100)}%)` : ''}
             </span>
           </div>
-          <div className="mt-2 text-[11px] text-slate-500 dark:text-zinc-400 font-mono flex items-center gap-1.5 flex-wrap">
-            {modelSummaries.slice(0, 4).map((m, idx) => (
-              <span key={m.modelName} className="inline-flex items-center gap-1">
-                {idx > 0 && <span className="text-slate-300 dark:text-zinc-600">•</span>}
-                <span>{m.modelName.replace('AVATR', 'A').trim()}:</span>
-                <b className={m.isOutOfStock ? 'text-rose-600 dark:text-red-400' : m.isLowStock ? 'text-amber-600 dark:text-amber-300' : 'text-slate-900 dark:text-white'}>
-                  {m.count}
-                </b>
-                {m.isLowStock && <span className="text-[9px] text-amber-600 font-bold">(&lt;5)</span>}
-              </span>
-            ))}
-          </div>
-          <div className={`mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 ${
-            isAdmin ? 'group-hover:text-blue-600 dark:group-hover:text-white' : ''
-          }`}>
+          <div className={`mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 ${isAdmin ? 'group-hover:text-emerald-600 dark:group-hover:text-white' : ''
+            }`}>
             <span>
               {lowStockModels.length > 0 ? (
                 <span className="text-amber-600 font-semibold flex items-center gap-1">
@@ -505,7 +557,7 @@ export default function DashboardView({
               )}
             </span>
             {isAdmin && (
-              <span className="flex items-center gap-1 text-blue-600 dark:text-white font-medium group-hover:underline">
+              <span className="flex items-center gap-1 text-emerald-600 dark:text-white font-medium group-hover:underline">
                 <span>{lowStockModels.length > 0 ? 'ເຕືອນສາງ' : 'ກວດສາງ'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </span>
@@ -562,6 +614,17 @@ export default function DashboardView({
         </div>
       </div>
 
+      {/* SECTION: ຈັດອັນດັບພະນັກງານຂາຍ Top Sales Widget (Top 3 Podium & Leaderboard) */}
+      <TopSalesWidget
+        bills={bills}
+        leads={leads}
+        vehicles={vehicles}
+        lang={lang}
+        activeTimeframe={timeframe}
+        onTimeframeChange={(p) => setTimeframe(p)}
+        onNavigateLeaderboard={() => onNavigateMenu('sales_leaderboard')}
+      />
+
       {/* SECTION: ສະແດງການຂາຍຕົວຈິງ & ປະຫວັດການຂາຍຫຼ້າສຸດ (Live Sales Transactions) */}
       <div className="dashboard-panel bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-zinc-800">
@@ -569,15 +632,15 @@ export default function DashboardView({
             <div className="flex items-center gap-2 mb-1">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
               <span className="text-[11px] font-mono tracking-widest uppercase text-blue-600 dark:text-zinc-400 font-bold">
-                REAL-TIME BILLING & POS TRANSACTIONS
+                REAL-TIME BILLING & POS TRANSACTIONS • {kpiData.label}
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
               <TrendingUp className="w-6 h-6 text-blue-600 dark:text-white" />
-              <span>ສະແດງການຂາຍຕົວຈິງ & ອອກໃບບິນຫຼ້າສຸດ</span>
+              <span>ສະແດງການຂາຍຕົວຈິງ & ອອກໃບບິນຫຼ້າສຸດ ({kpiData.label})</span>
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-              ຕິດຕາມລາຍການຂາຍລົດ, ການຊຳລະເງິນສົດ, ໂອນ QR, ແລະ ຜ່ອນຊຳລະ Finance ຕາມເວລາຕົວຈິງ
+              ຕິດຕາມລາຍການຂາຍລົດ, ການຊຳລະເງິນສົດ, ໂອນ QR, ແລະ ຜ່ອນຊຳລະ Finance ຕາມຊ່ວງເວລາ ({kpiData.label})
             </p>
           </div>
 
@@ -595,19 +658,18 @@ export default function DashboardView({
         {/* Sales Filter Tabs */}
         <div className="flex flex-wrap items-center gap-2">
           {[
-            { id: 'all' as const, label: `ທັງໝົດ (${saleBills.length})` },
-            { id: 'transfer' as const, label: `ໂອນຜ່ານ QR (${saleBills.filter(b => b.paymentMethod === 'transfer').length})` },
-            { id: 'finance' as const, label: `ຜ່ອນຊຳລະ / Finance (${saleBills.filter(b => b.paymentMethod === 'finance').length})` },
-            { id: 'cash' as const, label: `ເງິນສົດ (${saleBills.filter(b => b.paymentMethod === 'cash').length})` }
+            { id: 'all' as const, label: `ທັງໝົດ (${timeframeSaleBills.length})` },
+            { id: 'transfer' as const, label: `ໂອນຜ່ານ QR (${timeframeSaleBills.filter(b => b.paymentMethod === 'transfer').length})` },
+            { id: 'finance' as const, label: `ຜ່ອນຊຳລະ / Finance (${timeframeSaleBills.filter(b => b.paymentMethod === 'finance' || b.billType === 'installment').length})` },
+            { id: 'cash' as const, label: `ເງິນສົດ (${timeframeSaleBills.filter(b => b.paymentMethod === 'cash').length})` }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setSalesFilter(tab.id)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                salesFilter === tab.id
-                  ? 'bg-blue-600 text-white font-bold shadow-xs'
-                  : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-zinc-800'
-              }`}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${salesFilter === tab.id
+                ? 'bg-blue-600 text-white font-bold shadow-xs'
+                : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-zinc-800'
+                }`}
             >
               {tab.label}
             </button>
@@ -662,10 +724,15 @@ export default function DashboardView({
                         <span className="text-[10px] text-slate-500 dark:text-zinc-500 font-mono truncate block">VIN: {b.vin.slice(0, 12)}...</span>
                       </td>
                       <td className="py-3 px-4">
-                        {b.paymentMethod === 'finance' ? (
+                        {b.installmentType === 'monthly_installment' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            <CreditCard className="w-3 h-3 text-amber-700 dark:text-amber-300" />
+                            <span>ຊຳລະຄ່າງວດ (ງວດທີ {b.installmentPeriod || 1})</span>
+                          </span>
+                        ) : b.paymentMethod === 'finance' || b.billType === 'installment' ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                             <CreditCard className="w-3 h-3 text-purple-700 dark:text-purple-300" />
-                            <span>ຜ່ອນ ({b.downPaymentPercent || 30}% ດາວน์)</span>
+                            <span>ຜ່ອນ ({b.downPaymentPercent || 30}% ດາວນ໌)</span>
                           </span>
                         ) : b.paymentMethod === 'transfer' ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
@@ -679,10 +746,10 @@ export default function DashboardView({
                       </td>
                       <td className="py-3 px-4">
                         <span className="font-mono font-bold text-slate-900 dark:text-white block">
-                          ${(b.netTotalUSD || b.amountUSD || 0).toLocaleString()} USD
+                          ${(b.installmentType === 'monthly_installment' ? (b.amountUSD || 0) : (b.netTotalUSD || b.amountUSD || 0)).toLocaleString()} USD
                         </span>
                         <span className="text-[10px] font-mono text-slate-600 dark:text-zinc-400 block">
-                          {(b.netTotalLAK || 0).toLocaleString()} LAK
+                          {(b.installmentType === 'monthly_installment' ? (b.amountLAK || 0) : (b.netTotalLAK || b.amountLAK || 0)).toLocaleString()} LAK
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -936,7 +1003,7 @@ export default function DashboardView({
                   <span className="font-mono text-slate-900 dark:text-white font-bold">{tItem.count} ຄົນ ({tItem.share}%)</span>
                 </div>
                 <div className="w-full bg-slate-200 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-blue-500 rounded-full transition-all duration-500"
                     style={{ width: `${tItem.share}%` }}
                   />
@@ -1052,7 +1119,7 @@ export default function DashboardView({
                             <span className="text-amber-600 dark:text-amber-400 font-bold">{progressPct}%</span>
                           </div>
                           <div className="w-24 h-1.5 bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                            <div 
+                            <div
                               className="h-full bg-amber-500 rounded-full"
                               style={{ width: `${progressPct}%` }}
                             />
@@ -1235,13 +1302,12 @@ export default function DashboardView({
                             <span className="text-[10px] text-slate-500 dark:text-zinc-400">
                               ຊ່າງ: <span className="font-semibold text-slate-700 dark:text-zinc-300">{svc.technician}</span>
                             </span>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              svc.status === 'completed'
-                                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                                : svc.status === 'in_progress'
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${svc.status === 'completed'
+                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                              : svc.status === 'in_progress'
                                 ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/30'
                                 : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30'
-                            }`}>
+                              }`}>
                               {svc.status === 'completed' ? 'ສຳເລັດແລ້ວ' : svc.status === 'in_progress' ? 'ກຳລັງກວດເຊັກ' : 'ລໍຖ້າຄິວ'}
                             </span>
                           </div>
@@ -1335,15 +1401,14 @@ export default function DashboardView({
                             <span className="text-[10px] text-slate-500 dark:text-zinc-400">
                               ທີ່ປຶກສາ: <span className="font-semibold text-slate-700 dark:text-zinc-300">{td.salesRep}</span>
                             </span>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              td.status === 'confirmed'
-                                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                                : td.status === 'completed'
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${td.status === 'confirmed'
+                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                              : td.status === 'completed'
                                 ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/30'
                                 : td.status === 'pending'
-                                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30'
-                                : 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/30'
-                            }`}>
+                                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                                  : 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/30'
+                              }`}>
                               {td.status === 'confirmed' ? 'ຢືນຢັນແລ້ວ' : td.status === 'completed' ? 'ສຳເລັດ' : td.status === 'pending' ? 'ລໍຖ້າຢືນຢັນ' : 'ຍົກເລີກ'}
                             </span>
                           </div>
@@ -1729,7 +1794,7 @@ export default function DashboardView({
         </div>
 
         {/* Promotion Campaigns Grid */}
-        {ACTIVE_PROMOTIONS.length === 0 ? (
+        {displayedPromotions.length === 0 ? (
           <div className="p-8 bg-slate-50 dark:bg-zinc-900/40 border border-slate-200 dark:border-zinc-800/80 rounded-2xl text-center space-y-2">
             <Sparkles className="w-8 h-8 text-slate-400 dark:text-zinc-600 mx-auto" />
             <p className="text-slate-700 dark:text-zinc-400 text-sm font-medium">{t.noPromotionsTitle}</p>
@@ -1737,7 +1802,7 @@ export default function DashboardView({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {ACTIVE_PROMOTIONS.map((promo) => (
+            {displayedPromotions.map((promo) => (
               <div
                 key={promo.id}
                 className="bg-slate-50 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden flex flex-col justify-between transition-all hover:shadow-xl group shadow-sm dark:shadow-none"

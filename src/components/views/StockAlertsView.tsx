@@ -1,19 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { InventoryItem, VehicleModel, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { 
-  getModelStockSummaries, 
-  LOW_STOCK_THRESHOLD 
+import {
+  getModelStockSummaries,
+  LOW_STOCK_THRESHOLD
 } from '../../data/stockSummary';
-import { 
-  AlertTriangle, 
-  ShieldAlert, 
-  CheckCircle2, 
-  Car, 
-  PackagePlus, 
-  Search, 
-  ArrowRight, 
-  Info,
+import {
+  AlertTriangle,
+  ShieldAlert,
+  CheckCircle2,
+  Car,
+  PackagePlus,
+  Search,
+  ArrowRight,
   Clock,
   Truck,
   Sparkles,
@@ -54,11 +53,6 @@ export default function StockAlertsView({
   const healthyModels = useMemo(() => modelSummaries.filter(m => m.isHealthy), [modelSummaries]);
   const totalAlertModels = useMemo(() => [...outOfStockModels, ...lowStockModels], [outOfStockModels, lowStockModels]);
 
-  // Total active units in warehouse across all models
-  const totalAvailableVehicles = useMemo(() => {
-    return inventory.filter(i => i.status !== 'sold' && (i.stockQuantity ?? 1) > 0).length;
-  }, [inventory]);
-
   // Filtered Model Summaries (Alerts evaluated strictly at Model / Category level)
   const displayedModels = useMemo(() => {
     return modelSummaries.filter(m => {
@@ -85,18 +79,14 @@ export default function StockAlertsView({
   return (
     <div className="space-y-6 pb-12 font-sans">
       {/* Header Banner */}
-      <header className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-7 shadow-xl">
+      <header className="theme-adaptive-dark-surface relative overflow-hidden rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 sm:p-7 shadow-sm">
         <div className="pointer-events-none absolute -right-12 -top-16 h-56 w-56 rounded-full bg-amber-400/5 blur-3xl" />
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-300">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
-              <span>{t.stockAlertSystemBadge}</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {t.stockAlertHeading} ({t.stockAlertThresholdRule})
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+              {t.stockAlertHeading}
             </h1>
-            <p className="mt-2 text-xs sm:text-sm text-zinc-400 leading-relaxed">
+            <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed">
               {t.stockAlertDesc}
             </p>
           </div>
@@ -123,19 +113,6 @@ export default function StockAlertsView({
             </button>
           </div>
         </div>
-
-        {/* Explain Rule Callout */}
-        <div className="mt-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-200 flex items-start gap-2.5">
-          <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-          <div className="space-y-0.5">
-            <span className="font-bold text-amber-300">
-              {t.stockAlertRuleTitle}
-            </span>
-            <span className="ml-1 text-zinc-200">
-              {t.stockAlertRuleSummary} ({t.tableStock}: {totalAvailableVehicles} {t.unitCars})
-            </span>
-          </div>
-        </div>
       </header>
 
       {/* KPI Metric Cards by Category/Model */}
@@ -144,11 +121,10 @@ export default function StockAlertsView({
         <button
           type="button"
           onClick={() => setFilterType(filterType === 'out_of_stock' ? 'all' : 'out_of_stock')}
-          className={`rounded-2xl border p-5 text-left transition-all cursor-pointer ${
-            filterType === 'out_of_stock'
-              ? 'border-rose-500/50 bg-rose-500/10 shadow-lg shadow-rose-950/20'
-              : 'border-zinc-800 bg-zinc-950 hover:border-rose-500/40 hover:bg-zinc-900/80'
-          }`}
+          className={`rounded-2xl border p-5 text-left transition-all cursor-pointer ${filterType === 'out_of_stock'
+            ? 'border-rose-500/50 bg-rose-500/10 shadow-lg shadow-rose-950/20'
+            : 'border-zinc-800 bg-zinc-950 hover:border-rose-500/40 hover:bg-zinc-900/80'
+            }`}
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -178,11 +154,10 @@ export default function StockAlertsView({
         <button
           type="button"
           onClick={() => setFilterType(filterType === 'low_stock' ? 'all' : 'low_stock')}
-          className={`rounded-2xl border p-5 text-left transition-all cursor-pointer ${
-            filterType === 'low_stock'
-              ? 'border-amber-500/50 bg-amber-500/10 shadow-lg shadow-amber-950/20'
-              : 'border-zinc-800 bg-zinc-950 hover:border-amber-500/40 hover:bg-zinc-900/80'
-          }`}
+          className={`rounded-2xl border p-5 text-left transition-all cursor-pointer ${filterType === 'low_stock'
+            ? 'border-amber-500/50 bg-amber-500/10 shadow-lg shadow-amber-950/20'
+            : 'border-zinc-800 bg-zinc-950 hover:border-amber-500/40 hover:bg-zinc-900/80'
+            }`}
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -212,11 +187,10 @@ export default function StockAlertsView({
         <button
           type="button"
           onClick={() => setFilterType(filterType === 'healthy' ? 'all' : 'healthy')}
-          className={`rounded-2xl border p-5 text-left transition-all cursor-pointer ${
-            filterType === 'healthy'
-              ? 'border-emerald-500/50 bg-emerald-500/10 shadow-lg shadow-emerald-950/20'
-              : 'border-zinc-800 bg-zinc-950 hover:border-emerald-500/40 hover:bg-zinc-900/80'
-          }`}
+          className={`rounded-2xl border p-5 text-left transition-all cursor-pointer ${filterType === 'healthy'
+            ? 'border-emerald-500/50 bg-emerald-500/10 shadow-lg shadow-emerald-950/20'
+            : 'border-zinc-800 bg-zinc-950 hover:border-emerald-500/40 hover:bg-zinc-900/80'
+            }`}
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -268,44 +242,40 @@ export default function StockAlertsView({
               <button
                 type="button"
                 onClick={() => setFilterType('all')}
-                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${
-                  filterType === 'all'
-                    ? 'border-black bg-zinc-200 text-black dark:border-zinc-500 dark:bg-zinc-800 dark:text-white'
-                    : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
-                }`}
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${filterType === 'all'
+                  ? 'border-black bg-zinc-200 text-black dark:border-zinc-500 dark:bg-zinc-800 dark:text-white'
+                  : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
+                  }`}
               >
                 {t.filterAllModelsTab} ({modelSummaries.length})
               </button>
               <button
                 type="button"
                 onClick={() => setFilterType('alert_only')}
-                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${
-                  filterType === 'alert_only'
-                    ? 'border-black bg-amber-200 text-black dark:border-amber-500 dark:bg-amber-500/20 dark:text-amber-300'
-                    : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
-                }`}
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${filterType === 'alert_only'
+                  ? 'border-black bg-amber-200 text-black dark:border-amber-500 dark:bg-amber-500/20 dark:text-amber-300'
+                  : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
+                  }`}
               >
                 {t.filterAlertOnlyTab} ({totalAlertModels.length})
               </button>
               <button
                 type="button"
                 onClick={() => setFilterType('low_stock')}
-                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${
-                  filterType === 'low_stock'
-                    ? 'border-black bg-amber-200 text-black dark:border-amber-500 dark:bg-amber-500/20 dark:text-amber-300'
-                    : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
-                }`}
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${filterType === 'low_stock'
+                  ? 'border-black bg-amber-200 text-black dark:border-amber-500 dark:bg-amber-500/20 dark:text-amber-300'
+                  : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
+                  }`}
               >
                 {t.filterLowStockTab} ({lowStockModels.length})
               </button>
               <button
                 type="button"
                 onClick={() => setFilterType('out_of_stock')}
-                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${
-                  filterType === 'out_of_stock'
-                    ? 'border-black bg-rose-200 text-black dark:border-rose-500 dark:bg-rose-500/20 dark:text-rose-300'
-                    : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
-                }`}
+                className={`px-3 py-1.5 rounded-lg border font-bold transition-colors cursor-pointer ${filterType === 'out_of_stock'
+                  ? 'border-black bg-rose-200 text-black dark:border-rose-500 dark:bg-rose-500/20 dark:text-rose-300'
+                  : 'border-zinc-300 bg-zinc-100 text-black hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-white'
+                  }`}
               >
                 {t.filterOutOfStockTab} ({outOfStockModels.length})
               </button>
@@ -372,7 +342,7 @@ export default function StockAlertsView({
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-zinc-300 bg-zinc-100 text-black font-black dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
                             {item.category}
                           </span>
-                          
+
                           {/* Alert Badge (highlighted color status) */}
                           {item.isOutOfStock ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30">
@@ -404,9 +374,8 @@ export default function StockAlertsView({
                         <div className="text-[11px] text-black font-black dark:text-zinc-400 dark:font-medium">
                           {t.availableStockLabel}:
                         </div>
-                        <div className={`text-2xl sm:text-3xl font-black font-mono tabular-nums ${
-                          item.isOutOfStock ? 'text-rose-600 dark:text-rose-400' : item.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
-                        }`}>
+                        <div className={`text-2xl sm:text-3xl font-black font-mono tabular-nums ${item.isOutOfStock ? 'text-rose-600 dark:text-rose-400' : item.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+                          }`}>
                           {item.count}{' '}
                           <span className="text-xs font-bold text-black dark:text-zinc-400 dark:font-normal">{t.unitCars}</span>
                         </div>
@@ -420,9 +389,8 @@ export default function StockAlertsView({
                         </div>
                         <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-2.5 overflow-hidden border border-zinc-300 dark:border-zinc-700">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              item.isOutOfStock ? 'bg-rose-500' : item.isLowStock ? 'bg-amber-500' : 'bg-emerald-500'
-                            }`}
+                            className={`h-full rounded-full transition-all duration-500 ${item.isOutOfStock ? 'bg-rose-500' : item.isLowStock ? 'bg-amber-500' : 'bg-emerald-500'
+                              }`}
                             style={{ width: `${percent}%` }}
                           />
                         </div>
