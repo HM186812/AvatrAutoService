@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Lead, 
   VehicleModel, 
@@ -6,10 +6,16 @@ import {
   Language, 
   SystemUser, 
   ActiveMenu, 
-  InstallmentPaymentRecord 
+  InstallmentPaymentRecord,
+  IssuedDocumentRecord
 } from '../../types';
 import { translations } from '../../data/translations';
 import { showToast } from '../common';
+import {
+  getIssuedDocumentLogs,
+  getCustomerDocumentLogs,
+  DOCUMENT_LOG_EVENT,
+} from '../../utils/documentLogger';
 import { 
   Users, 
   CheckCircle2, 
@@ -87,6 +93,26 @@ export default function InstallmentDashboardView({
     summary: any;
     contractNo: string;
   } | null>(null);
+  const [issuedDocLogs, setIssuedDocLogs] = useState<IssuedDocumentRecord[]>(() => getIssuedDocumentLogs());
+
+  useEffect(() => {
+    const handleLogsUpdate = () => {
+      setIssuedDocLogs(getIssuedDocumentLogs());
+    };
+    window.addEventListener(DOCUMENT_LOG_EVENT, handleLogsUpdate);
+    return () => {
+      window.removeEventListener(DOCUMENT_LOG_EVENT, handleLogsUpdate);
+    };
+  }, []);
+
+  const getCustomerIssuedDocsCount = (lead: Lead) => {
+    return getCustomerDocumentLogs({
+      leadId: lead.id,
+      customerName: lead.customerName,
+      customerPhone: lead.phone,
+      vin: lead.vin,
+    }).length;
+  };
 
   const triggerToast = (msg: string) => {
     showToast(msg, 'success');
@@ -544,7 +570,7 @@ export default function InstallmentDashboardView({
       </div>
 
       {/* 3. Search & Filter Toolbar */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="theme-adaptive-dark-surface rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
         {/* Search */}
         <div className="relative flex-1 min-w-[260px]">
           <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -604,14 +630,14 @@ export default function InstallmentDashboardView({
             return (
               <div 
                 key={lead.id}
-                className="group rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-4 hover:border-zinc-700 transition-all flex flex-col justify-between"
+                className="group theme-adaptive-dark-surface rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-4 hover:border-slate-300 dark:hover:border-zinc-700 transition-all flex flex-col justify-between"
               >
                 <div className="space-y-4">
                   {/* Top Bar: Customer Identity & Status */}
                   <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-zinc-800/80">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-base text-white">{lead.customerName}</h3>
+                        <h3 className="font-bold text-base text-slate-900 dark:text-white">{lead.customerName}</h3>
                         <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-300">
                           {contractNo}
                         </span>
@@ -793,6 +819,15 @@ export default function InstallmentDashboardView({
                     >
                       <FileText className="w-3.5 h-3.5 text-zinc-400" />
                       <span>ເອກະສານ & ສັນຍາ</span>
+                      {(() => {
+                        void issuedDocLogs;
+                        const count = getCustomerIssuedDocsCount(lead);
+                        return count > 0 ? (
+                          <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            {count}
+                          </span>
+                        ) : null;
+                      })()}
                     </button>
                   </div>
 
@@ -968,10 +1003,19 @@ export default function InstallmentDashboardView({
 
                           <button
                             onClick={() => setSelectedLeadForDocs(lead)}
-                            className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-xl text-xs transition-all flex items-center justify-center cursor-pointer"
+                            className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-xl text-xs transition-all flex items-center justify-center gap-1 cursor-pointer"
                             title="ເບິ່ງເອກະສານສັນຍາ & ຕາຕະລາງ A4"
                           >
                             <FileText className="w-3.5 h-3.5" />
+                            {(() => {
+                              void issuedDocLogs;
+                              const count = getCustomerIssuedDocsCount(lead);
+                              return count > 0 ? (
+                                <span className="px-1 py-0.2 rounded-full text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  {count}
+                                </span>
+                              ) : null;
+                            })()}
                           </button>
 
                           <button
@@ -1028,6 +1072,7 @@ export default function InstallmentDashboardView({
           currentUser={currentUser || undefined}
           lang={lang}
           initialDoc="installment_schedule"
+          customerGroup="installment_customers"
           onConfirmPayment={async (updatedCust) => {
             if (!currentUser?.id) {
               throw new Error('Sign in again before confirming payment.');

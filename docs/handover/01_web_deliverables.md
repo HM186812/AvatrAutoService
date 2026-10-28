@@ -68,13 +68,15 @@ flowchart TD
 - **ການກວດ PDI (Pre-Delivery Inspection):** ລະບຸສະຖານະການກວດຮັບ (`passed`, `in_progress`, `pending`), ຊື່ຊ່າງກວດຮັບ, ແລະ ຄັງສິນຄ້າປາຍທາງ
 - **ໃບຮັບເຂົ້າສິນຄ້າ (Goods Receipt A4):** ສາມາດພິມເອກະສານຮັບລົດເຂົ້າສາງທາງການໄດ້ທັນທີ
 
-#### 3.4 ໂມດູນລູກຄ້າ ແລະ ຊຸດເອກະສານທາງການ 5 ສະບັບ (Official A4 Documents Suite)
-ຢູ່ໃນໂມດູນ [`CustomerDocumentsModal.tsx`](file:///home/pheuang01/Projects/AvatrAutoService/src/components/modals/CustomerDocumentsModal.tsx) ປະກອບມີຊຸດເອກະສານມາດຕະຖານ A4 ຄົບຖ້ວນ:
+#### 3.4 ໂມດູນລູກຄ້າ ແລະ ຊຸດເອກະສານທາງການ 7 ສະບັບ (Official A4 Documents Suite)
+ຢູ່ໃນໂມດູນ [`CustomerDocumentsModal.tsx`](file:///home/pheuang01/Projects/AvatrAutoService/src/components/modals/CustomerDocumentsModal.tsx) ປະກອບມີຊຸດເອກະສານມາດຕະຖານ A4 ຄົບຖ້ວນ 7 ສະບັບ:
 1. **ໃບສັນຍາສັ່ງຈອງ (Vehicle Booking Contract):** ລະບຸເງື່ອນໄຂການຈອງ, ລາຄາລົດ, ເງິນມັດຈຳ, ຂອງແຖມ, ແລະ ກຳນົດສົ່ງມອບ
 2. **ໃບຮັບເງິນ (Official Dealership Receipt):** ໃບຮັບເງິນທາງການລະບຸຍອດຈ່າຍ, ເລກອ້າງອີງການໂອນ, ວັນທີເວລາ, ແລະ ຊ່ອງລົງລາຍເຊັນ 3 ຝ່າຍ (ລູກຄ້າ, ພະນັກງານຮັບເງິນ, ຫົວໜ້າບັນຊີ)
 3. **ໃບມອບ-ຮັບລົດ (Vehicle Handover Certificate):** ເອກະສານກວດກາ ແລະ ສົ່ງມອບຍານພາຫະນະ ພ້ອມລາຍການອຸປະກອນແຖມ (Adapter CCS2, Home Charger 7kW, ບັດສາກໄຟ Bluedot)
 4. **ໃບມອບສິດ (Power of Attorney):** ໃບມອບສິດທາງການເພື່ອດຳເນີນການຂຶ້ນທະບຽນ ແລະ ເອົາປ້າຍລົດນຳພະແນກໂຍທາທິການ ແລະ ຂົນສົ່ງ
 5. **ຕາຕະລາງຜ່ອນຊຳລະ (Installment Schedule):** ຕາຕະລາງໄລ່ຄ່າງວດແຕ່ລະເດືອນ ລະບຸເງິນຕົ້ນ, ດອກເບ້ຍ, ແລະ ຍອດຄົງເຫຼືອທັງ USD ແລະ LAK
+6. **ໃບສັນຍາຢືມສິນ (Tripartite Credit Agreement):** ສັນຍາສິນເຊື່ອ 3 ຝ່າຍລະຫວ່າງ ລາວທານີ, ລູກຄ້າ (ທ່ານ ນາງ ນວນຈັນ ທໍາມະວົງສາ), ແລະ ທະນາຄານ MARUHAN Japan Bank Lao (ຝ່າຍສິນເຊື່ອ) ລະບຸຍອດຈ່າຍກ່ອນ $25,740, ຍອດກູ້ຢືມ $17,160, ແລະ ເງື່ອນໄຂດອກເບ້ຍ
+7. **ໃບເບີກລົດ KM7 (KM7 Vehicle Release Slip):** ໃບເບີກສາງຫຼັກ 7 ລະບຸວັນທີເບີກ, ເລກຖັງ (LS6J3E1E8TK504736), AVATR 07, ລາຄາ $42,900, ການຊຳລະ (ລູກຄ້າຈັດ Finance), ໝາຍເຫດ (ຂໍເບີກ Adapter CCS2), ຜູ້ເບີກ ແລະ ຜູ້ອໍານວຍການ
 
 #### 3.5 ໂມດູນຕິດຕາມຄ່າງວດ (Installment Ledger & Repayment)
 - **ຄຳນວນດອກເບ້ຍ ແລະ ຄ່າງວດ:** ຮອງຮັບການວາງດາວ 10% - 90% ແລະ ໄລຍະເວລາຜ່ອນ 12 ຫາ 60 ເດືອນ

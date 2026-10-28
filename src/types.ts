@@ -1,6 +1,6 @@
 export type Language = 'lo' | 'en' | 'th';
 
-export type ActiveMenu = 'dashboard' | 'installment_dashboard' | 'pos_sales' | 'customers' | 'inventory' | 'stock_in' | 'bills' | 'alerts' | 'users' | 'profile';
+export type ActiveMenu = 'dashboard' | 'installment_dashboard' | 'sales_leaderboard' | 'pos_sales' | 'customers' | 'inventory' | 'stock_in' | 'bills' | 'alerts' | 'users' | 'profile';
 
 export type UserRole = 'super_admin' | 'admin' | 'sales' | 'technician' | 'general_user';
 
@@ -361,3 +361,39 @@ export interface StockLogRecord {
 }
 
 export type SaleLogRecord = StockLogRecord;
+
+export type IssuedDocumentAction = 'print' | 'export_pdf' | 'export_csv';
+
+export type IssuedDocType =
+  | 'booking'
+  | 'receipt'
+  | 'handover'
+  | 'authorization'
+  | 'installment_schedule'
+  | 'credit_agreement'
+  | 'km7_release'
+  | 'quotation'
+  | 'official_bill'
+  | 'pos_receipt'
+  | 'after_sales_record';
+
+export interface IssuedDocumentRecord {
+  id: string;
+  docType: IssuedDocType;
+  docTitle: string;
+  docNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  leadId?: string;
+  billId?: string;
+  vin?: string;
+  model?: string;
+  action: IssuedDocumentAction;
+  formatLabel: string;
+  issuedAt: string;
+  issuedDate: string;
+  issuedBy: string;
+  amountUSD?: number;
+  amountLAK?: number;
+  notes?: string;
+}

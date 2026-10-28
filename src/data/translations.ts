@@ -35,6 +35,8 @@ export interface TranslationSchema {
   navBills: string;
   navInstallmentDashboard: string;
   navInstallmentDashboardSub: string;
+  navLeaderboard: string;
+  navLeaderboardSub: string;
   navUsers: string;
   navProfile: string;
   navCurrencies: string;
@@ -46,6 +48,7 @@ export interface TranslationSchema {
   // Top Header Titles & Actions
   headerDashboard: string;
   headerInstallmentDashboard: string;
+  headerLeaderboard: string;
   headerCustomers: string;
   headerInventory: string;
   headerStockIn: string;
@@ -201,12 +204,8 @@ export interface TranslationSchema {
   minThreshold: string;
   recommendedOrder: string;
   updateThresholdBtn: string;
-  stockAlertSystemBadge: string;
   stockAlertHeading: string;
-  stockAlertThresholdRule: string;
   stockAlertDesc: string;
-  stockAlertRuleTitle: string;
-  stockAlertRuleSummary: string;
   btnInboundStockIn: string;
   btnFullInventory: string;
   outOfStockModelsTitle: string;
@@ -270,7 +269,6 @@ export interface TranslationSchema {
 
   // Auth & Login
   authOnline: string;
-  authSystemTitle: string;
   authSignInTitle: string;
   authSignUpTitle: string;
   authSignInDesc: string;
@@ -351,7 +349,6 @@ export interface TranslationSchema {
 
   // Customer View Specific
   customerViewTitle: string;
-  customerViewSubtitle: string;
   assignedOfficer: string;
   inputFormHeader: string;
   customerTypeLabel: string;
@@ -526,6 +523,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     navBills: 'ບັນທຶກບິນ & ໃບຮັບ',
     navInstallmentDashboard: 'ຜ່ອນຊຳລະ & ສິນເຊື່ອ (Leasing)',
     navInstallmentDashboardSub: 'ສັນຍາຜ່ອນ & ດາວ',
+    navLeaderboard: 'ອັນດັບນັກຂາຍ (Leaderboard)',
+    navLeaderboardSub: 'Top Sales ແຕ່ລະໄລຍະ',
     navUsers: 'ອະນຸຍາດ & ມອບສິດ',
     navProfile: 'ໂປຣໄຟລ໌ສ່ວນຕົວ',
     navCurrencies: 'ສະກຸນເງິນ (Currencies)',
@@ -537,6 +536,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     // Top Header Titles & Actions
     headerDashboard: 'Dashboard • ພາບລວມລະບົບ',
     headerInstallmentDashboard: 'Dashboard ຜ່ອນຊຳລະ & ເງິນດາວ • Leasing Portfolio',
+    headerLeaderboard: 'ຈັດອັນດັບພະນັກງານຂາຍ Top Sales • Leaderboard',
     headerCustomers: 'ລູກຄ້າ CRM • ຖານຂໍ້ມູນ & ຕິດຕາມ',
     headerInventory: 'ສະຕ໋ອກລົດ AVATR • ຄັງສິນຄ້າທັງໝົດ',
     headerStockIn: 'ປ້ອນນຳເຂົ້າລົດ • Stock-In Entry',
@@ -545,8 +545,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     headerAlerts: 'ແຈ້ງເຕືອນສະຕ໋ອກ • ໃກ້ໝົດ & ສັ່ງເພີ່ມ',
     headerUsers: 'ອະນຸຍາດສະມາຊິກ • ມອບສິດ (Admin)',
     headerProfile: 'ໂປຣໄຟລ໌ຜູ້ໃຊ້ • ຂໍ້ມູນບັນຊີ',
-    quickPOSBtn: '+ ຂາຍລົດ (POS)',
-    quickStockInBtn: '+ ນຳເຂົ້າລົດ',
+    quickPOSBtn: 'ຂາຍລົດ (POS)',
+    quickStockInBtn: 'ນຳເຂົ້າລົດ',
     roleAdmin: 'Admin',
     roleSuperAdmin: 'Admin',
     roleBranchAdmin: 'Admin ສາຂາ',
@@ -652,7 +652,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     printStockInReceipt: 'ພິມໃບຮັບສິນຄ້າ (Stock-In Receipt)',
 
     // POS Sales
-    posTitle: 'POS ຂາຍລົດຍົນ & ອອກໃບບິນ (Sales Billing)',
+    posTitle: 'POS ຂາຍລົດຍົນ & ອອກໃບບິນ',
     posSubtitle: 'ລະບົບອອກໃບສັ່ງຊື້/ໃບຂາຍລົດ, ຄຳນວນສ່ວນຫຼຸດ, ຕັດສະຕ໋ອກ ແລະ ບັນທຶກລາຍຮັບທັນທີ',
     selectVehicleToSell: 'ເລືອກລົດໃນສະຕ໋ອກທີ່ຈະຂາຍ',
     buyerInfo: 'ຂໍ້ມູນຜູ້ຊື້ / ລູກຄ້າ',
@@ -692,13 +692,9 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     minThreshold: 'ຈຸດເຕືອນຂັ້ນຕ່ຳ',
     recommendedOrder: 'ຈຳນວນແນະນຳໃຫ້ນຳເຂົ້າ',
     updateThresholdBtn: 'ປັບຄ່າແຈ້ງເຕືອນ',
-    stockAlertSystemBadge: 'ລະບົບເຕືອນສະຕ໋ອກຕາມໝວດລຸ້ນລົດ (Model-Level Alert System)',
     stockAlertHeading: 'ແຈ້ງເຕືອນສະຕ໋ອກຕາມໝວດລຸ້ນລົດ',
-    stockAlertThresholdRule: 'ຕ່ຳກວ່າ 5 ຄັນເຕືອນທັນທີ',
-    stockAlertDesc: 'ການແຈ້ງເຕືອນຈະຄິດໄລ່ຈາກຍອດລວມສິນຄ້າໃນສາງຂອງ "ໝວດ ຫຼື ລຸ້ນລົດ" ໂດຍກົງ (ບໍ່ກວດເປັນລາຍຄັນ). ຫາກລຸ້ນໃດມີຍອດລວມພ້ອມຂາຍຕ່ຳກວ່າ 5 ຄັນ ລະບົບຈະແຈ້ງເຕືອນໃຫ້ເຕີມສະຕ໋ອກທັນທີ.',
-    stockAlertRuleTitle: 'ຫຼັກການເຕືອນຕາມໝວດລຸ້ນລົດ:',
-    stockAlertRuleSummary: 'ກວດນັບຍອດລວມຂອງແຕ່ລະໝວດລຸ້ນ (AVATR 12, AVATR 11, AVATR 07...). ຫາກຍອດລວມ < 5 ຄັນ = ⚠️ ໃກ້ໝົດສະຕ໋ອກ · ຫາກເທົ່າກັບ 0 ຄັນ = 🔴 ໝົດສະຕ໋ອກ.',
-    btnInboundStockIn: '+ ຮັບລົດເຂົ້າສາງ (Stock-In)',
+    stockAlertDesc: 'ການແຈ້ງເຕືອນຈະຄິດໄລ່ຈາກຍອດລວມສິນຄ້າໃນສາງ',
+    btnInboundStockIn: 'ຮັບລົດເຂົ້າສາງ (Stock-In)',
     btnFullInventory: 'ເບິ່ງລາຍການສາງທັງໝົດ',
     outOfStockModelsTitle: 'ໝວດລົດໝົດສະຕ໋ອກ',
     outOfStockModelsSub: '0 ຄັນ · ບໍ່ມີລົດໃນສາງ',
@@ -723,7 +719,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     badgeHealthyStock: 'ສະຕ໋ອກພຽງພໍ',
     availableStockLabel: 'ຍອດລວມພ້ອມຂາຍ',
     thresholdRuleLabel: 'ເກນເຕືອນ: 5 ຄັນ',
-    btnStockInCar: '+ ຮັບລົດເຂົ້າສາງ',
+    btnStockInCar: 'ຮັບລົດເຂົ້າສາງ',
     stageReady: 'ພ້ອມຂາຍ',
     stagePdi: 'ກວດ PDI',
     stageImported: 'ນຳເຂົ້າ/ຢູ່ດ່ານ',
@@ -761,7 +757,6 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Auth & Login
     authOnline: 'ONLINE',
-    authSystemTitle: 'ລະບົບຈັດການ AVATR AUTO',
     authSignInTitle: 'ເຂົ້າສູ່ລະບົບ (Sign In)',
     authSignUpTitle: 'ສ້າງບັນຊີໃໝ່ (Sign Up)',
     authSignInDesc: 'ເຂົ້າສູ່ລະບົບຈັດການ AVATR AUTO SERVICE',
@@ -842,7 +837,6 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Customer View Specific
     customerViewTitle: 'ລະບົບຈັດການລູກຄ້າ (Customers CRM)',
-    customerViewSubtitle: 'ຖານຂໍ້ມູນລູກຄ້າ Walk-in, Online ແລະ Event ພ້ອມການຕິດຕາມສະຖານະການຂາຍ',
     assignedOfficer: 'ຜູ້ຮັບຜິດຊອບ:',
     inputFormHeader: 'ເພີ່ມຂໍ້ມູນລູກຄ້າໃໝ່ (Input Form)',
     customerTypeLabel: 'ປະເພດລູກຄ້າ (3 ໝວດ)',
@@ -1014,6 +1008,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     navBills: 'Bills & Invoices',
     navInstallmentDashboard: 'Installment & Leasing',
     navInstallmentDashboardSub: 'Contracts & Down Payments',
+    navLeaderboard: 'Sales Leaderboard',
+    navLeaderboardSub: 'Top Sales Rankings',
     navUsers: 'User Governance',
     navProfile: 'User Profile',
     navCurrencies: 'Currencies & Rates',
@@ -1025,6 +1021,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     // Top Header Titles & Actions
     headerDashboard: 'Dashboard • Executive Overview',
     headerInstallmentDashboard: 'Installment & Down Payment Dashboard • Portfolio Hub',
+    headerLeaderboard: 'Sales Leaderboard • Top Sales Rankings',
     headerCustomers: 'CRM Customers • Database & Tracking',
     headerInventory: 'AVATR Inventory • Live Stock Management',
     headerStockIn: 'Stock-In Entry • Vehicle Import',
@@ -1033,8 +1030,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     headerAlerts: 'Stock Alerts • Low Inventory Warnings',
     headerUsers: 'User Governance • Role Privileges (Admin)',
     headerProfile: 'User Profile • Account Information',
-    quickPOSBtn: '+ Sell Car (POS)',
-    quickStockInBtn: '+ Stock-In Entry',
+    quickPOSBtn: 'Sell Car (POS)',
+    quickStockInBtn: 'Stock-In Entry',
     roleAdmin: 'Admin',
     roleSuperAdmin: 'Admin',
     roleBranchAdmin: 'Branch Admin',
@@ -1176,13 +1173,9 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     minThreshold: 'Low Threshold Limit',
     recommendedOrder: 'Recommended Reorder Qty',
     updateThresholdBtn: 'Update Alerts',
-    stockAlertSystemBadge: 'Model-Level Stock Alert System',
     stockAlertHeading: 'Model Stock Alerts',
-    stockAlertThresholdRule: 'Alerts when < 5 units',
     stockAlertDesc: 'Alerts are triggered strictly based on the total stock of each vehicle Model/Category (not per single car). If any model drops below 5 units, a restock alert is triggered.',
-    stockAlertRuleTitle: 'Model-Level Alert Rules:',
-    stockAlertRuleSummary: 'Monitors total aggregated stock per model (AVATR 12, AVATR 11, AVATR 07...). If total < 5 units = ⚠️ Low Stock · If 0 units = 🔴 Out of Stock.',
-    btnInboundStockIn: '+ Inbound Stock-In',
+    btnInboundStockIn: 'Inbound Stock-In',
     btnFullInventory: 'Full Inventory',
     outOfStockModelsTitle: 'Out of Stock Models',
     outOfStockModelsSub: '0 units available',
@@ -1207,7 +1200,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     badgeHealthyStock: 'Healthy Stock',
     availableStockLabel: 'Available in Stock',
     thresholdRuleLabel: 'Threshold: 5 units',
-    btnStockInCar: '+ Restock',
+    btnStockInCar: 'Restock',
     stageReady: 'Ready',
     stagePdi: 'PDI Check',
     stageImported: 'Imported/Port',
@@ -1219,7 +1212,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     // Users & Permissions
     usersTitle: 'User Governance & Role Permissions',
     usersSubtitle: 'Approve team members, grant Admin or General User privileges and control system access',
-    addUserBtn: '+ Add New Member',
+    addUserBtn: 'Add New Member',
     memberName: 'Member Name',
     memberRole: 'Access Role',
     memberDepartment: 'Department',
@@ -1245,7 +1238,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Auth & Login
     authOnline: 'ONLINE',
-    authSystemTitle: 'AVATR AUTO MANAGEMENT SYSTEM',
+
     authSignInTitle: 'Sign In',
     authSignUpTitle: 'Sign Up',
     authSignInDesc: 'Sign in to AVATR AUTO SERVICE Executive System',
@@ -1324,7 +1317,6 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Customer View Specific
     customerViewTitle: 'Customer Relationship Management (CRM)',
-    customerViewSubtitle: 'Central database for Walk-in, Online, and Event leads with sales stage tracking',
     assignedOfficer: 'Assigned Officer:',
     inputFormHeader: 'Add New Customer (Input Form)',
     customerTypeLabel: 'Customer Category (3 Types)',
@@ -1498,6 +1490,8 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     navBills: 'บันทึกบิล & ใบรับ',
     navInstallmentDashboard: 'ผ่อนชำระ & สินเชื่อ (Leasing)',
     navInstallmentDashboardSub: 'สัญญาผ่อน & ดาวน์',
+    navLeaderboard: 'อันดับนักขาย (Leaderboard)',
+    navLeaderboardSub: 'Top Sales แต่ละช่วงเวลา',
     navUsers: 'อนุมัติ & สิทธิ์สมาชิก',
     navProfile: 'โปรไฟล์ส่วนตัว',
     navCurrencies: 'สกุลเงิน (Currencies)',
@@ -1509,6 +1503,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     // Top Header Titles & Actions
     headerDashboard: 'Dashboard • ภาพรวมระบบ',
     headerInstallmentDashboard: 'Dashboard ผ่อนชำระ & เงินดาวน์ • Leasing Portfolio',
+    headerLeaderboard: 'จัดอันดับพนักงานขาย Top Sales • Leaderboard',
     headerCustomers: 'ลูกค้า CRM • ฐานข้อมูล & ติดตามงานขาย',
     headerInventory: 'สต็อกรถ AVATR • คลังสินค้าทั้งหมด',
     headerStockIn: 'บันทึกนำเข้ารถ • Stock-In Entry',
@@ -1664,13 +1659,9 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     minThreshold: 'เกณฑ์แจ้งเตือนขั้นต่ำ',
     recommendedOrder: 'จำนวนที่แนะนำให้นำเข้า',
     updateThresholdBtn: 'ปรับค่าการแจ้งเตือน',
-    stockAlertSystemBadge: 'ระบบแจ้งเตือนสต็อกตามหมวดรุ่นรถ (Model-Level Alert System)',
     stockAlertHeading: 'แจ้งเตือนสต็อกตามหมวดรุ่นรถ',
-    stockAlertThresholdRule: 'ต่ำกว่า 5 คันเตือนทันที',
     stockAlertDesc: 'การแจ้งเตือนคำนวณจากยอดรวมสินค้าในคลังของ "หมวดหรือรุ่นรถ" โดยตรง (ไม่ตรวจเป็นรายคัน) หากรุ่นใดมียอดพร้อมขายต่ำกว่า 5 คัน จะแจ้งเตือนให้เติมสต็อกทันที',
-    stockAlertRuleTitle: 'หลักการแจ้งเตือนตามหมวดรุ่นรถ:',
-    stockAlertRuleSummary: 'ตรวจนับยอดรวมของแต่ละหมวดรุ่น (AVATR 12, AVATR 11, AVATR 07...). หากยอดรวม < 5 คัน = ⚠️ ใกล้หมดสต็อก · หากเท่ากับ 0 คัน = 🔴 หมดสต็อก',
-    btnInboundStockIn: '+ นำเข้ารถสู่คลัง (Stock-In)',
+    btnInboundStockIn: 'นำเข้ารถสู่คลัง (Stock-In)',
     btnFullInventory: 'ดูรายการคลังทั้งหมด',
     outOfStockModelsTitle: 'หมวดรถหมดสต็อก',
     outOfStockModelsSub: '0 คัน · ไม่มีรถในคลัง',
@@ -1733,7 +1724,6 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Auth & Login
     authOnline: 'ONLINE',
-    authSystemTitle: 'ระบบจัดการ AVATR AUTO',
     authSignInTitle: 'เข้าสู่ระบบ (Sign In)',
     authSignUpTitle: 'สร้างบัญชีใหม่ (Sign Up)',
     authSignInDesc: 'เข้าสู่ระบบจัดการ AVATR AUTO SERVICE',
@@ -1814,7 +1804,6 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
 
     // Customer View Specific
     customerViewTitle: 'ระบบจัดการลูกค้า (Customers CRM)',
-    customerViewSubtitle: 'ฐานข้อมูลลูกค้า Walk-in, Online และ Event พร้อมการติดตามสถานะการขายอย่างเป็นระบบ',
     assignedOfficer: 'ผู้รับผิดชอบ:',
     inputFormHeader: 'เพิ่มข้อมูลลูกค้าใหม่ (Input Form)',
     customerTypeLabel: 'ประเภทลูกค้า (3 หมวด)',

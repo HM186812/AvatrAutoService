@@ -12,21 +12,21 @@ import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import { translations } from '../../data/translations';
 import AvatrLogo from '../layout/AvatrLogo';
 import { showToast } from '../common';
-import { 
-  FileText, 
-  Search, 
-  Printer, 
-  Download, 
-  X, 
-  CheckCircle2, 
-  Car, 
-  Calendar, 
-  CreditCard, 
-  ShieldCheck, 
-  Truck, 
-  Building2, 
-  Phone, 
-  User, 
+import {
+  FileText,
+  Search,
+  Printer,
+  Download,
+  X,
+  CheckCircle2,
+  Car,
+  Calendar,
+  CreditCard,
+  ShieldCheck,
+  Truck,
+  Building2,
+  Phone,
+  User,
   Sparkles,
   ArrowUpRight,
   Filter,
@@ -47,15 +47,18 @@ import {
   UploadCloud
 } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
-import { exportElementToDocx } from '../../utils/docxExport';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl } from '../../utils/whatsapp';
 import { saveBillToSupabase } from '../../supabase';
-import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
 import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
+import QuotationModal from '../modals/QuotationModal';
 import { saveLead, deleteBill, fetchBillsByDateRange, attachSlipToBill } from '../../backend/data';
 import SlipPreviewModal from '../modals/SlipPreviewModal';
+import IssuedDocumentsRegistryTab from './IssuedDocumentsRegistryTab';
+import { getIssuedDocumentLogs, deleteIssuedDocumentLog, logIssuedDocument, DOCUMENT_LOG_EVENT } from '../../utils/documentLogger';
+import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
+import type { IssuedDocumentRecord } from '../../types';
 
 interface BillsManagementViewProps {
   bills: InvoiceBillRecord[];
@@ -93,7 +96,7 @@ export default function BillsManagementView({
       return {};
     }
   }, []);
-  const [filterType, setFilterType] = useState<'all' | 'sale' | 'installment' | 'import'>(savedFilter.filterType || 'all');
+  const [filterType, setFilterType] = useState<'all' | 'sale' | 'installment' | 'import' | 'issued_docs'>(savedFilter.filterType || 'all');
   const [installmentSubTab, setInstallmentSubTab] = useState<'bills' | 'contracts'>('bills');
   const [searchQuery, setSearchQuery] = useState<string>(savedFilter.searchQuery || '');
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -118,17 +121,102 @@ export default function BillsManagementView({
       // ignore storage errors
     }
   }, [filterType, searchQuery, searchField, timePreset, selectedYear, selectedMonth, dateFrom, dateTo, sortBy]);
-  
   // Selected bill for print / view
   const [selectedBillForPrint, setSelectedBillForPrint] = useState<InvoiceBillRecord | null>(null);
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
   const [isExportingBillPdf, setIsExportingBillPdf] = useState(false);
-  const [isExportingBillDocx, setIsExportingBillDocx] = useState(false);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
   // Modal states for Installment Ledger & Documents
   const [selectedCustomerForLedger, setSelectedCustomerForLedger] = useState<Lead | null>(null);
   const [selectedCustomerForDocs, setSelectedCustomerForDocs] = useState<{ customer: Lead; docType?: DocumentType } | null>(null);
+  const [selectedQuoteForModal, setSelectedQuoteForModal] = useState<{ vehicle: VehicleModel; customerName?: string } | null>(null);
+
+  // Issued Document Logs (Audit Trail)
+  const [issuedDocLogs, setIssuedDocLogs] = useState<IssuedDocumentRecord[]>(() => getIssuedDocumentLogs());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setIssuedDocLogs(getIssuedDocumentLogs());
+    };
+    window.addEventListener(DOCUMENT_LOG_EVENT, handleUpdate);
+    return () => window.removeEventListener(DOCUMENT_LOG_EVENT, handleUpdate);
+  }, []);
+
+  const handleDeleteIssuedDocLog = (id: string) => {
+    deleteIssuedDocumentLog(id);
+    setIssuedDocLogs(getIssuedDocumentLogs());
+    showToast('ລຶບລາຍການບັນທຶກເອກະສານສຳເລັດ', 'success');
+  };
+
+  const handleReopenIssuedDoc = (log: IssuedDocumentRecord) => {
+    // 1. Quotation: Reopen in QuotationModal
+    if (log.docType === 'quotation') {
+      const matchingVehicle = vehicles.find(v => v.name === log.model) || vehicles[0];
+      if (matchingVehicle) {
+        setSelectedQuoteForModal({
+          vehicle: matchingVehicle,
+          customerName: log.customerName,
+        });
+      } else {
+        showToast('ບໍ່ພົບຂໍ້ມູນລຸ້ນລົດສຳລັບໃບສະເໜີລາຄານີ້', 'error');
+      }
+      return;
+    }
+
+    // 2. Official Bill & POS Receipt: Reopen printable bill modal
+    if (log.docType === 'official_bill' || log.docType === 'pos_receipt') {
+      const foundBill = bills.find(b => b.id === log.billId || b.billNumber === log.docNumber) || {
+        id: log.billId || log.docNumber,
+        billNumber: log.docNumber,
+        billType: 'sale',
+        date: log.issuedDate,
+        customerName: log.customerName,
+        customerPhone: log.customerPhone,
+        model: log.model || 'AVATR',
+        vin: log.vin || 'N/A',
+        netTotalUSD: log.amountUSD || 0,
+        netTotalLAK: log.amountLAK || (log.amountUSD ? log.amountUSD * 22000 : 0),
+        unitPriceUSD: log.amountUSD || 0,
+        unitPriceLAK: log.amountLAK || 0,
+        discountUSD: 0,
+        discountLAK: 0,
+        quantity: 1,
+        recordedBy: log.issuedBy,
+      } as InvoiceBillRecord;
+      setSelectedBillForPrint(foundBill);
+      return;
+    }
+
+    // Customer documents (credit_agreement, km7_release, receipt, booking, handover, authorization, installment_schedule)
+    const targetLead = leads.find(l => l.id === log.leadId || l.customerName === log.customerName || (l.phone && log.customerPhone && l.phone.replace(/\D/g, '') === log.customerPhone.replace(/\D/g, ''))) || {
+      id: log.leadId || 'LD-LOGGED',
+      customerName: log.customerName,
+      phone: log.customerPhone || '020 00000000',
+      interestedModel: log.model || 'AVATR 07',
+      status: 'delivered',
+      paymentReceiptNo: log.docNumber,
+      downPaymentUSD: log.amountUSD,
+      vin: log.vin,
+      notes: log.notes,
+    } as Lead;
+
+    const targetDocType: DocumentType = (
+      log.docType === 'credit_agreement' ? 'credit_agreement' :
+      log.docType === 'km7_release' ? 'km7_release' :
+      log.docType === 'receipt' ? 'receipt' :
+      log.docType === 'booking' ? 'booking' :
+      log.docType === 'handover' ? 'handover' :
+      log.docType === 'authorization' ? 'authorization' :
+      'installment_schedule'
+    );
+
+    setSelectedCustomerForDocs({
+      customer: targetLead,
+      docType: targetDocType,
+    });
+  };
+
   const [selectedBillForSlip, setSelectedBillForSlip] = useState<InvoiceBillRecord | null>(null);
   const [isUploadingSlipId, setIsUploadingSlipId] = useState<string | null>(null);
 
@@ -287,10 +375,10 @@ export default function BillsManagementView({
 
   // Leads matching installment & down payment category
   const installmentLeads = useMemo(() => {
-    return leads.filter(lead => 
-      lead.paymentType === 'installment' || 
-      lead.paymentType === 'finance' || 
-      Boolean(lead.downPaymentPercent) || 
+    return leads.filter(lead =>
+      lead.paymentType === 'installment' ||
+      lead.paymentType === 'finance' ||
+      Boolean(lead.downPaymentPercent) ||
       Boolean(lead.financeCompany) ||
       Boolean(lead.installmentRecords && lead.installmentRecords.length > 0)
     );
@@ -309,7 +397,7 @@ export default function BillsManagementView({
   // Financial aggregates
   const totalSalesRevenueUSD = saleBills.reduce((acc, curr) => acc + curr.netTotalUSD, 0);
   const totalImportValuationUSD = importBills.reduce((acc, curr) => acc + curr.netTotalUSD, 0);
-  
+
   // Total collected from down payments & installment receipts
   const totalInstallmentCollectionsUSD = useMemo(() => {
     return installmentBills.reduce((acc, curr) => {
@@ -574,8 +662,8 @@ export default function BillsManagementView({
     const confirmText = lang === 'lo'
       ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບ ${count} ໃບບິນທີ່ເລືອກໄວ້? ຂໍ້ມູນຈະຖືກລົບອອກຈາກລະບົບ.`
       : lang === 'th'
-      ? `คุณแน่ใจหรือไม่ว่าต้องการลบ ${count} ใบบิลที่เลือกไว้?`
-      : `Are you sure you want to delete ${count} selected bill(s)?`;
+        ? `คุณแน่ใจหรือไม่ว่าต้องการลบ ${count} ใบบิลที่เลือกไว้?`
+        : `Are you sure you want to delete ${count} selected bill(s)?`;
 
     if (!window.confirm(confirmText)) return;
 
@@ -602,11 +690,47 @@ export default function BillsManagementView({
   };
 
   const handlePrint = () => {
+    if (selectedBillForPrint) {
+      logIssuedDocument({
+        docType: 'official_bill',
+        docTitle: 'ໃບບິນທາງການ / ໃບແຈ້ງໜີ້ (Official Invoice & Bill)',
+        docNumber: selectedBillForPrint.billNumber,
+        customerName: selectedBillForPrint.customerName || 'ລູກຄ້າທົ່ວໄປ',
+        customerPhone: selectedBillForPrint.customerPhone,
+        leadId: selectedBillForPrint.leadId,
+        billId: selectedBillForPrint.id,
+        vin: selectedBillForPrint.vin,
+        model: selectedBillForPrint.model,
+        action: 'print',
+        formatLabel: 'Print / ພິມ',
+        issuedBy: selectedBillForPrint.recordedBy || currentUser?.name || 'Admin',
+        amountUSD: selectedBillForPrint.netTotalUSD || selectedBillForPrint.amountUSD,
+        amountLAK: selectedBillForPrint.netTotalLAK || selectedBillForPrint.amountLAK,
+        notes: `ພິມໃບບິນ ${selectedBillForPrint.billNumber}`,
+      });
+    }
     window.print();
   };
 
   const handleDirectPrintBill = (bill: InvoiceBillRecord) => {
     setSelectedBillForPrint(bill);
+    logIssuedDocument({
+      docType: 'official_bill',
+      docTitle: 'ໃບບິນທາງການ / ໃບແຈ້ງໜີ້ (Official Invoice & Bill)',
+      docNumber: bill.billNumber,
+      customerName: bill.customerName || 'ລູກຄ້າທົ່ວໄປ',
+      customerPhone: bill.customerPhone,
+      leadId: bill.leadId,
+      billId: bill.id,
+      vin: bill.vin,
+      model: bill.model,
+      action: 'print',
+      formatLabel: 'Print / ພິມ',
+      issuedBy: bill.recordedBy || currentUser?.name || 'Admin',
+      amountUSD: bill.netTotalUSD || bill.amountUSD,
+      amountLAK: bill.netTotalLAK || bill.amountLAK,
+      notes: `ພິມໃບບິນ ${bill.billNumber}`,
+    });
     setTimeout(() => {
       window.print();
     }, 150);
@@ -621,10 +745,28 @@ export default function BillsManagementView({
         const filename = `AVATR_Bill_${bill.billNumber}_${cleanName}.pdf`;
         await exportElementToPdf('printable-official-bill', {
           filename,
-          margin: [4, 4, 4, 4],
+          margin: [0, 0, 0, 0],
           orientation: 'portrait',
           singlePage: true,
         });
+        logIssuedDocument({
+          docType: 'official_bill',
+          docTitle: 'ໃບບິນທາງການ / ໃບແຈ້ງໜີ້ (Official Invoice & Bill)',
+          docNumber: bill.billNumber,
+          customerName: bill.customerName || 'ລູກຄ້າທົ່ວໄປ',
+          customerPhone: bill.customerPhone,
+          leadId: bill.leadId,
+          billId: bill.id,
+          vin: bill.vin,
+          model: bill.model,
+          action: 'export_pdf',
+          formatLabel: 'PDF (A4)',
+          issuedBy: bill.recordedBy || currentUser?.name || 'Admin',
+          amountUSD: bill.netTotalUSD || bill.amountUSD,
+          amountLAK: bill.netTotalLAK || bill.amountLAK,
+          notes: `ດາວໂຫຼດ PDF ໃບບິນ ${bill.billNumber}`,
+        });
+        showToast(`ບັນທຶກປະຫວັດການດາວໂຫຼດ PDF ${bill.billNumber} ສຳເລັດ`, 'success');
       } catch (err) {
         console.error('Error generating bill PDF:', err);
       } finally {
@@ -641,10 +783,28 @@ export default function BillsManagementView({
       const filename = `AVATR_Bill_${selectedBillForPrint.billNumber}_${cleanName}.pdf`;
       await exportElementToPdf('printable-official-bill', {
         filename,
-        margin: [4, 4, 4, 4],
+        margin: [0, 0, 0, 0],
         orientation: 'portrait',
         singlePage: true,
       });
+      logIssuedDocument({
+        docType: 'official_bill',
+        docTitle: 'ໃບບິນທາງການ / ໃບແຈ້ງໜີ້ (Official Invoice & Bill)',
+        docNumber: selectedBillForPrint.billNumber,
+        customerName: selectedBillForPrint.customerName || 'ລູກຄ້າທົ່ວໄປ',
+        customerPhone: selectedBillForPrint.customerPhone,
+        leadId: selectedBillForPrint.leadId,
+        billId: selectedBillForPrint.id,
+        vin: selectedBillForPrint.vin,
+        model: selectedBillForPrint.model,
+        action: 'export_pdf',
+        formatLabel: 'PDF (A4)',
+        issuedBy: selectedBillForPrint.recordedBy || currentUser?.name || 'Admin',
+        amountUSD: selectedBillForPrint.netTotalUSD || selectedBillForPrint.amountUSD,
+        amountLAK: selectedBillForPrint.netTotalLAK || selectedBillForPrint.amountLAK,
+        notes: `ດາວໂຫຼດ PDF ໃບບິນ ${selectedBillForPrint.billNumber}`,
+      });
+      showToast(`ບັນທຶກປະຫວັດການດາວໂຫຼດ PDF ${selectedBillForPrint.billNumber} ສຳເລັດ`, 'success');
     } catch (err) {
       console.error('Error generating bill PDF:', err);
       showToast('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້. ກະລຸນາລອງໃໝ່ ຫຼື ໃຊ້ປຸ່ມພິມບິນ', 'error');
@@ -653,42 +813,7 @@ export default function BillsManagementView({
     }
   };
 
-  const handleDirectDownloadBillDocx = (bill: InvoiceBillRecord) => {
-    setSelectedBillForPrint(bill);
-    setTimeout(async () => {
-      try {
-        setIsExportingBillDocx(true);
-        const cleanName = (bill.customerName || bill.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
-        const filename = `AVATR_Bill_${bill.billNumber}_${cleanName}.docx`;
-        await exportElementToDocx('printable-official-bill', {
-          filename,
-          title: `AVATR Official Bill ${bill.billNumber}`,
-        });
-      } catch (err) {
-        console.error('Error generating bill DOCX:', err);
-      } finally {
-        setIsExportingBillDocx(false);
-      }
-    }, 150);
-  };
 
-  const handleDownloadBillDocx = async () => {
-    if (!selectedBillForPrint) return;
-    try {
-      setIsExportingBillDocx(true);
-      const cleanName = (selectedBillForPrint.customerName || selectedBillForPrint.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
-      const filename = `AVATR_Bill_${selectedBillForPrint.billNumber}_${cleanName}.docx`;
-      await exportElementToDocx('printable-official-bill', {
-        filename,
-        title: `AVATR Official Bill ${selectedBillForPrint.billNumber}`,
-      });
-    } catch (err) {
-      console.error('Error generating bill DOCX:', err);
-      showToast('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້. ກະລຸນາລອງໃໝ່', 'error');
-    } finally {
-      setIsExportingBillDocx(false);
-    }
-  };
 
   // Helper: Open ledger for an installment bill or lead
   const handleOpenLedgerForBill = (bill: InvoiceBillRecord) => {
@@ -732,17 +857,22 @@ export default function BillsManagementView({
         id: bill.leadId || `SYN-${bill.id}`,
         customerName: bill.customerName || 'ລູກຄ້າຜ່ອນຊຳລະ',
         phone: bill.customerPhone || '020-00000000',
-        interestedModel: bill.model || 'AVATR 11',
-        paymentType: 'installment',
-        downPaymentPercent: bill.downPaymentPercent || 30,
-        downPaymentUSD: bill.downPaymentUSD || Math.round((bill.netTotalUSD || 50000) * 0.3),
+        interestedModel: bill.model || 'AVATR 07',
+        paymentType: 'finance',
+        downPaymentPercent: bill.downPaymentPercent || 50,
+        downPaymentUSD: bill.downPaymentUSD || bill.amountUSD || Math.round((bill.netTotalUSD || 43400) * 0.5),
         tenureMonths: bill.tenureMonths || 48,
-        monthlyPaymentLAK: bill.monthlyPaymentLAK || 21500000,
+        monthlyPaymentLAK: bill.monthlyPaymentLAK || 12500000,
         status: 'delivered',
         priority: 'normal',
-        notes: '',
-        assignedTo: 'Admin',
+        notes: bill.notes || '',
+        assignedTo: bill.salesRep || 'Admin',
         province: bill.customerProvince || 'ນະຄອນຫຼວງວຽງຈັນ',
+        vin: bill.vin,
+        engineNumber: bill.engineNumber,
+        color: bill.color,
+        financeCompany: bill.financeCompany,
+        paymentReceiptNo: bill.billNumber,
         category: 'walk_in',
         source: 'Showroom Bills',
         createdAt: bill.date,
@@ -861,7 +991,7 @@ export default function BillsManagementView({
       {/* WRAPPER FOR MAIN VIEWS - SUPPRESSED DURING PRINT WHEN A BILL IS BEING PRINTED */}
       <div className={selectedBillForPrint ? "print:hidden hide-on-print-bill space-y-6" : "space-y-6"}>
         {/* Top Header */}
-        <header className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-7">
+        <header className="theme-adaptive-dark-surface relative overflow-hidden rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 sm:p-7 shadow-xs">
           <div className="pointer-events-none absolute -right-12 -top-16 h-56 w-56 rounded-full bg-amber-400/5 blur-3xl" />
           <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="max-w-2xl">
@@ -869,13 +999,13 @@ export default function BillsManagementView({
                 <FileText className="h-3.5 w-3.5 text-amber-400" />
                 <span>{lang === 'lo' ? 'ສູນລວມເອກະສານການເງິນ' : lang === 'th' ? 'ศูนย์รวมเอกสารการเงิน' : 'Financial records'}</span>
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
                 {t.billsHeader || t.billsTitle}
               </h1>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">
-              {lang === 'lo' 
-                ? 'ລວມປະຫວັດໃບຂາຍລົດ, ໃບຮັບເງິນດາວ & ຜ່ອນຊຳລະ ແລະ ໃບນຳເຂົ້າລົດສາງ' 
-                : t.billsHeaderSub || t.billsSubtitle}
+              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-zinc-400">
+                {lang === 'lo'
+                  ? 'ລວມປະຫວັດໃບຂາຍລົດ, ໃບຮັບເງິນດາວ & ຜ່ອນຊຳລະ ແລະ ໃບນຳເຂົ້າລົດສາງ'
+                  : t.billsHeaderSub || t.billsSubtitle}
               </p>
             </div>
 
@@ -989,11 +1119,11 @@ export default function BillsManagementView({
         </section>
 
         {/* Filter and Search Bar with Category Separation */}
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:p-5">
+        <section className="theme-adaptive-dark-surface rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 sm:p-5 shadow-xs">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-white">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                   {lang === 'lo' ? 'ຄົ້ນຫາ ແລະ ກັ່ນຕອງເອກະສານ' : lang === 'th' ? 'ค้นหาและกรองเอกสาร' : 'Find a document'}
                 </h2>
                 <p className="mt-0.5 text-xs text-zinc-400">
@@ -1048,69 +1178,80 @@ export default function BillsManagementView({
                   className="min-h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-9 pr-9 text-sm font-medium text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-700"
                 />
               </div>
-
-              </div>
-            {/* Main Tabs */}
-            <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 p-1" role="group" aria-label={lang === 'lo' ? 'ກັ່ນຕອງປະເພດເອກະສານ' : lang === 'th' ? 'กรองประเภทเอกสาร' : 'Filter by document type'}>
-              <button
-                type="button"
-                aria-pressed={filterType === 'all'}
-                onClick={() => setFilterType('all')}
-                className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-                  filterType === 'all'
-                    ? 'bg-white text-black font-bold shadow-sm'
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                }`}
-              >
-                {t.filterAllBills} ({timeFilteredBills.length})
-              </button>
-
-              <button
-                type="button"
-                aria-pressed={filterType === 'sale'}
-                onClick={() => setFilterType('sale')}
-                className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-                  filterType === 'sale'
-                    ? 'bg-white text-black font-bold shadow-sm'
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                }`}
-              >
-                <Receipt className="w-3.5 h-3.5" />
-                <span>{t.filterSaleBills}</span>
-                <span className="font-mono">({saleBills.length})</span>
-              </button>
-
-              {/* Installment & Down Payment Bills Filter Tab */}
-              <button
-                type="button"
-                aria-pressed={filterType === 'installment'}
-                onClick={() => setFilterType('installment')}
-                className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
-                  filterType === 'installment'
-                    ? 'bg-amber-400 text-black font-bold shadow-sm'
-                    : 'text-amber-500 hover:bg-zinc-800 hover:text-amber-400'
-                }`}
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                <span>{t.filterInstallmentBills || 'ບິນຜ່ອນ & ເງິນດາວ (Financing)'}</span>
-                <span className="font-mono font-bold">({installmentBills.length})</span>
-              </button>
-
-              <button
-                type="button"
-                aria-pressed={filterType === 'import'}
-                onClick={() => setFilterType('import')}
-                className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-                  filterType === 'import'
-                    ? 'bg-white text-black font-bold shadow-sm'
-                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                }`}
-              >
-                <PackagePlus className="w-3.5 h-3.5" />
-                <span>{t.filterImportBills}</span>
-                <span className="font-mono">({importBills.length})</span>
-              </button>
             </div>
+
+              {/* Main Tabs */}
+              <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 p-1" role="group" aria-label={lang === 'lo' ? 'ກັ່ນຕອງປະເພດເອກະສານ' : lang === 'th' ? 'กรองประเภทเอกสาร' : 'Filter by document type'}>
+                <button
+                  type="button"
+                  aria-pressed={filterType === 'all'}
+                  onClick={() => setFilterType('all')}
+                  className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${filterType === 'all'
+                      ? 'bg-white text-black font-bold shadow-sm'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                >
+                  {t.filterAllBills} ({timeFilteredBills.length})
+                </button>
+
+                <button
+                  type="button"
+                  aria-pressed={filterType === 'sale'}
+                  onClick={() => setFilterType('sale')}
+                  className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${filterType === 'sale'
+                      ? 'bg-white text-black font-bold shadow-sm'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>{t.filterSaleBills}</span>
+                  <span className="font-mono">({saleBills.length})</span>
+                </button>
+
+                {/* Installment & Down Payment Bills Filter Tab */}
+                <button
+                  type="button"
+                  aria-pressed={filterType === 'installment'}
+                  onClick={() => setFilterType('installment')}
+                  className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${filterType === 'installment'
+                      ? 'bg-amber-400 text-black font-bold shadow-sm'
+                      : 'text-amber-500 hover:bg-zinc-800 hover:text-amber-400'
+                    }`}
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>{t.filterInstallmentBills || 'ບິນຜ່ອນ & ເງິນດາວ (Financing)'}</span>
+                  <span className="font-mono font-bold">({installmentBills.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  aria-pressed={filterType === 'import'}
+                  onClick={() => setFilterType('import')}
+                  className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${filterType === 'import'
+                      ? 'bg-white text-black font-bold shadow-sm'
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                >
+                  <PackagePlus className="w-3.5 h-3.5" />
+                  <span>{t.filterImportBills}</span>
+                  <span className="font-mono">({importBills.length})</span>
+                </button>
+
+                {/* Issued Documents Audit Registry Tab */}
+                <button
+                  type="button"
+                  aria-pressed={filterType === 'issued_docs'}
+                  onClick={() => setFilterType('issued_docs')}
+                  className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${filterType === 'issued_docs'
+                      ? 'bg-emerald-500 text-black font-bold shadow-sm'
+                      : 'text-emerald-400 hover:bg-zinc-800 hover:text-emerald-300'
+                    }`}
+                >
+                  <FileCheck className="w-3.5 h-3.5" />
+                  <span>ປະຫວັດການອອກເອກະສານ</span>
+                  <span className="font-mono font-bold">({issuedDocLogs.length})</span>
+                </button>
+              </div>
             </div>
 
             {/* Row 2: Compact Time Range Filter Bar (ແບບທີ 1) */}
@@ -1227,9 +1368,9 @@ export default function BillsManagementView({
                 >
                   <X className="h-3.5 w-3.5" />
                   <span>{lang === 'lo' ? 'ລ້າງຄ່າ' : lang === 'th' ? 'ล้างค่า' : 'Reset'}</span>
-              </button>
+                </button>
+              </div>
             </div>
-          </div>
           </div>
         </section>
 
@@ -1259,22 +1400,20 @@ export default function BillsManagementView({
                 <div className="flex items-center bg-zinc-950 border border-zinc-800 p-1 rounded-xl text-xs">
                   <button
                     onClick={() => setInstallmentSubTab('bills')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                      installmentSubTab === 'bills'
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${installmentSubTab === 'bills'
                         ? 'bg-amber-400 text-black shadow-sm'
                         : 'text-zinc-400 hover:text-white'
-                    }`}
+                      }`}
                   >
                     ໃບບິນຮັບເງິນດາວ & ງວດ ({installmentBills.length})
                   </button>
 
                   <button
                     onClick={() => setInstallmentSubTab('contracts')}
-                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                      installmentSubTab === 'contracts'
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${installmentSubTab === 'contracts'
                         ? 'bg-amber-400 text-black shadow-sm'
                         : 'text-zinc-400 hover:text-white'
-                    }`}
+                      }`}
                   >
                     ລາຍຊື່ສັນຍາລູກຄ້າຜ່ອນ ({installmentLeads.length})
                   </button>
@@ -1368,8 +1507,8 @@ export default function BillsManagementView({
                   <Trash2 className="w-3.5 h-3.5" />
                 )}
                 <span>
-                  {isDeletingBatch 
-                    ? (lang === 'lo' ? 'ກຳລັງລົບ...' : 'Deleting...') 
+                  {isDeletingBatch
+                    ? (lang === 'lo' ? 'ກຳລັງລົບ...' : 'Deleting...')
                     : (lang === 'lo' ? `ລົບບິນທີ່ເລືອກ (${selectedBillIds.length})` : `Delete Selected (${selectedBillIds.length})`)}
                 </span>
               </button>
@@ -1384,8 +1523,15 @@ export default function BillsManagementView({
           </div>
         )}
 
-        {/* VIEW 1: CONTRACTS VIEW (Only when in Installment tab and Contracts sub-tab) */}
-        {filterType === 'installment' && installmentSubTab === 'contracts' ? (
+        {/* VIEW 0: ISSUED DOCUMENTS AUDIT REGISTRY */}
+        {filterType === 'issued_docs' ? (
+          <IssuedDocumentsRegistryTab
+            logs={issuedDocLogs}
+            onDeleteLog={handleDeleteIssuedDocLog}
+            onReopenDoc={handleReopenIssuedDoc}
+            lang={lang}
+          />
+        ) : filterType === 'installment' && installmentSubTab === 'contracts' ? (
           <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/60 p-4">
               <span className="font-bold text-white text-sm flex items-center gap-2">
@@ -1518,9 +1664,25 @@ export default function BillsManagementView({
 
                               {/* Open Official Documents */}
                               <button
+                                onClick={() => setSelectedCustomerForDocs({ customer: lead, docType: 'credit_agreement' })}
+                                className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-amber-400 hover:text-white border border-amber-500/30 rounded-xl text-xs transition-all flex items-center justify-center cursor-pointer"
+                                title="ໃບສັນຍາໜີ້ສິນ (3 ຝ່າຍ Finance)"
+                              >
+                                <Building2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
+                                onClick={() => setSelectedCustomerForDocs({ customer: lead, docType: 'km7_release' })}
+                                className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-sky-400 hover:text-white border border-sky-500/30 rounded-xl text-xs transition-all flex items-center justify-center cursor-pointer"
+                                title="ໃບເບີກຂອງແຖມ (KM7)"
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                              </button>
+
+                              <button
                                 onClick={() => setSelectedCustomerForDocs({ customer: lead, docType: 'installment_schedule' })}
                                 className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-xl text-xs transition-all flex items-center justify-center cursor-pointer"
-                                title="ເບິ່ງສັນຍາຜ່ອນ & ເອກະສານທາງການ A4"
+                                title="ເບິ່ງສັນຍາຜ່ອນ & ເອກະສານທາງການ 7 ສະບັບ"
                               >
                                 <FileText className="w-3.5 h-3.5" />
                               </button>
@@ -1633,11 +1795,10 @@ export default function BillsManagementView({
                       const isInstallment = isInstallmentBill(bill);
 
                       return (
-                        <tr 
-                          key={bill.id} 
-                          className={`hover:bg-zinc-900/50 transition-colors ${
-                            selectedBillIds.includes(bill.id) ? 'bg-zinc-900/40' : ''
-                          } ${isInstallment ? 'bg-amber-500/[0.02]' : ''}`}
+                        <tr
+                          key={bill.id}
+                          className={`hover:bg-zinc-900/50 transition-colors ${selectedBillIds.includes(bill.id) ? 'bg-zinc-900/40' : ''
+                            } ${isInstallment ? 'bg-amber-500/[0.02]' : ''}`}
                         >
                           {/* Selection Checkbox */}
                           <td className="py-2.5 pl-3 pr-1 text-center">
@@ -1655,8 +1816,8 @@ export default function BillsManagementView({
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 inline-flex items-center gap-1">
                                 <CreditCard className="w-3 h-3 text-amber-400" />
                                 <span>
-                                  {bill.installmentType === 'monthly_installment' 
-                                    ? `ຄ່າງວດ (${bill.installmentPeriod || 1}/${bill.installmentTotalPeriods || 48})` 
+                                  {bill.installmentType === 'monthly_installment'
+                                    ? `ຄ່າງວດ (${bill.installmentPeriod || 1}/${bill.installmentTotalPeriods || 48})`
                                     : `ດາວ (${bill.downPaymentPercent || 30}%)`}
                                 </span>
                               </span>
@@ -1871,9 +2032,25 @@ export default function BillsManagementView({
                                   </button>
 
                                   <button
+                                    onClick={() => handleOpenDocumentsForBill(bill, 'credit_agreement')}
+                                    className="p-1 bg-zinc-900 hover:bg-zinc-800 text-amber-300 hover:text-white border border-zinc-700 rounded-lg transition-all flex items-center justify-center cursor-pointer"
+                                    title="ໃບສັນຍາໜີ້ສິນ (3 ຝ່າຍ Finance)"
+                                  >
+                                    <Building2 className="w-3 h-3" />
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleOpenDocumentsForBill(bill, 'km7_release')}
+                                    className="p-1 bg-zinc-900 hover:bg-zinc-800 text-sky-300 hover:text-white border border-zinc-700 rounded-lg transition-all flex items-center justify-center cursor-pointer"
+                                    title="ໃບເບີກຂອງແຖມ (KM7)"
+                                  >
+                                    <Truck className="w-3 h-3" />
+                                  </button>
+
+                                  <button
                                     onClick={() => handleOpenDocumentsForBill(bill, 'installment_schedule')}
                                     className="p-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-lg transition-all flex items-center justify-center cursor-pointer"
-                                    title="ເອກະສານສັນຍາ A4"
+                                    title="ເອກະສານສັນຍາ 7 ສະບັບ"
                                   >
                                     <FileText className="w-3 h-3" />
                                   </button>
@@ -1889,14 +2066,6 @@ export default function BillsManagementView({
                                 <Download className="w-3 h-3" />
                               </button>
 
-                              <button
-                                onClick={() => handleDirectDownloadBillDocx(bill)}
-                                disabled={isExportingBillDocx}
-                                className="p-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 rounded-lg transition-all flex items-center justify-center cursor-pointer"
-                                title="ບັນທຶກ Word DOCX"
-                              >
-                                <FileCheck className="w-3 h-3" />
-                              </button>
 
                               {isSuperAdmin && onDeleteBill && bill.status !== 'voided' && (
                                 <button
@@ -1953,7 +2122,7 @@ export default function BillsManagementView({
       {/* FULL LUXURY PRINTABLE / VIEWABLE OFFICIAL BILL MODAL */}
       {selectedBillForPrint && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:max-w-none print:shadow-none">
-          <div className="relative w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-2xl p-4 sm:p-5 text-white space-y-4 max-h-[92vh] overflow-y-auto shadow-2xl print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0 print:max-h-none print:max-w-none print:w-full print:overflow-visible print-modal-container">
+          <div className="relative w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-2xl p-4 sm:p-6 text-white space-y-4 max-h-[92vh] overflow-y-auto shadow-2xl print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0 print:max-h-none print:max-w-none print:w-full print:overflow-visible print-modal-container">
             {/* Modal Actions Header */}
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800 print:hidden">
               <div className="flex items-center gap-2">
@@ -1963,8 +2132,8 @@ export default function BillsManagementView({
                 <span className="font-bold text-xs text-white">
                   {isInstallmentBill(selectedBillForPrint)
                     ? 'ໃບບິນຮັບເງິນດາວ & ຜ່ອນຊຳລະທາງການ'
-                    : selectedBillForPrint.billType === 'sale' 
-                      ? 'ໃບບິນຂາຍລົດຍົນທາງການ' 
+                    : selectedBillForPrint.billType === 'sale'
+                      ? 'ໃບບິນຂາຍລົດຍົນທາງການ'
                       : 'ໃບບິນຮັບເຂົ້າສາງທາງການ'}
                 </span>
               </div>
@@ -1989,24 +2158,6 @@ export default function BillsManagementView({
                   )}
                 </button>
 
-                <button
-                  onClick={handleDownloadBillDocx}
-                  disabled={isExportingBillDocx}
-                  className="px-2.5 py-1 bg-zinc-100 hover:bg-white text-black rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border border-zinc-300 disabled:opacity-60 cursor-pointer"
-                  title="ບັນທຶກໃບບິນເປັນ Word DOCX"
-                >
-                  {isExportingBillDocx ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
-                      <span>Word...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FileCheck className="w-3.5 h-3.5 text-black" />
-                      <span>DOCX</span>
-                    </>
-                  )}
-                </button>
 
                 <button
                   onClick={handlePrint}
@@ -2025,56 +2176,57 @@ export default function BillsManagementView({
               </div>
             </div>
 
-            {/* PRINTABLE BILL CANVAS (Standard Compact Dealership Layout) */}
-            <div 
+            {/* PRINTABLE BILL CANVAS (Borderless Full A4 Sheet Layout) */}
+            <div
               id="printable-official-bill"
-              className="official-dealer-document a4-document-canvas w-full max-w-[580px] mx-auto p-4 sm:p-5 bg-white text-black font-sans text-[11px] leading-normal border border-black rounded-lg shadow-xl flex flex-col justify-between print:m-0 print:p-1 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto print:max-h-[278mm] print:break-inside-avoid print:page-break-inside-avoid print:page-break-after-avoid print:overflow-hidden"
-              style={{ backgroundColor: '#ffffff', color: '#000000', borderColor: '#000000' }}
+              className="official-dealer-document a4-document-canvas w-full max-w-[794px] mx-auto p-6 sm:p-8 bg-white text-black font-sans text-xs leading-normal rounded-sm shadow-xl flex flex-col justify-between print:m-0 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto print:max-h-[278mm] print:break-inside-avoid print:page-break-inside-avoid print:page-break-after-avoid print:overflow-hidden"
+              style={{ backgroundColor: '#ffffff', color: '#000000', border: 'none' }}
             >
-              {/* Top Section: National Motto & Header */}
+              {/* Top Section: Top-Left 3x4 cm Transparent AVATR Logo & Centered National Motto */}
               <div>
-                {/* National Motto Header */}
-                <div className="text-center space-y-0.5 mb-1">
-                  <p className="font-bold text-[11px] tracking-wide text-black leading-tight">ສາທາລະນະລັດ ປະຊາທິປະໄຕ ປະຊາຊົນລາວ</p>
-                  <p className="font-semibold text-[10px] text-black leading-tight">ສັນຕິພາບ ເອກະລາດ ປະຊາທິປະໄຕ ເອກະພາບ ວັດທະນາຖາວອນ</p>
-                </div>
-
-                {/* Bill Brand & Document Title Header */}
-                <div className="flex items-center justify-between gap-2.5 pb-1.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 flex items-center justify-center border border-black p-0.5 bg-white shrink-0">
-                      <AvatrLogo className="w-8 h-8" />
-                    </div>
-                    <div>
-                      <h2 className="text-xs sm:text-sm font-bold text-black leading-tight">ບໍລິສັດ ລາວທານີ ກົນຈັກໜັກ ຈຳກັດຜູ້ດຽວ.</h2>
-                      <p className="text-[10px] font-mono tracking-wider uppercase text-black font-bold">LAOTHANI TRACTOR SOLE CO., LTD</p>
-                      <p className="text-[9px] text-black leading-tight">
-                        Kaysone Phomvihane Road, Ban Sivilay, Vientiane | Tel: (856-20) 58181999
-                      </p>
-                    </div>
+                <div className="flex items-start justify-between gap-4 pb-1">
+                  {/* Top-Left Corner: 3 x 4 cm Transparent AVATR Logo */}
+                  <div className="w-[3cm] shrink-0 flex items-start justify-start">
+                    <AvatrLogo variant="document" />
                   </div>
 
-                  <div className="text-right space-y-0.5">
-                    <span className="px-2 py-0.5 rounded font-bold text-[10px] border border-black inline-block bg-zinc-100 text-black">
-                      {isInstallmentBill(selectedBillForPrint)
-                        ? (selectedBillForPrint.installmentType === 'monthly_installment'
-                            ? `ໃບບິນຮັບຄ່າງວດ (ງວດທີ ${selectedBillForPrint.installmentPeriod || 1}/${selectedBillForPrint.installmentTotalPeriods || 48})`
-                            : `ໃບບິນຮັບເງິນດາວ (${selectedBillForPrint.downPaymentPercent || 30}%)`)
-                        : selectedBillForPrint.billType === 'sale'
-                          ? 'ໃບບິນຂາຍລົດ (SALES INVOICE)'
-                          : 'ໃບຮັບເຂົ້າສິນຄ້າ (GOODS RECEIPT)'}
-                    </span>
-                    <div className="font-mono text-[11px] font-black text-black">
-                      ເລກທີ: {selectedBillForPrint.billNumber}
-                    </div>
-                    <div className="text-[10px] text-black font-mono">
-                      ວັນທີ: {selectedBillForPrint.date}
-                    </div>
+                  {/* Center: National Motto & Company Info */}
+                  <div className="text-center flex-1 space-y-0.5 pt-1">
+                    <p className="font-bold text-xs tracking-wide text-black leading-tight">ສາທາລະນະລັດ ປະຊາທິປະໄຕ ປະຊາຊົນລາວ</p>
+                    <p className="font-semibold text-[11px] text-black leading-tight">ສັນຕິພາບ ເອກະລາດ ປະຊາທິປະໄຕ ເອກະພາບ ວັດທະນາຖາວອນ</p>
+                    <p className="font-bold text-[10px] tracking-wider uppercase text-black leading-tight">LAO PEOPLE'S DEMOCRATIC REPUBLIC</p>
+                    <h2 className="text-sm sm:text-base font-bold text-black leading-tight pt-1">ບໍລິສັດ ລາວທານີ ກົນຈັກໜັກ ຈຳກັດຜູ້ດຽວ.</h2>
+                    <p className="text-xs font-mono tracking-wider uppercase text-black font-bold">LAOTHANI TRACTOR SOLE CO., LTD</p>
+                    <p className="text-[10px] text-black leading-tight">
+                      Office: Kaysone Phomvihane Road, Ban Sivilay, Vientiane | Tel: (856-20) 58181999
+                    </p>
                   </div>
+
+                  {/* Right Balancer (3cm) */}
+                  <div className="w-[3cm] shrink-0"></div>
                 </div>
 
                 {/* Official Divider Line */}
-                <div className="border-t-2 border-b border-black h-1 my-1"></div>
+                <div className="border-t-2 border-b border-black h-1 my-1.5"></div>
+
+                {/* Row 1: Dedicated Row for Document Number & Date */}
+                <div className="w-full flex justify-end items-center gap-4 font-mono text-xs font-bold text-black">
+                  <span>ເລກທີ: {selectedBillForPrint.billNumber}</span>
+                  <span>ວັນທີ: {selectedBillForPrint.date}</span>
+                </div>
+
+                {/* Row 2: Dedicated Row for Centered Bill Title */}
+                <div className="w-full text-center my-1">
+                  <h1 className="text-base sm:text-lg font-black uppercase tracking-wide text-black">
+                    {isInstallmentBill(selectedBillForPrint)
+                      ? (selectedBillForPrint.installmentType === 'monthly_installment'
+                        ? `ໃບບິນຮັບຄ່າງວດລົດ EV (ງວດທີ ${selectedBillForPrint.installmentPeriod || 1}/${selectedBillForPrint.installmentTotalPeriods || 48})`
+                        : `ໃບບິນຮັບເງິນດາວລົດ EV (${selectedBillForPrint.downPaymentPercent || 30}%)`)
+                      : selectedBillForPrint.billType === 'sale'
+                        ? 'ໃບບິນຂາຍລົດຍົນໄຟຟ້າ (OFFICIAL SALES INVOICE)'
+                        : 'ໃບຮັບເຂົ້າສິນຄ້າສາງ (OFFICIAL GOODS RECEIPT)'}
+                  </h1>
+                </div>
               </div>
 
               {/* Middle Section: Bill Content Details */}
@@ -2103,8 +2255,8 @@ export default function BillsManagementView({
                         <div className="font-bold text-black uppercase text-[11px]">
                           {isInstallmentBill(selectedBillForPrint)
                             ? 'ຜ່ອນຊຳລະລົດຍົນ (Vehicle Installment Plan)'
-                            : selectedBillForPrint.paymentMethod === 'cash' 
-                              ? 'ເງິນສົດ (Cash)' 
+                            : selectedBillForPrint.paymentMethod === 'cash'
+                              ? 'ເງິນສົດ (Cash)'
                               : 'ຊຳລະເງິນຜ່ານ QR (QR Payment)'}
                         </div>
                         {selectedBillForPrint.transferRef && (
@@ -2269,8 +2421,8 @@ export default function BillsManagementView({
                         )}
                         <div className="pt-0.5 mt-0.5 border-t border-black/30 flex justify-between font-mono font-black text-black">
                           <span>
-                            {selectedBillForPrint.installmentType === 'monthly_installment' 
-                              ? `ຊຳລະຄ່າງວດ (ງວດທີ ${selectedBillForPrint.installmentPeriod}):` 
+                            {selectedBillForPrint.installmentType === 'monthly_installment'
+                              ? `ຊຳລະຄ່າງວດ (ງວດທີ ${selectedBillForPrint.installmentPeriod}):`
                               : 'ຊຳລະເງິນດາວໃນໃບບິນນີ້:'}
                           </span>
                           <span className="text-black font-extrabold">
@@ -2289,8 +2441,8 @@ export default function BillsManagementView({
                   <span className="font-bold block mb-7 print:mb-4">
                     {isInstallmentBill(selectedBillForPrint)
                       ? 'ລາຍເຊັນລູກຄ້າຜູ້ຊື້ / ຜູ້ກູ້ຢືມ (Borrower)'
-                      : selectedBillForPrint.billType === 'sale' 
-                        ? 'ລາຍເຊັນລູກຄ້າຜູ້ຊື້ (Customer)' 
+                      : selectedBillForPrint.billType === 'sale'
+                        ? 'ລາຍເຊັນລູກຄ້າຜູ້ຊື້ (Customer)'
                         : 'ລາຍເຊັນຜູ້ຈັດສົ່ງ (Supplier)'}
                   </span>
                   <div className="border-b border-dashed border-black w-36 mx-auto mb-1"></div>
@@ -2358,6 +2510,17 @@ export default function BillsManagementView({
               setLeads(prev => prev.map(l => l.id === updatedCust.id ? updatedCust : l));
             }
           }}
+        />
+      )}
+
+      {/* MODAL 4: QUOTATION MODAL FOR REOPENING QUOTES */}
+      {selectedQuoteForModal && (
+        <QuotationModal
+          isOpen={Boolean(selectedQuoteForModal)}
+          onClose={() => setSelectedQuoteForModal(null)}
+          vehicle={selectedQuoteForModal.vehicle}
+          customerName={selectedQuoteForModal.customerName}
+          lang={lang}
         />
       )}
     </div>

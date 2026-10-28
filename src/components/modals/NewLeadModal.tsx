@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, UserPlus, MapPin, Calendar, Loader2, RotateCcw } from 'lucide-react';
-import { Lead, CustomerCategory, Language, VehicleModel, SystemUser } from '../../types';
+import { X, UserPlus, MapPin, Calendar, Loader2, RotateCcw, Sparkles } from 'lucide-react';
+import { Lead, CustomerCategory, Language, VehicleModel, SystemUser, InventoryItem } from '../../types';
 import { translations } from '../../data/translations';
 import { LAO_PROVINCES } from '../../data/laoProvinces';
 import WhatsAppIcon from '../common/WhatsAppIcon';
@@ -11,6 +11,7 @@ interface NewLeadModalProps {
   onClose: () => void;
   onAddLead: (lead: Omit<Lead, 'id' | 'createdAt'> & { createdAt?: string }) => Promise<void> | void;
   vehicles?: VehicleModel[];
+  inventory?: InventoryItem[];
   currentUser?: SystemUser;
   lang?: Language;
 }
@@ -20,6 +21,7 @@ export default function NewLeadModal({
   onClose, 
   onAddLead, 
   vehicles, 
+  inventory = [],
   currentUser,
   lang = 'lo' 
 }: NewLeadModalProps) {
@@ -36,6 +38,19 @@ export default function NewLeadModal({
   const [interestedModel, setInterestedModel] = useState<string>(getDefaultModel);
   const [priority, setPriority] = useState<'vip' | 'high' | 'normal'>('vip');
   const [category, setCategory] = useState<CustomerCategory>('walk_in');
+  const [eventSource, setEventSource] = useState('Event Lao Motor Expo 2026');
+
+  const eventCampaignSuggestions = Array.from(
+    new Set([
+      ...inventory
+        .map((item) => item.eventCampaign?.trim())
+        .filter((name): name is string => Boolean(name)),
+      'Event Lao Motor Expo 2026',
+      'ITECC Mall EV Showcase',
+      'Vientiane Center Roadshow',
+      'Parkson VIP Roadshow',
+    ])
+  );
   
   // Location States
   const [province, setProvince] = useState('ນະຄອນຫຼວງວຽງຈັນ');
@@ -58,6 +73,7 @@ export default function NewLeadModal({
     setInterestedModel(getDefaultModel());
     setPriority('vip');
     setCategory('walk_in');
+    setEventSource('Event Lao Motor Expo 2026');
     setProvince('ນະຄອນຫຼວງວຽງຈັນ');
     setDistrict('ເມືອງ ຈັນທະບູລີ');
     setVillage('ບ້ານ ສີຫອມ');
@@ -87,7 +103,12 @@ export default function NewLeadModal({
         district,
         village: effectiveVillage,
         category,
-        source: category === 'walk_in' ? 'Walk-in Showroom' : category === 'online' ? 'Online Social' : 'Motor Show Event',
+        source:
+          category === 'walk_in'
+            ? 'Walk-in Showroom'
+            : category === 'online'
+            ? 'Online Social'
+            : eventSource.trim() || 'Event Lao Motor Expo 2026',
         interestedModel,
         status: 'new',
         priority,
@@ -286,6 +307,51 @@ export default function NewLeadModal({
               </select>
             </div>
           </div>
+
+          {/* Conditional Event Campaign Name Field when category === 'event' */}
+          {category === 'event' && (
+            <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 rounded-2xl space-y-2.5 animate-fadeIn">
+              <label htmlFor="lead-event-source" className="block text-amber-800 dark:text-amber-300 font-semibold flex items-center gap-1.5 cursor-pointer">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>
+                  {lang === 'lo'
+                    ? 'ຊື່ງານ Event / ສະຖານທີ່ຈັດງານວາງສະແດງ'
+                    : lang === 'th'
+                    ? 'ชื่องาน Event / สถานที่จัดงาน'
+                    : 'Event Campaign / Exhibition Name'}{' '}
+                  <span className="text-red-500">*</span>
+                </span>
+              </label>
+              <input
+                id="lead-event-source"
+                type="text"
+                required
+                value={eventSource}
+                onChange={(e) => setEventSource(e.target.value)}
+                placeholder={lang === 'lo' ? 'ຕົວຢ່າງ: Event Lao Motor Expo 2026' : 'e.g. Lao Motor Expo 2026'}
+                className="w-full bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-800/60 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition-all"
+              />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-amber-700 dark:text-amber-400 font-medium mr-1">
+                  {lang === 'lo' ? 'ເລືອກດ່ວນ:' : 'Quick select:'}
+                </span>
+                {eventCampaignSuggestions.map((campName) => (
+                  <button
+                    key={campName}
+                    type="button"
+                    onClick={() => setEventSource(campName)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-mono border transition-all cursor-pointer ${
+                      eventSource === campName
+                        ? 'bg-amber-500 text-black border-amber-500 font-bold'
+                        : 'bg-white dark:bg-zinc-900 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50 hover:border-amber-400'
+                    }`}
+                  >
+                    {campName}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Row 4: Priority & Email */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

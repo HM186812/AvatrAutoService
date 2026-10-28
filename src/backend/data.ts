@@ -1248,7 +1248,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
       }
       offlineSaveInventoryItem(vehicle);
     }
-    offlineSaveBill(bill);
+    offlineSaveBill(bill, vehicle);
     return;
   }
   const client = requireSupabase();

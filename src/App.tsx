@@ -9,7 +9,8 @@ import {
   StockLogRecord, 
   InvoiceBillRecord, 
   Language, 
-  ActiveMenu 
+  ActiveMenu,
+  KPITimeframe
 } from './types';
 import { translations } from './data/translations';
 import { getModelStockSummaries } from './data/stockSummary';
@@ -41,6 +42,7 @@ const StockAlertsView = lazy(() => import('./components/views/StockAlertsView'))
 const UserManagementView = lazy(() => import('./components/views/UserManagementView'));
 const ProfileView = lazy(() => import('./components/views/ProfileView'));
 const InstallmentDashboardView = lazy(() => import('./components/views/InstallmentDashboardView'));
+const SalesLeaderboardView = lazy(() => import('./components/views/SalesLeaderboardView'));
 
 // Lazy load heavy modals to shrink main bundle size
 const NewLeadModal = lazy(() => import('./components/modals/NewLeadModal'));
@@ -57,6 +59,7 @@ import {
   FileText, 
   CreditCard,
   ShoppingBag,
+  Trophy,
   AlertTriangle, 
   Key, 
   User as UserIcon, 
@@ -76,6 +79,7 @@ import {
 
 export default function App() {
   const [currentMenu, setCurrentMenu] = useState<ActiveMenu>('dashboard');
+  const [sharedTimeframe, setSharedTimeframe] = useState<KPITimeframe>('month');
   const [customerViewInitialTab, setCustomerViewInitialTab] = useState<'new_leads' | 'existing_customers' | 'installment_customers'>('new_leads');
   const [lang, setLang] = useState<Language>(() => {
     try {
@@ -438,16 +442,44 @@ export default function App() {
       setBills(prev => prev.map(b => b.id === billId ? { ...b, status: 'voided' } : b));
       if (targetBill?.vin) {
         const billType = targetBill.billType || targetBill.type;
-        if (billType === 'sale') {
-          setInventory(prev => prev.map(item =>
-            item.vin === targetBill.vin ? { ...item, status: 'ready', stockQuantity: 1 } : item
-          ));
+        if ((billType === 'sale' || billType === 'installment') && targetBill.installmentType !== 'monthly_installment') {
+          setInventory(prev => {
+            const exists = prev.some(item => item.vin === targetBill.vin);
+            if (exists) {
+              return prev.map(item =>
+                item.vin === targetBill.vin ? { ...item, status: 'ready', stockQuantity: 1 } : item
+              );
+            }
+            return [
+              {
+                vin: targetBill.vin,
+                engineNumber: targetBill.engineNumber || '',
+                model: targetBill.model,
+                trim: targetBill.trim || '',
+                plateNumber: targetBill.plateNumber || 'ລໍຖ້າຂຶ້ນທະບຽນ',
+                color: targetBill.color || '-',
+                colorHex: '#18181b',
+                interiorColor: targetBill.interiorColor || 'Black',
+                battery: targetBill.battery || 'CATL Ternary Lithium',
+                priceUSD: targetBill.unitPriceUSD || targetBill.netTotalUSD || 0,
+                priceLAK: targetBill.unitPriceLAK || targetBill.netTotalLAK || 0,
+                stockQuantity: 1,
+                status: 'ready',
+                pdiStatus: 'passed',
+                location: 'ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ',
+                arrivalDate: (targetBill.date || new Date().toISOString()).slice(0, 10),
+                mileageKm: 0,
+              },
+              ...prev,
+            ];
+          });
         } else if (billType === 'import') {
           const hasOtherBills = bills.some(b => b.id !== billId && b.vin === targetBill.vin && b.status !== 'voided');
           if (!hasOtherBills) {
             setInventory(prev => prev.filter(item => item.vin !== targetBill.vin));
           }
         }
+        setStockLogs(prev => prev.filter(log => !(log.billId === billId || (log.vin === targetBill.vin && log.type === (billType === 'import' ? 'stock_in' : 'stock_out')))));
       }
       triggerToast(lang === 'lo' ? 'ຍົກເລີກບິນ ແລະ ຄືນສະຕ໋ອກລົດຮຽບຮ້ອຍແລ້ວ!' : 'ยกเลิกบิลและคืนสต็อกรถเรียบร้อยแล้ว!');
     } catch (error) {
@@ -612,6 +644,7 @@ export default function App() {
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="p-2 rounded-xl bg-blue-50 dark:bg-zinc-900 border border-blue-200 dark:border-zinc-800 text-blue-600 dark:text-white flex-shrink-0 shadow-2xs">
                 {currentMenu === 'dashboard' && <LayoutDashboard className="w-4 h-4" />}
+                {currentMenu === 'sales_leaderboard' && <Trophy className="w-4 h-4 text-amber-500" />}
                 {currentMenu === 'pos_sales' && <ShoppingBag className="w-4 h-4 text-blue-600 dark:text-emerald-400" />}
                 {currentMenu === 'customers' && <Users className="w-4 h-4" />}
                 {currentMenu === 'inventory' && <Car className="w-4 h-4" />}
@@ -626,6 +659,7 @@ export default function App() {
               <div className="min-w-0">
                 <h2 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate leading-tight">
                   {currentMenu === 'dashboard' && t.headerDashboard}
+                  {currentMenu === 'sales_leaderboard' && (t.headerLeaderboard || 'ຈັດອັນດັບພະນັກງານຂາຍ Top Sales • Leaderboard')}
                   {currentMenu === 'pos_sales' && (t.headerPOS || 'POS ຂາຍລົດຍົນ • ອອກໃບບິນ & ຕັດສະຕ໋ອກ')}
                   {currentMenu === 'customers' && t.headerCustomers}
                   {currentMenu === 'inventory' && t.headerInventory}
@@ -691,6 +725,8 @@ export default function App() {
               currentUser={currentUser}
               lang={lang}
               isAdmin={isAdmin}
+              activeTimeframe={sharedTimeframe}
+              onTimeframeChange={setSharedTimeframe}
               onNavigateMenu={(menu) => setCurrentMenu(menu)}
               onOpenNewLead={() => setIsNewLeadOpen(true)}
               onOpenQuote={handleOpenQuoteForVehicle}
@@ -794,6 +830,19 @@ export default function App() {
             />
           )}
 
+          {currentMenu === 'sales_leaderboard' && (
+            <SalesLeaderboardView
+              bills={bills}
+              leads={leads}
+              vehicles={vehicles}
+              currentUser={currentUser}
+              lang={lang}
+              initialPeriod={sharedTimeframe}
+              onPeriodChange={setSharedTimeframe}
+              onNavigateMenu={(menu) => setCurrentMenu(menu)}
+            />
+          )}
+
           {currentMenu === 'installment_dashboard' && (
             <InstallmentDashboardView
               leads={leads}
@@ -860,6 +909,7 @@ export default function App() {
             onClose={() => setIsNewLeadOpen(false)}
             onAddLead={handleAddLead}
             vehicles={vehicles}
+            inventory={inventory}
             currentUser={currentUser}
             lang={lang}
           />

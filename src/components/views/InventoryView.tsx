@@ -293,8 +293,9 @@ export default function InventoryView({
       return false;
     }
     if (selectedModelFilter !== 'all' && item.model !== selectedModelFilter) return false;
-    if (eventPromoFilter === 'event_only' && !item.eventCampaign) return false;
-    if (eventPromoFilter === 'standard' && item.eventCampaign) return false;
+    const isEventOrPromo = item.status === 'event' || item.status === 'promotion' || Boolean(item.eventCampaign);
+    if (eventPromoFilter === 'event_only' && !isEventOrPromo) return false;
+    if (eventPromoFilter === 'standard' && isEventOrPromo) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
@@ -391,28 +392,28 @@ export default function InventoryView({
                 value: inventory.reduce((total, item) => total + item.stockQuantity, 0),
                 caption: lang === 'lo' ? `${inventory.length} ລາຍການ VIN` : lang === 'th' ? `${inventory.length} รายการ VIN` : `${inventory.length} VIN records`,
                 icon: Car,
-                tone: 'text-zinc-200',
+                tone: 'bg-slate-100 text-slate-800 dark:bg-zinc-800 dark:text-zinc-100 border border-slate-200 dark:border-zinc-700',
               },
               {
                 label: lang === 'lo' ? 'ພ້ອມຂາຍ' : lang === 'th' ? 'พร้อมขาย' : 'Ready for sale',
                 value: inventory.filter(item => item.status === 'ready').reduce((total, item) => total + item.stockQuantity, 0),
                 caption: t.stage3Ready,
                 icon: CheckCircle2,
-                tone: 'text-emerald-300',
+                tone: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800',
               },
               {
                 label: lang === 'lo' ? 'ກຳລັງກຽມລົດ' : lang === 'th' ? 'กำลังเตรียมรถ' : 'In preparation',
                 value: inventory.filter(item => item.status === 'pdi' || item.status === 'imported').reduce((total, item) => total + item.stockQuantity, 0),
                 caption: `${t.stage2PDI} · ${t.stage1Imported}`,
                 icon: Clock,
-                tone: 'text-amber-300',
+                tone: 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800',
               },
               {
                 label: lang === 'lo' ? 'ລົດ Event / ໂປຣໂມຊັນ' : lang === 'th' ? 'รถอีเวนต์ / โปรโมชัน' : 'Event / promotion',
                 value: inventory.filter(item => item.status === 'event' || item.status === 'promotion' || Boolean(item.eventCampaign)).reduce((total, item) => total + item.stockQuantity, 0),
                 caption: lang === 'lo' ? 'ລົດທີ່ກຳນົດແຄມເປນ' : lang === 'th' ? 'รถที่กำหนดแคมเปญ' : 'Campaign vehicles',
                 icon: Sparkles,
-                tone: 'text-blue-300',
+                tone: 'bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300 dark:border-blue-800',
               },
             ].map((metric) => {
               const Icon = metric.icon;
@@ -423,7 +424,7 @@ export default function InventoryView({
                       <p className="truncate text-[11px] font-medium text-slate-500 dark:text-zinc-400">{metric.label}</p>
                       <p className="mt-1 font-mono text-2xl font-bold text-slate-900 dark:text-white">{metric.value.toLocaleString()}</p>
                     </div>
-                    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 dark:bg-zinc-900 ${metric.tone}`}>
+                    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-xs ${metric.tone}`}>
                       <Icon className="h-4 w-4" />
                     </span>
                   </div>
@@ -434,7 +435,7 @@ export default function InventoryView({
           </div>
 
           {/* MODEL CATEGORY STOCK SUMMARY & LOW-STOCK (< 5) ALERT BANNER */}
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="theme-adaptive-dark-surface rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
               <div className="flex items-center gap-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-black shadow-sm always-white-text">
@@ -530,13 +531,15 @@ export default function InventoryView({
                     <div className="flex items-center gap-3 mb-2.5">
                       {/* Model Logo / Photo */}
                       <div className="w-14 h-11 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-950 shrink-0 flex items-center justify-center shadow-inner">
-                        {summary.model?.heroImage ? (
+                        {(modelObj.heroImage || summary.model?.heroImage) ? (
                           <img
-                            src={summary.model.heroImage}
+                            src={modelObj.heroImage || summary.model?.heroImage}
                             alt={summary.modelName}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
+                              const target = e.currentTarget;
+                              target.onerror = null;
+                              target.src = '/avatr-logo.png';
                             }}
                           />
                         ) : (
@@ -1868,6 +1871,19 @@ export default function InventoryView({
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-zinc-500 uppercase">USD</span>
                         </div>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                          {lang === 'lo' ? 'ເງື່ອນໄຂໂປຣໂມຊັນ & ຂອງແຖມພິເສດໃນງານ (ບໍ່ບັງຄັບ)' : 'Event Perks & Special Conditions (Optional)'}
+                        </label>
+                        <input
+                          type="text"
+                          value={editingItem.promotionNotes || ''}
+                          onChange={(e) => setEditingItem({ ...editingItem, promotionNotes: e.target.value })}
+                          placeholder="e.g. ດອກເບ້ຍພິເສດ + ຟຣີ Wallbox Charger 7kW + ປະກັນໄພຊັ້ນ 1"
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+                        />
                       </div>
                     </div>
                   </div>

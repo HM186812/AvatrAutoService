@@ -8,3 +8,5 @@ export { default as StockAlertsView } from './StockAlertsView';
 export { default as UserManagementView } from './UserManagementView';
 export { default as ProfileView } from './ProfileView';
 export { default as InstallmentDashboardView } from './InstallmentDashboardView';
+export { default as SalesLeaderboardView } from './SalesLeaderboardView';
+export { default as TopSalesWidget } from './TopSalesWidget';

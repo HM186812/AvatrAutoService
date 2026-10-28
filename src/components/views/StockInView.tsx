@@ -455,6 +455,8 @@ export default function StockInView({
       eventStartDate: (status === 'event' || status === 'promotion') ? eventStartDate : undefined,
       eventEndDate: (status === 'event' || status === 'promotion') ? eventEndDate : undefined,
       eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
+      promotionDiscountUSD: (status === 'event' || status === 'promotion') && promotionDiscountUSD > 0 ? promotionDiscountUSD : undefined,
+      promotionNotes: (status === 'event' || status === 'promotion') && promotionNotes.trim() ? promotionNotes.trim() : undefined,
     };
 
     // Create official inbound bill (goods receipt note).
@@ -591,7 +593,7 @@ export default function StockInView({
       {/* MAIN IMPORT FORM */}
       <form onSubmit={handleSubmitStockIn} className="space-y-5 sm:space-y-6">
         {/* Step 1: Vehicle Model & Identifiers */}
-        <div className="space-y-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-7">
+        <div className="space-y-5 theme-adaptive-dark-surface rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm sm:p-7 text-slate-900 dark:text-white">
           <div className="flex items-center gap-3 border-b border-zinc-800 pb-4 text-white">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-zinc-900 text-zinc-100 ring-1 ring-zinc-700">
               <Car className="h-4 w-4" />
@@ -898,7 +900,7 @@ export default function StockInView({
         </div>
 
         {/* Step 2: Logistics, Customs & Warehouse */}
-        <div className="space-y-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-7">
+        <div className="space-y-5 theme-adaptive-dark-surface rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm sm:p-7 text-slate-900 dark:text-white">
           <div className="flex items-center gap-3 border-b border-zinc-800 pb-4 text-white">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-zinc-900 text-zinc-100 ring-1 ring-zinc-700">
               <Truck className="h-4 w-4" />
@@ -1155,7 +1157,7 @@ export default function StockInView({
         )}
 
         {/* Step 3: Valuation, Quantity & PDI */}
-        <div className="space-y-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-7">
+        <div className="space-y-5 theme-adaptive-dark-surface rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm sm:p-7 text-slate-900 dark:text-white">
           <div className="flex items-center gap-3 border-b border-zinc-800 pb-4 text-white">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-zinc-900 text-zinc-100 ring-1 ring-zinc-700">
               <DollarSign className="h-4 w-4" />

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { VehicleModel, Language } from '../../types';
 import AvatrLogo from '../layout/AvatrLogo';
-import { X, Printer, Phone, Download, CheckCircle, ShieldCheck, Loader2, Calendar, FileCheck } from 'lucide-react';
+import { X, Printer, Phone, Download, CheckCircle, ShieldCheck, Loader2, Calendar } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
-import { exportElementToDocx } from '../../utils/docxExport';
 import { showToast } from '../common';
+import { logIssuedDocument, getLatestDocumentIssuance } from '../../utils/documentLogger';
 
 interface QuotationModalProps {
   isOpen: boolean;
@@ -28,7 +28,9 @@ export default function QuotationModal({
   const [loanMonths, setLoanMonths] = useState<number>(48);
   const [interestRateYearly, setInterestRateYearly] = useState<number>(5.5); // 5.5% typical Lao bank auto finance
   const [isExportingQuotePdf, setIsExportingQuotePdf] = useState(false);
-  const [isExportingQuoteDocx, setIsExportingQuoteDocx] = useState(false);
+  const [latestIssuance, setLatestIssuance] = useState(() =>
+    getLatestDocumentIssuance('quotation', customerName)
+  );
   const rateLAK = 22000;
 
   if (!isOpen) return null;
@@ -49,7 +51,31 @@ export default function QuotationModal({
     ? new Date(quoteDate).toLocaleDateString('lo-LA', { year: 'numeric', month: 'long', day: 'numeric' })
     : new Date().toLocaleDateString('lo-LA', { year: 'numeric', month: 'long', day: 'numeric' });
 
+  const recordQuoteIssuance = (action: 'print' | 'export_pdf', formatLabel: string) => {
+    try {
+      const rec = logIssuedDocument({
+        docType: 'quotation',
+        docTitle: `ໃບສະເໜີລາຄາລົດຍົນໄຟຟ້າ ${vehicle.name}`,
+        docNumber: quotationNumber,
+        customerName: clientName,
+        customerPhone: clientPhone,
+        model: vehicle.name,
+        action,
+        formatLabel,
+        issuedBy: 'Admin / ທີ່ປຶກສາການຂາຍ',
+        amountUSD: totalPriceUSD,
+        amountLAK: totalPriceLAK,
+        notes: `ໃບສະເໜີລາຄາ ${vehicle.name} ດາວ ${downPaymentPercent}% ຜ່ອນ ${loanMonths} ເດືອນ`,
+      });
+      setLatestIssuance(rec);
+      showToast(`ບັນທຶກປະຫວັດການອອກໃບສະເໜີລາຄາ ${quotationNumber} (${formatLabel}) ສຳເລັດ`, 'success');
+    } catch (err) {
+      console.error('Failed to log quotation issuance:', err);
+    }
+  };
+
   const handlePrint = () => {
+    recordQuoteIssuance('print', 'Print / ພິມ');
     window.print();
   };
 
@@ -59,10 +85,11 @@ export default function QuotationModal({
       const filename = `AVATR_Quotation_${vehicle.name.replace(/\s+/g, '_')}_${quotationNumber}.pdf`;
       await exportElementToPdf('printable-quotation', {
         filename,
-        margin: [6, 6, 6, 6],
+        margin: [0, 0, 0, 0],
         orientation: 'portrait',
         singlePage: true,
       });
+      recordQuoteIssuance('export_pdf', 'PDF (A4)');
     } catch (err) {
       console.error('Error generating quotation PDF:', err);
       showToast('ບໍ່ສາມາດດາວໂຫຼດ PDF ໄດ້', 'error');
@@ -71,32 +98,24 @@ export default function QuotationModal({
     }
   };
 
-  const handleDownloadQuoteDocx = async () => {
-    try {
-      setIsExportingQuoteDocx(true);
-      const filename = `AVATR_Quotation_${vehicle.name.replace(/\s+/g, '_')}_${quotationNumber}.docx`;
-      await exportElementToDocx('printable-quotation', {
-        filename,
-        title: `AVATR Official Quotation ${quotationNumber} - ${vehicle.name}`,
-      });
-    } catch (err) {
-      console.error('Error generating quotation DOCX:', err);
-      showToast('ບໍ່ສາມາດດາວໂຫຼດ DOCX ໄດ້', 'error');
-    } finally {
-      setIsExportingQuoteDocx(false);
-    }
-  };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:w-full print:max-w-none print:shadow-none">
       <div className="relative w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl p-6 sm:p-8 text-white max-h-[92vh] overflow-y-auto print:bg-white print:text-black print:border-none print:shadow-none print:p-0 print:m-0 print:max-h-none print:max-w-none print:w-full print:overflow-visible print-modal-container">
         {/* Modal Controls */}
         <div className="flex items-center justify-between pb-4 border-b border-zinc-800 print:hidden">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono px-2.5 py-0.5 bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-lg">
               OFFICIAL QUOTATION
             </span>
             <span className="text-xs text-zinc-400 font-mono">#{quotationNumber}</span>
+            {latestIssuance && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 text-[11px] font-mono shadow-xs animate-in fade-in">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>ອອກລ້າສຸດ: {new Date(latestIssuance.issuedAt).toLocaleTimeString('lo-LA', { hour: '2-digit', minute: '2-digit' })} ({latestIssuance.formatLabel})</span>
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -116,23 +135,7 @@ export default function QuotationModal({
                 </>
               )}
             </button>
-            <button
-              onClick={handleDownloadQuoteDocx}
-              disabled={isExportingQuoteDocx}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-white text-black rounded-xl text-xs font-bold transition-colors shadow-sm border border-zinc-300 cursor-pointer"
-            >
-              {isExportingQuoteDocx ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
-                  <span>Word...</span>
-                </>
-              ) : (
-                <>
-                  <FileCheck className="w-3.5 h-3.5 text-black" />
-                  <span>DOCX</span>
-                </>
-              )}
-            </button>
+
             <button
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
@@ -153,31 +156,49 @@ export default function QuotationModal({
         {/* Printable Quotation Content (Full A4 Page Layout) */}
         <div 
           id="printable-quotation"
-          className="official-dealer-document a4-document-canvas w-full max-w-[794px] min-h-[1123px] mx-auto p-7 sm:p-9 bg-white text-black font-sans text-xs leading-normal border border-black rounded-lg shadow-2xl flex flex-col justify-between print:m-0 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0"
-          style={{ backgroundColor: '#ffffff', color: '#000000', borderColor: '#000000' }}
+          className="official-dealer-document a4-document-canvas w-full max-w-[794px] min-h-[1123px] mx-auto p-6 sm:p-8 bg-white text-black font-sans text-xs leading-normal rounded-lg shadow-2xl flex flex-col justify-between print:m-0 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0"
+          style={{ backgroundColor: '#ffffff', color: '#000000', border: 'none' }}
         >
           {/* Top Section: Header */}
           <div>
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-black pb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 flex items-center justify-center border border-black p-1 bg-white">
-                  <AvatrLogo className="w-10 h-10" />
+            <div className="border-b-2 border-black pb-2.5 mb-2">
+              <div className="flex items-start justify-between gap-4">
+                <div className="shrink-0 flex items-start justify-start">
+                  <AvatrLogo variant="document" />
                 </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-black tracking-widest text-black">AVATR AUTO SERVICE SOLE CO., LTD</h2>
+                <div className="flex-1 text-center pt-1">
+                  <p className="text-[10.5px] font-bold tracking-wide text-black">
+                    ສາທາລະນະລັດ ປະຊາທິປະໄຕ ປະຊາຊົນລາວ
+                  </p>
+                  <p className="text-[10px] font-semibold text-black mb-1.5">
+                    ສັນຕິພາບ ເອກະລາດ ປະຊາທິປະໄຕ ເອກະພາບ ວັດທະນາຖາວອນ
+                  </p>
+                  <h2 className="text-base sm:text-lg font-black tracking-widest text-black leading-tight">
+                    AVATR AUTO SERVICE SOLE CO., LTD
+                  </h2>
                   <p className="text-[11px] text-black font-semibold tracking-wide">
                     Changan × Huawei × CATL Luxury Intelligent EVs (Laos)
                   </p>
-                  <p className="text-[10px] text-black">
+                  <p className="text-[10px] text-black mt-0.5">
                     ໂຊຣູມໃຫຍ່: ຫຼັກ 3 ຖະໜົນທ່າເດື່ອ, ນະຄອນຫຼວງວຽງຈັນ | Hotline: +856 20 55575537
                   </p>
                 </div>
+                <div className="hidden sm:block shrink-0 w-[3cm]" aria-hidden="true" />
               </div>
-              <div className="text-right text-xs">
-                <p className="text-black font-semibold">ເລກທີໃບສະເໜີ: <span className="font-mono font-bold text-black">{quotationNumber}</span></p>
-                <p className="text-black">ວັນທີອອກ: <span className="font-semibold text-black">{dateStr}</span></p>
-                <p className="text-black">ທີ່ປຶກສາ: <strong className="text-black">AVATR Sales Advisor</strong></p>
-                <p className="text-black font-mono text-[11px] mt-0.5 font-bold">ອັດຕາແລກປ່ຽນອ້າງອີງ: 22,000 LAK / USD</p>
+
+              {/* Row 1: Right-aligned Reference & Date */}
+              <div className="flex flex-wrap justify-end items-center gap-x-5 gap-y-0.5 mt-1 text-[11px] text-black border-t border-black/20 pt-1.5">
+                <p className="font-semibold">ເລກທີໃບສະເໜີ: <span className="font-mono font-bold text-black">{quotationNumber}</span></p>
+                <p>ວັນທີອອກ: <span className="font-semibold text-black">{dateStr}</span></p>
+                <p>ທີ່ປຶກສາ: <strong className="text-black">AVATR Sales Advisor</strong></p>
+                <p className="font-mono text-[10.5px] font-bold">ອັດຕາແລກປ່ຽນ: 22,000 LAK/USD</p>
+              </div>
+
+              {/* Row 2: 100% Centered Document Title */}
+              <div className="text-center pt-2">
+                <h1 className="text-sm sm:text-base font-black text-black uppercase tracking-wide">
+                  ໃບສະເໜີລາຄາລົດຍົນໄຟຟ້າ (OFFICIAL EV QUOTATION)
+                </h1>
               </div>
             </div>
           </div>
