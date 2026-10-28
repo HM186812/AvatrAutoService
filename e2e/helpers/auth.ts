@@ -1,5 +1,7 @@
 import { Page, expect } from '@playwright/test';
-import { createClient } from '@supabase/supabase-js';
+import { createRequire } from 'module';
+const req = createRequire(import.meta.url);
+const { createClient } = req('@supabase/supabase-js');
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
