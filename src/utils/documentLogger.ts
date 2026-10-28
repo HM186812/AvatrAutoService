@@ -1,4 +1,5 @@
 import type { IssuedDocumentRecord, IssuedDocType, IssuedDocumentAction } from '../types';
+import { supabase, isSupabaseConfigured } from '../backend/client';
 
 const STORAGE_KEY = 'avatr_offline_document_logs';
 export const DOCUMENT_LOG_EVENT = 'avatr_document_logged';
@@ -99,25 +100,6 @@ export const INITIAL_ISSUED_DOCUMENTS: IssuedDocumentRecord[] = [
     amountLAK: 1144000000,
     notes: 'ໃບສະເໜີລາຄາ AVATR 11 AWD Performance ຜ່ອນ 48 ເດືອນ',
   },
-  {
-    id: 'DOCLOG-2026-0006',
-    docType: 'official_bill',
-    docTitle: 'ໃບບິນຮັບເງິນ / ໃບແຈ້ງໜີ້ຂາຍລົດ (Official Tax Invoice/Receipt)',
-    docNumber: 'INV-2026-0001',
-    customerName: 'ທ່ານ ສົມບູນ ໄຊຍະສຸກ',
-    customerPhone: '020 5511 2233',
-    billId: 'BILL-2026-0001',
-    vin: 'AVATR11-2026-9901',
-    model: 'AVATR 11',
-    action: 'print',
-    formatLabel: 'Print / ພິມ',
-    issuedAt: '2026-10-10T10:15:00.000Z',
-    issuedDate: '2026-10-10',
-    issuedBy: 'ທ້າວ ສົມພອນ ໄຊຍະສິດ',
-    amountUSD: 50000,
-    amountLAK: 1100000000,
-    notes: 'ໃບບິນຂາຍລົດເງິນໂອນເຕັມຈຳນວນ ພ້ອມມອບລົດສຳເລັດ',
-  },
 ];
 
 export function getIssuedDocumentLogs(): IssuedDocumentRecord[] {
@@ -158,7 +140,6 @@ export function logIssuedDocument(
   const updatedLogs = [newRecord, ...currentLogs];
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedLogs));
-    // Dispatch custom event to notify all listeners across views
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(DOCUMENT_LOG_EVENT, { detail: newRecord }));
     }
@@ -166,7 +147,82 @@ export function logIssuedDocument(
     console.error('Failed to save document log:', err);
   }
 
+  // Asynchronous background sync to Supabase Cloud
+  if (isSupabaseConfigured && supabase) {
+    void (async () => {
+      try {
+        const { error } = await supabase
+          .from('document_issuance_logs')
+          .insert({
+            document_type: newRecord.docType,
+            serial_number: newRecord.docNumber,
+            customer_name: newRecord.customerName,
+            customer_phone: newRecord.customerPhone || null,
+            vin: newRecord.vin || null,
+            lead_id: newRecord.leadId || null,
+            issued_by_name: newRecord.issuedBy,
+            notes: newRecord.notes || null,
+            metadata: {
+              docTitle: newRecord.docTitle,
+              action: newRecord.action,
+              amountUSD: newRecord.amountUSD,
+              amountLAK: newRecord.amountLAK,
+              model: newRecord.model,
+              billId: newRecord.billId,
+            },
+          });
+        if (error) {
+          console.warn('Supabase document log sync notice:', error.message);
+        }
+      } catch (err) {
+        console.warn('Supabase document log sync error:', err);
+      }
+    })();
+  }
+
   return newRecord;
+}
+
+export async function fetchDocumentLogsFromCloud(): Promise<IssuedDocumentRecord[]> {
+  if (!isSupabaseConfigured || !supabase) return getIssuedDocumentLogs();
+  try {
+    const { data, error } = await supabase
+      .from('document_issuance_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    if (data && data.length > 0) {
+      const cloudLogs: IssuedDocumentRecord[] = data.map((row: any) => ({
+        id: row.id,
+        docType: row.document_type as IssuedDocType,
+        docTitle: row.metadata?.docTitle || row.document_type,
+        docNumber: row.serial_number,
+        customerName: row.customer_name,
+        customerPhone: row.customer_phone || undefined,
+        leadId: row.lead_id || undefined,
+        vin: row.vin || undefined,
+        model: row.metadata?.model || undefined,
+        action: (row.metadata?.action as IssuedDocumentAction) || 'export_pdf',
+        formatLabel: row.metadata?.action === 'print' ? 'Print' : 'PDF',
+        issuedAt: row.created_at,
+        issuedDate: (row.created_at || '').slice(0, 10),
+        issuedBy: row.issued_by_name,
+        amountUSD: row.metadata?.amountUSD,
+        amountLAK: row.metadata?.amountLAK,
+        notes: row.notes || undefined,
+      }));
+      const local = getIssuedDocumentLogs();
+      const mergedMap = new Map<string, IssuedDocumentRecord>();
+      [...cloudLogs, ...local].forEach((item) => mergedMap.set(item.id, item));
+      const merged = Array.from(mergedMap.values());
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      return merged;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch document logs from cloud:', err);
+  }
+  return getIssuedDocumentLogs();
 }
 
 export function deleteIssuedDocumentLog(id: string): IssuedDocumentRecord[] {
@@ -180,6 +236,15 @@ export function deleteIssuedDocumentLog(id: string): IssuedDocumentRecord[] {
   } catch (err) {
     console.error('Failed to delete document log:', err);
   }
+  if (isSupabaseConfigured && supabase) {
+    void (async () => {
+      try {
+        await supabase.from('document_issuance_logs').delete().eq('id', id);
+      } catch (err) {
+        console.warn('Failed to delete document log from Supabase:', err);
+      }
+    })();
+  }
   return filtered;
 }
 
@@ -191,6 +256,15 @@ export function clearIssuedDocumentLogs(): void {
     }
   } catch (err) {
     console.error('Failed to clear document logs:', err);
+  }
+  if (isSupabaseConfigured && supabase) {
+    void (async () => {
+      try {
+        await supabase.from('document_issuance_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      } catch (err) {
+        console.warn('Failed to clear document logs from Supabase:', err);
+      }
+    })();
   }
 }
 

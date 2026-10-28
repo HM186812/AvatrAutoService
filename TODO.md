@@ -1,6 +1,6 @@
-﻿# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 84 ข้อ + แผนงาน Phase 2 & รายการแก้ไขเร่งด่วน)
-> **วันที่อัปเดตล่าสุด**: 2026-10-28 14:40 (+07:00)
-> **สถานะ**: ระบบ Phase 1 และการปรับปรุงความเสถียร/ขีดจำกัดฐานข้อมูลเสร็จสิ้น 100% (ข้อ 1-74 ผ่านการทดสอบและ Deploy ขึ้น Cloudflare เรียบร้อย), เพิ่มแผนงาน Phase 2 หมวดที่ 15 (ข้อ 75-78) สำหรับ Staff Offboarding, RBAC Boundaries และ Smart Showroom 360° Ranking, หมวดที่ 16 (ข้อ 79-83) บันทึก 5 ปัญหาฐานข้อมูลและสภาพแวดล้อมที่ต้องแก้
+﻿# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 85 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
+> **วันที่อัปเดตล่าสุด**: 2026-10-28 23:55 (+07:00)
+> **สถานะ**: ระบบ Phase 1 และ Phase 2 ส่วนจัดอันดับ Top Sales (ข้อ 77-78) และระบบ Cloud Document Audit Log (ข้อ 85) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC & RLS Policies เรียบร้อย, ระบบ Phase 1 ข้อ 1-74 และการแก้ปัญหาโครงสร้างฐานข้อมูลข้อ 79, 80, 83, 84 ผ่านการทดสอบครบถ้วน
 
 ---
 
@@ -559,7 +559,7 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
        - **ล็อกบิลที่ตรวจแล้ว (Approved Lock)**: ปิดการแก้ไขบิลที่สถานะอนุมัติแล้ว มีไอคอนกุญแจ 🔒 เฉพาะ Admin เท่านั้นที่ปลดล็อกได้
        - **ซ่อนต้นทุนรถ**: พนักงานขายเห็นเฉพาะบิลของตนเอง และซ่อนตัวเลขต้นทุน/กำไรโชว์รูม 100%
 
-- [ ] **77. ระบบจัดอันดับ Top Sales & 4 เหรียญเกียรติยศฉบับเข้าใจง่ายใน 3 วินาที (`src/utils/salesRanking.ts`)**
+- [x] **77. ระบบจัดอันดับ Top Sales & 4 เหรียญเกียรติยศฉบับเข้าใจง่ายใน 3 วินาที (`src/utils/salesLeaderboard.ts`)**
   - **ไฟล์เป้าหมาย**: `src/utils/salesRanking.ts` (สร้างใหม่)
   - **รายละเอียด**:
     1. **เลิกใช้สูตรคำนวณถ่วงน้ำหนัก 4 มิติที่ซับซ้อน**: เซลส์วัดผลจาก **"จำนวนคันที่ส่งมอบสำเร็จ (Delivered Units)"** ประจำเดือนอย่างตรงไปตรงมา
@@ -570,7 +570,7 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
        - 🤝 **Customer Care**: บันทึกติดตามลูกค้าและดูแลบริการหลังการขายสม่ำเสมอที่สุด
     3. คำนวณแบบ In-Memory ด้วย `useMemo` จากข้อมูลในระบบ ทำงานเร็วระดับ < 1ms
 
-- [ ] **78. หน้าจอแสดงผล Dashboard โชว์รูม & การ์ดผลงานส่วนบุคคล (Showroom Board & Sales Card)**
+- [x] **78. หน้าจอแสดงผล Dashboard โชว์รูม & การ์ดผลงานส่วนบุคคล (Showroom Board & Sales Card)**
   - **ไฟล์เป้าหมาย**: `src/components/views/DashboardView.tsx`
   - **รายละเอียด**:
     1. **มุมมองพนักงานขาย (Sales View)**:
@@ -612,3 +612,13 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
     2. เพิ่ม `emailRedirectTo: typeof window !== "undefined" ? (window.location.origin + "/") : "https://avatrautoservice.pheuangkeokisith.workers.dev/"` ใน `signUpStaff` (`src/backend/data.ts`)
     3. เพิ่ม `redirectTo: 'https://avatrautoservice.pheuangkeokisith.workers.dev/'` ใน Edge Function `supabase/functions/create-staff/index.ts`
     4. **ข้อกำหนดสำคัญเมื่อเปลี่ยนโดเมนในอนาคต**: โค้ดหน้าเว็บใช้ `window.location.origin` แบบ Dynamic อยู่แล้ว วันหลังหากเปลี่ยนโดเมนใหม่ (เช่น Custom Domain `https://avatr.la`) ไม่ต้องแก้โค้ดเว็บ แต่ต้องเพิ่ม URL โดเมนใหม่เข้าไปใน `additional_redirect_urls` ของ Supabase Auth เสมอ
+
+- [x] **85. เชื่อมต่อระบบ Audit Log การออกเอกสาร A4 (7 แบบ) ขึ้นฐานข้อมูล Supabase (`document_issuance_logs`)**
+  - **ไฟล์เป้าหมาย**: `supabase/migrations/20261028160000_create_document_issuance_logs.sql`, `supabase/migrations/20261028180000_add_doc_logs_delete_policy.sql`, `src/utils/documentLogger.ts`
+  - **การดำเนินการ**:
+    1. สร้างตาราง `document_issuance_logs` บน Supabase พร้อม Database Indexes 4 จุด (`lead_id`, `vin`, `serial_number`, `created_at`)
+    2. กำหนด Row Level Security (RLS) ครบวงจร (`SELECT`, `INSERT`, `DELETE`) สำหรับผู้ใช้งานที่ Authenticated
+    3. ปรับ `src/utils/documentLogger.ts` ให้รองรับการซิงค์ประวัติขึ้น Cloud อัตโนมัติใน Background พร้อม Offline Fallback บน `localStorage`
+    4. เพิ่มฟังก์ชัน `fetchDocumentLogsFromCloud()` ดึงประวัติเอกสารจากคลาวด์มาซิงค์ในหน้า CRM (`CustomerView.tsx`) และหน้าการเงิน (`BillsManagementView.tsx`)
+    5. สร้าง Security Definer Stored Procedure `get_sales_leaderboard(p_period, p_target_date)` บน PostgreSQL (`supabase/migrations/20261028170000_get_sales_leaderboard_rpc.sql`) เพื่อประมวลผลยอดขาย/ส่วนลด/อันดับที่ฝั่งฐานข้อมูล รองรับการเติบโตของข้อมูลขนาดใหญ่
+

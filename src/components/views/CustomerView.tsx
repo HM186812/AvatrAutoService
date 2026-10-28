@@ -75,7 +75,7 @@ import { deleteLead, saveLead, updateLeadStatus, saveBillRecord, fetchLeadsByDat
 import { newRecordId } from '../../backend/ids';
 import InstallmentDashboardView from './InstallmentDashboardView';
 import { IssuedDocumentRecord } from '../../types';
-import { getIssuedDocumentLogs, DOCUMENT_LOG_EVENT } from '../../utils/documentLogger';
+import { getIssuedDocumentLogs, fetchDocumentLogsFromCloud, DOCUMENT_LOG_EVENT } from '../../utils/documentLogger';
 
 interface CustomerViewProps {
   leads: Lead[];
@@ -246,6 +246,7 @@ export default function CustomerView({
   const [issuedDocLogs, setIssuedDocLogs] = useState<IssuedDocumentRecord[]>(() => getIssuedDocumentLogs());
 
   useEffect(() => {
+    fetchDocumentLogsFromCloud().then(l => { if (l && l.length) setIssuedDocLogs(l); });
     const handleLogsUpdate = () => {
       setIssuedDocLogs(getIssuedDocumentLogs());
     };

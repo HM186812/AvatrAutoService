@@ -56,7 +56,7 @@ import QuotationModal from '../modals/QuotationModal';
 import { saveLead, deleteBill, fetchBillsByDateRange, attachSlipToBill } from '../../backend/data';
 import SlipPreviewModal from '../modals/SlipPreviewModal';
 import IssuedDocumentsRegistryTab from './IssuedDocumentsRegistryTab';
-import { getIssuedDocumentLogs, deleteIssuedDocumentLog, logIssuedDocument, DOCUMENT_LOG_EVENT } from '../../utils/documentLogger';
+import { getIssuedDocumentLogs, deleteIssuedDocumentLog, logIssuedDocument, DOCUMENT_LOG_EVENT, fetchDocumentLogsFromCloud } from '../../utils/documentLogger';
 import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
 import type { IssuedDocumentRecord } from '../../types';
 
@@ -136,6 +136,7 @@ export default function BillsManagementView({
   const [issuedDocLogs, setIssuedDocLogs] = useState<IssuedDocumentRecord[]>(() => getIssuedDocumentLogs());
 
   useEffect(() => {
+    fetchDocumentLogsFromCloud().then(l => { if (l && l.length) setIssuedDocLogs(l); });
     const handleUpdate = () => {
       setIssuedDocLogs(getIssuedDocumentLogs());
     };

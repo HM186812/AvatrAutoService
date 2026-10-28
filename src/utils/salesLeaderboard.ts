@@ -227,3 +227,36 @@ export function getPeriodLabel(period: LeaderboardPeriod, lang: string, now = ne
   if (period === 'month') return lang === 'lo' ? `ເດືອນນີ້ (${lo[monthIdx]} ${y})` : lang === 'th' ? `เดือนนี้ (${th[monthIdx]} ${y})` : `${en[monthIdx]} ${y}`;
   return lang === 'lo' ? `ປີນີ້ (${y})` : lang === 'th' ? `ปีนี้ (${y})` : `Year ${y}`;
 }
+
+
+import { supabase, isSupabaseConfigured } from '../backend/client';
+
+export interface CloudLeaderboardRow {
+  staff_id: string;
+  staff_name: string;
+  role: string;
+  delivered_units: number;
+  total_revenue_usd: number;
+  avg_discount_usd: number;
+}
+
+export async function fetchLeaderboardFromCloud(
+  period: LeaderboardPeriod = 'month',
+  targetDate?: string
+): Promise<CloudLeaderboardRow[] | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+  try {
+    const { data, error } = await supabase.rpc('get_sales_leaderboard', {
+      p_period: period,
+      p_target_date: targetDate || new Date().toISOString().slice(0, 10),
+    });
+    if (error) {
+      console.warn('Supabase get_sales_leaderboard notice:', error.message);
+      return null;
+    }
+    return (data as CloudLeaderboardRow[]) || [];
+  } catch (err) {
+    console.warn('Failed to fetch sales leaderboard from cloud:', err);
+    return null;
+  }
+}
