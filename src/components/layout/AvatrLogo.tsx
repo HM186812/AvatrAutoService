@@ -16,6 +16,9 @@ export default function AvatrLogo({
         <img
           src="/avatr-logo-doc.png"
           alt="AVATR Official Logo"
+          width="120"
+          height="150"
+          decoding="async"
           className="w-full h-full object-contain select-none bg-transparent border-0"
           style={{ backgroundColor: 'transparent', border: 'none' }}
         />
@@ -28,6 +31,9 @@ export default function AvatrLogo({
       <img
         src="/avatr-logo.png"
         alt="AVATR Official Logo"
+        width="32"
+        height="32"
+        decoding="async"
         className={`w-full h-full object-contain transform transition-all duration-300 hover:scale-105 ${light ? 'brightness-0' : ''}`}
       />
     </div>
