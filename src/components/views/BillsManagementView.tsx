@@ -277,14 +277,34 @@ export default function BillsManagementView({
   };
 
   const allLoadedBills = useMemo(() => {
-    if (extraFetchedBills.length === 0) return bills;
-    const byId = new Map<string, InvoiceBillRecord>();
-    bills.forEach(b => byId.set(b.id, b));
-    extraFetchedBills.forEach(b => {
-      if (!byId.has(b.id)) byId.set(b.id, b);
-    });
-    return Array.from(byId.values());
-  }, [bills, extraFetchedBills]);
+    let baseList = bills;
+    if (extraFetchedBills.length > 0) {
+      const byId = new Map<string, InvoiceBillRecord>();
+      bills.forEach(b => byId.set(b.id, b));
+      extraFetchedBills.forEach(b => {
+        if (!byId.has(b.id)) byId.set(b.id, b);
+      });
+      baseList = Array.from(byId.values());
+    }
+
+    // Role-based visibility: sales reps see only bills they personally closed or recorded
+    if (currentUser?.role === 'sales') {
+      const myId = currentUser.id;
+      const myName = currentUser.name?.trim().toLowerCase();
+      const myEmail = currentUser.email?.trim().toLowerCase();
+      return baseList.filter(b => {
+        const rep = (b.salesRep || '').trim().toLowerCase();
+        const rec = (b.recordedBy || '').trim().toLowerCase();
+        return (
+          (myId && (b.salesRep === myId || b.recordedBy === myId)) ||
+          (myName && (rep === myName || rec === myName)) ||
+          (myEmail && (rep === myEmail || rec === myEmail))
+        );
+      });
+    }
+
+    return baseList;
+  }, [bills, extraFetchedBills, currentUser]);
 
   const effectiveDbRange = useMemo((): { dateFrom?: string; dateTo?: string } => {
     const now = new Date();

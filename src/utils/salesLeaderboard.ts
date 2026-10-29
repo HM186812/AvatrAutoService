@@ -115,7 +115,12 @@ export function computeLeaderboard(
     if (seenIds.has(uniq)) return;
     seenIds.add(uniq);
     const k = dealKey(b);
-    deals.set(k, [...(deals.get(k) || []), b]);
+    const existing = deals.get(k);
+    if (existing) {
+      existing.push(b);
+    } else {
+      deals.set(k, [b]);
+    }
   });
 
   const repMap = new Map<string, RepPerformanceRecord>();
