@@ -70,6 +70,11 @@ export default defineConfig(({ mode, command }) => {
     },
     build: {
       chunkSizeWarningLimit: 1000,
+      modulePreload: {
+        resolveDependencies: (_filename, deps) => {
+          return deps.filter(dep => !dep.includes('vendor-pdf'));
+        },
+      },
       rollupOptions: {
         output: {
           manualChunks(id) {

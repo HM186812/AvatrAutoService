@@ -643,26 +643,67 @@ export default function CustomerView({
         l.installmentStatus === 'pending_approval';
     };
 
+    // Build O(1) indexed lookup maps for leads and services to eliminate O(N^2) bottlenecks
+    const leadsByCleanPhone = new Map<string, Lead>();
+    const leadsByLowerName = new Map<string, Lead>();
+    leads.forEach(l => {
+      const p = (l.phone || '').replace(/\D/g, '');
+      if (p) leadsByCleanPhone.set(p, l);
+      const n = (l.customerName || '').trim().toLowerCase();
+      if (n) leadsByLowerName.set(n, l);
+    });
+
+    const servicesByPhone = new Map<string, ServiceAppointment[]>();
+    const servicesByName = new Map<string, ServiceAppointment[]>();
+    const servicesByPlate = new Map<string, ServiceAppointment[]>();
+    services.forEach(s => {
+      const p = (s.phone || '').replace(/\D/g, '');
+      if (p) {
+        const arr = servicesByPhone.get(p) || [];
+        arr.push(s);
+        servicesByPhone.set(p, arr);
+      }
+      const n = (s.customerName || '').trim().toLowerCase();
+      if (n) {
+        const arr = servicesByName.get(n) || [];
+        arr.push(s);
+        servicesByName.set(n, arr);
+      }
+      const pl = (s.plateNumber || '').trim().toLowerCase();
+      if (pl) {
+        const arr = servicesByPlate.get(pl) || [];
+        arr.push(s);
+        servicesByPlate.set(pl, arr);
+      }
+    });
+
+    const getMatchedServices = (phone?: string, name?: string, plate?: string) => {
+      const p = (phone || '').replace(/\D/g, '');
+      const n = (name || '').trim().toLowerCase();
+      const pl = (plate || '').trim().toLowerCase();
+      const set = new Set<ServiceAppointment>();
+      if (p && servicesByPhone.has(p)) servicesByPhone.get(p)!.forEach(item => set.add(item));
+      if (n && servicesByName.has(n)) servicesByName.get(n)!.forEach(item => set.add(item));
+      if (pl && servicesByPlate.has(pl)) servicesByPlate.get(pl)!.forEach(item => set.add(item));
+      return Array.from(set);
+    };
+
     // 1. From completed Sales Bills (STRICTLY full cash / transfer only)
     const saleBills = bills.filter(b => (b.billType === 'sale' || (!b.billType && b.customerName)) && !isInstallmentBill(b));
     saleBills.forEach(bill => {
       const key = (bill.customerPhone || bill.customerName || bill.vin || bill.id).toLowerCase();
       seenKeys.add(key);
 
-      const matchedLead = leads.find(l => 
-        (bill.customerPhone && l.phone === bill.customerPhone) ||
-        (bill.customerName && l.customerName?.toLowerCase() === bill.customerName?.toLowerCase())
-      );
+      const cleanPhone = (bill.customerPhone || '').replace(/\D/g, '');
+      const cleanName = (bill.customerName || '').trim().toLowerCase();
+      const matchedLead = (cleanPhone ? leadsByCleanPhone.get(cleanPhone) : undefined) ||
+        (cleanName ? leadsByLowerName.get(cleanName) : undefined);
 
       if (matchedLead && isUncompletedInstallmentLead(matchedLead)) {
         return; // Exclude active installments
       }
 
-      const matchedServices = services.filter(s => 
-        (bill.customerPhone && s.phone === bill.customerPhone) ||
-        (bill.customerName && s.customerName?.toLowerCase() === bill.customerName?.toLowerCase()) ||
-        (bill.plateNumber && s.plateNumber === bill.plateNumber)
-      );
+      const matchedServices = getMatchedServices(bill.customerPhone, bill.customerName, bill.plateNumber);
 
       const purchaseDate = bill.date || matchedLead?.paymentDate || matchedLead?.createdAt?.slice(0, 10) || new Date().toISOString().slice(0, 10);
       const rawStart = matchedLead?.warrantyStartDate || bill.warrantyStartDate || purchaseDate;
@@ -713,11 +754,7 @@ export default function CustomerView({
       const key = (lead.phone || lead.customerName || lead.id).toLowerCase();
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
-        const matchedServices = services.filter(s => 
-          (lead.phone && s.phone === lead.phone) ||
-          (lead.customerName && s.customerName?.toLowerCase() === lead.customerName?.toLowerCase()) ||
-          (lead.plateNumber && s.plateNumber === lead.plateNumber)
-        );
+        const matchedServices = getMatchedServices(lead.phone, lead.customerName, lead.plateNumber);
 
         const purchaseDate = lead.paymentDate || lead.createdAt?.slice(0, 10) || new Date().toISOString().slice(0, 10);
         const rawStart = lead.warrantyStartDate || purchaseDate;
@@ -768,11 +805,7 @@ export default function CustomerView({
       const key = (lead.phone || lead.customerName || lead.id).toLowerCase();
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
-        const matchedServices = services.filter(s => 
-          (lead.phone && s.phone === lead.phone) ||
-          (lead.customerName && s.customerName?.toLowerCase() === lead.customerName?.toLowerCase()) ||
-          (lead.plateNumber && s.plateNumber === lead.plateNumber)
-        );
+        const matchedServices = getMatchedServices(lead.phone, lead.customerName, lead.plateNumber);
 
         const purchaseDate = lead.paidDate || lead.paymentDate || lead.createdAt?.slice(0, 10) || new Date().toISOString().slice(0, 10);
         const rawStart = lead.warrantyStartDate || purchaseDate;
