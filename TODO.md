@@ -1,6 +1,6 @@
-# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 85 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
-> **วันที่อัปเดตล่าสุด**: 2026-10-29 01:06 (+07:00)
-> **สถานะ**: ระบบ Phase 1 และ Phase 2 ส่วนจัดอันดับ Top Sales (ข้อ 77-78), ระบบโอนเคสพนักงานลาออก (ข้อ 75) และระบบ Cloud Document Audit Log (ข้อ 85) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC & RLS Policies เรียบร้อย, ข้อ 81 มาร์กข้าม (เป็น Dummy Data), งาน Phase 2 ที่เหลือ (ข้อ 76) พักไว้ตามคำสั่งเพื่อรักษาขอบเขตงาน
+# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 88 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
+> **วันที่อัปเดตล่าสุด**: 2026-10-29 11:40 (+07:00)
+> **สถานะ**: ระบบ Phase 1 และ Phase 2, การปรับปรุงประสิทธิภาพฐานข้อมูล P0-P1, และระบบแบ่งพาร์ติชันจัดเก็บประวัติบิลย้อนหลัง 10 ปีตามกฎหมายบัญชี สปป.ลาว (ข้อ 86-88) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC, RLS Policies และรัน Migration ขึ้น Production เรียบร้อย, ข้อ 81 มาร์กข้าม (เป็น Dummy Data), งาน Phase 2 ที่เหลือ (ข้อ 76, 82) พักไว้ตามคำสั่งเพื่อรักษาขอบเขตงาน
 
 ---
 
@@ -624,4 +624,38 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
     3. ปรับ `src/utils/documentLogger.ts` ให้รองรับการซิงค์ประวัติขึ้น Cloud อัตโนมัติใน Background พร้อม Offline Fallback บน `localStorage`
     4. เพิ่มฟังก์ชัน `fetchDocumentLogsFromCloud()` ดึงประวัติเอกสารจากคลาวด์มาซิงค์ในหน้า CRM (`CustomerView.tsx`) และหน้าการเงิน (`BillsManagementView.tsx`)
     5. สร้าง Security Definer Stored Procedure `get_sales_leaderboard(p_period, p_target_date)` บน PostgreSQL (`supabase/migrations/20261028170000_get_sales_leaderboard_rpc.sql`) เพื่อประมวลผลยอดขาย/ส่วนลด/อันดับที่ฝั่งฐานข้อมูล รองรับการเติบโตของข้อมูลขนาดใหญ่
+
+---
+
+## 🚀 หมวดที่ 17: การปรับปรุงประสิทธิภาพฐานข้อมูลและการแบ่งพาร์ติชันตามกฎหมายบัญชีลาว (Database Performance & Cold Storage Partitioning - 2026-10-29)
+
+> **วัตถุประสงค์**: เพิ่มความเร็วในการประมวลผลของฐานข้อมูล ป้องกันบราวเซอร์ค้างจากข้อมูลขนาดใหญ่ และวางระบบแบ่งพาร์ติชันจัดเก็บประวัติบิลย้อนหลัง 10 ปี (Option B) ตามกฎหมายว่าด้วยการบัญชี สปป.ลาว (ກົດໝາຍວ່າດ້ວຍການບັນຊີ)
+
+- [x] **86. Safe Query Ceilings & Bundle Optimization (P0)**
+  - **ไฟล์เป้าหมาย**: `src/backend/data.ts`, `vite.config.ts`, `src/components/views/CustomerView.tsx`
+  - **การดำเนินการ**:
+    1. กำหนด `MAX_QUERY_LIMIT = 1000` Ceiling ใน `fetchBillsByDateRange` และ `fetchLeadsByDateRange` ป้องกัน Memory รั่ว/บราวเซอร์ค้างเมื่อดึงช่วงเวลาที่กว้างเกินไป
+    2. ปรับการตั้งค่า `modulePreload` ใน `vite.config.ts` แยก chunk ขนาดใหญ่ (`vendor-pdf` 809 KB) ไม่ให้ดาวน์โหลดตอนเปิดเว็บครั้งแรก ช่วยประหยัดแบนด์วิธเริ่มต้น 50%
+    3. ปรับ Loop จับคู่ลูกค้า-ประวัติบริการ ใน `CustomerView.tsx` จาก $O(N^2)$ เป็น Map Lookup $O(1)$ เร็วขึ้นอย่างมีนัยสำคัญ
+
+- [x] **87. Database Performance Indexes & Concurrency Guards (P1)**
+  - **ไฟล์เป้าหมาย**: `supabase/migrations/20261029093000_atomic_bill_number_generator.sql`, `supabase/migrations/20261029103000_unique_bill_number.sql`, `supabase/migrations/20261029113000_optimize_database_performance.sql`
+  - **การดำเนินการ**:
+    1. สร้าง Sequence `bill_number_seq` และ RPC `generate_next_bill_number` ป้องกัน Race Condition เลขบิลชนกันเมื่อออกบิลพร้อมกัน
+    2. เพิ่ม Partial Unique Index บน `public.bills(bill_number)` ป้องกันการแทรกบิลซ้ำซ้อน
+    3. สร้าง Partial Index `idx_vehicles_available_stock` บน `vehicles(model_id, created_at DESC) WHERE status != 'sold'` ดึงเฉพาะรถในสต็อกโชว์รูม
+    4. เปิดใช้งานส่วนขยาย `pg_trgm` และสร้าง GIN Indexes บน `customers(name)`, `customers(phone)` และ `bills(customer_name)` ค้นหาไวแม้ข้อมูลโตนับแสนแถว
+    5. สร้าง Composite Index `idx_bills_status_date` บน `bills(status, bill_date DESC)` คัดกรองบิลที่ยกเลิกออกจากบิลปกติ
+
+- [x] **88. ระบบจัดเก็บข้อมูลบิลแยกปีและการเก็บรักษาเอกสาร 10 ปีตามกฎหมายบัญชีลาว (Option B: Yearly Partitioning & Cold Storage Archive - P2)**
+  - **ไฟล์เป้าหมาย**: `supabase/migrations/20261029120000_bills_yearly_archive_partitioning.sql`, `src/backend/data.ts`
+  - **การดำเนินการ**:
+    1. **คุ้มครองประวัติสต๊อก**: ปลด Foreign Key `stock_movements_bill_id_fkey` แบบ `ON DELETE CASCADE` ออก เพื่อไม่ให้การย้ายบิลเก่าไปตารางประวัติลบข้อมูลสต๊อกย้อนหลัง
+    2. **สร้าง Partitioned Cold Storage Tables**: สร้างตารางแม่แบบแบ่งพาร์ติชัน `public.bills_archive` และ `public.bill_items_archive` แยกตามปีบัญชี (`fiscal_year`) พร้อมสร้างตารางจริงแยกปี (`bills_archive_2023`, `bills_archive_2024`, `bills_archive_2025`, `bills_archive_2026`, `bills_archive_2027`, `bills_archive_default`)
+    3. **อินเด็กซ์บนพาร์ติชันอัตโนมัติ**: สร้าง Indexes บนตาราง Archive ครอบคลุมทั้ง `bill_number`, `bill_date`, `status`, `customer_name`, `sales_rep`, `vehicle_vin`
+    4. **ความปลอดภัย RLS**: พนักงานทุกคนอ่านได้ (`public.is_active_staff()`) แต่ล็อกห้ามแก้ไขหรือลบผ่าน Client API โดยตรงเด็ดขาด
+    5. **10-Year Unified Audit View**: สร้าง View `public.v_bills_10_year_audit` และ `public.v_bill_items_10_year_audit` (พร้อม `security_invoker = true` และ Pre-aggregated `bill_items` JSONB) เชื่อมต่อข้อมูลระหว่างตารางบิลสดและบิลเก่า เพื่อให้สรรพากรหรือฝ่ายบัญชีสามารถตรวจสอบย้อนหลัง 10 ปีได้ในคำสั่งเดียว
+    6. **Atomic Archiving RPC**: สร้าง Stored Procedure `public.archive_fiscal_year_bills(p_year integer)` สำหรับให้ผู้ดูแลระบบ (Admin/Super Admin) ย้ายบิลและรายการในบิลที่ปิดรอบปีบัญชีแล้วเข้าตาราง Archive ได้ใน Transaction เดียวอย่างปลอดภัย พร้อม Safety Guard ห้าม Archive บิลของปีปัจจุบัน (2026) หรือปีอนาคต
+    7. **Data Layer Integration**: เพิ่มฟังก์ชัน `archiveFiscalYearBills(year)` และตัวเลือก `includeArchived?: boolean` ใน `fetchBillsByDateRange` ใน [data.ts](file:///C:/Users/HP/Projects/AvatrAutoService/src/backend/data.ts) เพื่อดึงข้อมูลบิลประวัติศาสตร์ย้อนหลังจาก Audit View ได้ทันที
+
 
