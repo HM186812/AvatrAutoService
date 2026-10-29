@@ -486,6 +486,7 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
 export async function fetchBillsByDateRange(params?: {
   dateFrom?: string;
   dateTo?: string;
+  includeArchived?: boolean;
 }): Promise<InvoiceBillRecord[]> {
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
@@ -496,11 +497,13 @@ export async function fetchBillsByDateRange(params?: {
   const MAX_QUERY_LIMIT = 1000; // Hard ceiling to guard browser memory from unbounded date ranges
   let offset = 0;
   const allRows: DbRow[] = [];
+  const targetTable = params?.includeArchived ? 'v_bills_10_year_audit' : 'bills';
+  const selectQuery = params?.includeArchived ? '*' : '*, bill_items(*)';
 
   while (allRows.length < MAX_QUERY_LIMIT) {
     let query = client
-      .from('bills')
-      .select('*, bill_items(*)')
+      .from(targetTable)
+      .select(selectQuery)
       .order('bill_date', { ascending: false })
       .range(offset, offset + pageSize - 1);
 
@@ -523,6 +526,19 @@ export async function fetchBillsByDateRange(params?: {
     const firstItem = Array.isArray(row.bill_items) ? row.bill_items[0] : undefined;
     return mapBill(row, firstItem);
   });
+}
+
+export async function archiveFiscalYearBills(year: number): Promise<{
+  success: boolean;
+  fiscal_year: number;
+  archived_bills_count: number;
+  archived_items_count: number;
+  archived_at: string;
+}> {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('archive_fiscal_year_bills', { p_year: year });
+  if (error) throw error;
+  return data;
 }
 
 export async function fetchLeadsByDateRange(params?: {
