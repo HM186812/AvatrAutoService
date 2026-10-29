@@ -1,20 +1,21 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { TEST_CREDENTIALS } from './helpers/auth';
 
-test('Live POS Real Sale Submission & Bill Verification for test01@gmail.com', async ({ page }) => {
+test('Live POS Real Sale Submission & Bill Verification for test staff', async ({ page }) => {
   const screenshotsDir = path.resolve(process.cwd(), 'docs/verification-screenshots/full-audit');
   test.setTimeout(90_000);
 
-  console.log('--- Step 1: Login with test01@gmail.com ---');
+  console.log(`--- Step 1: Login with ${TEST_CREDENTIALS.email} ---`);
   await page.goto('/');
-  await page.locator('input[type="text"]').first().fill('test01@gmail.com');
-  await page.locator('input[type="password"]').first().fill('123456');
+  await page.locator('input[type="text"]').first().fill(TEST_CREDENTIALS.email);
+  await page.locator('input[type="password"]').first().fill(TEST_CREDENTIALS.password);
   await page.locator('button[type="submit"]').first().click();
 
   const sidebar = page.locator('aside.app-sidebar');
   await expect(sidebar).toBeVisible({ timeout: 20_000 });
-  await expect(sidebar).toContainText('test01@gmail.com');
-  console.log('✅ Logged in successfully as test01@gmail.com');
+  await expect(sidebar).toContainText(TEST_CREDENTIALS.email);
+  console.log(`✅ Logged in successfully as ${TEST_CREDENTIALS.email}`);
 
   console.log('--- Step 2: Navigate to POS View ---');
   const posBtn = sidebar.locator('button').filter({ hasText: /POS|ຂາຍ|จุดขาย/i }).first();

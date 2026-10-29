@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceBillRecord, StockLogRecord, SystemUser } from '../../types';
 import { translations } from '../../data/translations';
 import { newRecordId } from '../../backend/ids';
+import { generateNextBillNumber } from '../../backend/data';
 import { 
   saveBillToSupabase, 
   saveVehicleModelToSupabase,
@@ -426,7 +427,7 @@ export default function StockInView({
     const finalPriceLAK = Math.round(finalPriceUSD * 22000);
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const importDateTime = importDate ? `${importDate} ${new Date().toTimeString().slice(0, 8)}` : now;
-    const grnNumber = `GRN-AVATR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const grnNumber = await generateNextBillNumber('GRN');
 
     const finalColor = color.trim() ? color.trim() : (lang === 'lo' ? 'ມາດຕະຖານ' : lang === 'th' ? 'มาตรฐาน' : 'Standard');
 

@@ -8,31 +8,33 @@ import dotenv from 'dotenv';
 
 const testEnvPath = path.resolve(process.cwd(), '.env.test');
 
-if (fs.existsSync(testEnvPath)) {
-  const envContent = fs.readFileSync(testEnvPath, 'utf8');
-  const parsed = dotenv.parse(envContent);
-  for (const [key, value] of Object.entries(parsed)) {
-    if (!process.env[key]) {
-      process.env[key] = value;
-    }
-  }
-} else if (process.env.ALLOW_PROD_TEST !== 'true') {
-  throw new Error('E2E Safety Guard: .env.test not found. Refusing to fallback to .env.local without ALLOW_PROD_TEST=true');
+if (!fs.existsSync(testEnvPath)) {
+  throw new Error('[E2E SAFETY HALT] .env.test is mandatory. Tests refuse to run without an isolated test environment configuration.');
+}
+
+const envContent = fs.readFileSync(testEnvPath, 'utf8');
+const parsed = dotenv.parse(envContent);
+for (const [key, value] of Object.entries(parsed)) {
+  process.env[key] = value; // Always enforce .env.test values over host env
 }
 
 function requiredTestEnv(name: string): string {
   const value = process.env[name];
 
-  if (!value) {
-    throw new Error(`Missing test environment variable: ${name}`);
+  if (!value || !value.trim()) {
+    throw new Error(`Missing required test environment variable in .env.test: ${name}`);
   }
 
-  return value;
+  return value.trim();
 }
 
 export function validateTestSupabaseOrigin(url: string) {
   const allowed = process.env.E2E_ALLOWED_SUPABASE_ORIGIN;
-  if (!allowed || !allowed.trim()) return;
+  if (!allowed || !allowed.trim()) {
+    throw new Error(
+      '[E2E SAFETY HALT] E2E_ALLOWED_SUPABASE_ORIGIN is mandatory in .env.test. Refusing to run tests without explicit allowed origin whitelist.'
+    );
+  }
   const targetOrigin = new URL(url).origin;
   const allowedOrigin = new URL(allowed).origin;
   if (targetOrigin !== allowedOrigin) {
@@ -84,6 +86,37 @@ export async function loginAsAdmin(page: Page) {
   await page.waitForLoadState('networkidle').catch(() => {});
 }
 
+export async function ensureDedicatedTestVehicle(vin: string) {
+  const supabase = getSupabaseClient();
+  const { data: auth } = await supabase.auth.signInWithPassword({
+    email: TEST_CREDENTIALS.email,
+    password: TEST_CREDENTIALS.password,
+  });
+  if (!auth?.session) throw new Error('Failed to authenticate as test admin to seed vehicle');
+
+  const defaultModels = [
+    { id: 'avatr-12', name: 'AVATR 12', category: 'Grand Coupé', price_starting_usd: 46800, price_starting_lak: 1029600000 },
+  ];
+  await supabase.from('vehicle_models').upsert(defaultModels, { onConflict: 'id' });
+
+  // Always create/reset the dedicated test vehicle with ready status
+  const { error } = await supabase.from('vehicles').upsert({
+    vin,
+    model_id: 'avatr-12',
+    engine_number: `ENG-${vin.slice(-8)}`,
+    plate_number: 'TEST-9999',
+    color: 'Obsidian Black',
+    price_usd: 46800,
+    price_lak: 1029600000,
+    status: 'ready',
+    pdi_status: 'passed',
+  }, { onConflict: 'vin' });
+
+  if (error) {
+    throw new Error(`Failed to seed test vehicle ${vin}: ${error.message}`);
+  }
+}
+
 export async function ensureSeedData() {
   try {
     const supabase = getSupabaseClient();
@@ -99,27 +132,12 @@ export async function ensureSeedData() {
       { id: 'avatr-07', name: 'AVATR 07', category: 'Urban Smart SUV', price_starting_usd: 36500, price_starting_lak: 803000000 },
     ];
     await supabase.from('vehicle_models').upsert(defaultModels, { onConflict: 'id' });
-
-    const { data: existingVehicles } = await supabase.from('vehicles').select('vin').eq('status', 'ready').limit(1);
-    if (!existingVehicles || existingVehicles.length === 0) {
-      await supabase.from('vehicles').upsert({
-        vin: 'LVV9C12E7RA000001',
-        model_id: 'avatr-12',
-        engine_number: 'ENG-SEED-001',
-        plate_number: 'ກມ-9999',
-        color: 'Obsidian Black',
-        price_usd: 46800,
-        price_lak: 1029600000,
-        status: 'ready',
-        pdi_status: 'passed',
-      }, { onConflict: 'vin' });
-    }
   } catch (err) {
     console.warn('ensureSeedData error:', err);
   }
 }
 
-export async function cleanupTestData(prefix: string) {
+export async function cleanupTestData(target: string | { buyerName?: string; testVin?: string }) {
   try {
     const supabase = getSupabaseClient();
     const { data: auth } = await supabase.auth.signInWithPassword({
@@ -129,15 +147,42 @@ export async function cleanupTestData(prefix: string) {
 
     if (!auth?.session) return;
 
-    // Delete test customers
-    await supabase.from('customers').delete().ilike('name', `%${prefix}%`);
+    if (typeof target === 'string') {
+      const prefix = target;
+      // Delete test customers
+      await supabase.from('customers').delete().ilike('name', `%${prefix}%`);
+      // Delete test bills
+      await supabase.from('bills').delete().ilike('bill_number', `%${prefix}%`);
+      // Delete test vehicles
+      await supabase.from('vehicles').delete().ilike('vin', `%${prefix}%`);
+    } else {
+      const { buyerName, testVin } = target;
 
-    // Delete test bills
-    await supabase.from('bills').delete().ilike('bill_number', `%${prefix}%`);
+      // 1. If buyerName specified, find bills and customers
+      if (buyerName) {
+        const { data: billsToClean } = await supabase
+          .from('bills')
+          .select('id')
+          .ilike('customer_name', `%${buyerName}%`);
 
-    // Delete test vehicles
-    await supabase.from('vehicles').delete().ilike('vin', `%${prefix}%`);
+        if (billsToClean && billsToClean.length > 0) {
+          const billIds = billsToClean.map((b: { id: string }) => b.id);
+          await supabase.from('bill_items').delete().in('bill_id', billIds);
+          await supabase.from('stock_movements').delete().in('bill_id', billIds);
+          await supabase.from('bills').delete().in('id', billIds);
+        }
+
+        await supabase.from('customers').delete().ilike('name', `%${buyerName}%`);
+      }
+
+      // 2. If testVin specified, clean vehicle movements and vehicle
+      if (testVin) {
+        await supabase.from('stock_movements').delete().eq('vehicle_vin', testVin);
+        await supabase.from('bill_items').delete().eq('vehicle_vin', testVin);
+        await supabase.from('vehicles').delete().eq('vin', testVin);
+      }
+    }
   } catch (err) {
-    console.warn(`Cleanup error for prefix ${prefix}:`, err);
+    console.warn('Cleanup error:', err);
   }
 }

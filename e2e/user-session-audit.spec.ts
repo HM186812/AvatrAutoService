@@ -1,16 +1,17 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { TEST_CREDENTIALS } from './helpers/auth';
 
-test('Verify Live Website Login with test01@gmail.com / 123456', async ({ page }) => {
+test('Verify Live Website Login with test admin credentials', async ({ page }) => {
   const screenshotsDir = path.resolve(process.cwd(), 'docs/verification-screenshots');
 
   console.log('--- Step 1: Navigate to Web Application ---');
   await page.goto('/');
   await expect(page.locator('input[type="text"]').first()).toBeVisible({ timeout: 10_000 });
 
-  console.log('--- Step 2: Input test01@gmail.com and password ---');
-  await page.locator('input[type="text"]').first().fill('test01@gmail.com');
-  await page.locator('input[type="password"]').first().fill('123456');
+  console.log(`--- Step 2: Input ${TEST_CREDENTIALS.email} and password ---`);
+  await page.locator('input[type="text"]').first().fill(TEST_CREDENTIALS.email);
+  await page.locator('input[type="password"]').first().fill(TEST_CREDENTIALS.password);
 
   const startTime = Date.now();
   await page.locator('button[type="submit"]').first().click();
@@ -22,8 +23,8 @@ test('Verify Live Website Login with test01@gmail.com / 123456', async ({ page }
   console.log(`✅ Login Success! Response time: ${loginDuration}ms`);
 
   // Verify email displayed in sidebar
-  await expect(sidebar).toContainText('test01@gmail.com');
-  console.log('✅ User email verified in sidebar: test01@gmail.com');
+  await expect(sidebar).toContainText(TEST_CREDENTIALS.email);
+  console.log(`✅ User email verified in sidebar: ${TEST_CREDENTIALS.email}`);
 
   await page.waitForTimeout(1000);
   await page.screenshot({ path: `${screenshotsDir}/01-dashboard-view.png`, fullPage: false });
@@ -64,5 +65,5 @@ test('Verify Live Website Login with test01@gmail.com / 123456', async ({ page }
     console.log('✅ CRM View loaded successfully');
   }
 
-  console.log('🎉 ALL LIVE SYSTEM CHECKS COMPLETED FOR test01@gmail.com!');
+  console.log(`🎉 ALL LIVE SYSTEM CHECKS COMPLETED FOR ${TEST_CREDENTIALS.email}!`);
 });

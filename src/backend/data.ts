@@ -621,8 +621,8 @@ export async function loadBackendData(
           cachedVehicleModels
             ? Promise.resolve({ data: cachedVehicleModels, error: null })
             : client.from('vehicle_models').select('id,name,subtitle,tagline,category,price_starting_usd,price_starting_lak,is_custom,colors,features,description,created_at').order('name'),
-          client.from('vehicles').select('*').order('created_at', { ascending: false }),
-          client.from('customers').select('*').order('created_at', { ascending: false }),
+          client.from('vehicles').select('*').order('created_at', { ascending: false }).range(0, 99),
+          client.from('customers').select('*').order('created_at', { ascending: false }).range(0, 99),
           cachedStaffRoles
             ? Promise.resolve({ data: cachedStaffRoles, error: null })
             : client.from('staff_roles').select('role_code,permissions'),
@@ -666,12 +666,12 @@ export async function loadBackendData(
         try { listener(tier1Payload); } catch (_) {}
       }
 
-      // Tier 2: Transactional logs, appointments, test drives, and bills
+      // Tier 2: Transactional logs, appointments, test drives, and bills (Paginated to 100 most recent records)
       const [billsResult, movementsResult, servicesResult, testDrivesResult] = await Promise.all([
-        client.from('bills').select('*, bill_items(*)').order('bill_date', { ascending: false }),
-        client.from('stock_movements').select('*').order('created_at', { ascending: false }),
-        client.from('service_appointments').select('*').order('scheduled_date', { ascending: true }),
-        client.from('test_drives').select('*').order('drive_date', { ascending: true }),
+        client.from('bills').select('*, bill_items(*)').order('bill_date', { ascending: false }).range(0, 99),
+        client.from('stock_movements').select('*').order('created_at', { ascending: false }).range(0, 99),
+        client.from('service_appointments').select('*').order('scheduled_date', { ascending: true }).range(0, 99),
+        client.from('test_drives').select('*').order('drive_date', { ascending: true }).range(0, 99),
       ]);
 
       if (billsResult.error) throw billsResult.error;
@@ -1862,5 +1862,25 @@ export async function handoverStaffPendingLeads(
   } catch (err) {
     console.error('Supabase handoverStaffPendingLeads exception:', err);
     throw err;
+  }
+}
+
+export async function generateNextBillNumber(prefix: string = 'INV'): Promise<string> {
+  const currentYear = new Date().getFullYear();
+  const fallback = `${prefix}-${currentYear}-${Date.now().toString().slice(-5)}`;
+  if (!isSupabaseConfigured) {
+    return fallback;
+  }
+  try {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('generate_next_bill_number', { p_prefix: prefix });
+    if (error || !data) {
+      console.warn('generate_next_bill_number RPC notice:', error?.message);
+      return fallback;
+    }
+    return data;
+  } catch (err) {
+    console.warn('generate_next_bill_number RPC error:', err);
+    return fallback;
   }
 }

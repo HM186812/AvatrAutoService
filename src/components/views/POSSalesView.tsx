@@ -8,7 +8,7 @@ import {
   saveDealershipConfigToSupabase
 } from '../../supabase';
 import { newRecordId } from '../../backend/ids';
-import { saveLead, uploadPaymentSlip } from '../../backend/data';
+import { saveLead, uploadPaymentSlip, generateNextBillNumber } from '../../backend/data';
 import { generateInstallmentSchedule } from '../../utils/installment';
 import AvatrLogo from '../layout/AvatrLogo';
 import { ConfirmDeleteModal } from '../modals';
@@ -604,7 +604,7 @@ export default function POSSalesView({
 
     const currentQty = selectedVehicle.stockQuantity;
     const remainingQty = Math.max(0, currentQty - 1);
-    const invoiceNum = `INV-AVATR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const invoiceNum = await generateNextBillNumber('INV');
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const saleDateTime = saleDate ? `${saleDate} ${new Date().toTimeString().slice(0, 5)}` : now;
 

@@ -1,4 +1,4 @@
-﻿# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 85 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
+# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 85 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
 > **วันที่อัปเดตล่าสุด**: 2026-10-29 01:06 (+07:00)
 > **สถานะ**: ระบบ Phase 1 และ Phase 2 ส่วนจัดอันดับ Top Sales (ข้อ 77-78), ระบบโอนเคสพนักงานลาออก (ข้อ 75) และระบบ Cloud Document Audit Log (ข้อ 85) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC & RLS Policies เรียบร้อย, ข้อ 81 มาร์กข้าม (เป็น Dummy Data), งาน Phase 2 ที่เหลือ (ข้อ 76) พักไว้ตามคำสั่งเพื่อรักษาขอบเขตงาน
 
@@ -390,7 +390,7 @@ VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmF
 VITE_SUPABASE_URL="https://ivybsqtzrfwdamibbumc.supabase.co"
 VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2eWJzcXR6cmZ3ZGFtaWJidW1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4MTU5NTAsImV4cCI6MjEwODM5MTk1MH0.iz7kRSsD4DQ4_P0cG2QYM8bjyOhGfSRllE3QyntOnn0"
 E2E_ADMIN_EMAIL="test01@gmail.com"
-E2E_ADMIN_PASSWORD="123456"
+E2E_ADMIN_PASSWORD="<SET_IN_TEST_ENV>"
 E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
 ```
 
@@ -399,7 +399,7 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
 - [ ] **Production Build**: รัน `npm run build` (Vite Build ต้องผ่านเรียบร้อย)
 - [ ] **E2E Test Suite**: รัน `npx playwright test e2e/auth.spec.ts` (ทดสอบเชื่อมต่อ Database Singapore)
 - [ ] **Development Server**: รัน `npm run dev` แล้วเข้าเว็บที่ `http://localhost:3000`
-- [ ] **เข้าสู่ระบบจริง**: ทดสอบล็อกอินด้วย `test01@gmail.com` / `123456` (เวลาโหลดต้องไม่เกิน 1.5 วินาที)
+- [ ] **เข้าสู่ระบบจริง**: ทดสอบล็อกอินด้วยบัญชีทดสอบที่กำหนดใน `.env.test` (เวลาโหลดต้องไม่เกิน 1.5 วินาที)
 
 ### 4. การตั้งค่าบน Cloudflare Pages (Production Deploy Checklist)
 เมื่อพร้อมนำหน้าเว็บ Production ขึ้น Cloudflare Pages ให้เข้าไปที่ Dashboard:

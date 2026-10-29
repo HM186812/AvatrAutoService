@@ -3,39 +3,41 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
-// Verify .env.test to prevent accidental test mutation on Production DB
+// Fail-closed E2E environment guard: .env.test is mandatory
 const envTestPath = path.resolve(process.cwd(), '.env.test');
-
-if (fs.existsSync(envTestPath)) {
-  const envContent = fs.readFileSync(envTestPath, 'utf8');
-  const parsed = dotenv.parse(envContent);
-  for (const [key, value] of Object.entries(parsed)) {
-    if (!process.env[key]) {
-      process.env[key] = value;
-    }
-  }
-} else if (process.env.ALLOW_PROD_TEST !== 'true') {
-  console.warn(
-    '\n⚠️  [PLAYWRIGHT E2E SAFETY GUARD] Missing .env.test file!\n' +
-    'To avoid mutating the Production database, Playwright requires a dedicated test environment.\n' +
-    'Please copy .env.test.example to .env.test and set your test database credentials:\n' +
-    '  cp .env.test.example .env.test\n' +
-    'Or run with ALLOW_PROD_TEST=true if you explicitly intend to test against the current environment.\n'
-  );
-  throw new Error('E2E Test Aborted: .env.test not found. Run with .env.test or ALLOW_PROD_TEST=true');
+if (!fs.existsSync(envTestPath)) {
+  throw new Error('[E2E SAFETY HALT] Missing .env.test! E2E tests strictly require a dedicated test configuration.');
 }
 
-// Origin guard to prevent executing tests against unintended databases
-const testSupabaseUrl = process.env.VITE_SUPABASE_URL;
-const allowedOrigin = process.env.E2E_ALLOWED_SUPABASE_ORIGIN;
-if (testSupabaseUrl && allowedOrigin && allowedOrigin.trim()) {
-  const targetOrigin = new URL(testSupabaseUrl).origin;
-  const expectedOrigin = new URL(allowedOrigin).origin;
-  if (targetOrigin !== expectedOrigin) {
-    throw new Error(
-      `[E2E SAFETY HALT] Target Supabase URL origin (${targetOrigin}) does not match E2E_ALLOWED_SUPABASE_ORIGIN (${expectedOrigin})`
-    );
+const envContent = fs.readFileSync(envTestPath, 'utf8');
+const parsed = dotenv.parse(envContent);
+
+const REQUIRED_E2E_KEYS = [
+  'VITE_SUPABASE_URL',
+  'VITE_SUPABASE_ANON_KEY',
+  'E2E_ADMIN_EMAIL',
+  'E2E_ADMIN_PASSWORD',
+  'E2E_ALLOWED_SUPABASE_ORIGIN',
+];
+
+for (const key of REQUIRED_E2E_KEYS) {
+  const val = parsed[key]?.trim();
+  if (!val) {
+    throw new Error(`[E2E SAFETY HALT] Missing mandatory key "${key}" in .env.test`);
   }
+  process.env[key] = val; // Enforce test env values
+}
+
+// Origin guard: Target Supabase origin must strictly match allowed whitelist
+const testSupabaseUrl = process.env.VITE_SUPABASE_URL!;
+const allowedOrigin = process.env.E2E_ALLOWED_SUPABASE_ORIGIN!;
+const targetOrigin = new URL(testSupabaseUrl).origin;
+const expectedOrigin = new URL(allowedOrigin).origin;
+
+if (targetOrigin !== expectedOrigin) {
+  throw new Error(
+    `[E2E SAFETY HALT] Target Supabase URL origin (${targetOrigin}) does not match E2E_ALLOWED_SUPABASE_ORIGIN (${expectedOrigin})`
+  );
 }
 
 // Check if existing cached Chromium or default browser is available
@@ -72,7 +74,7 @@ export default defineConfig({
   webServer: {
     command: 'node ./node_modules/vite/bin/vite.js --port=3000 --host=0.0.0.0 --mode test',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 });

@@ -1,20 +1,21 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { TEST_CREDENTIALS } from './helpers/auth';
 
 test('Full Comprehensive System Test - Every View and Action', async ({ page }) => {
   const screenshotsDir = path.resolve(process.cwd(), 'docs/verification-screenshots/full-audit');
 
   console.log('=== [1/11] AUTHENTICATION & LOGIN ===');
   await page.goto('/');
-  await page.locator('input[type="text"]').first().fill('test01@gmail.com');
-  await page.locator('input[type="password"]').first().fill('123456');
+  await page.locator('input[type="text"]').first().fill(TEST_CREDENTIALS.email);
+  await page.locator('input[type="password"]').first().fill(TEST_CREDENTIALS.password);
   const t0 = Date.now();
   await page.locator('button[type="submit"]').first().click();
 
   const sidebar = page.locator('aside.app-sidebar');
   await expect(sidebar).toBeVisible({ timeout: 15_000 });
   console.log(`✓ Login success in ${Date.now() - t0}ms`);
-  await expect(sidebar).toContainText('test01@gmail.com');
+  await expect(sidebar).toContainText(TEST_CREDENTIALS.email);
 
   console.log('=== [2/11] DASHBOARD VIEW ===');
   await page.waitForTimeout(1000);
