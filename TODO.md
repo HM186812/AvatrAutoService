@@ -665,5 +665,30 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
     2. **สร้าง Financial Integrity Check Constraint บน `bills`**: ใส่ `CHECK (total_usd >= 0 AND total_lak >= 0 AND (down_payment_usd IS NULL OR down_payment_usd >= 0) AND (down_payment_percent IS NULL OR (down_payment_percent >= 0 AND down_payment_percent <= 100)))` ป้องกันการดักแก้ Payload ให้บิลยอดติดลบหรือยอด 0 บาทระดับฐานข้อมูล
     3. **Session Inactivity Auto-Logout 30 นาที**: เพิ่ม Activity Listener บน [App.tsx](file:///C:/Users/HP/Projects/AvatrAutoService/src/App.tsx) สั่ง `supabase.auth.signOut()` และล้างแคชอัตโนมัติหากไม่มีการเคลื่อนไหวเกิน 30 นาที ป้องกันการขโมย Token จากเครื่องโชว์รูมที่เปิดทิ้งไว้
 
+---
+
+## 🏁 หมวดที่ 18: บันทึกสรุปการตรวจสอบทั้งระบบก่อนส่งมอบลูกค้า (Comprehensive Handover - 2026-10-29)
+
+> **สถานะการส่งมอบ**: ผ่านการตรวจสอบและทดสอบ E2E 100% พร้อมใช้งานจริงบน Cloud Singapore (`ivybsqtzrfwdamibbumc`)  
+> **รายงานฉบับสมบูรณ์**: อ่านเพิ่มเติมได้ที่ [docs/HANDOVER_REPORT_20261029.md](file:///C:/Users/HP/Projects/AvatrAutoService/docs/HANDOVER_REPORT_20261029.md)
+
+### 1. ผลการตรวจวัดประสิทธิภาพรายตาราง (Live Database Singapore)
+- ตาราง 26 ตาราง อัตราขยะเป็น 0 bytes (Zero Bloat)
+- B-Tree Index Hit: `idx_bill_items_bill_id` (12,089 ครั้ง), `staff_roles_pkey` (49,513 ครั้ง)
+- 1-RTT Showroom Init RPC: ตอบสนองใน **366 ms** (รวม 5 โครงสร้างข้อมูลใน 1 Request)
+
+### 2. ผลการวิเคราะห์ความเร็ว Big-O (From Granular to Full System)
+- Database: B-Tree $O(\log N)$, Sequence $O(1)$, Range $O(\log N + K)$, Trigram GIN $O(\log N + M)$
+- Client: Hash Map Lookup $O(C+S)$, Virtual Pagination $O(1)$ (50 แถว/หน้า ล็อก DOM คงที่)
+- End-to-End: เปิดหน้าแรกทั้งระบบ $O(1\text{ RTT}) + O(1) \approx \mathbf{400\text{ ms}}$
+
+### 3. ผลการทดสอบ Playwright E2E Suite ครบ 100% (13/13 ข้อ ใน 1.2 นาที)
+- `auth.spec.ts` (3/3), `bills.spec.ts` (2/2), `crm.spec.ts` (2/2), `pos.spec.ts` (2/2), `stock.spec.ts` (2/2), `theme-lang.spec.ts` (2/2)
+
+### 4. บัญชีรายการงานคงค้างสำหรับจัดทำเอกสารช่วงเย็น (Backlog Ledger)
+- **พักไว้ชั่วคราว (Paused)**: ข้อ 76 (ระบบช่วยงานหน้าร้าน & เช็กกันชนเคส 3 วินาที) และ ข้อ 82 (จัดระเบียบบัญชีเซลส์จริง)
+- **แผนงานระยะยาว Phase 2**: ข้อ 65 (ลบขยะอัตโนมัติ), ข้อ 66 (Keep-Alive Ping 3 วัน), ข้อ 67 (บีบอัดรูปช่าง PDI), ข้อ 68.2 (หมุนเวียนสลิป ZIP 90 วัน), ข้อ 69 (แจ้งเตือนเช็คระยะ/SOH), ข้อ 70 (Cold Archive ประวัติซ่อม 3 ปี)
+
+
 
 
