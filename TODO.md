@@ -1,6 +1,6 @@
-# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 88 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
-> **วันที่อัปเดตล่าสุด**: 2026-10-29 11:40 (+07:00)
-> **สถานะ**: ระบบ Phase 1 และ Phase 2, การปรับปรุงประสิทธิภาพฐานข้อมูล P0-P1, และระบบแบ่งพาร์ติชันจัดเก็บประวัติบิลย้อนหลัง 10 ปีตามกฎหมายบัญชี สปป.ลาว (ข้อ 86-88) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC, RLS Policies และรัน Migration ขึ้น Production เรียบร้อย, ข้อ 81 มาร์กข้าม (เป็น Dummy Data), งาน Phase 2 ที่เหลือ (ข้อ 76, 82) พักไว้ตามคำสั่งเพื่อรักษาขอบเขตงาน
+# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 89 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
+> **วันที่อัปเดตล่าสุด**: 2026-10-29 14:25 (+07:00)
+> **สถานะ**: ระบบ Phase 1 และ Phase 2, การปรับปรุงประสิทธิภาพฐานข้อมูล P0-P1, ระบบแบ่งพาร์ติชัน 10 ปี (ข้อ 86-88), และระบบปิดช่องโหว่ความปลอดภัยระดับลึก (RLS Partition Child Guard + Positive Amount Constraint + Session Inactivity Auto-Logout - ข้อ 89) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC, RLS Policies และรัน Migration ขึ้น Production เรียบร้อย, ข้อ 81 มาร์กข้าม (เป็น Dummy Data), งาน Phase 2 ที่เหลือ (ข้อ 76, 82) พักไว้ตามคำสั่งเพื่อรักษาขอบเขตงาน
 
 ---
 
@@ -657,5 +657,13 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
     5. **10-Year Unified Audit View**: สร้าง View `public.v_bills_10_year_audit` และ `public.v_bill_items_10_year_audit` (พร้อม `security_invoker = true` และ Pre-aggregated `bill_items` JSONB) เชื่อมต่อข้อมูลระหว่างตารางบิลสดและบิลเก่า เพื่อให้สรรพากรหรือฝ่ายบัญชีสามารถตรวจสอบย้อนหลัง 10 ปีได้ในคำสั่งเดียว
     6. **Atomic Archiving RPC**: สร้าง Stored Procedure `public.archive_fiscal_year_bills(p_year integer)` สำหรับให้ผู้ดูแลระบบ (Admin/Super Admin) ย้ายบิลและรายการในบิลที่ปิดรอบปีบัญชีแล้วเข้าตาราง Archive ได้ใน Transaction เดียวอย่างปลอดภัย พร้อม Safety Guard ห้าม Archive บิลของปีปัจจุบัน (2026) หรือปีอนาคต
     7. **Data Layer Integration**: เพิ่มฟังก์ชัน `archiveFiscalYearBills(year)` และตัวเลือก `includeArchived?: boolean` ใน `fetchBillsByDateRange` ใน [data.ts](file:///C:/Users/HP/Projects/AvatrAutoService/src/backend/data.ts) เพื่อดึงข้อมูลบิลประวัติศาสตร์ย้อนหลังจาก Audit View ได้ทันที
+
+- [x] **89. ปิดช่องโหว่ความปลอดภัยระดับลึก (RLS Partition Child Guard, Financial Check Constraint & 30-Min Idle Auto-Logout)**
+  - **ไฟล์เป้าหมาย**: `supabase/migrations/20261029141000_harden_archive_partitions_rls_and_financial_constraints.sql`, `src/App.tsx`
+  - **การดำเนินการ**:
+    1. **เปิด RLS และนโยบายความปลอดภัยบนตารางลูก Partition ทั้ง 12 ตาราง**: บังคับ `ENABLE ROW LEVEL SECURITY` และสร้างนโยบาย SELECT เฉพาะ `public.is_active_staff()` บน `bills_archive_2023..2027, default` และ `bill_items_archive_2023..2027, default` ป้องกันการบายพาสตรง
+    2. **สร้าง Financial Integrity Check Constraint บน `bills`**: ใส่ `CHECK (total_usd >= 0 AND total_lak >= 0 AND (down_payment_usd IS NULL OR down_payment_usd >= 0) AND (down_payment_percent IS NULL OR (down_payment_percent >= 0 AND down_payment_percent <= 100)))` ป้องกันการดักแก้ Payload ให้บิลยอดติดลบหรือยอด 0 บาทระดับฐานข้อมูล
+    3. **Session Inactivity Auto-Logout 30 นาที**: เพิ่ม Activity Listener บน [App.tsx](file:///C:/Users/HP/Projects/AvatrAutoService/src/App.tsx) สั่ง `supabase.auth.signOut()` และล้างแคชอัตโนมัติหากไม่มีการเคลื่อนไหวเกิน 30 นาที ป้องกันการขโมย Token จากเครื่องโชว์รูมที่เปิดทิ้งไว้
+
 
 

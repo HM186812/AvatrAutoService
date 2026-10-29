@@ -415,7 +415,7 @@ export default function App() {
   }, [currentUser.role, currentMenu, isAdmin]);
 
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     setIsLoggedIn(false);
     setCurrentUser(FALLBACK_EMPTY_USER);
     try {
@@ -428,7 +428,32 @@ export default function App() {
       triggerToast(error instanceof Error ? error.message : 'Sign-out failed.');
     }
     triggerToast('ທ່ານໄດ້ອອກຈາກລະບົບຮຽບຮ້ອຍແລ້ວ');
-  };
+  }, []);
+
+  // 30-minute idle session auto-logout guard for showroom workstation security
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        void handleLogout();
+        triggerToast('ເຊສຊັນໝົດອາຍຸເນື່ອງຈາກບໍ່ມີການເຄື່ອນໄຫວເກີນ 30 ນາທີ');
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach(evt => window.addEventListener(evt, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach(evt => window.removeEventListener(evt, resetTimer));
+    };
+  }, [isLoggedIn, handleLogout]);
 
   // Delete Bill Handler (Admin only - synced to Supabase)
   const handleDeleteBill = async (billId: string) => {
