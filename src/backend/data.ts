@@ -1853,13 +1853,14 @@ export async function handoverStaffPendingLeads(
         .not('status', 'in', '("delivered","lost")');
     }
 
-    const { error, count } = await query;
+    const { data, error } = await query.select('id');
     if (error) {
-      console.warn('Supabase handoverStaffPendingLeads notice:', error.message);
+      console.error('Supabase handoverStaffPendingLeads error:', error.message);
+      throw error;
     }
-    return count ?? offlineCount;
+    return data?.length ?? offlineCount;
   } catch (err) {
-    console.warn('Supabase handoverStaffPendingLeads error:', err);
-    return offlineCount;
+    console.error('Supabase handoverStaffPendingLeads exception:', err);
+    throw err;
   }
 }

@@ -1531,6 +1531,7 @@ export default function BillsManagementView({
             onDeleteLog={handleDeleteIssuedDocLog}
             onReopenDoc={handleReopenIssuedDoc}
             lang={lang}
+            canDelete={currentUser?.role === 'super_admin' || currentUser?.role === 'admin'}
           />
         ) : filterType === 'installment' && installmentSubTab === 'contracts' ? (
           <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-sm">

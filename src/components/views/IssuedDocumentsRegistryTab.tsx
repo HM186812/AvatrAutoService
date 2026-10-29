@@ -27,6 +27,7 @@ interface IssuedDocumentsRegistryTabProps {
   onDeleteLog: (id: string) => void;
   onReopenDoc: (log: IssuedDocumentRecord) => void;
   lang: Language;
+  canDelete?: boolean;
 }
 
 export default function IssuedDocumentsRegistryTab({
@@ -34,6 +35,7 @@ export default function IssuedDocumentsRegistryTab({
   onDeleteLog,
   onReopenDoc,
   lang,
+  canDelete = false,
 }: IssuedDocumentsRegistryTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDocType, setSelectedDocType] = useState<string>('all');
@@ -421,18 +423,20 @@ export default function IssuedDocumentsRegistryTab({
                             <span>ເບິ່ງ/ພິມຄືນ</span>
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(`ຕ້ອງການລຶບປະຫວັດເອກະສານ "${log.docTitle} (${log.docNumber})" ນີ້ແທ້ບໍ?`)) {
-                                onDeleteLog(log.id);
-                              }
-                            }}
-                            className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer"
-                            title="ລຶບລາຍການບັນທຶກນີ້"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`ຕ້ອງການລຶບປະຫວັດເອກະສານ "${log.docTitle} (${log.docNumber})" ນີ້ແທ້ບໍ?`)) {
+                                  onDeleteLog(log.id);
+                                }
+                              }}
+                              className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer"
+                              title="ລຶບລາຍການບັນທຶກນີ້"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
