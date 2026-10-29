@@ -492,11 +492,12 @@ export async function fetchBillsByDateRange(params?: {
     return getOfflineBackendData().bills;
   }
   const client = requireSupabase();
-  const pageSize = 1000;
+  const pageSize = 500;
+  const MAX_QUERY_LIMIT = 1000; // Hard ceiling to guard browser memory from unbounded date ranges
   let offset = 0;
   const allRows: DbRow[] = [];
 
-  while (true) {
+  while (allRows.length < MAX_QUERY_LIMIT) {
     let query = client
       .from('bills')
       .select('*, bill_items(*)')
@@ -514,7 +515,7 @@ export async function fetchBillsByDateRange(params?: {
     if (error) throw error;
     const batch = data || [];
     allRows.push(...batch);
-    if (batch.length < pageSize) break;
+    if (batch.length < pageSize || allRows.length >= MAX_QUERY_LIMIT) break;
     offset += pageSize;
   }
 
@@ -533,11 +534,12 @@ export async function fetchLeadsByDateRange(params?: {
     return getOfflineBackendData().leads;
   }
   const client = requireSupabase();
-  const pageSize = 1000;
+  const pageSize = 500;
+  const MAX_QUERY_LIMIT = 1000; // Hard ceiling to guard browser memory from unbounded date ranges
   let offset = 0;
   const allRows: DbRow[] = [];
 
-  while (true) {
+  while (allRows.length < MAX_QUERY_LIMIT) {
     let query = client
       .from('customers')
       .select('*')
@@ -555,7 +557,7 @@ export async function fetchLeadsByDateRange(params?: {
     if (error) throw error;
     const batch = data || [];
     allRows.push(...batch);
-    if (batch.length < pageSize) break;
+    if (batch.length < pageSize || allRows.length >= MAX_QUERY_LIMIT) break;
     offset += pageSize;
   }
 
