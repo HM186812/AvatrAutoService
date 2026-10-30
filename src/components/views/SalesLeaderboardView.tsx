@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { 
-  Trophy, 
-  Medal, 
-  TrendingUp, 
-  Car, 
-  Calendar, 
-  Users, 
-  ChevronRight, 
-  ArrowUpRight, 
-  DollarSign, 
-  ShieldCheck, 
+import {
+  Trophy,
+  Medal,
+  TrendingUp,
+  Car,
+  Calendar,
+  Users,
+  ChevronRight,
+  ArrowUpRight,
+  DollarSign,
+  ShieldCheck,
   Search,
   Sparkles,
   FileText,
@@ -132,19 +132,9 @@ export default function SalesLeaderboardView({
       {/* Top Banner & Timeframe Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 shadow-xs">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
-            <span className="text-[11px] font-mono tracking-widest uppercase text-amber-600 dark:text-amber-400 font-bold">
-              SALES PERFORMANCE RECOGNITION
-            </span>
-          </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
-            <Trophy className="w-7 h-7 text-amber-500" />
             <span>ຈັດອັນດັບພະນັກງານຂາຍ Top Sales</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-1 max-w-2xl">
-            ຕິດຕາມຜົນງານການຂາຍລົດ AVATR ຂອງທີມງານທີ່ປຶກສາການຂາຍ • ຈັດອັນດັບຕາມຈຳນວນຄັນ ແລະ ຍອດເງິນຂາຍຕົວຈິງ
-          </p>
         </div>
 
         {/* Controls: Period Switcher & CSV Export */}
@@ -154,11 +144,10 @@ export default function SalesLeaderboardView({
               <button
                 key={p}
                 onClick={() => handleSelectPeriod(p)}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  period === p
-                    ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs font-bold'
-                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${period === p
+                  ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs font-bold'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
               >
                 {p === 'day' ? 'ວັນນີ້' : p === 'week' ? 'ອາທິດນີ້' : p === 'month' ? 'ເດືອນນີ້' : 'ປີນີ້'}
               </button>
@@ -210,30 +199,26 @@ export default function SalesLeaderboardView({
             </span>
             <span className="text-xs font-mono font-bold text-emerald-600">USD</span>
           </div>
-          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 text-[11px] text-slate-500 dark:text-zinc-400 font-mono">
-            ≈ {((totalPeriodRevenueLAK) / 1000000).toFixed(0)}M LAK
-          </div>
         </div>
 
         {/* Metric 3: Top Sales Champion */}
-        <div className="bento-card bg-white dark:bg-zinc-950 border border-amber-500/30 rounded-3xl p-5 shadow-xs bg-gradient-to-br from-amber-500/5 to-transparent">
-          <div className="flex items-center justify-between text-amber-700 dark:text-amber-400 text-xs mb-3">
-            <span className="font-bold flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+        <div className="bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-5 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 text-xs mb-3">
+            <span className="font-medium flex items-center gap-1.5">
               <span>ແຊັມຍອດຂາຍອັນດັບ 1</span>
             </span>
-            <span className="p-2.5 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-300 rounded-2xl border border-amber-200 dark:border-amber-800">
+            <span className="p-2.5 bg-amber-50 dark:bg-zinc-900 text-amber-600 dark:text-white rounded-2xl">
               <Trophy className="w-4 h-4" />
             </span>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white truncate">
+          <div className="flex items-baseline gap-2 min-h-[2.25rem] sm:min-h-[2.5rem] items-center">
+            <span className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate" title={top1?.repName}>
               {top1 ? top1.repName : 'ຍັງບໍ່ມີ'}
             </span>
           </div>
-          <div className="mt-3 pt-3 border-t border-amber-200/60 dark:border-amber-900/40 text-[11px] font-mono text-amber-700 dark:text-amber-300 flex justify-between">
+          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 text-[11px] font-mono text-slate-500 dark:text-zinc-400 flex justify-between">
             <span>{top1 ? `${top1.totalUnits} ຄັນ` : '-'}</span>
-            <span className="font-bold">{top1 ? `$${top1.totalRevenueUSD.toLocaleString()}` : '-'}</span>
+            <span className="font-bold text-slate-900 dark:text-white">{top1 ? `$${top1.totalRevenueUSD.toLocaleString()}` : '-'}</span>
           </div>
         </div>
 
@@ -273,7 +258,7 @@ export default function SalesLeaderboardView({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end max-w-5xl mx-auto pt-4">
             {/* 2nd Place Podium */}
             {top2 ? (
-              <div 
+              <div
                 onClick={() => setSelectedRep(top2)}
                 className="order-2 md:order-1 relative rounded-2xl p-6 bg-gradient-to-b from-slate-100/90 via-slate-50 to-white dark:from-zinc-900 dark:via-zinc-925 dark:to-zinc-950 border-2 border-slate-300 dark:border-zinc-700 hover:border-slate-400 dark:hover:border-zinc-500 transition-all cursor-pointer group shadow-sm hover:shadow-md"
               >
@@ -324,7 +309,7 @@ export default function SalesLeaderboardView({
 
             {/* 1st Place Podium (Gold - Center) */}
             {top1 && (
-              <div 
+              <div
                 onClick={() => setSelectedRep(top1)}
                 className="order-1 md:order-2 relative rounded-3xl p-7 bg-gradient-to-b from-amber-500/15 via-amber-500/5 to-white dark:to-zinc-950 border-2 border-amber-500/70 hover:border-amber-500 dark:hover:border-amber-400 transition-all cursor-pointer group shadow-lg hover:shadow-xl scale-100 md:-translate-y-3"
               >
@@ -361,7 +346,6 @@ export default function SalesLeaderboardView({
                   <div className="text-right">
                     <span className="text-[10px] text-slate-500 dark:text-zinc-400 block uppercase font-bold">ຍອດເງິນຂາຍ</span>
                     <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white block">${top1.totalRevenueUSD.toLocaleString()}</span>
-                    <span className="text-[11px] text-slate-500 dark:text-zinc-400 block truncate">≈ {((top1.totalRevenueLAK) / 1000000).toFixed(0)}M LAK</span>
                   </div>
                 </div>
 
@@ -376,7 +360,7 @@ export default function SalesLeaderboardView({
 
             {/* 3rd Place Podium */}
             {top3 ? (
-              <div 
+              <div
                 onClick={() => setSelectedRep(top3)}
                 className="order-3 relative rounded-2xl p-6 bg-gradient-to-b from-amber-900/10 via-amber-950/5 to-white dark:from-zinc-900 dark:via-zinc-925 dark:to-zinc-950 border-2 border-amber-800/30 dark:border-amber-800/40 hover:border-amber-700/60 transition-all cursor-pointer group shadow-sm hover:shadow-md"
               >
@@ -477,7 +461,7 @@ export default function SalesLeaderboardView({
                   {filteredLeaderboard.map((r) => {
                     const rank = rankByRep.get(r.repName) || 1;
                     return (
-                      <tr 
+                      <tr
                         key={r.repName}
                         onClick={() => setSelectedRep(r)}
                         className="hover:bg-slate-100/70 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer group"
@@ -525,9 +509,6 @@ export default function SalesLeaderboardView({
                         <td className="py-3.5 px-4 font-mono">
                           <span className="font-black text-slate-900 dark:text-white block">
                             ${r.totalRevenueUSD.toLocaleString()} USD
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-zinc-400 block truncate">
-                            {(r.totalRevenueLAK).toLocaleString()} LAK
                           </span>
                         </td>
 
@@ -668,9 +649,6 @@ export default function SalesLeaderboardView({
                           <div className="text-right font-mono">
                             <span className="font-black text-sm text-slate-900 dark:text-white block">
                               ${item.amountUSD.toLocaleString()} USD
-                            </span>
-                            <span className="text-[10px] text-slate-500 dark:text-zinc-400 block">
-                              {item.amountLAK.toLocaleString()} LAK
                             </span>
                           </div>
                         </div>

@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { 
-  Trophy, 
-  Medal, 
-  TrendingUp, 
-  Car, 
-  Calendar, 
-  Users, 
-  ChevronRight, 
-  ArrowUpRight, 
-  DollarSign, 
-  ShieldCheck, 
+import {
+  Trophy,
+  Medal,
+  TrendingUp,
+  Car,
+  Calendar,
+  Users,
+  ChevronRight,
+  ArrowUpRight,
+  DollarSign,
+  ShieldCheck,
   Search,
   Sparkles
 } from 'lucide-react';
@@ -71,19 +71,10 @@ export default function TopSalesWidget({
       {/* Header with Title and Period Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-zinc-800">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
-            <span className="text-[11px] font-mono tracking-widest uppercase text-amber-600 dark:text-amber-400 font-bold">
-              TOP SALES RECOGNITION & RANKINGS
-            </span>
-          </div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
             <Trophy className="w-6 h-6 text-amber-500" />
             <span>ຈັດອັນດັບພະນັກງານຂາຍ Top Sales</span>
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-            ສະຖິຕິຍອດຂາຍລົດ ແລະ ຈຳນວນຄັນທີ່ປິດການຂາຍໄດ້ ປະຈຳ{periodLabels[period]}
-          </p>
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -93,11 +84,10 @@ export default function TopSalesWidget({
               <button
                 key={p}
                 onClick={() => handleSelectPeriod(p)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  period === p
-                    ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs font-bold'
-                    : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${period === p
+                  ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs font-bold'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
               >
                 {p === 'day' ? 'ວັນນີ້' : p === 'week' ? 'ອາທິດນີ້' : p === 'month' ? 'ເດືອນນີ້' : 'ປີນີ້'}
               </button>
@@ -129,7 +119,7 @@ export default function TopSalesWidget({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end pt-3">
             {/* 2ND PLACE (SILVER) */}
             {top2 ? (
-              <div 
+              <div
                 onClick={onNavigateLeaderboard}
                 className="order-2 md:order-1 relative rounded-2xl p-5 bg-gradient-to-b from-slate-100/90 to-white dark:from-zinc-900 dark:to-zinc-950 border border-slate-300 dark:border-zinc-700/80 hover:border-slate-400 dark:hover:border-zinc-500 transition-all cursor-pointer group shadow-xs hover:shadow-md"
               >
@@ -173,7 +163,7 @@ export default function TopSalesWidget({
 
             {/* 1ST PLACE (GOLD - CENTER, ELEVATED) */}
             {top1 && (
-              <div 
+              <div
                 onClick={onNavigateLeaderboard}
                 className="order-1 md:order-2 relative rounded-2xl p-6 bg-gradient-to-b from-amber-500/10 via-amber-500/5 to-white dark:to-zinc-950 border-2 border-amber-500/60 hover:border-amber-500 dark:hover:border-amber-400 transition-all cursor-pointer group shadow-md hover:shadow-lg scale-100 md:-translate-y-2"
               >
@@ -211,7 +201,6 @@ export default function TopSalesWidget({
                   <div className="text-right">
                     <span className="text-[10px] text-slate-500 dark:text-zinc-400 block uppercase font-bold">ຍອດເງິນຂາຍ</span>
                     <span className="text-sm font-black text-slate-900 dark:text-white block">${top1.totalRevenueUSD.toLocaleString()}</span>
-                    <span className="text-[10px] text-slate-500 dark:text-zinc-500 block truncate">≈ {((top1.totalRevenueLAK) / 1000000).toFixed(0)}M LAK</span>
                   </div>
                 </div>
               </div>
@@ -219,7 +208,7 @@ export default function TopSalesWidget({
 
             {/* 3RD PLACE (BRONZE) */}
             {top3 ? (
-              <div 
+              <div
                 onClick={onNavigateLeaderboard}
                 className="order-3 relative rounded-2xl p-5 bg-gradient-to-b from-amber-900/10 to-white dark:from-zinc-900 dark:to-zinc-950 border border-amber-700/30 dark:border-amber-800/40 hover:border-amber-700/60 transition-all cursor-pointer group shadow-xs hover:shadow-md"
               >

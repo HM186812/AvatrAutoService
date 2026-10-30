@@ -1787,6 +1787,11 @@ export async function deleteStaffProfile(id: string) {
 }
 
 export async function updateServiceAppointment(appointment: ServiceAppointment) {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    offlineSaveService(appointment);
+    return;
+  }
   const client = requireSupabase();
   const payload: Record<string, unknown> = {
     customer_name: appointment.customerName,

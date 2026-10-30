@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Lead, 
-  VehicleModel, 
-  InvoiceBillRecord, 
-  Language, 
-  SystemUser, 
-  ActiveMenu, 
+import {
+  Lead,
+  VehicleModel,
+  InvoiceBillRecord,
+  Language,
+  SystemUser,
+  ActiveMenu,
   InstallmentPaymentRecord,
   IssuedDocumentRecord
 } from '../../types';
@@ -16,12 +16,12 @@ import {
   getCustomerDocumentLogs,
   DOCUMENT_LOG_EVENT,
 } from '../../utils/documentLogger';
-import { 
-  Users, 
-  CheckCircle2, 
-  Clock, 
-  Search, 
-  Calendar, 
+import {
+  Users,
+  CheckCircle2,
+  Clock,
+  Search,
+  Calendar,
   FileText,
   CreditCard,
   Coins,
@@ -43,10 +43,10 @@ import {
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, openWhatsAppWithMessage } from '../../utils/whatsapp';
-import { 
-  DEFAULT_EXCHANGE_RATE_LAK, 
-  generateInstallmentSchedule, 
-  calculateInstallmentSummary 
+import {
+  DEFAULT_EXCHANGE_RATE_LAK,
+  generateInstallmentSchedule,
+  calculateInstallmentSummary
 } from '../../utils/installment';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 import CustomerDocumentsModal from '../modals/CustomerDocumentsModal';
@@ -124,10 +124,10 @@ export default function InstallmentDashboardView({
       // If customer payment is fully completed & moved, exclude unless viewing 'completed' status
       if (l.isPaymentCompleted && statusFilter !== 'completed') return false;
 
-      const isInstallment = l.paymentType === 'installment' || 
-        l.paymentType === 'finance' || 
-        Boolean(l.downPaymentPercent) || 
-        Boolean(l.financeCompany) || 
+      const isInstallment = l.paymentType === 'installment' ||
+        l.paymentType === 'finance' ||
+        Boolean(l.downPaymentPercent) ||
+        Boolean(l.financeCompany) ||
         Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
         l.installmentStatus === 'active_repaying' ||
         l.installmentStatus === 'completed' ||
@@ -138,14 +138,14 @@ export default function InstallmentDashboardView({
 
     const seenPhones = new Set(matchedLeads.map(l => (l.phone || '').replace(/\D/g, '')).filter(Boolean));
     const extraFromBills: Lead[] = [];
-    
+
     bills.filter(b => (b.paymentMethod === 'finance' || b.billType === 'installment' || Boolean(b.downPaymentPercent))).forEach(bill => {
       const cleanPhone = (bill.customerPhone || '').replace(/\D/g, '');
       if (cleanPhone && seenPhones.has(cleanPhone)) return;
       if (matchedLeads.some(l => l.id === bill.leadId)) return;
       if (leads.some(l => (l.id === bill.leadId || (cleanPhone && l.phone && l.phone.replace(/\D/g, '') === cleanPhone)) && l.isPaymentCompleted) && statusFilter !== 'completed') return;
       seenPhones.add(cleanPhone || bill.id);
-      
+
       extraFromBills.push({
         id: bill.leadId || `inst-bill-${bill.id}`,
         customerName: bill.customerName || 'ລູກຄ້າຜ່ອນ',
@@ -267,7 +267,7 @@ export default function InstallmentDashboardView({
   const handleUpdateCustomerRecords = async (customerId: string, updatedRecords: InstallmentPaymentRecord[]) => {
     const targetLead = leads.find(l => l.id === customerId);
     if (!targetLead) throw new Error('Customer record not found.');
-    
+
     const paidRecords = updatedRecords.filter(r => r.status === 'paid');
     const totalPaidLAK = paidRecords.reduce((sum, r) => sum + (r.paidAmountLAK || r.amountLAK), 0);
     const totalPaidUSD = paidRecords.reduce((sum, r) => sum + (r.paidAmountUSD || r.amountUSD), 0);
@@ -409,7 +409,7 @@ export default function InstallmentDashboardView({
 
   return (
     <div className="space-y-6 pb-12 font-sans">
-      
+
       {/* 1. Header with Title & Action Suite */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-zinc-800">
         <div>
@@ -424,9 +424,6 @@ export default function InstallmentDashboardView({
                   {filteredCustomers.length} ສັນຍາ
                 </span>
               </h2>
-              <p className="text-xs text-slate-600 dark:text-zinc-400 mt-0.5">
-                ສູນຈັດການສັນຍາຜ່ອນ, ບັນທຶກຮັບເງິນງວດ, ຕິດຕາມວັນຄົບກຳນົດ ແລະ ອອກໃບບິນງວດລົດ AVATR ຕາມເວລາຕົວຈິງ
-              </p>
             </div>
           </div>
         </div>
@@ -438,9 +435,8 @@ export default function InstallmentDashboardView({
             <button
               type="button"
               onClick={() => setViewMode('cards')}
-              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewMode === 'cards' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${viewMode === 'cards' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
               title="ສະແດງແບບ Cards"
             >
               <LayoutGrid className="w-4 h-4" />
@@ -449,9 +445,8 @@ export default function InstallmentDashboardView({
             <button
               type="button"
               onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewMode === 'table' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${viewMode === 'table' ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
               title="ສະແດງແບບ Table"
             >
               <List className="w-4 h-4" />
@@ -467,7 +462,7 @@ export default function InstallmentDashboardView({
             title="ເປີດໜ້າ POS ເພື່ອສ້າງສັນຍາຜ່ອນ & ວາງດາວລົດຄັນໃໝ່"
           >
             <Plus className="w-4 h-4" />
-            <span>+ ສັນຍາຜ່ອນໃໝ່ (POS)</span>
+            <span>ສັນຍາຜ່ອນໃໝ່ (POS)</span>
           </button>
         </div>
       </div>
@@ -485,9 +480,6 @@ export default function InstallmentDashboardView({
           <div className="space-y-0.5">
             <span className="text-2xl font-black font-mono text-slate-900 dark:text-white block">
               ${portfolioMetrics.totalPortfolioBalanceUSD.toLocaleString()} USD
-            </span>
-            <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono block">
-              ~ {portfolioMetrics.totalPortfolioBalanceLAK.toLocaleString()} LAK
             </span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800/80">
@@ -507,9 +499,6 @@ export default function InstallmentDashboardView({
             <span className="text-2xl font-black font-mono text-slate-900 dark:text-white block">
               {portfolioMetrics.activeContractsCount} <span className="text-sm font-normal text-slate-500 dark:text-zinc-400 font-sans">ສັນຍາ</span>
             </span>
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-sans block font-semibold">
-              ຜ່ອນຄົບ 100% ແລ້ວ: {portfolioMetrics.totalContracts - portfolioMetrics.activeContractsCount} ສັນຍາ
-            </span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800/80">
             ທັງໝົດໃນລະບົບ {portfolioMetrics.totalContracts} ສັນຍາ
@@ -528,9 +517,6 @@ export default function InstallmentDashboardView({
             <span className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400 block">
               ${portfolioMetrics.totalCollectedUSD.toLocaleString()} USD
             </span>
-            <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono block">
-              ~ {portfolioMetrics.totalCollectedLAK.toLocaleString()} LAK
-            </span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800/80">
             ລວມເງິນດາວ & ເງິນງວດທີ່ຮັບແລ້ວຕົວຈິງ
@@ -538,33 +524,20 @@ export default function InstallmentDashboardView({
         </div>
 
         {/* Card 4: Due & Overdue Alerts */}
-        <div className={`rounded-3xl border p-5 shadow-sm space-y-2 relative overflow-hidden ${
-          portfolioMetrics.dueOrOverdueCount > 0 
-            ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/60' 
-            : 'bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800'
-        }`}>
+        <div className="rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm space-y-2 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">ຮອດກຳນົດຊຳລະ / ຄ້າງ</span>
-            <div className={`p-2 rounded-xl border ${
-              portfolioMetrics.dueOrOverdueCount > 0 
-                ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-700/60 text-amber-600 dark:text-amber-400' 
-                : 'bg-slate-100 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400'
-            }`}>
+            <div className="p-2 rounded-xl bg-amber-50 dark:bg-zinc-900 border border-amber-200 dark:border-zinc-800 text-amber-600 dark:text-amber-400">
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <div className="space-y-0.5">
-            <span className={`text-2xl font-black font-mono block ${
-              portfolioMetrics.dueOrOverdueCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'
-            }`}>
+            <span className="text-2xl font-black font-mono text-slate-900 dark:text-white block">
               {portfolioMetrics.dueOrOverdueCount} <span className="text-sm font-normal text-slate-500 dark:text-zinc-400 font-sans">ລູກຄ້າ</span>
-            </span>
-            <span className="text-xs text-slate-500 dark:text-zinc-400 font-sans block">
-              {portfolioMetrics.dueOrOverdueCount > 0 ? 'ແນະນຳສົ່ງ WhatsApp ແຈ້ງເຕືອນ' : 'ບໍ່ມີຍອດຄ້າງຊຳລະ'}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800/80">
-            ກວດເຊັກຮອບຊຳລະພາຍໃນ 7 ວັນ
+            {portfolioMetrics.dueOrOverdueCount > 0 ? 'ແນະນຳສົ່ງ WhatsApp ແຈ້ງເຕືອນ' : 'ບໍ່ມີຍອດຄ້າງຊຳລະ'}
           </p>
         </div>
       </div>
@@ -628,7 +601,7 @@ export default function InstallmentDashboardView({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {filteredCustomers.map(({ lead, basePrice, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
             return (
-              <div 
+              <div
                 key={lead.id}
                 className="group theme-adaptive-dark-surface rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-4 hover:border-slate-300 dark:hover:border-zinc-700 transition-all flex flex-col justify-between"
               >
@@ -721,13 +694,12 @@ export default function InstallmentDashboardView({
                       <span className="text-[10px] text-zinc-400 font-sans">~{Math.round(summary.monthlyPaymentLAK / 1000000)}M ກີບ</span>
                     </div>
 
-                    <div className={`p-2.5 rounded-xl border ${
-                      isOverdue 
-                        ? 'bg-red-950/20 border-red-800/60 text-red-300' 
-                        : isDueSoon 
-                        ? 'bg-amber-950/20 border-amber-800/60 text-amber-300' 
+                    <div className={`p-2.5 rounded-xl border ${isOverdue
+                      ? 'bg-red-950/20 border-red-800/60 text-red-300'
+                      : isDueSoon
+                        ? 'bg-amber-950/20 border-amber-800/60 text-amber-300'
                         : 'bg-zinc-900/40 border-zinc-800/60'
-                    }`}>
+                      }`}>
                       <span className="text-[10px] text-zinc-500 font-sans block">ວັນຄົບກຳນົດ:</span>
                       <strong className="block mt-0.5">{nextUnpaid ? nextUnpaid.dueDate : 'ຄົບແລ້ວ'}</strong>
                       <span className="text-[10px] font-sans">
@@ -746,10 +718,9 @@ export default function InstallmentDashboardView({
                       <span className="font-mono font-bold text-amber-400">{summary.progressPercent}%</span>
                     </div>
                     <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          summary.isFullyPaid ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-amber-300'
-                        }`}
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${summary.isFullyPaid ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-amber-300'
+                          }`}
                         style={{ width: `${summary.progressPercent}%` }}
                       />
                     </div>
@@ -911,9 +882,8 @@ export default function InstallmentDashboardView({
 
                       {/* Due Date */}
                       <td className="py-3.5 px-4">
-                        <span className={`block font-bold ${
-                          isOverdue ? 'text-red-400' : isDueSoon ? 'text-amber-400' : 'text-zinc-300'
-                        }`}>
+                        <span className={`block font-bold ${isOverdue ? 'text-red-400' : isDueSoon ? 'text-amber-400' : 'text-zinc-300'
+                          }`}>
                           {nextUnpaid ? nextUnpaid.dueDate : 'ຄົບແລ້ວ'}
                         </span>
                         <span className="text-[10px] text-zinc-500 font-sans">
@@ -928,7 +898,7 @@ export default function InstallmentDashboardView({
                           <span className="text-amber-400 font-bold">{summary.progressPercent}%</span>
                         </div>
                         <div className="w-20 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className="h-full bg-amber-400 rounded-full"
                             style={{ width: `${summary.progressPercent}%` }}
                           />

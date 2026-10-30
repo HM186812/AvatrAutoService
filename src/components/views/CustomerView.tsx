@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { 
-  Lead, 
-  VehicleModel, 
-  Language, 
-  LeadStatus, 
-  LeadPriority, 
-  CustomerCategory, 
-  SystemUser, 
+import {
+  Lead,
+  VehicleModel,
+  Language,
+  LeadStatus,
+  LeadPriority,
+  CustomerCategory,
+  SystemUser,
   InstallmentPaymentRecord,
   InvoiceBillRecord,
   ServiceAppointment,
@@ -15,27 +15,27 @@ import {
 import { translations } from '../../data/translations';
 import { LAO_PROVINCES } from '../../data/laoProvinces';
 import { showToast } from '../common';
-import { 
-  Users, 
-  Search, 
-  Plus, 
-  Phone, 
-  MessageSquare, 
-  Car, 
-  Filter, 
-  Star, 
+import {
+  Users,
+  Search,
+  Plus,
+  Phone,
+  MessageSquare,
+  Car,
+  Filter,
+  Star,
   Store,
-  Globe, 
-  CalendarCheck, 
+  Globe,
+  CalendarCheck,
   Calendar,
-  FileText, 
-  UserPlus, 
-  CheckCircle2, 
-  Sparkles, 
-  Trash2, 
-  ChevronDown, 
-  ChevronUp, 
-  ShoppingBag, 
+  FileText,
+  UserPlus,
+  CheckCircle2,
+  Sparkles,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  ShoppingBag,
   CreditCard,
   Download,
   Printer,
@@ -60,10 +60,10 @@ import {
   AlertTriangle,
   History
 } from 'lucide-react';
-import { 
-  ConfirmDeleteModal, 
-  CustomerDocumentsModal, 
-  InstallmentLedgerModal, 
+import {
+  ConfirmDeleteModal,
+  CustomerDocumentsModal,
+  InstallmentLedgerModal,
   PaymentConfirmModal,
   ServiceModal,
   CustomerAfterSalesModal,
@@ -71,7 +71,7 @@ import {
 } from '../modals';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
-import { deleteLead, saveLead, updateLeadStatus, saveBillRecord, fetchLeadsByDateRange } from '../../backend/data';
+import { deleteLead, saveLead, updateLeadStatus, saveBillRecord, fetchLeadsByDateRange, updateServiceAppointment } from '../../backend/data';
 import { newRecordId } from '../../backend/ids';
 import InstallmentDashboardView from './InstallmentDashboardView';
 import { IssuedDocumentRecord } from '../../types';
@@ -90,7 +90,9 @@ interface CustomerViewProps {
   bills?: InvoiceBillRecord[];
   setBills?: React.Dispatch<React.SetStateAction<InvoiceBillRecord[]>>;
   services?: ServiceAppointment[];
+  setServices?: React.Dispatch<React.SetStateAction<ServiceAppointment[]>>;
   onAddService?: (service: Omit<ServiceAppointment, 'id'>) => Promise<void> | void;
+  onUpdateServiceStatus?: (id: string, status: ServiceAppointment['status']) => Promise<void> | void;
   initialClassificationTab?: 'new_leads' | 'existing_customers' | 'installment_customers';
 }
 
@@ -107,7 +109,9 @@ export default function CustomerView({
   bills = [],
   setBills,
   services = [],
+  setServices,
   onAddService,
+  onUpdateServiceStatus,
   initialClassificationTab,
 }: CustomerViewProps) {
   const t = translations[lang] || translations.lo;
@@ -199,7 +203,7 @@ export default function CustomerView({
           });
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         if (!cancelled) setIsLoadingRangeLeads(false);
       });
@@ -276,10 +280,10 @@ export default function CustomerView({
     if (lead.status === 'delivered') return true;
     if (lead.paymentTypeConfirmed === 'full' || lead.paymentTypeConfirmed === 'down_payment') return true;
     if (lead.installmentStatus === 'active_repaying' || lead.installmentStatus === 'completed') return true;
-    const inBills = bills.some(b => 
+    const inBills = bills.some(b =>
       (b.billType === 'sale' || !b.billType) &&
-      (b.leadId === lead.id || 
-       (b.customerPhone && lead.phone && b.customerPhone.replace(/\D/g, '') === lead.phone.replace(/\D/g, '')))
+      (b.leadId === lead.id ||
+        (b.customerPhone && lead.phone && b.customerPhone.replace(/\D/g, '') === lead.phone.replace(/\D/g, '')))
     );
     if (inBills) return true;
     return false;
@@ -346,6 +350,31 @@ export default function CustomerView({
       } : l));
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Customer status could not be updated.');
+    }
+  };
+
+  const [updatingServiceId, setUpdatingServiceId] = useState<string | null>(null);
+
+  const handleUpdateSingleServiceStatus = async (serviceId: string, newStatus: ServiceAppointment['status']) => {
+    setUpdatingServiceId(serviceId);
+    try {
+      if (onUpdateServiceStatus) {
+        await onUpdateServiceStatus(serviceId, newStatus);
+      } else {
+        const target = services.find(s => s.id === serviceId);
+        if (target) {
+          const updated: ServiceAppointment = { ...target, status: newStatus };
+          await updateServiceAppointment(updated);
+          if (setServices) {
+            setServices(prev => prev.map(s => s.id === serviceId ? updated : s));
+          }
+        }
+      }
+      showToast(lang === 'lo' ? 'ອັບເດດສະຖານະການບໍລິການສຳເລັດ!' : 'Service status updated successfully!');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not update service status.');
+    } finally {
+      setUpdatingServiceId(null);
     }
   };
 
@@ -622,9 +651,9 @@ export default function CustomerView({
     const seenKeys = new Set<string>();
 
     const isInstallmentBill = (b: InvoiceBillRecord) => {
-      return b.paymentMethod === 'finance' || 
-        b.billType === 'installment' || 
-        Boolean(b.downPaymentPercent) || 
+      return b.paymentMethod === 'finance' ||
+        b.billType === 'installment' ||
+        Boolean(b.downPaymentPercent) ||
         Boolean(b.financeCompany);
     };
 
@@ -633,10 +662,10 @@ export default function CustomerView({
       if (l.installmentStatus === 'completed' || l.isPaymentCompleted) {
         return false;
       }
-      return l.paymentType === 'installment' || 
-        l.paymentType === 'finance' || 
-        Boolean(l.downPaymentPercent) || 
-        Boolean(l.financeCompany) || 
+      return l.paymentType === 'installment' ||
+        l.paymentType === 'finance' ||
+        Boolean(l.downPaymentPercent) ||
+        Boolean(l.financeCompany) ||
         Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
         l.installmentStatus === 'active_repaying' ||
         l.installmentStatus === 'approved' ||
@@ -881,10 +910,10 @@ export default function CustomerView({
   // Dedicated Installment Customers (For Tab 3 - All Installment & Financing Customers)
   const installmentCustomers = useMemo(() => {
     const matchedLeads = leads.filter(l => {
-      const isInstallment = l.paymentType === 'installment' || 
-        l.paymentType === 'finance' || 
-        Boolean(l.downPaymentPercent) || 
-        Boolean(l.financeCompany) || 
+      const isInstallment = l.paymentType === 'installment' ||
+        l.paymentType === 'finance' ||
+        Boolean(l.downPaymentPercent) ||
+        Boolean(l.financeCompany) ||
         Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
         l.installmentStatus === 'active_repaying' ||
         l.installmentStatus === 'completed' ||
@@ -895,8 +924,8 @@ export default function CustomerView({
 
     const seenPhones = new Set(matchedLeads.map(l => (l.phone || '').replace(/\D/g, '')).filter(Boolean));
     const extraBills = bills.filter(b => {
-      const isInstBill = b.paymentMethod === 'finance' || 
-        b.billType === 'installment' || 
+      const isInstBill = b.paymentMethod === 'finance' ||
+        b.billType === 'installment' ||
         Boolean(b.downPaymentPercent);
       if (!isInstBill || !matchesCrmTime(b.date)) return false;
       const cleanPhone = (b.customerPhone || '').replace(/\D/g, '');
@@ -984,12 +1013,12 @@ export default function CustomerView({
 
     const exportTargetLeads = customerClassificationTab === 'installment_customers'
       ? leads.filter(l => {
-          const isInst = l.paymentType === 'installment' || l.paymentType === 'finance' || Boolean(l.downPaymentPercent) ||
-            Boolean(l.financeCompany) || Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
-            l.installmentStatus === 'active_repaying' || l.installmentStatus === 'completed' ||
-            l.installmentStatus === 'approved' || l.installmentStatus === 'pending_approval';
-          return isInst && matchesCrmTime(l.paymentDate || l.createdAt);
-        })
+        const isInst = l.paymentType === 'installment' || l.paymentType === 'finance' || Boolean(l.downPaymentPercent) ||
+          Boolean(l.financeCompany) || Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
+          l.installmentStatus === 'active_repaying' || l.installmentStatus === 'completed' ||
+          l.installmentStatus === 'approved' || l.installmentStatus === 'pending_approval';
+        return isInst && matchesCrmTime(l.paymentDate || l.createdAt);
+      })
       : filteredLeads;
     const headers = [
       'Customer ID',
@@ -1055,28 +1084,13 @@ export default function CustomerView({
           <div className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full bg-white/4 blur-3xl" />
           <div className="relative flex flex-wrap items-center justify-between gap-5">
             <div className="min-w-0">
-              <div className="mb-2 flex items-center gap-2">
-                <span className="rounded-xl bg-slate-900 text-white dark:bg-white dark:text-black p-2 shadow-sm always-white-text">
-                  <Users className="h-5 w-5 always-white-icon" />
-                </span>
-                <span className="text-[11px] font-mono font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-zinc-300">
-                  CUSTOMER RELATIONSHIP MANAGEMENT
-                </span>
-              </div>
               <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
                 {t.customerViewTitle}
               </h1>
-              <p className="mt-1 max-w-2xl text-xs text-slate-600 dark:text-zinc-400 sm:text-sm">
-                {lang === 'lo'
-                  ? 'ຈັດການລາຍຊື່, ຕິດຕາມສະຖານະ ແລະບັນທຶກການຕິດຕໍ່ລູກຄ້າໄວ້ໃນຈຸດດຽວ'
-                  : lang === 'th'
-                    ? 'จัดการรายชื่อลูกค้า ติดตามสถานะ และบันทึกการติดต่อได้ในที่เดียว'
-                    : 'Manage customer records, follow-up status, and contact history in one place.'}
-              </p>
             </div>
 
             <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
-          {/* Officer in charge indicator according to active logged-in user */}
+              {/* Officer in charge indicator according to active logged-in user */}
               <div className="officer-indicator flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs sm:flex-none">
                 <span className="officer-indicator-avatar grid h-8 w-8 shrink-0 place-items-center rounded-lg border">
                   <UserIcon className="h-4 w-4" />
@@ -1090,1432 +1104,1433 @@ export default function CustomerView({
                 </span>
               </div>
 
-          {/* Quick POS Sales Button */}
-          {onSelectCustomerForPOS && (
-            <button
-              type="button"
-              onClick={() => onSelectCustomerForPOS()}
-              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-600/40 bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all sm:flex-none cursor-pointer active:scale-95"
-              title="ເປີດໜ້າຈໍ POS ຂາຍລົດຍົນ"
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-white" />
-              <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'POS Sales'}</span>
-            </button>
-          )}
-
-          {/* Export CSV Button (ນຳອອກ) */}
-          <button
-            type="button"
-            onClick={handleExportCSV}
-            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:border-zinc-500 hover:bg-zinc-800 sm:flex-none"
-            title="ດາວໂຫລດຖານຂໍ້ມູນລູກຄ້າ CRM ເປັນຟາຍ CSV/Excel"
-          >
-            <Download className="w-3.5 h-3.5 text-zinc-300" />
-            <span>ນຳອອກ (Export CSV)</span>
-          </button>
-
-          {/* Print Summary Report */}
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:border-zinc-500 hover:bg-zinc-800 sm:flex-none"
-            title="ພິມລາຍງານລູກຄ້າ CRM"
-          >
-            <Printer className="w-3.5 h-3.5 text-zinc-300" />
-            <span>ພິມລາຍງານ</span>
-          </button>
-            </div>
-          </div>
-      </div>
-
-      {/* Primary Classification Tabs: 3 Separated Customer Categories */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-xs">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex items-center gap-1.5 pr-1 font-semibold text-zinc-400">
-            <Calendar className="h-3.5 w-3.5 text-amber-400" />
-            <span>{lang === 'lo' ? 'ຊ່ວງວັນທີ:' : 'Date Range:'}</span>
-          </span>
-          {([
-            { id: 'all', label: lang === 'lo' ? 'ທັງໝົດ' : 'All' },
-            { id: 'today', label: lang === 'lo' ? 'ມື້ນີ້' : 'Today' },
-            { id: '7d', label: lang === 'lo' ? '7 ວັນ' : '7 Days' },
-            { id: 'month', label: lang === 'lo' ? 'ເດືອນນີ້' : 'This Month' },
-            { id: 'year', label: lang === 'lo' ? 'ປີນີ້' : 'This Year' },
-            { id: 'custom', label: lang === 'lo' ? 'ກຳນົດວັນທີ' : 'Custom' },
-          ] as const).map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => {
-                setCrmTimePreset(preset.id);
-                if (preset.id === 'all') {
-                  setCrmDateFrom('');
-                  setCrmDateTo('');
-                }
-              }}
-              className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
-                crmTimePreset === preset.id
-                  ? 'bg-amber-400 text-black'
-                  : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-              }`}
-            >
-              {preset.label}
-            </button>
-          ))}
-          {crmTimePreset === 'custom' && (
-            <div className="flex flex-wrap items-center gap-1.5 pl-1">
-              <input
-                type="date"
-                aria-label="Date from"
-                value={crmDateFrom}
-                onChange={(e) => setCrmDateFrom(e.target.value)}
-                className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-mono text-white"
-              />
-              <span className="text-zinc-500">-</span>
-              <input
-                type="date"
-                aria-label="Date to"
-                value={crmDateTo}
-                onChange={(e) => setCrmDateTo(e.target.value)}
-                className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-mono text-white"
-              />
-            </div>
-          )}
-        </div>
-        {isLoadingRangeLeads && (
-          <span className="text-[11px] text-amber-400 font-semibold">ກຳລັງດຶງຂໍ້ມູນຕາມຊ່ວງເວລາ...</span>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Tab 1: ລູກຄ້າໃໝ່ (Leads) */}
-          <button
-            type="button"
-            onClick={() => setCustomerClassificationTab('new_leads')}
-            className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-              customerClassificationTab === 'new_leads'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800'
-            }`}
-          >
-            <UserPlus className={`w-4 h-4 ${customerClassificationTab === 'new_leads' ? 'text-white' : 'text-blue-600 dark:text-blue-400'}`} />
-            <span>ລູກຄ້າໃໝ່ (Leads)</span>
-            <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
-              customerClassificationTab === 'new_leads' ? 'bg-blue-700 text-white' : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300'
-            }`}>
-              {prospectiveLeads.length}
-            </span>
-          </button>
-
-          {/* Tab 2: ລູກຄ້າຊື້ສົດ/ໂອນ 100% */}
-          <button
-            type="button"
-            onClick={() => setCustomerClassificationTab('existing_customers')}
-            className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-              customerClassificationTab === 'existing_customers'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800'
-            }`}
-          >
-            <CheckCircle2 className={`w-4 h-4 ${customerClassificationTab === 'existing_customers' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`} />
-            <span>ລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ</span>
-            <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
-              customerClassificationTab === 'existing_customers' ? 'bg-blue-700 text-white' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40'
-            }`}>
-              {existingCustomers.length}
-            </span>
-          </button>
-
-          {/* Tab 3: ລູກຄ້າຜ່ອນຊຳລະ */}
-          <button
-            type="button"
-            onClick={() => setCustomerClassificationTab('installment_customers')}
-            className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-              customerClassificationTab === 'installment_customers'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800'
-            }`}
-          >
-            <CreditCard className={`w-4 h-4 ${customerClassificationTab === 'installment_customers' ? 'text-white' : 'text-amber-500'}`} />
-            <span>ລູກຄ້າຜ່ອນຊຳລະ</span>
-            <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
-              customerClassificationTab === 'installment_customers' ? 'bg-blue-700 text-white' : 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40'
-            }`}>
-              {installmentCustomers.length}
-            </span>
-          </button>
-        </div>
-
-        {/* Tab-Specific Primary Action Button */}
-        <div>
-          {customerClassificationTab === 'new_leads' && (
-            <button
-              type="button"
-              onClick={onOpenNewLead}
-              className="flex items-center gap-2 px-4 py-2.5 azure-gradient-btn rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ ເພີ່ມລູກຄ້າໃໝ່</span>
-            </button>
-          )}
-
-          {customerClassificationTab === 'existing_customers' && (
-            <button
-              type="button"
-              onClick={() => setServiceModalCustomer({ name: '', phone: '', model: vehicles[0]?.name || 'AVATR 12' })}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
-            >
-              <Wrench className="w-4 h-4" />
-              <span>+ ນັດໝາຍເຂົ້າສູນບໍລິການ</span>
-            </button>
-          )}
-
-          {customerClassificationTab === 'installment_customers' && (
-            <div className="flex items-center gap-2">
-              {onNavigateMenu && (
+              {/* Quick POS Sales Button */}
+              {onSelectCustomerForPOS && (
                 <button
                   type="button"
-                  onClick={() => onNavigateMenu('installment_dashboard')}
-                  className="flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
-                  title="ເປີດໜ້າຈໍ Dashboard ຜ່ອນຊຳລະ"
+                  onClick={() => onSelectCustomerForPOS()}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-600/40 bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all sm:flex-none cursor-pointer active:scale-95"
+                  title="ເປີດໜ້າຈໍ POS ຂາຍລົດຍົນ"
                 >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Dashboard ຜ່ອນຊຳລະ</span>
+                  <ShoppingBag className="w-3.5 h-3.5 text-white" />
+                  <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'POS Sales'}</span>
                 </button>
               )}
+
+              {/* Export CSV Button (ນຳອອກ) */}
               <button
                 type="button"
-                onClick={() => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-black rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
+                onClick={handleExportCSV}
+                className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:border-zinc-500 hover:bg-zinc-800 sm:flex-none"
+                title="ດາວໂຫລດຖານຂໍ້ມູນລູກຄ້າ CRM ເປັນຟາຍ CSV/Excel"
               >
-                <Plus className="w-4 h-4" />
-                <span>+ ສັນຍາຜ່ອນໃໝ່ (POS)</span>
+                <Download className="w-3.5 h-3.5 text-zinc-300" />
+                <span>ນຳອອກ (Export CSV)</span>
+              </button>
+
+              {/* Print Summary Report */}
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:border-zinc-500 hover:bg-zinc-800 sm:flex-none"
+                title="ພິມລາຍງານລູກຄ້າ CRM"
+              >
+                <Printer className="w-3.5 h-3.5 text-zinc-300" />
+                <span>ພິມລາຍງານ</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Primary Classification Tabs: 3 Separated Customer Categories */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 pr-1 font-semibold text-zinc-400">
+              <Calendar className="h-3.5 w-3.5 text-amber-400" />
+              <span>{lang === 'lo' ? 'ຊ່ວງວັນທີ:' : 'Date Range:'}</span>
+            </span>
+            {([
+              { id: 'all', label: lang === 'lo' ? 'ທັງໝົດ' : 'All' },
+              { id: 'today', label: lang === 'lo' ? 'ມື້ນີ້' : 'Today' },
+              { id: '7d', label: lang === 'lo' ? '7 ວັນ' : '7 Days' },
+              { id: 'month', label: lang === 'lo' ? 'ເດືອນນີ້' : 'This Month' },
+              { id: 'year', label: lang === 'lo' ? 'ປີນີ້' : 'This Year' },
+              { id: 'custom', label: lang === 'lo' ? 'ກຳນົດວັນທີ' : 'Custom' },
+            ] as const).map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => {
+                  setCrmTimePreset(preset.id);
+                  if (preset.id === 'all') {
+                    setCrmDateFrom('');
+                    setCrmDateTo('');
+                  }
+                }}
+                className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${crmTimePreset === preset.id
+                  ? 'bg-amber-400 text-black'
+                  : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                  }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+            {crmTimePreset === 'custom' && (
+              <div className="flex flex-wrap items-center gap-1.5 pl-1">
+                <input
+                  type="date"
+                  aria-label="Date from"
+                  value={crmDateFrom}
+                  onChange={(e) => setCrmDateFrom(e.target.value)}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-mono text-white"
+                />
+                <span className="text-zinc-500">-</span>
+                <input
+                  type="date"
+                  aria-label="Date to"
+                  value={crmDateTo}
+                  onChange={(e) => setCrmDateTo(e.target.value)}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-mono text-white"
+                />
+              </div>
+            )}
+          </div>
+          {isLoadingRangeLeads && (
+            <span className="text-[11px] text-amber-400 font-semibold">ກຳລັງດຶງຂໍ້ມູນຕາມຊ່ວງເວລາ...</span>
           )}
         </div>
-      </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Tab 1: ລູກຄ້າໃໝ່ (Leads) */}
+            <button
+              type="button"
+              onClick={() => setCustomerClassificationTab('new_leads')}
+              className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${customerClassificationTab === 'new_leads'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-black shadow-md border border-slate-900 dark:border-white'
+                : 'bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800'
+                }`}
+            >
+              <UserPlus className={`w-4 h-4 ${customerClassificationTab === 'new_leads' ? 'text-white dark:text-black' : 'text-slate-500 dark:text-zinc-400'}`} />
+              <span>ລູກຄ້າໃໝ່ (Leads)</span>
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${customerClassificationTab === 'new_leads' ? 'bg-white/20 dark:bg-black/15 text-white dark:text-black' : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-300/60 dark:border-zinc-700/60'
+                }`}>
+                {prospectiveLeads.length}
+              </span>
+            </button>
 
-      {customerClassificationTab === 'new_leads' ? (
-        <>
-      {/* 4 Focused KPI Metrics for New Leads Pipeline (Channels + Acquisition) */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {[
-          {
-            label: 'ລູກຄ້າໃໝ່ທັງໝົດ',
-            value: statusCounts.all,
-            caption: 'ຍັງບໍ່ທັນຕົກລົງຊື້ຂາຍ',
-            icon: Users,
-            tone: 'text-zinc-200',
-          },
-          {
-            label: 'Walk-in (ໜ້າໂຊຣູມ)',
-            value: channelCounts.walk_in,
-            caption: 'ລູກຄ້າເຂົ້າມາຊົມລົດຕົວຈິງ',
-            icon: Store,
-            tone: 'text-emerald-400',
-          },
-          {
-            label: 'Online (ສື່ສັງຄົມ)',
-            value: channelCounts.online,
-            caption: 'ສົນໃຈຜ່ານ Facebook/Web',
-            icon: Globe,
-            tone: 'text-blue-400',
-          },
-          {
-            label: 'Event (ງານວາງສະແດງ)',
-            value: channelCounts.event,
-            caption: 'ຂໍ້ມູນຈາກບູດງານວາງສະແດງ',
-            icon: Sparkles,
-            tone: 'text-amber-400',
-          },
-        ].map((metric) => {
-          const Icon = metric.icon;
-          return (
-            <div key={metric.label} className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm sm:p-5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-[11px] font-medium text-slate-500 dark:text-zinc-400">{metric.label}</p>
-                  <p className="mt-1 text-2xl font-bold font-mono text-slate-900 dark:text-white">{metric.value.toLocaleString()}</p>
-                </div>
-                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 dark:bg-zinc-900 ${metric.tone}`}>
-                  <Icon className="h-4 w-4" />
-                </span>
-              </div>
-              <p className="mt-2 text-[10px] text-slate-500 dark:text-zinc-500">{metric.caption}</p>
-            </div>
-          );
-        })}
-      </div>
+            {/* Tab 2: ລູກຄ້າຊື້ສົດ/ໂອນ 100% */}
+            <button
+              type="button"
+              onClick={() => setCustomerClassificationTab('existing_customers')}
+              className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${customerClassificationTab === 'existing_customers'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-black shadow-md border border-slate-900 dark:border-white'
+                : 'bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800'
+                }`}
+            >
+              <CheckCircle2 className={`w-4 h-4 ${customerClassificationTab === 'existing_customers' ? 'text-white dark:text-black' : 'text-slate-500 dark:text-zinc-400'}`} />
+              <span>ລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ</span>
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${customerClassificationTab === 'existing_customers' ? 'bg-white/20 dark:bg-black/15 text-white dark:text-black' : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-300/60 dark:border-zinc-700/60'
+                }`}>
+                {existingCustomers.length}
+              </span>
+            </button>
 
-      {/* Main Full-Width Leads Workspace */}
-      <div className="w-full space-y-4">
-          
-          {/* UNIFIED FILTER, SEARCH & VIEW MODE CONTROL PANEL */}
-          <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl space-y-3.5 shadow-sm">
-            {/* Row 1: Search Bar, Status Filter, Quick Shortcut & View Switcher */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-              {/* Search Bar */}
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="ຄົ້ນຫາຊື່, ເບີໂທ, ເລກບັດ, ທີ່ຢູ່, ລຸ້ນລົດ, ເລກບິນ..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/10"
-                />
-                {searchQuery && (
+            {/* Tab 3: ລູກຄ້າຜ່ອນຊຳລະ */}
+            <button
+              type="button"
+              onClick={() => setCustomerClassificationTab('installment_customers')}
+              className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${customerClassificationTab === 'installment_customers'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-black shadow-md border border-slate-900 dark:border-white'
+                : 'bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800'
+                }`}
+            >
+              <CreditCard className={`w-4 h-4 ${customerClassificationTab === 'installment_customers' ? 'text-white dark:text-black' : 'text-slate-500 dark:text-zinc-400'}`} />
+              <span>ລູກຄ້າຜ່ອນຊຳລະ</span>
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${customerClassificationTab === 'installment_customers' ? 'bg-white/20 dark:bg-black/15 text-white dark:text-black' : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-300/60 dark:border-zinc-700/60'
+                }`}>
+                {installmentCustomers.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Tab-Specific Primary Action Button */}
+          <div>
+            {customerClassificationTab === 'new_leads' && (
+              <button
+                type="button"
+                onClick={onOpenNewLead}
+                className="flex items-center gap-2 px-4 py-2.5 azure-gradient-btn rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>ເພີ່ມລູກຄ້າໃໝ່</span>
+              </button>
+            )}
+
+            {customerClassificationTab === 'existing_customers' && (
+              <button
+                type="button"
+                onClick={() => setServiceModalCustomer({ name: '', phone: '', model: vehicles[0]?.name || 'AVATR 12' })}
+                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
+              >
+                <Wrench className="w-4 h-4" />
+                <span>ນັດໝາຍເຂົ້າສູນບໍລິການ</span>
+              </button>
+            )}
+
+            {customerClassificationTab === 'installment_customers' && (
+              <div className="flex items-center gap-2">
+                {onNavigateMenu && (
                   <button
                     type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-white"
+                    onClick={() => onNavigateMenu('installment_dashboard')}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
+                    title="ເປີດໜ້າຈໍ Dashboard ຜ່ອນຊຳລະ"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <CreditCard className="w-4 h-4" />
+                    <span>Dashboard ຜ່ອນຊຳລະ</span>
                   </button>
                 )}
-              </div>
-
-              {/* Status & Action Controls */}
-              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-                {/* Status Dropdown Filter (Prospective stages) */}
-                <select
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  aria-label={lang === 'lo' ? 'ກັ່ນຕອງຕາມສະຖານະ' : 'Filter by status'}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
+                <button
+                  type="button"
+                  onClick={() => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-black rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
                 >
-                  <option value="all">{t.statusAll} ({statusCounts.all})</option>
-                  <option value="new">{t.statusNew} ({statusCounts.new})</option>
-                  <option value="contacted">{t.statusContacted} ({statusCounts.contacted})</option>
-                  <option value="test_drive">{t.statusTestDrive} ({statusCounts.test_drive})</option>
-                  <option value="negotiation">{t.statusNegotiation} ({statusCounts.negotiation})</option>
-                </select>
-
-                {/* View Mode Toggle: Cards vs Table */}
-                <div className="flex items-center bg-zinc-900 p-1 rounded-xl border border-zinc-800 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('cards')}
-                    className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer ${
-                      viewMode === 'cards'
-                        ? 'bg-white text-black font-bold shadow-sm'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                    title="ມຸມມອງບັດຂໍ້ມູນ (Card View)"
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline text-[11px]">ບັດ</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('table')}
-                    className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer ${
-                      viewMode === 'table'
-                        ? 'bg-white text-black font-bold shadow-sm'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                    title="ມຸມມອງຕາຕະລາງ (Table View)"
-                  >
-                    <List className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline text-[11px]">ຕາຕະລາງ</span>
-                  </button>
-                </div>
+                  <Plus className="w-4 h-4" />
+                  <span> ສັນຍາຜ່ອນໃໝ່ (POS)</span>
+                </button>
               </div>
+            )}
+          </div>
+        </div>
+
+        {customerClassificationTab === 'new_leads' ? (
+          <>
+            {/* 4 Focused KPI Metrics for New Leads Pipeline (Channels + Acquisition) */}
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              {[
+                {
+                  label: 'ລູກຄ້າໃໝ່ທັງໝົດ',
+                  value: statusCounts.all,
+                  icon: Users,
+                  tone: 'text-zinc-200',
+                },
+                {
+                  label: 'Walk-in (ໜ້າໂຊຣູມ)',
+                  value: channelCounts.walk_in,
+                  icon: Store,
+                  tone: 'text-emerald-400',
+                },
+                {
+                  label: 'Online (ສື່ສັງຄົມ)',
+                  value: channelCounts.online,
+                  icon: Globe,
+                  tone: 'text-blue-400',
+                },
+                {
+                  label: 'Event (ງານວາງສະແດງ)',
+                  value: channelCounts.event,
+                  icon: Sparkles,
+                  tone: 'text-amber-400',
+                },
+              ].map((metric) => {
+                const Icon = metric.icon;
+                return (
+                  <div key={metric.label} className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm sm:p-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-medium text-slate-500 dark:text-zinc-400">{metric.label}</p>
+                        <p className="mt-1 text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-slate-900 dark:text-white">{metric.value.toLocaleString()}</p>
+                      </div>
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 dark:bg-zinc-900 ${metric.tone}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                    </div>
+                    {'caption' in metric && Boolean((metric as { caption?: string }).caption) && (
+                      <p className="mt-2 text-[10px] text-slate-500 dark:text-zinc-500">{(metric as { caption?: string }).caption}</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Row 2: Customer Acquisition Channel Filter Pills */}
-            <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2.5 text-xs">
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Customer Channel Pills */}
-                <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800/80">
-                  <span className="text-[10px] text-zinc-400 font-bold px-1.5 uppercase">ຊ່ອງທາງ:</span>
-                  {[
-                    { key: 'all' as const, label: 'ທັງໝົດ', count: channelCounts.all },
-                    { key: 'walk_in' as const, label: 'Walk-in', count: channelCounts.walk_in },
-                    { key: 'online' as const, label: 'Online', count: channelCounts.online },
-                    { key: 'event' as const, label: 'Event', count: channelCounts.event },
-                  ].map((tab) => {
-                    const isSelected = channelFilter === tab.key;
-                    return (
+            {/* Main Full-Width Leads Workspace */}
+            <div className="w-full space-y-4">
+
+              {/* UNIFIED FILTER, SEARCH & VIEW MODE CONTROL PANEL */}
+              <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl space-y-3.5 shadow-sm">
+                {/* Row 1: Search Bar, Status Filter, Quick Shortcut & View Switcher */}
+                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+                  {/* Search Bar */}
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="ຄົ້ນຫາຊື່, ເບີໂທ, ເລກບັດ, ທີ່ຢູ່, ລຸ້ນລົດ, ເລກບິນ..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/10"
+                    />
+                    {searchQuery && (
                       <button
-                        key={tab.key}
                         type="button"
-                        onClick={() => setChannelFilter(tab.key)}
-                        className={`px-2 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer ${
-                          isSelected
-                            ? 'bg-zinc-200 text-black font-bold shadow-sm'
-                            : 'text-zinc-400 hover:text-white'
-                        }`}
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-white"
                       >
-                        <span>{tab.label}</span>
-                        <span className={`text-[10px] font-mono px-1 rounded-full ${isSelected ? 'bg-zinc-300 text-black' : 'text-zinc-500'}`}>
-                          {tab.count}
-                        </span>
+                        <X className="w-3.5 h-3.5" />
                       </button>
-                    );
-                  })}
+                    )}
+                  </div>
+
+                  {/* Status & Action Controls */}
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+                    {/* Status Dropdown Filter (Prospective stages) */}
+                    <select
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                      aria-label={lang === 'lo' ? 'ກັ່ນຕອງຕາມສະຖານະ' : 'Filter by status'}
+                      className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
+                    >
+                      <option value="all">{t.statusAll} ({statusCounts.all})</option>
+                      <option value="new">{t.statusNew} ({statusCounts.new})</option>
+                      <option value="contacted">{t.statusContacted} ({statusCounts.contacted})</option>
+                      <option value="test_drive">{t.statusTestDrive} ({statusCounts.test_drive})</option>
+                      <option value="negotiation">{t.statusNegotiation} ({statusCounts.negotiation})</option>
+                    </select>
+
+                    {/* View Mode Toggle: Cards vs Table */}
+                    <div className="flex items-center bg-zinc-900 p-1 rounded-xl border border-zinc-800 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('cards')}
+                        className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer ${viewMode === 'cards'
+                          ? 'bg-white text-black font-bold shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                          }`}
+                        title="ມຸມມອງບັດຂໍ້ມູນ (Card View)"
+                      >
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline text-[11px]">ບັດ</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('table')}
+                        className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer ${viewMode === 'table'
+                          ? 'bg-white text-black font-bold shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                          }`}
+                        title="ມຸມມອງຕາຕະລາງ (Table View)"
+                      >
+                        <List className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline text-[11px]">ຕາຕະລາງ</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 2: Customer Acquisition Channel Filter Pills */}
+                <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Customer Channel Pills */}
+                    <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800/80">
+                      <span className="text-[10px] text-zinc-400 font-bold px-1.5 uppercase">ຊ່ອງທາງ:</span>
+                      {[
+                        { key: 'all' as const, label: 'all', count: channelCounts.all },
+                        { key: 'walk_in' as const, label: 'Walk-in', count: channelCounts.walk_in },
+                        { key: 'online' as const, label: 'Online', count: channelCounts.online },
+                        { key: 'event' as const, label: 'Event', count: channelCounts.event },
+                      ].map((tab) => {
+                        const isSelected = channelFilter === tab.key;
+                        return (
+                          <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => setChannelFilter(tab.key)}
+                            className={`px-2 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer ${isSelected
+                              ? 'bg-zinc-200 text-black font-bold shadow-sm'
+                              : 'text-zinc-400 hover:text-white'
+                              }`}
+                          >
+                            <span>{tab.label}</span>
+                            <span className={`text-[10px] font-mono px-1 rounded-full ${isSelected ? 'bg-zinc-300 text-black' : 'text-zinc-500'}`}>
+                              {tab.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Clear Filters Button */}
+                  {(channelFilter !== 'all' || selectedStatus !== 'all' || searchQuery.trim() !== '') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChannelFilter('all');
+                        setSelectedStatus('all');
+                        setSearchQuery('');
+                      }}
+                      className="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <RotateCcw className="w-3 h-3 text-zinc-400" />
+                      <span>{lang === 'lo' ? 'ລ້າງຕົວກອງ' : 'Clear filters'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* Clear Filters Button */}
-              {(channelFilter !== 'all' || selectedStatus !== 'all' || searchQuery.trim() !== '') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChannelFilter('all');
-                    setSelectedStatus('all');
-                    setSearchQuery('');
-                  }}
-                  className="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  <RotateCcw className="w-3 h-3 text-zinc-400" />
-                  <span>{lang === 'lo' ? 'ລ້າງຕົວກອງ' : 'Clear filters'}</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* LIST HEADER & COUNT */}
-          <div className="flex items-center justify-between px-1 text-xs">
-            <div className="flex items-baseline gap-2">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                {lang === 'lo' ? 'ລາຍຊື່ລູກຄ້າທີ່ກຳລັງຕິດຕາມ (Leads)' : 'Prospective Leads'}
-              </h2>
-              <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">
-                ສະແດງ {filteredLeads.length.toLocaleString()} ຈາກທັງໝົດ {prospectiveLeads.length.toLocaleString()} ຄົນ
-              </span>
-            </div>
-          </div>
-
-          {/* CUSTOMER LIST: EMPTY STATE */}
-          {filteredLeads.length === 0 ? (
-            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-12 text-center text-zinc-500 space-y-3">
-              <div className="w-12 h-12 mx-auto rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 shadow-inner">
-                <Users className="w-6 h-6 text-zinc-500" />
+              {/* LIST HEADER & COUNT */}
+              <div className="flex items-center justify-between px-1 text-xs">
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                    {lang === 'lo' ? 'ລາຍຊື່ລູກຄ້າທີ່ກຳລັງຕິດຕາມ (Leads)' : 'Prospective Leads'}
+                  </h2>
+                </div>
               </div>
-              <p className="text-sm font-semibold text-zinc-200">{t.noCustomersFound}</p>
-              <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-                {searchQuery || channelFilter !== 'all' || selectedStatus !== 'all'
-                  ? 'ບໍ່ພົບຂໍ້ມູນລູກຄ້າທີ່ກົງກັບເງື່ອນໄຂການຄົ້ນຫາ ຫຼື ຕົວກອງຂອງທ່ານ'
-                  : 'ຍັງບໍ່ມີຂໍ້ມູນລູກຄ້າໃນລະບົບ ທ່ານສາມາດກົດປຸ່ມ "+ ເພີ່ມລູກຄ້າໃໝ່" ເພື່ອເລີ່ມຕົ້ນບັນທຶກ'}
-              </p>
-              {filteredLeads.length === 0 && !searchQuery && channelFilter === 'all' && selectedStatus === 'all' && (
-                <button
-                  type="button"
-                  onClick={onOpenNewLead}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-zinc-200 text-black shadow-lg transition-all cursor-pointer active:scale-95 mt-2"
-                >
-                  <Plus className="w-4 h-4 text-black" />
-                  <span>{lang === 'lo' ? '+ ເພີ່ມລູກຄ້າໃໝ່' : '+ Add New Customer'}</span>
-                </button>
-              )}
-              {(channelFilter !== 'all' || selectedStatus !== 'all' || searchQuery.trim() !== '') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChannelFilter('all');
-                    setSelectedStatus('all');
-                    setSearchQuery('');
-                  }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 transition-all cursor-pointer active:scale-95 shadow-sm mt-1"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
-                  <span>{lang === 'lo' ? 'ລ້າງຕົວກອງທັງໝົດ' : lang === 'th' ? 'ล้างตัวกรองทั้งหมด' : 'Reset all filters'}</span>
-                </button>
-              )}
-            </div>
-          ) : viewMode === 'table' ? (
-            /* VIEW MODE 1: MODERN STRUCTURED TABLE VIEW */
-            <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-sm">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-900/90 text-zinc-400 border-b border-zinc-800 font-mono uppercase text-[10px]">
-                  <tr>
-                    <th className="py-3 px-3.5">ລູກຄ້າ & ຕົວຕົນ</th>
-                    <th className="py-3 px-3.5">ຕິດຕໍ່ & ທີ່ຢູ່</th>
-                    <th className="py-3 px-3.5">ລຸ້ນລົດທີ່ສົນໃຈ</th>
-                    <th className="py-3 px-3.5">ຊ່ອງທາງ (Channel)</th>
-                    <th className="py-3 px-3.5">ສະຖານະ CRM</th>
-                    <th className="py-3 px-3.5">ຜູ້ຮັບຜິດຊອບ</th>
-                    <th className="py-3 px-3.5 text-right">ຈັດການ & ເອກະສານ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800/60">
+
+              {/* CUSTOMER LIST: EMPTY STATE */}
+              {filteredLeads.length === 0 ? (
+                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-12 text-center text-zinc-500 space-y-3">
+                  <div className="w-12 h-12 mx-auto rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 shadow-inner">
+                    <Users className="w-6 h-6 text-zinc-500" />
+                  </div>
+                  <p className="text-sm font-semibold text-zinc-200">{t.noCustomersFound}</p>
+                  <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                    {searchQuery || channelFilter !== 'all' || selectedStatus !== 'all'
+                      ? 'ບໍ່ພົບຂໍ້ມູນລູກຄ້າທີ່ກົງກັບເງື່ອນໄຂການຄົ້ນຫາ ຫຼື ຕົວກອງຂອງທ່ານ'
+                      : 'ຍັງບໍ່ມີຂໍ້ມູນລູກຄ້າໃນລະບົບ ທ່ານສາມາດກົດປຸ່ມ "ເພີ່ມລູກຄ້າໃໝ່" ເພື່ອເລີ່ມຕົ້ນບັນທຶກ'}
+                  </p>
+                  {filteredLeads.length === 0 && !searchQuery && channelFilter === 'all' && selectedStatus === 'all' && (
+                    <button
+                      type="button"
+                      onClick={onOpenNewLead}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-zinc-200 text-black shadow-lg transition-all cursor-pointer active:scale-95 mt-2"
+                    >
+                      <Plus className="w-4 h-4 text-black" />
+                      <span>{lang === 'lo' ? 'ເພີ່ມລູກຄ້າໃໝ່' : 'Add New Customer'}</span>
+                    </button>
+                  )}
+                  {(channelFilter !== 'all' || selectedStatus !== 'all' || searchQuery.trim() !== '') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChannelFilter('all');
+                        setSelectedStatus('all');
+                        setSearchQuery('');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 transition-all cursor-pointer active:scale-95 shadow-sm mt-1"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>{lang === 'lo' ? 'ລ້າງຕົວກອງທັງໝົດ' : lang === 'th' ? 'ล้างตัวกรองทั้งหมด' : 'Reset all filters'}</span>
+                    </button>
+                  )}
+                </div>
+              ) : viewMode === 'table' ? (
+                /* VIEW MODE 1: MODERN STRUCTURED TABLE VIEW */
+                <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-sm">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-zinc-900/90 text-zinc-400 border-b border-zinc-800 font-mono uppercase text-[10px]">
+                      <tr>
+                        <th className="py-3 px-3.5">ລູກຄ້າ & ຕົວຕົນ</th>
+                        <th className="py-3 px-3.5">ຕິດຕໍ່ & ທີ່ຢູ່</th>
+                        <th className="py-3 px-3.5">ລຸ້ນລົດທີ່ສົນໃຈ</th>
+                        <th className="py-3 px-3.5">ຊ່ອງທາງ (Channel)</th>
+                        <th className="py-3 px-3.5">ສະຖານະ CRM</th>
+                        <th className="py-3 px-3.5">ຜູ້ຮັບຜິດຊອບ</th>
+                        <th className="py-3 px-3.5 text-right">ຈັດການ & ເອກະສານ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/60">
+                      {paginatedLeads.map((lead) => {
+                        return (
+                          <tr
+                            key={lead.id}
+                            className="transition-colors hover:bg-zinc-900/60"
+                          >
+                            {/* Customer & Identity */}
+                            <td className="py-3 px-3.5 align-top">
+                              <div className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800/80 bg-slate-50/80 dark:bg-zinc-900/50 hover:border-slate-300 dark:hover:border-zinc-700/80 transition-all shadow-xs min-w-[170px] max-w-[220px]">
+                                {/* Customer Name & VIP Badge */}
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <strong className="text-xs font-bold text-slate-900 dark:text-white truncate block" title={lead.customerName}>
+                                    {lead.customerName}
+                                  </strong>
+                                  {lead.priority === 'vip' && (
+                                    <span className="text-[9px] font-mono px-1.5 py-0.5 bg-amber-400 text-black rounded-md font-extrabold shrink-0 shadow-xs">
+                                      VIP
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* ID Card Number Badge */}
+                                {lead.idCardNumber && (
+                                  <div className="flex items-center gap-1 text-[10px] font-mono bg-white dark:bg-zinc-950/80 px-2 py-0.5 rounded-md border border-slate-200 dark:border-zinc-800/70 w-fit">
+                                    <span className="text-slate-400 dark:text-zinc-500">ບັດ:</span>
+                                    <span className="text-slate-700 dark:text-zinc-300 font-semibold">{lead.idCardNumber}</span>
+                                  </div>
+                                )}
+
+                                {/* Category & Created Date */}
+                                <div className="flex items-center gap-1.5 pt-1 border-t border-slate-200/80 dark:border-zinc-800/50 text-[9.5px] font-mono">
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-zinc-800/80 text-slate-700 dark:text-zinc-300 font-medium">
+                                    {lead.category === 'walk_in' ? 'Walk-in' : lead.category === 'online' ? 'Online' : 'Event'}
+                                  </span>
+                                  {lead.createdAt && (
+                                    <span className="text-slate-400 dark:text-zinc-500">
+                                      {lead.createdAt.slice(0, 10)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Contact & Location & Notes */}
+                            <td className="py-3 px-3.5 align-top">
+                              <div className="space-y-1 font-mono">
+                                <button
+                                  type="button"
+                                  onClick={() => openWhatsApp(lead.phone, lead.customerName, lead.interestedModel, lang)}
+                                  className="text-white hover:text-emerald-400 transition-colors flex items-center gap-1 text-xs font-bold cursor-pointer"
+                                >
+                                  <span>{lead.phone}</span>
+                                  <WhatsAppIcon className="w-3 h-3 text-emerald-400" />
+                                </button>
+                                <span className="text-[10px] text-zinc-300 font-sans block leading-tight max-w-[200px]" title={[lead.village, lead.district, lead.province].filter(Boolean).join(', ')}>
+                                  {[lead.village, lead.district, lead.province].filter(Boolean).join(', ') || '-'}
+                                </span>
+                                {lead.notes && (
+                                  <span className="text-[10px] text-amber-800 dark:text-amber-300 font-sans block italic truncate max-w-[200px]" title={lead.notes}>
+                                    "{lead.notes}"
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Interested Model */}
+                            <td className="py-3 px-3.5 align-top">
+                              <div className="flex items-center gap-1.5 text-zinc-200 font-bold">
+                                <Car className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                <span>{lead.interestedModel || 'AVATR'}</span>
+                              </div>
+                            </td>
+
+                            {/* Channel & Source */}
+                            <td className="py-3 px-3.5 align-top">
+                              <div className="space-y-1">
+                                <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-full inline-block">
+                                  {lead.category === 'walk_in' ? 'Walk-in (ໜ້າໂຊຣູມ)' : lead.category === 'online' ? 'Online (ສື່ສັງຄົມ)' : 'Event (ງານວາງສະແດງ)'}
+                                </span>
+                                {lead.source && (
+                                  <span className="text-[10px] text-zinc-500 block">
+                                    {lead.source}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Status Dropdown */}
+                            <td className="py-3 px-3.5 align-top">
+                              <select
+                                value={lead.status}
+                                onChange={(e) => handleUpdateStatus(lead.id, e.target.value as LeadStatus)}
+                                className="text-[11px] rounded-lg px-2 py-1 font-semibold focus:outline-none cursor-pointer bg-zinc-900 border border-zinc-700 text-zinc-300"
+                              >
+                                <option value="new">{t.statusNew}</option>
+                                <option value="contacted">{t.statusContacted}</option>
+                                <option value="test_drive">{t.statusTestDrive}</option>
+                                <option value="negotiation">{t.statusNegotiation}</option>
+                                <option value="delivered">{t.statusDelivered || 'ຈ່າຍແລ້ວ'}</option>
+                              </select>
+                            </td>
+
+                            {/* Staff */}
+                            <td className="py-3 px-3.5 align-top">
+                              <span className="text-[11px] text-zinc-300 font-medium">
+                                {lead.assignedTo || currentUser?.name || 'Admin'}
+                              </span>
+                            </td>
+
+                            {/* Table Actions */}
+                            <td className="py-3 px-3.5 align-top text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* POS Sale Button */}
+                                {onSelectCustomerForPOS && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onSelectCustomerForPOS(lead)}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] flex items-center gap-1 transition-colors cursor-pointer shadow-sm active:scale-95"
+                                    title="ເປີດບິນຂາຍ POS ສຳລັບລູກຄ້ານີ້"
+                                  >
+                                    <ShoppingBag className="w-3 h-3" />
+                                    <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'POS'}</span>
+                                  </button>
+                                )}
+
+
+                                {/* Customer Documents Suite & Audit History Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedCustomerForDocs(lead)}
+                                  className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/80 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 shadow-sm"
+                                  title="ເບິ່ງ/ອອກເອກະສານລູກຄ້າ (ໃບຮັບເງິນ, ໃບສັນຍາ, ໃບມອບສິດ)"
+                                >
+                                  <FileText className="w-3 h-3 text-amber-400" />
+                                  <span>ເອກະສານ</span>
+                                  {(() => {
+                                    const count = getCustomerIssuedDocsCount(lead.customerName, lead.phone, lead.vin, lead.id);
+                                    return count > 0 ? (
+                                      <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                        {count}
+                                      </span>
+                                    ) : null;
+                                  })()}
+                                </button>
+
+                                {/* WhatsApp link */}
+                                <a
+                                  href={getWhatsAppUrl(lead.phone, lead.customerName, lead.interestedModel, lang)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1 bg-emerald-950/60 text-emerald-400 hover:text-white hover:bg-emerald-700 rounded-lg border border-emerald-800/40 transition-colors"
+                                  title="ສົນທະນາ WhatsApp"
+                                >
+                                  <WhatsAppIcon className="w-3 h-3" />
+                                </a>
+
+                                {/* Delete Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setLeadToDelete(lead)}
+                                  className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                                  title="ລົບລູກຄ້າ"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                /* VIEW MODE 2: MODERN HIGH-AESTHETIC BENTO STREAMLINE CARD VIEW */
+                <div className="space-y-4">
                   {paginatedLeads.map((lead) => {
                     return (
-                      <tr
+                      <div
                         key={lead.id}
-                        className="transition-colors hover:bg-zinc-900/60"
+                        className="theme-adaptive-dark-surface rounded-2xl border p-4 sm:p-5 space-y-4 transition-all shadow-sm bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700"
                       >
-                        {/* Customer & Identity */}
-                        <td className="py-3 px-3.5 align-top">
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-1.5">
-                              <strong className="text-white text-xs block">{lead.customerName}</strong>
-                              {lead.priority === 'vip' && (
-                                <span className="text-[9px] font-mono px-1.5 py-0.2 bg-amber-400 text-black rounded font-bold">
-                                  VIP
-                                </span>
-                              )}
+                        {/* 1. Header: Customer Identity, Contact Badges, Status Switcher & Delete */}
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
+                          <div className="flex items-start sm:items-center gap-3 min-w-0">
+                            {/* Customer Initials Avatar */}
+                            <div className="w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 border bg-slate-100 dark:bg-zinc-800 text-slate-800 dark:text-white border-slate-300 dark:border-zinc-700 shadow-xs">
+                              {lead.customerName ? lead.customerName.slice(0, 2).toUpperCase() : 'CU'}
                             </div>
-                            {lead.idCardNumber && (
-                              <span className="text-[10px] text-zinc-400 font-mono block">
-                                ບັດ: {lead.idCardNumber}
-                              </span>
-                            )}
-                            <span className="text-[10px] text-zinc-500 font-mono block">
-                              {lead.category === 'walk_in' ? 'Walk-in' : lead.category === 'online' ? 'Online' : 'Event'} • {lead.createdAt?.slice(0, 10)}
-                            </span>
-                          </div>
-                        </td>
 
-                        {/* Contact & Location & Notes */}
-                        <td className="py-3 px-3.5 align-top">
-                          <div className="space-y-1 font-mono">
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                                  {lead.customerName}
+                                </h3>
+
+                                {/* VIP Priority Badge */}
+                                {lead.priority === 'vip' && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-400 text-black rounded-full font-bold flex items-center gap-1 shadow-sm">
+                                    <Star className="w-2.5 h-2.5 fill-black text-black" />
+                                    <span>VIP</span>
+                                  </span>
+                                )}
+
+                                {/* Acquisition Channel Badge */}
+                                <span className="text-[10px] font-mono px-2.5 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-full flex items-center gap-1">
+                                  {lead.category === 'walk_in' ? <Store className="w-2.5 h-2.5 text-emerald-400" /> : lead.category === 'online' ? <Globe className="w-2.5 h-2.5 text-blue-400" /> : <Sparkles className="w-2.5 h-2.5 text-amber-400" />}
+                                  <span>{lead.category === 'walk_in' ? 'Walk-in' : lead.category === 'online' ? 'Online' : 'Event'}</span>
+                                </span>
+                                {lead.category === 'event' && lead.source && (
+                                  <span className="text-[10px] font-mono px-2.5 py-0.5 bg-amber-950/60 text-amber-300 border border-amber-800/60 rounded-full flex items-center gap-1">
+                                    <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                                    <span>{lead.source}</span>
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Contact Info, Framed ID Card, and Registration Date */}
+                              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-mono">
+                                {/* Phone with WhatsApp Link */}
+                                <button
+                                  type="button"
+                                  onClick={() => openWhatsApp(lead.phone, lead.customerName, lead.interestedModel, lang)}
+                                  className="font-bold text-slate-900 dark:text-white hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 cursor-pointer shadow-xs"
+                                  title="ສົນທະນາ WhatsApp"
+                                >
+                                  <Phone className="w-3 h-3 text-slate-400 dark:text-zinc-400" />
+                                  <span>{lead.phone}</span>
+                                  <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-500/20 font-bold flex items-center gap-0.5">
+                                    <WhatsAppIcon className="w-2.5 h-2.5" />
+                                    <span>WA</span>
+                                  </span>
+                                </button>
+
+                                {/* Framed Vertical ID Card Box */}
+                                {lead.idCardNumber && (
+                                  <div className="inline-flex flex-col justify-center px-2.5 py-0.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-xs">
+                                    <span className="text-[9px] text-slate-400 dark:text-zinc-500 font-sans leading-tight">ເລກບັດປະຈຳຕົວ:</span>
+                                    <span className="font-bold font-mono text-slate-900 dark:text-white text-xs leading-tight">{lead.idCardNumber}</span>
+                                  </div>
+                                )}
+
+                                {/* Registration Date Badge */}
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800/80 text-[11px] text-slate-500 dark:text-zinc-400 shadow-xs">
+                                  <span>ID: {lead.id.slice(0, 8)}</span>
+                                  <span className="text-slate-300 dark:text-zinc-700">•</span>
+                                  <span>ວັນທີ: {lead.createdAt?.slice(0, 10)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Status Switcher & Delete Action */}
+                          <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
+                            <select
+                              value={lead.status}
+                              onChange={(e) => handleUpdateStatus(lead.id, e.target.value as LeadStatus)}
+                              className="bg-zinc-900 border border-zinc-700 text-zinc-200 hover:border-zinc-500 text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-white/20 font-semibold cursor-pointer transition-colors shadow-sm"
+                            >
+                              <option value="new">{t.statusNew}</option>
+                              <option value="contacted">{t.statusContacted}</option>
+                              <option value="test_drive">{t.statusTestDrive}</option>
+                              <option value="negotiation">{t.statusNegotiation}</option>
+                            </select>
+
                             <button
                               type="button"
-                              onClick={() => openWhatsApp(lead.phone, lead.customerName, lead.interestedModel, lang)}
-                              className="text-white hover:text-emerald-400 transition-colors flex items-center gap-1 text-xs font-bold cursor-pointer"
+                              onClick={() => setLeadToDelete(lead)}
+                              className="p-2 bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 rounded-xl border border-zinc-800 hover:border-red-800 transition-colors cursor-pointer shrink-0 active:scale-95"
+                              title="ລົບລູກຄ້າ"
+                              aria-label="Delete Lead"
                             >
-                              <span>{lead.phone}</span>
-                              <WhatsAppIcon className="w-3 h-3 text-emerald-400" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                            <span className="text-[10px] text-zinc-300 font-sans block leading-tight max-w-[200px]" title={[lead.village, lead.district, lead.province].filter(Boolean).join(', ')}>
-                              {[lead.village, lead.district, lead.province].filter(Boolean).join(', ') || '-'}
+                          </div>
+                        </div>
+
+                        {/* 2. Bento Stream Details: Vehicle, Complete Location & Complete Notes (Zero Truncation) */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
+                          {/* Section A: Interested Vehicle & Dealership Source (4 cols) */}
+                          <div className="md:col-span-4 space-y-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                              <Car className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>ລຸ້ນລົດທີ່ສົນໃຈ</span>
                             </span>
-                            {lead.notes && (
-                              <span className="text-[10px] text-amber-800 dark:text-amber-300 font-sans block italic truncate max-w-[200px]" title={lead.notes}>
-                                "{lead.notes}"
-                              </span>
-                            )}
+                            <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 space-y-1">
+                              <div className="font-bold text-sm text-white flex items-center gap-1.5">
+                                <span>{lead.interestedModel || 'AVATR'}</span>
+                              </div>
+                              <div className="text-[11px] text-zinc-400 flex items-center justify-between pt-0.5">
+                                <span>ແຫຼ່ງທີ່ມາ:</span>
+                                <span className="text-zinc-200 font-medium">{lead.source || (lead.category === 'walk_in' ? 'ມາຊົມລົດຕົວຈິງ' : 'ສື່ສັງຄົມອອນລາຍ')}</span>
+                              </div>
+                            </div>
                           </div>
-                        </td>
 
-                        {/* Interested Model */}
-                        <td className="py-3 px-3.5 align-top">
-                          <div className="flex items-center gap-1.5 text-zinc-200 font-bold">
-                            <Car className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                            <span>{lead.interestedModel || 'AVATR'}</span>
-                          </div>
-                        </td>
-
-                        {/* Channel & Source */}
-                        <td className="py-3 px-3.5 align-top">
-                          <div className="space-y-1">
-                            <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-full inline-block">
-                              {lead.category === 'walk_in' ? 'Walk-in (ໜ້າໂຊຣູມ)' : lead.category === 'online' ? 'Online (ສື່ສັງຄົມ)' : 'Event (ງານວາງສະແດງ)'}
+                          {/* Section B: Complete Customer Address & Staff (4 cols) */}
+                          <div className="md:col-span-4 space-y-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-blue-400" />
+                              <span>ທີ່ຢູ່ລູກຄ້າ (ເຫັນຄົບຖ້ວນ)</span>
                             </span>
-                            {lead.source && (
-                              <span className="text-[10px] text-zinc-500 block">
-                                {lead.source}
-                              </span>
-                            )}
+                            <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 space-y-1">
+                              <p className="text-zinc-200 font-medium leading-relaxed">
+                                {[lead.village, lead.district, lead.province].filter(Boolean).join(', ') || 'ບໍ່ໄດ້ລະບຸທີ່ຢູ່'}
+                              </p>
+                              <div className="text-[11px] text-zinc-400 flex items-center justify-between pt-0.5">
+                                <span>ຜູ້ຮັບຜິດຊອບ:</span>
+                                <span className="text-zinc-200 font-semibold bg-zinc-800 px-2 py-0.5 rounded text-[11px]">
+                                  {lead.assignedTo || currentUser?.name || 'Admin'}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                        </td>
 
-                        {/* Status Dropdown */}
-                        <td className="py-3 px-3.5 align-top">
-                          <select
-                            value={lead.status}
-                            onChange={(e) => handleUpdateStatus(lead.id, e.target.value as LeadStatus)}
-                            className="text-[11px] rounded-lg px-2 py-1 font-semibold focus:outline-none cursor-pointer bg-zinc-900 border border-zinc-700 text-zinc-300"
-                          >
-                            <option value="new">{t.statusNew}</option>
-                            <option value="contacted">{t.statusContacted}</option>
-                            <option value="test_drive">{t.statusTestDrive}</option>
-                            <option value="negotiation">{t.statusNegotiation}</option>
-                            <option value="delivered">{t.statusDelivered || 'ຈ່າຍແລ້ວ'}</option>
-                          </select>
-                        </td>
+                          {/* Section C: Complete Customer Notes (4 cols) */}
+                          <div className="md:col-span-4 space-y-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                              <FileText className="w-3.5 h-3.5 text-amber-400" />
+                              <span>ໝາຍເຫດ & ຄວາມຕ້ອງການ</span>
+                            </span>
+                            <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 min-h-[64px] flex items-center">
+                              {lead.notes ? (
+                                <p className="text-zinc-200 italic leading-relaxed text-[11px]">
+                                  "{lead.notes}"
+                                </p>
+                              ) : (
+                                <p className="text-zinc-500 italic text-[11px]">ບໍ່ມີໝາຍເຫດເພີ່ມເຕີມ</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                        {/* Staff */}
-                        <td className="py-3 px-3.5 align-top">
-                          <span className="text-[11px] text-zinc-300 font-medium">
-                            {lead.assignedTo || currentUser?.name || 'Admin'}
-                          </span>
-                        </td>
+                        {/* 3. Card Bottom Actions Toolbar */}
+                        <div className="pt-2.5 border-t border-zinc-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
+                          {/* Left: Quick Direct Contact */}
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={`tel:${lead.phone.replace(/\s+/g, '')}`}
+                              className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white rounded-xl border border-zinc-800 font-medium flex items-center gap-1.5 transition-colors text-xs active:scale-95"
+                            >
+                              <Phone className="w-3.5 h-3.5 text-zinc-400" />
+                              <span>{t.callNow}</span>
+                            </a>
 
-                        {/* Table Actions */}
-                        <td className="py-3 px-3.5 align-top text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* POS Sale Button */}
-                            {onSelectCustomerForPOS && (
-                              <button
-                                type="button"
-                                onClick={() => onSelectCustomerForPOS(lead)}
-                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] flex items-center gap-1 transition-colors cursor-pointer shadow-sm active:scale-95"
-                                title="ເປີດບິນຂາຍ POS ສຳລັບລູກຄ້ານີ້"
-                              >
-                                <ShoppingBag className="w-3 h-3" />
-                                <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'POS'}</span>
-                              </button>
-                            )}
+                            <a
+                              href={getWhatsAppUrl(lead.phone, lead.customerName, lead.interestedModel, lang)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-emerald-950/60 hover:bg-emerald-800 text-emerald-400 hover:text-white rounded-xl border border-emerald-800/50 font-semibold flex items-center gap-1.5 transition-all text-xs cursor-pointer active:scale-95"
+                              title={`ເປີດ WhatsApp: ${formatWhatsAppDisplay(lead.phone)}`}
+                            >
+                              <WhatsAppIcon className="w-3.5 h-3.5" />
+                              <span>WhatsApp</span>
+                            </a>
+                          </div>
 
-
+                          {/* Right: Actions */}
+                          <div className="flex items-center gap-2">
                             {/* Customer Documents Suite & Audit History Button */}
                             <button
                               type="button"
                               onClick={() => setSelectedCustomerForDocs(lead)}
-                              className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/80 rounded-lg text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 shadow-sm"
+                              className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-700/80 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-sm"
                               title="ເບິ່ງ/ອອກເອກະສານລູກຄ້າ (ໃບຮັບເງິນ, ໃບສັນຍາ, ໃບມອບສິດ)"
                             >
-                              <FileText className="w-3 h-3 text-amber-400" />
+                              <FileText className="w-3.5 h-3.5 text-amber-400" />
                               <span>ເອກະສານ</span>
                               {(() => {
                                 const count = getCustomerIssuedDocsCount(lead.customerName, lead.phone, lead.vin, lead.id);
                                 return count > 0 ? (
-                                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
                                     {count}
                                   </span>
                                 ) : null;
                               })()}
                             </button>
 
-                            {/* WhatsApp link */}
-                            <a
-                              href={getWhatsAppUrl(lead.phone, lead.customerName, lead.interestedModel, lang)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1 bg-emerald-950/60 text-emerald-400 hover:text-white hover:bg-emerald-700 rounded-lg border border-emerald-800/40 transition-colors"
-                              title="ສົນທະນາ WhatsApp"
-                            >
-                              <WhatsAppIcon className="w-3 h-3" />
-                            </a>
-
-                            {/* Delete Button */}
-                            <button
-                              type="button"
-                              onClick={() => setLeadToDelete(lead)}
-                              className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
-                              title="ລົບລູກຄ້າ"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                            {onSelectCustomerForPOS && (
+                              <button
+                                type="button"
+                                onClick={() => onSelectCustomerForPOS(lead)}
+                                className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 text-xs"
+                                title="ເປີດບິນຂາຍລົດ (POS) ແລະ ຕັດສະຕ໋ອກສຳລັບລູກຄ້ານີ້"
+                              >
+                                <ShoppingBag className="w-3.5 h-3.5" />
+                                <span>{lang === 'lo' ? 'ເປີດບິນຂາຍ POS' : lang === 'th' ? 'เปิดบิลขาย POS' : 'Sell POS'}</span>
+                              </button>
+                            )}
                           </div>
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
+                </div>
+              )}
+
+              {filteredLeads.length > PAGE_SIZE && (
+                <div className="flex items-center justify-between px-4 py-3 rounded-2xl border border-zinc-800 text-xs text-zinc-400 bg-zinc-950">
+                  <span>
+                    {lang === 'th' ? `แสดง ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} จาก ${filteredLeads.length} รายการ`
+                      : lang === 'lo' ? `ສະແດງ ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} ຈາກ ${filteredLeads.length} ລາຍການ`
+                        : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} of ${filteredLeads.length}`}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {lang === 'th' ? 'ก่อนหน้า' : lang === 'lo' ? 'ກ່ອນໜ້າ' : 'Previous'}
+                    </button>
+                    <span className="font-mono text-zinc-300">{currentPage} / {totalPages}</span>
+                    <button
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {lang === 'th' ? 'ถัดไป' : lang === 'lo' ? 'ຖັດໄປ' : 'Next'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          ) : (
-            /* VIEW MODE 2: MODERN HIGH-AESTHETIC BENTO STREAMLINE CARD VIEW */
-            <div className="space-y-4">
-              {paginatedLeads.map((lead) => {
+          </>
+        ) : customerClassificationTab === 'existing_customers' ? (
+          /* EXISTING CUSTOMERS & AFTER-SALES MANAGEMENT VIEW (100% PAID) */
+          <div className="space-y-6">
+            {/* 4 Metric Cards for 100% Cash/Transfer Owners & After-Sales */}
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              {[
+                {
+                  label: 'ລູກຄ້າຊື້ສົດ/ໂອນ 100%',
+                  value: existingCustomers.length,
+                  icon: Car,
+                  tone: 'text-zinc-100',
+                },
+                {
+                  label: 'ໂອນຜ່ານບັນຊີ / QR',
+                  value: existingCustomers.filter(c => c.paymentType === 'transfer' || c.billRecord?.paymentMethod === 'transfer').length,
+                  icon: CheckCircle2,
+                  tone: 'text-emerald-400',
+                },
+                {
+                  label: 'ຊຳລະເງິນສົດ (Cash)',
+                  value: existingCustomers.filter(c => c.paymentType === 'cash' || c.billRecord?.paymentMethod === 'cash').length,
+                  icon: Banknote,
+                  tone: 'text-amber-400',
+                },
+                {
+                  label: 'ການຮັບປະກັນ EV ແບັດເຕີຣີ',
+                  value: '100%',
+                  icon: ShieldCheck,
+                  tone: 'text-purple-400',
+                },
+              ].map((metric) => {
+                const Icon = metric.icon;
                 return (
-                  <div
-                    key={lead.id}
-                    className="theme-adaptive-dark-surface rounded-2xl border p-4 sm:p-5 space-y-4 transition-all shadow-sm bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700"
-                  >
-                    {/* 1. Header: Customer Identity, Contact Badges, Status Switcher & Delete */}
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-zinc-800/80">
-                      <div className="flex items-start sm:items-center gap-3 min-w-0">
-                        {/* Customer Initials Avatar */}
-                        <div className="w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 border bg-slate-100 dark:bg-zinc-800 text-slate-800 dark:text-white border-slate-300 dark:border-zinc-700 shadow-xs">
-                          {lead.customerName ? lead.customerName.slice(0, 2).toUpperCase() : 'CU'}
-                        </div>
-
-                        <div className="min-w-0 space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                              {lead.customerName}
-                            </h3>
-
-                            {/* VIP Priority Badge */}
-                            {lead.priority === 'vip' && (
-                              <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-400 text-black rounded-full font-bold flex items-center gap-1 shadow-sm">
-                                <Star className="w-2.5 h-2.5 fill-black text-black" />
-                                <span>VIP</span>
-                              </span>
-                            )}
-
-                            {/* Acquisition Channel Badge */}
-                            <span className="text-[10px] font-mono px-2.5 py-0.5 bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-full flex items-center gap-1">
-                              {lead.category === 'walk_in' ? <Store className="w-2.5 h-2.5 text-emerald-400" /> : lead.category === 'online' ? <Globe className="w-2.5 h-2.5 text-blue-400" /> : <Sparkles className="w-2.5 h-2.5 text-amber-400" />}
-                              <span>{lead.category === 'walk_in' ? 'Walk-in' : lead.category === 'online' ? 'Online' : 'Event'}</span>
-                            </span>
-                            {lead.category === 'event' && lead.source && (
-                              <span className="text-[10px] font-mono px-2.5 py-0.5 bg-amber-950/60 text-amber-300 border border-amber-800/60 rounded-full flex items-center gap-1">
-                                <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                                <span>{lead.source}</span>
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Contact Info, ID Card, and Registration Date Bar */}
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono text-zinc-400">
-                            {/* Phone with WhatsApp Link */}
-                            <button
-                              type="button"
-                              onClick={() => openWhatsApp(lead.phone, lead.customerName, lead.interestedModel, lang)}
-                              className="font-bold text-white hover:text-emerald-400 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-                              title="ສົນທະນາ WhatsApp"
-                            >
-                              <Phone className="w-3 h-3 text-zinc-400" />
-                              <span>{lead.phone}</span>
-                              <span className="text-[9px] bg-emerald-950/80 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-800/40 font-bold flex items-center gap-0.5">
-                                <WhatsAppIcon className="w-2.5 h-2.5" />
-                                <span>WA</span>
-                              </span>
-                            </button>
-
-                            {lead.idCardNumber && (
-                              <>
-                                <span className="text-zinc-600 hidden sm:inline">•</span>
-                                <span className="flex items-center gap-1 text-zinc-300">
-                                  <span className="text-zinc-500 font-sans">ບັດ:</span>
-                                  <span className="font-semibold text-white">{lead.idCardNumber}</span>
-                                </span>
-                              </>
-                            )}
-
-                            <span className="text-zinc-600 hidden sm:inline">•</span>
-                            <span className="text-zinc-500 text-[11px]">
-                              ID: {lead.id.slice(0, 8)} • ວັນທີສ້າງ: {lead.createdAt?.slice(0, 10)}
-                            </span>
-                          </div>
-                        </div>
+                  <div key={metric.label} className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm sm:p-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-[11px] font-medium text-slate-500 dark:text-zinc-400">{metric.label}</p>
+                        <p className="mt-1 text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-slate-900 dark:text-white">{typeof metric.value === 'number' ? metric.value.toLocaleString() : metric.value}</p>
                       </div>
-
-                      {/* Status Switcher & Delete Action */}
-                      <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
-                        <select
-                          value={lead.status}
-                          onChange={(e) => handleUpdateStatus(lead.id, e.target.value as LeadStatus)}
-                          className="bg-zinc-900 border border-zinc-700 text-zinc-200 hover:border-zinc-500 text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-white/20 font-semibold cursor-pointer transition-colors shadow-sm"
-                        >
-                          <option value="new">{t.statusNew}</option>
-                          <option value="contacted">{t.statusContacted}</option>
-                          <option value="test_drive">{t.statusTestDrive}</option>
-                          <option value="negotiation">{t.statusNegotiation}</option>
-                        </select>
-
-                        <button
-                          type="button"
-                          onClick={() => setLeadToDelete(lead)}
-                          className="p-2 bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 rounded-xl border border-zinc-800 hover:border-red-800 transition-colors cursor-pointer shrink-0 active:scale-95"
-                          title="ລົບລູກຄ້າ"
-                          aria-label="Delete Lead"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 dark:bg-zinc-900 ${metric.tone}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
                     </div>
-
-                    {/* 2. Bento Stream Details: Vehicle, Complete Location & Complete Notes (Zero Truncation) */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
-                      {/* Section A: Interested Vehicle & Dealership Source (4 cols) */}
-                      <div className="md:col-span-4 space-y-1.5">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
-                          <Car className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>ລຸ້ນລົດທີ່ສົນໃຈ</span>
-                        </span>
-                        <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 space-y-1">
-                          <div className="font-bold text-sm text-white flex items-center gap-1.5">
-                            <span>{lead.interestedModel || 'AVATR'}</span>
-                          </div>
-                          <div className="text-[11px] text-zinc-400 flex items-center justify-between pt-0.5">
-                            <span>ແຫຼ່ງທີ່ມາ:</span>
-                            <span className="text-zinc-200 font-medium">{lead.source || (lead.category === 'walk_in' ? 'ມາຊົມລົດຕົວຈິງ' : 'ສື່ສັງຄົມອອນລາຍ')}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Section B: Complete Customer Address & Staff (4 cols) */}
-                      <div className="md:col-span-4 space-y-1.5">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-blue-400" />
-                          <span>ທີ່ຢູ່ລູກຄ້າ (ເຫັນຄົບຖ້ວນ)</span>
-                        </span>
-                        <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 space-y-1">
-                          <p className="text-zinc-200 font-medium leading-relaxed">
-                            {[lead.village, lead.district, lead.province].filter(Boolean).join(', ') || 'ບໍ່ໄດ້ລະບຸທີ່ຢູ່'}
-                          </p>
-                          <div className="text-[11px] text-zinc-400 flex items-center justify-between pt-0.5">
-                            <span>ຜູ້ຮັບຜິດຊອບ:</span>
-                            <span className="text-zinc-200 font-semibold bg-zinc-800 px-2 py-0.5 rounded text-[11px]">
-                              {lead.assignedTo || currentUser?.name || 'Admin'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Section C: Complete Customer Notes (4 cols) */}
-                      <div className="md:col-span-4 space-y-1.5">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
-                          <FileText className="w-3.5 h-3.5 text-amber-400" />
-                          <span>ໝາຍເຫດ & ຄວາມຕ້ອງການ</span>
-                        </span>
-                        <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 min-h-[64px] flex items-center">
-                          {lead.notes ? (
-                            <p className="text-zinc-200 italic leading-relaxed text-[11px]">
-                              "{lead.notes}"
-                            </p>
-                          ) : (
-                            <p className="text-zinc-500 italic text-[11px]">ບໍ່ມີໝາຍເຫດເພີ່ມເຕີມ</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 3. Card Bottom Actions Toolbar */}
-                    <div className="pt-2.5 border-t border-zinc-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
-                      {/* Left: Quick Direct Contact */}
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={`tel:${lead.phone.replace(/\s+/g, '')}`}
-                          className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white rounded-xl border border-zinc-800 font-medium flex items-center gap-1.5 transition-colors text-xs active:scale-95"
-                        >
-                          <Phone className="w-3.5 h-3.5 text-zinc-400" />
-                          <span>{t.callNow}</span>
-                        </a>
-
-                        <a
-                          href={getWhatsAppUrl(lead.phone, lead.customerName, lead.interestedModel, lang)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 bg-emerald-950/60 hover:bg-emerald-800 text-emerald-400 hover:text-white rounded-xl border border-emerald-800/50 font-semibold flex items-center gap-1.5 transition-all text-xs cursor-pointer active:scale-95"
-                          title={`ເປີດ WhatsApp: ${formatWhatsAppDisplay(lead.phone)}`}
-                        >
-                          <WhatsAppIcon className="w-3.5 h-3.5" />
-                          <span>WhatsApp</span>
-                        </a>
-                      </div>
-
-                      {/* Right: Actions */}
-                      <div className="flex items-center gap-2">
-                        {/* Customer Documents Suite & Audit History Button */}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedCustomerForDocs(lead)}
-                          className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-700/80 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-sm"
-                          title="ເບິ່ງ/ອອກເອກະສານລູກຄ້າ (ໃບຮັບເງິນ, ໃບສັນຍາ, ໃບມອບສິດ)"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-amber-400" />
-                          <span>ເອກະສານ</span>
-                          {(() => {
-                            const count = getCustomerIssuedDocsCount(lead.customerName, lead.phone, lead.vin, lead.id);
-                            return count > 0 ? (
-                              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                                {count}
-                              </span>
-                            ) : null;
-                          })()}
-                        </button>
-
-                        {onSelectCustomerForPOS && (
-                          <button
-                            type="button"
-                            onClick={() => onSelectCustomerForPOS(lead)}
-                            className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 text-xs"
-                            title="ເປີດບິນຂາຍລົດ (POS) ແລະ ຕັດສະຕ໋ອກສຳລັບລູກຄ້ານີ້"
-                          >
-                            <ShoppingBag className="w-3.5 h-3.5" />
-                            <span>{lang === 'lo' ? 'ເປີດບິນຂາຍ POS' : lang === 'th' ? 'เปิดบิลขาย POS' : 'Sell POS'}</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                    {'caption' in metric && Boolean((metric as { caption?: string }).caption) && (
+                      <p className="mt-2 text-[10px] text-slate-500 dark:text-zinc-500">{(metric as { caption?: string }).caption}</p>
+                    )}
                   </div>
                 );
               })}
             </div>
-          )}
 
-          {filteredLeads.length > PAGE_SIZE && (
-            <div className="flex items-center justify-between px-4 py-3 rounded-2xl border border-zinc-800 text-xs text-zinc-400 bg-zinc-950">
-              <span>
-                {lang === 'th' ? `แสดง ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} จาก ${filteredLeads.length} รายการ`
-                  : lang === 'lo' ? `ສະແດງ ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} ຈາກ ${filteredLeads.length} ລາຍການ`
-                  : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredLeads.length)} of ${filteredLeads.length}`}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {lang === 'th' ? 'ก่อนหน้า' : lang === 'lo' ? 'ກ່ອນໜ້າ' : 'Previous'}
-                </button>
-                <span className="font-mono text-zinc-300">{currentPage} / {totalPages}</span>
-                <button
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  className="px-2.5 py-1 rounded border border-zinc-700 bg-zinc-900 text-zinc-200 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {lang === 'th' ? 'ถัดไป' : lang === 'lo' ? 'ຖັດໄປ' : 'Next'}
-                </button>
-              </div>
-            </div>
-          )}
-      </div>
-        </>
-      ) : customerClassificationTab === 'existing_customers' ? (
-        /* EXISTING CUSTOMERS & AFTER-SALES MANAGEMENT VIEW (100% PAID) */
-        <div className="space-y-6">
-          {/* 4 Metric Cards for 100% Cash/Transfer Owners & After-Sales */}
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            {[
-              {
-                label: 'ລູກຄ້າຊື້ສົດ/ໂອນ 100%',
-                value: existingCustomers.length,
-                caption: 'ຊຳລະຄົບຖ້ວນ & ມອບລົດແລ້ວ',
-                icon: Car,
-                tone: 'text-zinc-100',
-              },
-              {
-                label: 'ໂອນຜ່ານບັນຊີ / QR',
-                value: existingCustomers.filter(c => c.paymentType === 'transfer' || c.billRecord?.paymentMethod === 'transfer').length,
-                caption: 'ຊຳລະຜ່ານ BCEL One / QR',
-                icon: CheckCircle2,
-                tone: 'text-emerald-400',
-              },
-              {
-                label: 'ຊຳລະເງິນສົດ (Cash)',
-                value: existingCustomers.filter(c => c.paymentType === 'cash' || c.billRecord?.paymentMethod === 'cash').length,
-                caption: 'ຊຳລະເງິນສົດໜ້າໂຊຣູມ',
-                icon: Banknote,
-                tone: 'text-amber-400',
-              },
-              {
-                label: 'ການຮັບປະກັນ EV ແບັດເຕີຣີ',
-                value: '100%',
-                caption: 'ຄຸ້ມຄອງ 8 ປີ / 160,000 km',
-                icon: ShieldCheck,
-                tone: 'text-purple-400',
-              },
-            ].map((metric) => {
-              const Icon = metric.icon;
-              return (
-                <div key={metric.label} className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm sm:p-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-[11px] font-medium text-slate-500 dark:text-zinc-400">{metric.label}</p>
-                      <p className="mt-1 text-2xl font-bold font-mono text-slate-900 dark:text-white">{typeof metric.value === 'number' ? metric.value.toLocaleString() : metric.value}</p>
-                    </div>
-                    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 dark:bg-zinc-900 ${metric.tone}`}>
-                      <Icon className="h-4 w-4" />
-                    </span>
-                  </div>
-                  <p className="mt-2 text-[10px] text-slate-500 dark:text-zinc-500">{metric.caption}</p>
+            {/* Filter & Action Toolbar for Existing Customers */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:p-5 shadow-sm space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                {/* Search Bar */}
+                <div className="relative flex-1 min-w-[260px]">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={existingSearchQuery}
+                    onChange={(e) => setExistingSearchQuery(e.target.value)}
+                    placeholder="ຄົ້ນຫາຊື່ລູກຄ້າ, ເບີໂທ, ທະບຽນລົດ, ເລກ VIN, ແຂວງ..."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-all"
+                  />
+                  {existingSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setExistingSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
-              );
-            })}
-          </div>
 
-          {/* Filter & Action Toolbar for Existing Customers */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:p-5 shadow-sm space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              {/* Search Bar */}
-              <div className="relative flex-1 min-w-[260px]">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                <input
-                  type="text"
-                  value={existingSearchQuery}
-                  onChange={(e) => setExistingSearchQuery(e.target.value)}
-                  placeholder="ຄົ້ນຫາຊື່ລູກຄ້າ, ເບີໂທ, ທະບຽນລົດ, ເລກ VIN, ແຂວງ..."
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-all"
-                />
-                {existingSearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setExistingSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                {/* Model Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-zinc-400 font-medium">ລຸ້ນລົດ:</span>
+                  <select
+                    value={existingModelFilter}
+                    onChange={(e) => setExistingModelFilter(e.target.value)}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+                    <option value="all">ທຸກລຸ້ນ ({existingCustomers.length})</option>
+                    {vehicles.map((v) => (
+                      <option key={v.id || v.name} value={v.name}>
+                        {v.name} ({existingCustomers.filter(c => c.model === v.name).length})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Model Filter */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-zinc-400 font-medium">ລຸ້ນລົດ:</span>
-                <select
-                  value={existingModelFilter}
-                  onChange={(e) => setExistingModelFilter(e.target.value)}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
-                >
-                  <option value="all">ທຸກລຸ້ນ ({existingCustomers.length})</option>
-                  {vehicles.map((v) => (
-                    <option key={v.id || v.name} value={v.name}>
-                      {v.name} ({existingCustomers.filter(c => c.model === v.name).length})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Service Filter */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-zinc-400 font-medium">ປະຫວັດສູນ:</span>
-                <select
-                  value={existingServiceFilter}
-                  onChange={(e) => setExistingServiceFilter(e.target.value as any)}
-                  className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
-                >
-                  <option value="all">ທັງໝົດ ({existingCustomers.length})</option>
-                  <option value="has_service">ມີປະຫວັດເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) > 0).length})</option>
-                  <option value="no_service">ຍັງບໍ່ເຄີຍເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) === 0).length})</option>
-                </select>
-              </div>
-
-              {/* Quick Book Service Button */}
-              <button
-                type="button"
-                onClick={() => setServiceModalCustomer({ name: '', phone: '', model: vehicles[0]?.name || 'AVATR 12' })}
-                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95 ml-auto"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>ນັດໝາຍເຂົ້າສູນໃໝ່</span>
-              </button>
-            </div>
-          </div>
-
-          {/* List of Existing Customers / Car Owners */}
-          {filteredExistingCustomers.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-zinc-800 bg-zinc-950/50 p-12 text-center">
-              <Car className="mx-auto w-12 h-12 text-zinc-600 mb-3" />
-              <p className="text-sm font-bold text-zinc-300">ບໍ່ພົບຂໍ້ມູນລູກຄ້າເກົ່າທີ່ຕົງກັບເງື່ອນໄຂຄົ້ນຫາ</p>
-              <p className="text-xs text-zinc-500 mt-1">ລູກຄ້າທີ່ອອກບິນຂາຍ ຫຼື ສົ່ງມອບລົດແລ້ວ ຈະຖືກບັນທຶກໄວ້ໃນໜ້ານີ້ໂດຍອັດຕະໂນມັດ ເພື່ອໃຫ້ບໍລິການຫຼັງການຂາຍ</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-5">
-              {filteredExistingCustomers.map((owner) => {
-                const recentServices = owner.services || [];
-                const leadData = owner.leadRecord;
-
-                return (
-                  <div
-                    key={owner.id}
-                    className="group rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-4 hover:border-zinc-700 transition-all"
+                {/* Service Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-zinc-400 font-medium">ປະຫວັດສູນ:</span>
+                  <select
+                    value={existingServiceFilter}
+                    onChange={(e) => setExistingServiceFilter(e.target.value as any)}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
                   >
-                    {/* Header Row: Vehicle Banner & Live Warranty Duration Countdown */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 grid place-items-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-inner">
-                          <Car className="w-6 h-6 text-emerald-400" />
-                        </div>
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-bold text-white tracking-tight">{owner.model}</h3>
-                            <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-zinc-900 border border-zinc-700 text-zinc-200">
-                              {owner.plateNumber || 'ກຳແພງນະຄອນ (ລໍຖ້າປ້າຍ)'}
-                            </span>
-                            {owner.color && (
-                              <span className="px-2 py-0.5 rounded-lg text-[10px] font-medium bg-zinc-900/60 border border-zinc-800 text-zinc-400">
-                                ສີ: {owner.color}
-                              </span>
-                            )}
+                    <option value="all">ທັງໝົດ ({existingCustomers.length})</option>
+                    <option value="has_service">ມີປະຫວັດເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) > 0).length})</option>
+                    <option value="no_service">ຍັງບໍ່ເຄີຍເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) === 0).length})</option>
+                  </select>
+                </div>
+
+                {/* Quick Book Service Button */}
+                <button
+                  type="button"
+                  onClick={() => setServiceModalCustomer({ name: '', phone: '', model: vehicles[0]?.name || 'AVATR 12' })}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95 ml-auto"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>ນັດໝາຍເຂົ້າສູນໃໝ່</span>
+                </button>
+              </div>
+            </div>
+
+            {/* List of Existing Customers / Car Owners */}
+            {filteredExistingCustomers.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-zinc-800 bg-zinc-950/50 p-12 text-center">
+                <Car className="mx-auto w-12 h-12 text-zinc-600 mb-3" />
+                <p className="text-sm font-bold text-zinc-300">ບໍ່ພົບຂໍ້ມູນລູກຄ້າເກົ່າທີ່ຕົງກັບເງື່ອນໄຂຄົ້ນຫາ</p>
+                <p className="text-xs text-zinc-500 mt-1">ລູກຄ້າທີ່ອອກບິນຂາຍ ຫຼື ສົ່ງມອບລົດແລ້ວ ຈະຖືກບັນທຶກໄວ້ໃນໜ້ານີ້ໂດຍອັດຕະໂນມັດ ເພື່ອໃຫ້ບໍລິການຫຼັງການຂາຍ</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5">
+                {filteredExistingCustomers.map((owner) => {
+                  const recentServices = owner.services || [];
+                  const leadData = owner.leadRecord;
+
+                  return (
+                    <div
+                      key={owner.id}
+                      className="group rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 shadow-sm space-y-4 hover:border-zinc-700 transition-all"
+                    >
+                      {/* Header Row: Vehicle Banner & Live Warranty Duration Countdown */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 grid place-items-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-inner">
+                            <Car className="w-6 h-6 text-emerald-400" />
                           </div>
-                          <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-zinc-400 mt-1">
-                            <span>VIN: <strong className="text-zinc-300 font-semibold">{owner.vin}</strong></span>
-                            {owner.engineNumber && (
-                              <span>• Motor: <strong className="text-zinc-300 font-semibold">{owner.engineNumber}</strong></span>
-                            )}
-                            <span className="text-zinc-500">• ມອບລົດ: {owner.purchaseDate}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Live Dynamic Warranty Status & Countdown Card */}
-                      <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800/80 min-w-[280px] sm:min-w-[320px] shadow-sm space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-200">
-                            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                            <span className="truncate">{owner.warrantyTerms || 'ການຮັບປະກັນ EV CATL'}</span>
-                          </span>
-
-                          {/* Warranty Status Badge */}
-                          {owner.warrantyStatus === 'active' && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
-                              <CheckCircle2 className="w-3 h-3" />
-                              <span>ຍັງຢູ່ໃນປະກັນ</span>
-                            </span>
-                          )}
-                          {owner.warrantyStatus === 'expiring' && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1 shrink-0">
-                              <Clock className="w-3 h-3" />
-                              <span>ໃກ້ໝົດປະກັນ</span>
-                            </span>
-                          )}
-                          {owner.warrantyStatus === 'expired' && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1 shrink-0">
-                              <AlertTriangle className="w-3 h-3" />
-                              <span>ໝົດອາຍຸແລ້ວ</span>
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-baseline justify-between text-xs pt-1">
                           <div>
-                            <span className="text-[11px] text-zinc-400">ແພັກເກັດ: </span>
-                            <span className="font-bold text-white font-mono">{owner.warrantyYears} ປີ / {owner.warrantyDistanceKm?.toLocaleString()} km</span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-[11px] text-zinc-400">ໝົດອາຍຸ: </span>
-                            <span className="font-bold text-emerald-400 font-mono">{owner.warrantyExpiryDate}</span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-lg font-bold text-white tracking-tight">{owner.model}</h3>
+                              <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-zinc-900 border border-zinc-700 text-zinc-200">
+                                {owner.plateNumber || 'ກຳແພງນະຄອນ (ລໍຖ້າປ້າຍ)'}
+                              </span>
+                              {owner.color && (
+                                <span className="px-2 py-0.5 rounded-lg text-[10px] font-medium bg-zinc-900/60 border border-zinc-800 text-zinc-400">
+                                  ສີ: {owner.color}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-zinc-400 mt-1">
+                              <span>VIN: <strong className="text-zinc-300 font-semibold">{owner.vin}</strong></span>
+                              {owner.engineNumber && (
+                                <span>• Motor: <strong className="text-zinc-300 font-semibold">{owner.engineNumber}</strong></span>
+                              )}
+                              <span className="text-zinc-500">• ມອບລົດ: {owner.purchaseDate}</span>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Visual Progress Bar of Remaining Time */}
-                        <div className="space-y-1 pt-0.5">
-                          <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
-                            <div 
-                              className={`h-1.5 rounded-full transition-all duration-500 ${
-                                owner.warrantyStatus === 'active' ? 'bg-gradient-to-r from-emerald-500 to-teal-400' :
-                                owner.warrantyStatus === 'expiring' ? 'bg-gradient-to-r from-amber-500 to-yellow-400' :
-                                'bg-rose-500'
-                              }`} 
-                              style={{ width: `${owner.remainingPct}%` }}
-                            />
+                        {/* Live Dynamic Warranty Status & Countdown Card */}
+                        <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800/80 min-w-[280px] sm:min-w-[320px] shadow-sm space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-200">
+                              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                              <span className="truncate">{owner.warrantyTerms || 'ການຮັບປະກັນ EV CATL'}</span>
+                            </span>
+
+                            {/* Warranty Status Badge */}
+                            {owner.warrantyStatus === 'active' && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>ຍັງຢູ່ໃນປະກັນ</span>
+                              </span>
+                            )}
+                            {owner.warrantyStatus === 'expiring' && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1 shrink-0">
+                                <Clock className="w-3 h-3" />
+                                <span>ໃກ້ໝົດປະກັນ</span>
+                              </span>
+                            )}
+                            {owner.warrantyStatus === 'expired' && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1 shrink-0">
+                                <AlertTriangle className="w-3 h-3" />
+                                <span>ໝົດອາຍຸແລ້ວ</span>
+                              </span>
+                            )}
                           </div>
-                          <div className="flex items-center justify-between text-[10px] text-zinc-400 font-mono">
-                            <span>ເລີ່ມ: {owner.warrantyStartDate}</span>
-                            <span className="text-emerald-400 font-bold">{owner.remainingText} ({owner.remainingPct}%)</span>
+
+                          <div className="flex items-baseline justify-between text-xs pt-1">
+                            <div>
+                              <span className="text-[11px] text-zinc-400">ແພັກເກັດ: </span>
+                              <span className="font-bold text-white font-mono">{owner.warrantyYears} ປີ / {owner.warrantyDistanceKm?.toLocaleString()} km</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[11px] text-zinc-400">ໝົດອາຍຸ: </span>
+                              <span className="font-bold text-emerald-400 font-mono">{owner.warrantyExpiryDate}</span>
+                            </div>
+                          </div>
+
+                          {/* Visual Progress Bar of Remaining Time */}
+                          <div className="space-y-1 pt-0.5">
+                            <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-1.5 rounded-full transition-all duration-500 ${owner.warrantyStatus === 'active' ? 'bg-gradient-to-r from-emerald-500 to-teal-400' :
+                                  owner.warrantyStatus === 'expiring' ? 'bg-gradient-to-r from-amber-500 to-yellow-400' :
+                                    'bg-rose-500'
+                                  }`}
+                                style={{ width: `${owner.remainingPct}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-zinc-400 font-mono">
+                              <span>ເລີ່ມ: {owner.warrantyStartDate}</span>
+                              <span className="text-emerald-400 font-bold">{owner.remainingText} ({owner.remainingPct}%)</span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Middle Section: Customer Details & After-Sales Service History */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                      {/* Left: Customer Info & Vehicle Telemetry (5 cols) */}
-                      <div className="lg:col-span-5 rounded-2xl bg-zinc-900/50 border border-zinc-800/70 p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                            <UserIcon className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>ຂໍ້ມູນເຈົ້າຂອງລົດ</span>
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedOwnerForAfterSales(owner);
-                                setIsAfterSalesModalOpen(true);
-                              }}
-                              className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
-                              title="ແກ້ໄຂຂໍ້ມູນເຈົ້າຂອງລົດ & ຫຼັງການຂາຍ"
-                            >
-                              <span>ແກ້ໄຂ</span>
-                            </button>
-                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                              <span>{owner.paymentType === 'installment_completed' ? 'ຜ່ອນຄົບ 100%' : 'ຊຳລະສົດ/ໂອນ 100%'}</span>
+                      {/* Middle Section: Customer Details & After-Sales Service History */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                        {/* Left: Customer Info & Vehicle Telemetry (5 cols) */}
+                        <div className="lg:col-span-5 rounded-2xl bg-zinc-900/50 border border-zinc-800/70 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                              <UserIcon className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>ຂໍ້ມູນເຈົ້າຂອງລົດ</span>
                             </span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-base font-extrabold text-white">{owner.customerName}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Phone className="w-3.5 h-3.5 text-zinc-400" />
-                            <a
-                              href={`tel:${owner.phone}`}
-                              className="text-xs font-mono font-bold text-white hover:underline"
-                            >
-                              {owner.phone}
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => openWhatsApp(owner.phone, owner.customerName, owner.model, lang)}
-                              className="p-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 border border-emerald-800/60 transition-all cursor-pointer active:scale-95 ml-1"
-                              title="ເປີດ WhatsApp"
-                            >
-                              <WhatsAppIcon className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="pt-2 border-t border-zinc-800/60 space-y-1.5 text-xs">
-                          {(owner.province || owner.district || owner.village) && (
-                            <div className="flex items-start gap-1.5 text-zinc-400">
-                              <MapPin className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
-                              <span className="truncate">
-                                {[owner.village, owner.district, owner.province].filter(Boolean).join(', ')}
-                              </span>
-                            </div>
-                          )}
-
-                          {owner.idCardNumber && (
-                            <div className="flex items-center gap-1.5 text-zinc-400">
-                              <CreditCard className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                              <span>ບັດປະຈຳຕົວ: <strong className="font-mono text-zinc-300">{owner.idCardNumber}</strong></span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Telemetry & Health Box */}
-                        <div className="pt-2 border-t border-zinc-800/60 space-y-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">ສະຖານະຕົວລົດປັດຈຸບັນ</span>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-zinc-800/90 space-y-0.5">
-                              <span className="text-[10px] text-zinc-400 flex items-center gap-1">
-                                <Gauge className="w-3 h-3 text-zinc-400" />
-                                <span>ເລກໄມປັດຈຸບັນ</span>
-                              </span>
-                              <span className="font-mono font-bold text-white text-sm block">
-                                {owner.currentMileageKm?.toLocaleString() || '5,000'} km
-                              </span>
-                            </div>
-                            <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-zinc-800/90 space-y-0.5">
-                              <span className="text-[10px] text-zinc-400 flex items-center gap-1">
-                                <BatteryCharging className="w-3 h-3 text-emerald-400" />
-                                <span>ສຸຂະພາບແບັດ (SOH)</span>
-                              </span>
-                              <span className="font-mono font-bold text-emerald-400 text-sm block">
-                                {owner.batteryHealthSOH || 99.5}%
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedOwnerForAfterSales(owner);
+                                  setIsAfterSalesModalOpen(true);
+                                }}
+                                className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                                title="ແກ້ໄຂຂໍ້ມູນເຈົ້າຂອງລົດ & ຫຼັງການຂາຍ"
+                              >
+                                <span>ແກ້ໄຂ</span>
+                              </button>
+                              <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                <span>{owner.paymentType === 'installment_completed' ? 'ຜ່ອນຄົບ 100%' : 'ຊຳລະສົດ/ໂອນ 100%'}</span>
                               </span>
                             </div>
                           </div>
 
-                          {owner.afterSalesNotes && (
-                            <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/70 text-[11px] text-zinc-400 flex items-start gap-1.5">
-                              <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                              <p className="line-clamp-2 italic">{owner.afterSalesNotes}</p>
+                          <div>
+                            <p className="text-base font-extrabold text-white">{owner.customerName}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Phone className="w-3.5 h-3.5 text-zinc-400" />
+                              <a
+                                href={`tel:${owner.phone}`}
+                                className="text-xs font-mono font-bold text-white hover:underline"
+                              >
+                                {owner.phone}
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => openWhatsApp(owner.phone, owner.customerName, owner.model, lang)}
+                                className="p-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 border border-emerald-800/60 transition-all cursor-pointer active:scale-95 ml-1"
+                                title="ເປີດ WhatsApp"
+                              >
+                                <WhatsAppIcon className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Right: After-Sales Service Suite & History (7 cols) */}
-                      <div className="lg:col-span-7 rounded-2xl bg-zinc-900/50 border border-zinc-800/70 p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Wrench className="w-4 h-4 text-amber-400" />
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-200">
-                              ປະຫວັດການເຂົ້າສູນ & ບໍລິການຫຼັງການຂາຍ
-                            </span>
                           </div>
-                          
-                          <div className="flex items-center gap-2">
-                            {/* Live Service Visit Count Badge */}
-                            <span className="px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                              ເຂົ້າສູນແລ້ວ {recentServices.length} ຄັ້ງ
-                            </span>
 
-                            {/* Quick Add Service Button prefilled */}
-                            <button
-                              type="button"
-                              onClick={() => setServiceModalCustomer({
-                                name: owner.customerName,
-                                phone: owner.phone,
-                                model: owner.model,
-                                plateNumber: owner.plateNumber,
-                                mileageKm: owner.currentMileageKm,
-                                batteryHealthPercent: owner.batteryHealthSOH
-                              })}
-                              className="px-2.5 py-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-[11px] font-bold text-zinc-200 border border-zinc-700 flex items-center gap-1 cursor-pointer transition-all"
-                              title="ບັນທຶກປະຫວັດການເຂົ້າສູນໃໝ່ໃຫ້ລູກຄ້ານີ້"
-                            >
-                              <Plus className="w-3 h-3 text-emerald-400" />
-                              <span>+ ເພີ່ມປະຫວັດ</span>
-                            </button>
+                          <div className="pt-2 border-t border-zinc-800/60 space-y-1.5 text-xs">
+                            {(owner.province || owner.district || owner.village) && (
+                              <div className="flex items-start gap-1.5 text-zinc-400">
+                                <MapPin className="w-3.5 h-3.5 text-zinc-500 shrink-0 mt-0.5" />
+                                <span className="truncate">
+                                  {[owner.village, owner.district, owner.province].filter(Boolean).join(', ')}
+                                </span>
+                              </div>
+                            )}
+
+                            {owner.idCardNumber && (
+                              <div className="flex items-center gap-1.5 text-zinc-400">
+                                <CreditCard className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                                <span>ບັດປະຈຳຕົວ: <strong className="font-mono text-zinc-300">{owner.idCardNumber}</strong></span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Telemetry & Health Box */}
+                          <div className="pt-2 border-t border-zinc-800/60 space-y-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">ສະຖານະຕົວລົດປັດຈຸບັນ</span>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-zinc-800/90 space-y-0.5">
+                                <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+                                  <Gauge className="w-3 h-3 text-zinc-400" />
+                                  <span>ເລກໄມປັດຈຸບັນ</span>
+                                </span>
+                                <span className="font-mono font-bold text-white text-sm block">
+                                  {owner.currentMileageKm?.toLocaleString() || '5,000'} km
+                                </span>
+                              </div>
+                              <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-zinc-800/90 space-y-0.5">
+                                <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+                                  <BatteryCharging className="w-3 h-3 text-emerald-400" />
+                                  <span>ສຸຂະພາບແບັດ (SOH)</span>
+                                </span>
+                                <span className="font-mono font-bold text-emerald-400 text-sm block">
+                                  {owner.batteryHealthSOH || 99.5}%
+                                </span>
+                              </div>
+                            </div>
+
+                            {owner.afterSalesNotes && (
+                              <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/70 text-[11px] text-zinc-400 flex items-start gap-1.5">
+                                <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                <p className="line-clamp-2 italic">{owner.afterSalesNotes}</p>
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        {recentServices.length > 0 ? (
-                          <div className="space-y-2 max-h-52 overflow-y-auto pr-1 custom-scrollbar">
-                            {recentServices.map((svc) => {
-                              const serviceTypeLabels: Record<string, string> = {
-                                periodic_maintenance: 'ບຳລຸງຮັກສາຕາມໄລຍະ (Periodic)',
-                                battery_check: 'ກວດເຊັກສຸຂະພາບແບັດເຕີຣີ (Battery HV)',
-                                software_ota: 'ອັບເດດ Software OTA / HarmonyOS',
-                                brake_suspension: 'ກວດລະບົບເບກ & ຊ່ວງລ່າງ',
-                                body_paint: 'ສ້ອມແປງສີ & ຕົວຖັງ',
-                                emergency_repair: 'ສ້ອມແປງດ່ວນ / Emergency',
-                              };
+                        {/* Right: After-Sales Service Suite & History (7 cols) */}
+                        <div className="lg:col-span-7 rounded-2xl bg-zinc-900/50 border border-zinc-800/70 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Wrench className="w-4 h-4 text-amber-400" />
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-200">
+                                ປະຫວັດການເຂົ້າສູນ & ບໍລິການຫຼັງການຂາຍ
+                              </span>
+                            </div>
 
-                              return (
-                                <div
-                                  key={svc.id}
-                                  className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs hover:border-zinc-700 transition-colors"
-                                >
-                                  <div className="min-w-0 space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-bold text-white truncate">
-                                        {serviceTypeLabels[svc.serviceType] || svc.serviceType}
-                                      </span>
-                                      {svc.batteryHealthPercent && (
-                                        <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800/40">
-                                          SOH: {svc.batteryHealthPercent}%
+                            <div className="flex items-center gap-2">
+                              {/* Live Service Visit Count Badge */}
+                              <span className="px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                                ເຂົ້າສູນແລ້ວ {recentServices.length} ຄັ້ງ
+                              </span>
+
+                              {/* Quick Add Service Button prefilled */}
+                              <button
+                                type="button"
+                                onClick={() => setServiceModalCustomer({
+                                  name: owner.customerName,
+                                  phone: owner.phone,
+                                  model: owner.model,
+                                  plateNumber: owner.plateNumber,
+                                  mileageKm: owner.currentMileageKm,
+                                  batteryHealthPercent: owner.batteryHealthSOH
+                                })}
+                                className="px-2.5 py-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-[11px] font-bold text-zinc-200 border border-zinc-700 flex items-center gap-1 cursor-pointer transition-all"
+                                title="ບັນທຶກປະຫວັດການເຂົ້າສູນໃໝ່ໃຫ້ລູກຄ້ານີ້"
+                              >
+                                <Plus className="w-3 h-3 text-emerald-400" />
+                                <span>ເພີ່ມປະຫວັດ</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {recentServices.length > 0 ? (
+                            <div className="space-y-2 max-h-52 overflow-y-auto pr-1 custom-scrollbar">
+                              {recentServices.map((svc) => {
+                                const serviceTypeLabels: Record<string, string> = {
+                                  periodic_maintenance: 'ບຳລຸງຮັກສາຕາມໄລຍະ (Periodic)',
+                                  battery_check: 'ກວດເຊັກສຸຂະພາບແບັດເຕີຣີ (Battery HV)',
+                                  software_ota: 'ອັບເດດ Software OTA / HarmonyOS',
+                                  brake_suspension: 'ກວດລະບົບເບກ & ຊ່ວງລ່າງ',
+                                  body_paint: 'ສ້ອມແປງສີ & ຕົວຖັງ',
+                                  emergency_repair: 'ສ້ອມແປງດ່ວນ / Emergency',
+                                };
+
+                                return (
+                                  <div
+                                    key={svc.id}
+                                    className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs hover:border-zinc-700 transition-colors"
+                                  >
+                                    <div className="min-w-0 space-y-0.5">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-white truncate">
+                                          {serviceTypeLabels[svc.serviceType] || svc.serviceType}
                                         </span>
-                                      )}
-                                      {svc.mileageKm && (
-                                        <span className="px-1.5 py-0.2 rounded text-[10px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800">
-                                          {svc.mileageKm.toLocaleString()} km
+                                        {svc.batteryHealthPercent && (
+                                          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800/40">
+                                            SOH: {svc.batteryHealthPercent}%
+                                          </span>
+                                        )}
+                                        {svc.mileageKm && (
+                                          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800">
+                                            {svc.mileageKm.toLocaleString()} km
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-[11px] text-zinc-400 mt-0.5 flex items-center gap-2">
+                                        <span className="flex items-center gap-1">
+                                          <Calendar className="w-3 h-3 text-zinc-400 shrink-0" />
+                                          <span>{svc.scheduledDate} {svc.scheduledTime}</span>
                                         </span>
+                                        {svc.technician && <span>• ຊ່າງ: {svc.technician}</span>}
+                                      </p>
+                                      {svc.notes && (
+                                        <p className="text-[10px] text-zinc-500 italic truncate max-w-md">{svc.notes}</p>
                                       )}
                                     </div>
-                                    <p className="text-[11px] text-zinc-400 mt-0.5 flex items-center gap-2">
-                                      <span className="flex items-center gap-1">
-                                        <Calendar className="w-3 h-3 text-zinc-400 shrink-0" />
-                                        <span>{svc.scheduledDate} {svc.scheduledTime}</span>
-                                      </span>
-                                      {svc.technician && <span>• ຊ່າງ: {svc.technician}</span>}
-                                    </p>
-                                    {svc.notes && (
-                                      <p className="text-[10px] text-zinc-500 italic truncate max-w-md">{svc.notes}</p>
-                                    )}
-                                  </div>
 
-                                  <div>
-                                    {svc.status === 'completed' && (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800/40">
-                                        ສຳເລັດແລ້ວ
-                                      </span>
-                                    )}
-                                    {svc.status === 'in_progress' && (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-800/40">
-                                        ກຳລັງກວດເຊັກ
-                                      </span>
-                                    )}
-                                    {(svc.status === 'pending' || !svc.status) && (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800/40">
-                                        ລໍຖ້າກວດເຊັກ
-                                      </span>
-                                    )}
-                                    {svc.status === 'inspection_done' && (
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-950 text-purple-300 border border-purple-800/40">
-                                        ກວດສອບແລ້ວ
-                                      </span>
-                                    )}
+                                    <div className="relative shrink-0">
+                                      <select
+                                        value={svc.status || 'pending'}
+                                        disabled={updatingServiceId === svc.id}
+                                        onChange={(e) => handleUpdateSingleServiceStatus(svc.id, e.target.value as ServiceAppointment['status'])}
+                                        className={`text-[10.5px] font-bold px-2.5 py-1 pr-6 rounded-lg border appearance-none cursor-pointer focus:outline-none transition-all shadow-xs ${svc.status === 'completed'
+                                          ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700/60 hover:border-emerald-500'
+                                          : svc.status === 'in_progress'
+                                            ? 'bg-blue-950/90 text-blue-300 border-blue-700/60 hover:border-blue-500'
+                                            : svc.status === 'inspection_done'
+                                              ? 'bg-purple-950/90 text-purple-300 border-purple-700/60 hover:border-purple-500'
+                                              : 'bg-amber-950/90 text-amber-300 border-amber-700/60 hover:border-amber-500'
+                                          } disabled:opacity-50`}
+                                        title="ກົດເພື່ອປ່ຽນສະຖານະການບໍລິການ"
+                                      >
+                                        <option value="pending" className="bg-zinc-900 text-amber-300">ລໍຖ້າກວດເຊັກ</option>
+                                        <option value="in_progress" className="bg-zinc-900 text-blue-300">ກຳລັງກວດເຊັກ</option>
+                                        <option value="inspection_done" className="bg-zinc-900 text-purple-300">ກວດສອບແລ້ວ</option>
+                                        <option value="completed" className="bg-zinc-900 text-emerald-300">ສຳເລັດແລ້ວ</option>
+                                      </select>
+                                      {updatingServiceId === svc.id ? (
+                                        <Loader2 className="w-3 h-3 text-zinc-400 animate-spin absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                      ) : (
+                                        <ChevronDown className="w-3 h-3 text-zinc-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              );
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-dashed border-zinc-800 text-center space-y-1">
+                              <p className="text-xs font-semibold text-zinc-300">
+                                ຍັງບໍ່ທັນມີປະຫວັດການເຂົ້າສູນບໍລິການ
+                              </p>
+                              <p className="text-[11px] text-zinc-500">
+                                ລົດໃໝ່ແນະນຳເພື່ອນັດໝາຍກວດເຊັກ 5,000 km ທຳອິດ ຫຼື 3 ເດືອນເພື່ອຮັກສາເງື່ອນໄຂການຮັບປະກັນແບັດເຕີຣີ.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Bottom Action Buttons Suite */}
+                      <div className="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-zinc-800/80">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* 1. Edit After-Sales & Warranty Profile Button (PRIMARY) */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedOwnerForAfterSales(owner);
+                              setIsAfterSalesModalOpen(true);
+                            }}
+                            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 active:scale-95 text-white font-bold rounded-xl text-xs border border-zinc-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                            title="ປ້ອນ ແລະ ແກ້ໄຂຂໍ້ມູນລູກຄ້າຫຼັງການຂາຍ, ເລກ VIN, ເລກໄມ ແລະ ໄລຍະຮັບປະກັນ"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>ແກ້ໄຂຂໍ້ມູນຫຼັງການຂາຍ & ຮັບປະກັນ</span>
+                          </button>
+
+                          {/* 2. Book Service Button */}
+                          <button
+                            type="button"
+                            onClick={() => setServiceModalCustomer({
+                              name: owner.customerName,
+                              phone: owner.phone,
+                              model: owner.model,
+                              plateNumber: owner.plateNumber,
+                              mileageKm: owner.currentMileageKm,
+                              batteryHealthPercent: owner.batteryHealthSOH
                             })}
-                          </div>
-                        ) : (
-                          <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-dashed border-zinc-800 text-center space-y-1">
-                            <p className="text-xs font-semibold text-zinc-300">
-                              ຍັງບໍ່ທັນມີປະຫວັດການເຂົ້າສູນບໍລິການ
-                            </p>
-                            <p className="text-[11px] text-zinc-500">
-                              ລົດໃໝ່ແນະນຳເພື່ອນັດໝາຍກວດເຊັກ 5,000 km ທຳອິດ ຫຼື 3 ເດືອນເພື່ອຮັກສາເງື່ອນໄຂການຮັບປະກັນແບັດເຕີຣີ.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                            title="ເປີດຟອມນັດໝາຍເຂົ້າສູນບໍລິການ AVATR"
+                          >
+                            <Wrench className="w-3.5 h-3.5" />
+                            <span>ນັດໝາຍເຂົ້າສູນ (Book Service)</span>
+                          </button>
 
-                    {/* Bottom Action Buttons Suite */}
-                    <div className="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-zinc-800/80">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* 1. Edit After-Sales & Warranty Profile Button (PRIMARY) */}
+                          {/* 3. Customer Documents & Delivery Handover */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (owner.leadRecord) {
+                                setSelectedCustomerForDocs(owner.leadRecord);
+                              } else {
+                                // Synthetic lead object from bill
+                                setSelectedCustomerForDocs({
+                                  id: owner.id,
+                                  customerName: owner.customerName,
+                                  phone: owner.phone,
+                                  idCardNumber: owner.idCardNumber,
+                                  province: owner.province || 'ນະຄອນຫຼວງວຽງຈັນ',
+                                  district: owner.district,
+                                  village: owner.village,
+                                  category: 'walk_in',
+                                  source: 'Showroom Delivery',
+                                  interestedModel: owner.model,
+                                  status: 'delivered',
+                                  priority: 'vip',
+                                  notes: `ລົດສົ່ງມອບແລ້ວ: ${owner.model} VIN: ${owner.vin}`,
+                                  paymentType: owner.paymentType as any || 'cash',
+                                  paymentDate: owner.purchaseDate,
+                                  paymentReceiptNo: owner.billRecord?.billNumber || owner.vin,
+                                  assignedTo: owner.billRecord?.salesRep || currentUser?.name || 'Admin',
+                                  createdAt: owner.purchaseDate || new Date().toISOString(),
+                                });
+                              }
+                            }}
+                            className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                            title="ເບິ່ງເອກະສານມອບລົດ, ໃບຮັບເງິນ ແລະ ໃບຮັບປະກັນ"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                            <span>ເອກະສານ & ໃບມອບລົດ</span>
+                            {(() => {
+                              const count = getCustomerIssuedDocsCount(owner.customerName, owner.phone, owner.vin, owner.leadRecord?.id || owner.id);
+                              return count > 0 ? (
+                                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  {count}
+                                </span>
+                              ) : null;
+                            })()}
+                          </button>
+
+                        </div>
+
+                        {/* 4. After-Sales Polite WhatsApp Contact */}
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedOwnerForAfterSales(owner);
-                            setIsAfterSalesModalOpen(true);
+                            const message = `ສະບາຍດີ ທ່ານ ${owner.customerName}, ຈາກສູນບໍລິການຫຼັງການຂາຍ AVATR Laos.\nພວກເຮົາຂໍຕິດຕາມການໃຊ້ງານລົດ ${owner.model} (ປ້າຍທະບຽນ: ${owner.plateNumber || 'ກຳແພງນະຄອນ'}). ທ່ານຕ້ອງການນັດໝາຍກວດເຊັກສະພາບລົດ ຫຼື ມີຂໍ້ສອບຖາມເພີ່ມເຕີມບໍ່?`;
+                            openWhatsApp(owner.phone, message);
                           }}
-                          className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 active:scale-95 text-white font-bold rounded-xl text-xs border border-zinc-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
-                          title="ປ້ອນ ແລະ ແກ້ໄຂຂໍ້ມູນລູກຄ້າຫຼັງການຂາຍ, ເລກ VIN, ເລກໄມ ແລະ ໄລຍະຮັບປະກັນ"
+                          className="px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          title="ສົ່ງຂໍ້ຄວາມ WhatsApp ບໍລິການຫຼັງການຂາຍ"
                         >
-                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>ແກ້ໄຂຂໍ້ມູນຫຼັງການຂາຍ & ຮັບປະກັນ</span>
+                          <WhatsAppIcon className="w-3.5 h-3.5" />
+                          <span>WhatsApp ຫຼັງການຂາຍ</span>
                         </button>
-
-                        {/* 2. Book Service Button */}
-                        <button
-                          type="button"
-                          onClick={() => setServiceModalCustomer({
-                            name: owner.customerName,
-                            phone: owner.phone,
-                            model: owner.model,
-                            plateNumber: owner.plateNumber,
-                            mileageKm: owner.currentMileageKm,
-                            batteryHealthPercent: owner.batteryHealthSOH
-                          })}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-                          title="ເປີດຟອມນັດໝາຍເຂົ້າສູນບໍລິການ AVATR"
-                        >
-                          <Wrench className="w-3.5 h-3.5" />
-                          <span>ນັດໝາຍເຂົ້າສູນ (Book Service)</span>
-                        </button>
-
-                        {/* 3. Customer Documents & Delivery Handover */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (owner.leadRecord) {
-                              setSelectedCustomerForDocs(owner.leadRecord);
-                            } else {
-                              // Synthetic lead object from bill
-                              setSelectedCustomerForDocs({
-                                id: owner.id,
-                                customerName: owner.customerName,
-                                phone: owner.phone,
-                                idCardNumber: owner.idCardNumber,
-                                province: owner.province || 'ນະຄອນຫຼວງວຽງຈັນ',
-                                district: owner.district,
-                                village: owner.village,
-                                category: 'walk_in',
-                                source: 'Showroom Delivery',
-                                interestedModel: owner.model,
-                                status: 'delivered',
-                                priority: 'vip',
-                                notes: `ລົດສົ່ງມອບແລ້ວ: ${owner.model} VIN: ${owner.vin}`,
-                                paymentType: owner.paymentType as any || 'cash',
-                                paymentDate: owner.purchaseDate,
-                                paymentReceiptNo: owner.billRecord?.billNumber || owner.vin,
-                                assignedTo: owner.billRecord?.salesRep || currentUser?.name || 'Admin',
-                                createdAt: owner.purchaseDate || new Date().toISOString(),
-                              });
-                            }
-                          }}
-                          className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                          title="ເບິ່ງເອກະສານມອບລົດ, ໃບຮັບເງິນ ແລະ ໃບຮັບປະກັນ"
-                        >
-                          <FileText className="w-3.5 h-3.5 text-zinc-400" />
-                          <span>ເອກະສານ & ໃບມອບລົດ</span>
-                          {(() => {
-                            const count = getCustomerIssuedDocsCount(owner.customerName, owner.phone, owner.vin, owner.leadRecord?.id || owner.id);
-                            return count > 0 ? (
-                              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                                {count}
-                              </span>
-                            ) : null;
-                          })()}
-                        </button>
-
                       </div>
-
-                      {/* 4. After-Sales Polite WhatsApp Contact */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const message = `ສະບາຍດີ ທ່ານ ${owner.customerName}, ຈາກສູນບໍລິການຫຼັງການຂາຍ AVATR Laos.\nພວກເຮົາຂໍຕິດຕາມການໃຊ້ງານລົດ ${owner.model} (ປ້າຍທະບຽນ: ${owner.plateNumber || 'ກຳແພງນະຄອນ'}). ທ່ານຕ້ອງການນັດໝາຍກວດເຊັກສະພາບລົດ ຫຼື ມີຂໍ້ສອບຖາມເພີ່ມເຕີມບໍ່?`;
-                          openWhatsApp(owner.phone, message);
-                        }}
-                        className="px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                        title="ສົ່ງຂໍ້ຄວາມ WhatsApp ບໍລິການຫຼັງການຂາຍ"
-                      >
-                        <WhatsAppIcon className="w-3.5 h-3.5" />
-                        <span>WhatsApp ຫຼັງການຂາຍ</span>
-                      </button>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* DEDICATED TAB 3: INSTALLMENT & FINANCE CUSTOMERS VIEW */
-        <div className="space-y-6">
-          <InstallmentDashboardView
-            leads={leads.filter(l => matchesCrmTime(l.paymentDate || l.createdAt))}
-            setLeads={setLeads}
-            bills={bills.filter(b => matchesCrmTime(b.date))}
-            setBills={setBills}
-            vehicles={vehicles}
-            currentUser={currentUser}
-            lang={lang}
-            onNavigateMenu={onNavigateMenu || ((menu) => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined)}
-            onNavigateTab={(tab) => setCustomerClassificationTab(tab)}
-          />
-        </div>
-      )}
-    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* DEDICATED TAB 3: INSTALLMENT & FINANCE CUSTOMERS VIEW */
+          <div className="space-y-6">
+            <InstallmentDashboardView
+              leads={leads.filter(l => matchesCrmTime(l.paymentDate || l.createdAt))}
+              setLeads={setLeads}
+              bills={bills.filter(b => matchesCrmTime(b.date))}
+              setBills={setBills}
+              vehicles={vehicles}
+              currentUser={currentUser}
+              lang={lang}
+              onNavigateMenu={onNavigateMenu || ((menu) => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined)}
+              onNavigateTab={(tab) => setCustomerClassificationTab(tab)}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Customer Document Suite Modal (ໃບຮັບເງິນ, ໃບມອບສິດ, ໃບມອບລົດ, ຕາຕະລາງຜ່ອນ) */}
       {selectedCustomerForDocs && (

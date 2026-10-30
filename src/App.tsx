@@ -23,6 +23,7 @@ import {
   saveLead,
   saveServiceAppointment,
   saveTestDriveBooking,
+  updateServiceAppointment,
 } from './backend/data';
 import { DEFAULT_OFFLINE_USERS } from './backend/offlineStore';
 import { newRecordId } from './backend/ids';
@@ -539,6 +540,19 @@ export default function App() {
     }
   };
 
+  const handleUpdateServiceStatus = async (id: string, newStatus: ServiceAppointment['status']) => {
+    const existing = services.find(s => s.id === id);
+    if (!existing) return;
+    const updated: ServiceAppointment = { ...existing, status: newStatus };
+    try {
+      await updateServiceAppointment(updated);
+      setServices(prev => prev.map(s => s.id === id ? updated : s));
+      triggerToast(lang === 'lo' ? 'ອັບເດດສະຖານະການບໍລິການສຳເລັດ' : 'Service status updated');
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Could not update service status');
+    }
+  };
+
   const handleAddTestDrive = async (tdData: Omit<TestDriveBooking, 'id'>) => {
     const newTd: TestDriveBooking = { ...tdData, id: newRecordId() };
     try {
@@ -798,7 +812,9 @@ export default function App() {
               bills={bills}
               setBills={setBills}
               services={services}
+              setServices={setServices}
               onAddService={handleAddService}
+              onUpdateServiceStatus={handleUpdateServiceStatus}
             />
           )}
 

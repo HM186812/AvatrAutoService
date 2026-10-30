@@ -86,9 +86,6 @@ export default function StockAlertsView({
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
               {t.stockAlertHeading}
             </h1>
-            <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-zinc-400 leading-relaxed">
-              {t.stockAlertDesc}
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
@@ -229,9 +226,6 @@ export default function StockAlertsView({
                 <h2 className="text-base font-black text-black dark:text-white">
                   {t.categoryAlertSectionTitle}
                 </h2>
-                <p className="text-xs text-black font-bold dark:text-zinc-400 dark:font-normal mt-0.5">
-                  {t.categoryAlertSectionSubtitle} · {displayedModels.length}
-                </p>
               </div>
             </div>
           </div>

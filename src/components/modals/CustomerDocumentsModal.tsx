@@ -1001,7 +1001,7 @@ export default function CustomerDocumentsModal({
                         />
                       </div>
                     </div>
-                    <div>
+                    <div className="hidden">
                       <label className="block text-zinc-400 mb-0.5 text-[10px]">ເລດເງິນກີບ (LAK/$)</label>
                       <input
                         type="number"
@@ -1054,7 +1054,7 @@ export default function CustomerDocumentsModal({
                     />
                   </div>
 
-                  <div>
+                  <div className="hidden">
                     <label className="block text-amber-400 mb-1 text-[11px] font-bold">
                       ເລດເງິນກີບ / USD (LAK/$)
                     </label>
@@ -1215,7 +1215,7 @@ export default function CustomerDocumentsModal({
                     <tr>
                       <td className="border border-black px-2.5 py-1.5 font-bold w-28 bg-zinc-50">ມູນຄ່າລົດ :</td>
                       <td className="border border-black px-2.5 py-1.5 font-sans leading-relaxed">
-                        ລາຄາລົດ <strong>${basePriceUSD.toLocaleString()}</strong> + ສີພິເສດ <strong>${colorOptionUSD.toLocaleString()}</strong> + ອັອບຊັ່ນ <strong>${specOptionUSD.toLocaleString()}</strong> = ມູນຄ່າຕົວຈິງ <strong>${actualTotalPrice.toLocaleString()} USD</strong> (~{(actualTotalPrice * DEFAULT_EXCHANGE_RATE_LAK).toLocaleString()} LAK)
+                        ລາຄາລົດ <strong>${basePriceUSD.toLocaleString()}</strong> + ສີພິເສດ <strong>${colorOptionUSD.toLocaleString()}</strong> + ອັອບຊັ່ນ <strong>${specOptionUSD.toLocaleString()}</strong> = ມູນຄ່າຕົວຈິງ <strong>${actualTotalPrice.toLocaleString()} USD</strong>
                       </td>
                     </tr>
                     <tr>
@@ -1223,7 +1223,7 @@ export default function CustomerDocumentsModal({
                         {isInstallment ? 'ເງິນວາງດາວ :' : 'ມັດຈຳກ່ອນ :'}
                       </td>
                       <td className="border border-black px-2.5 py-1.5 font-bold font-mono text-[13px]">
-                        ${depositUSD.toLocaleString()} USD (~{(depositUSD * DEFAULT_EXCHANGE_RATE_LAK).toLocaleString()} LAK)
+                        ${depositUSD.toLocaleString()} USD
                         {isInstallment && <span className="ml-2 font-sans text-xs text-zinc-700">({customer.downPaymentPercent || 30}% ຂອງມູນຄ່າລົດ)</span>}
                       </td>
                     </tr>
@@ -1799,7 +1799,6 @@ export default function CustomerDocumentsModal({
                           <th className="border border-black px-1.5 py-1 text-right">ເງິນຕົ້ນ ($)</th>
                           <th className="border border-black px-1.5 py-1 text-right">ດອກເບ້ຍ ($)</th>
                           <th className="border border-black px-1.5 py-1 text-right">ຄ່າງວດ ($)</th>
-                          <th className="border border-black px-2 py-1 text-right">ຄ່າງວດ (LAK)</th>
                           <th className="border border-black px-1.5 py-1 text-center font-sans">ສະຖານະ</th>
                         </tr>
                       </thead>
@@ -1811,7 +1810,6 @@ export default function CustomerDocumentsModal({
                             <td className="border border-black px-1.5 py-0.5 text-right">${row.principalUSD.toLocaleString()}</td>
                             <td className="border border-black px-1.5 py-0.5 text-right">${row.interestUSD.toLocaleString()}</td>
                             <td className="border border-black px-1.5 py-0.5 text-right font-bold">${row.amountUSD.toLocaleString()}</td>
-                            <td className="border border-black px-2 py-0.5 text-right font-bold">{row.amountLAK.toLocaleString()}</td>
                             <td className="border border-black px-1.5 py-0.5 text-center font-sans text-[10px]">
                               {row.status === 'paid' ? (
                                 <span className="font-bold">ຊຳລະແລ້ວ</span>
@@ -1828,7 +1826,7 @@ export default function CustomerDocumentsModal({
 
                 {tenure > 24 && (
                   <div className="border border-black bg-zinc-50 py-1 px-3 text-center text-[11px] font-sans font-bold">
-                    ... ງວດທີ 25 ເຖິງ ງວດທີ {tenure} ຊຳລະທຸກໆວັນທີ 10 ຂອງແຕ່ລະເດືອນ ໃນອັດຕາ ${monthlyPaymentUSD.toLocaleString()} USD (~{monthlyPaymentLAK.toLocaleString()} LAK) ຈົນຄົບສັນຍາ ...
+                    ... ງວດທີ 25 ເຖິງ ງວດທີ {tenure} ຊຳລະທຸກໆວັນທີ 10 ຂອງແຕ່ລະເດືອນ ໃນອັດຕາ ${monthlyPaymentUSD.toLocaleString()} USD ຈົນຄົບສັນຍາ ...
                   </div>
                 )}
 
@@ -1993,13 +1991,13 @@ export default function CustomerDocumentsModal({
                     <tr>
                       <td className="border border-black px-2.5 py-1.5 font-bold w-48 bg-zinc-50/50">ມູນຄ່າລວມ</td>
                       <td className="border border-black px-2.5 py-1.5 font-bold font-mono text-[12.5px]">
-                        {actualTotalPrice.toLocaleString()}$ / {(actualTotalPrice * financeRateLAK).toLocaleString()}ກີບ (ເລດ{financeRateLAK.toLocaleString()} ກີບ /1$)
+                        ${actualTotalPrice.toLocaleString()} USD
                       </td>
                     </tr>
                     <tr>
                       <td className="border border-black px-2.5 py-1.5 font-bold bg-zinc-50/50">ລູກຄ້າຈ່າຍກ່ອນ</td>
                       <td className="border border-black px-2.5 py-1.5 font-bold font-mono text-[12.5px]">
-                        {depositUSD.toLocaleString()}$ / {(depositUSD * financeRateLAK).toLocaleString()}ກີບ( ເລດ{financeRateLAK.toLocaleString()}ກີບ/$)
+                        ${depositUSD.toLocaleString()} USD
                       </td>
                     </tr>
                   </tbody>
@@ -2055,7 +2053,7 @@ export default function CustomerDocumentsModal({
                       <tr>
                         <td className="border border-black px-2 py-1 font-semibold w-36">ຄ່າງວດ</td>
                         <td className="border border-black px-2 py-1 font-bold font-mono text-[11.5px]">
-                          {((actualTotalPrice - depositUSD) * financeRateLAK).toLocaleString()}ກີບ ຫຼື ${(actualTotalPrice - depositUSD).toLocaleString()}$
+                          ${(actualTotalPrice - depositUSD).toLocaleString()} USD
                         </td>
                       </tr>
                       <tr>

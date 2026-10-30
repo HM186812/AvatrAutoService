@@ -662,25 +662,53 @@ html.light .bg-white.text-zinc-950:not(button[type="submit"]):not(.pos-confirm-s
 }
 
 /* Primary Action CTA Buttons in Light Mode (Deep Obsidian / Slate-900 with Crisp White Text) */
-html.light button[type="submit"].bg-white,
-html.light button[type="submit"].bg-white *,
-html.light .pos-confirm-sale-button,
-html.light .pos-confirm-sale-button * {
+html.light button[type="submit"].bg-white:not(.pos-confirm-sale-button) {
   background-color: #0f172a !important;
   color: #ffffff !important;
   border-color: #0f172a !important;
 }
 
-html.light button[type="submit"].bg-white svg,
-html.light .pos-confirm-sale-button svg {
+html.light button[type="submit"].bg-white:not(.pos-confirm-sale-button) svg {
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
 
-html.light button[type="submit"].bg-white:hover,
-html.light .pos-confirm-sale-button:hover {
+html.light button[type="submit"].bg-white:not(.pos-confirm-sale-button):hover {
   background-color: #1e293b !important;
   color: #ffffff !important;
+}
+
+/* POS Confirm Sale Button - Clean styling with no border/background on text span */
+.pos-confirm-sale-button *,
+.pos-confirm-sale-button span {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+html.light .pos-confirm-sale-button {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #09090b !important;
+  box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light .pos-confirm-sale-button:hover {
+  background-color: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+}
+
+html.light .pos-confirm-sale-button svg {
+  color: #09090b !important;
+  stroke: currentColor !important;
+  fill: currentColor !important;
+}
+
+html.light .pos-confirm-sale-button span {
+  background-color: transparent !important;
+  border: none !important;
+  color: #09090b !important;
 }
 
 /* Universal Non-Inverting Hover for all light elements */
@@ -891,6 +919,7 @@ html.light [class*="aspect-"] .absolute.left-2.top-2 span {
   color: #09090b !important;
   border-color: rgba(226, 232, 240, 0.95) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
   backdrop-filter: blur(8px) !important;
 }
 
@@ -932,6 +961,7 @@ html.light [class*="aspect-"] .absolute.bottom-2.right-2 {
   background-color: rgba(15, 23, 42, 0.9) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
   backdrop-filter: blur(8px) !important;
 }
 
@@ -2814,6 +2844,12 @@ html.dark .dashboard-view {
   html.light .app-shell button.pos-confirm-sale-button svg {
     color: #09090b !important;
     stroke: currentColor !important;
+  }
+
+  html.light .app-shell button.pos-confirm-sale-button span {
+    background-color: transparent !important;
+    border: none !important;
+    color: inherit !important;
   }
 }
 

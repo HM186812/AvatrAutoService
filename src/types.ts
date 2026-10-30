@@ -172,6 +172,7 @@ export interface InvoiceBillRecord {
   downPaymentPercent?: number;
   downPaymentUSD?: number;
   tenureMonths?: number;
+  monthlyPaymentUSD?: number;
   monthlyPaymentLAK?: number;
   freeGifts?: string[];
   warrantyTerms?: string;
@@ -271,6 +272,7 @@ export interface Lead {
   downPaymentUSD?: number;
   financeCompany?: string;
   tenureMonths?: number;
+  monthlyPaymentUSD?: number;
   monthlyPaymentLAK?: number;
   installmentStatus?: 'pending_approval' | 'approved' | 'rejected' | 'contract_signed' | 'completed' | 'active_repaying';
   assignedTo: string;

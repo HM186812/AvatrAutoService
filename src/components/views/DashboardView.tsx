@@ -146,10 +146,10 @@ export default function DashboardView({
         const perks = item.promotionNotes
           ? item.promotionNotes.split(/[+,•|]/).map(s => s.trim()).filter(Boolean)
           : [
-              'ຟຣີຕູ້ສາກໄວ Home Charger 7kW ພ້ອມຕິດຕັ້ງມາດຕະຖານ CATL',
-              'ຟຣີປະກັນໄພຊັ້ນ 1 (First Class Insurance) 1 ປີເຕັມ',
-              'ຮັບປະກັນແບັດເຕີຣີ CATL 8 ປີ / 160,000 km',
-            ];
+            'ຟຣີຕູ້ສາກໄວ Home Charger 7kW ພ້ອມຕິດຕັ້ງມາດຕະຖານ CATL',
+            'ຟຣີປະກັນໄພຊັ້ນ 1 (First Class Insurance) 1 ປີເຕັມ',
+            'ຮັບປະກັນແບັດເຕີຣີ CATL 8 ປີ / 160,000 km',
+          ];
         return {
           id: `inv-promo-${item.vin}`,
           titleLo: item.eventCampaign || (item.status === 'event' ? `ງານວາງສະແດງ ${item.model} (${item.color})` : `ແຄມເປນໂປຣໂມຊັນ ${item.model}`),
@@ -186,11 +186,11 @@ export default function DashboardView({
 
   // Sale & Delivery Bills (Includes Full Sales & Installment Down Payments)
   const saleBills = useMemo(() => {
-    return (bills || []).filter(b => 
+    return (bills || []).filter(b =>
       b.status !== 'voided' && (
-        b.billType === 'sale' || 
-        b.billType === 'installment' || 
-        b.type === 'sale' || 
+        b.billType === 'sale' ||
+        b.billType === 'installment' ||
+        b.type === 'sale' ||
         b.type === 'installment'
       )
     );
@@ -215,11 +215,11 @@ export default function DashboardView({
 
   // Filter installment bills
   const installmentBills = useMemo(() => {
-    return bills.filter(b => 
+    return bills.filter(b =>
       b.status !== 'voided' && (
-        b.billType === 'installment' || 
-        b.paymentMethod === 'finance' || 
-        Boolean(b.financeCompany) || 
+        b.billType === 'installment' ||
+        b.paymentMethod === 'finance' ||
+        Boolean(b.financeCompany) ||
         Boolean(b.downPaymentPercent && b.downPaymentPercent > 0)
       )
     );
@@ -340,13 +340,14 @@ export default function DashboardView({
 
   const handleExportInstallmentCsv = () => {
     if (installmentLeads.length === 0) return;
-    const headers = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ແຂວງ', 'ລຸ້ນລົດ', 'ເງິນດາວ %', 'ເງິນດາວ (USD)', 'ຍອດກູ້ຢືມ (USD)', 'ໄລຍະຜ່ອນ (ເດືອນ)', 'ຄ່າງວດ/ເດືອນ (LAK)', 'ຈ່າຍແລ້ວ (ງວດ)', 'ສະຖານະ'];
+    const headers = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ແຂວງ', 'ລຸ້ນລົດ', 'ເງິນດາວ %', 'ເງິນດາວ (USD)', 'ຍອດກູ້ຢືມ (USD)', 'ໄລຍະຜ່ອນ (ເດືອນ)', 'ຄ່າງວດ/ເດືອນ (USD)', 'ຄ່າງວດ/ເດືອນ (LAK)', 'ຈ່າຍແລ້ວ (ງວດ)', 'ສະຖານະ'];
     const rows = installmentLeads.map(lead => {
       const v = vehicles.find(veh => veh.name === lead.interestedModel);
       const p = v?.priceStartingUSD || 50000;
       const dpUSD = lead.downPaymentUSD || Math.round(p * ((lead.downPaymentPercent || 30) / 100));
       const loanUSD = Math.max(0, p - dpUSD);
       const tenure = lead.tenureMonths || 48;
+      const monthlyUSD = lead.monthlyPaymentUSD || Math.round(loanUSD / tenure);
       const monthlyLAK = lead.monthlyPaymentLAK || Math.round((loanUSD * DEFAULT_EXCHANGE_RATE_LAK) / tenure);
       const paidCount = (lead.installmentRecords || []).filter(r => r.status === 'paid').length;
       return [
@@ -358,6 +359,7 @@ export default function DashboardView({
         dpUSD,
         loanUSD,
         tenure,
+        monthlyUSD,
         monthlyLAK,
         `${paidCount}/${tenure}`,
         `"${lead.status === 'delivered' ? 'ຈ່າຍດາວແລ້ວ' : 'ກຳລັງຜ່ອນ'}"`,
@@ -633,19 +635,10 @@ export default function DashboardView({
       <div className="dashboard-panel bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-zinc-800">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-              <span className="text-[11px] font-mono tracking-widest uppercase text-blue-600 dark:text-zinc-400 font-bold">
-                REAL-TIME BILLING & POS TRANSACTIONS • {kpiData.label}
-              </span>
-            </div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
               <TrendingUp className="w-6 h-6 text-blue-600 dark:text-white" />
               <span>ສະແດງການຂາຍຕົວຈິງ & ອອກໃບບິນຫຼ້າສຸດ ({kpiData.label})</span>
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-              ຕິດຕາມລາຍການຂາຍລົດ, ການຊຳລະເງິນສົດ, ໂອນ QR, ແລະ ຜ່ອນຊຳລະ Finance ຕາມຊ່ວງເວລາ ({kpiData.label})
-            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -789,19 +782,10 @@ export default function DashboardView({
         {/* Section Header with Live Status & Controls */}
         <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-zinc-800">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-              <span className="text-[11px] font-mono tracking-widest uppercase text-blue-600 dark:text-amber-400 font-bold">
-                INSTALLMENT PORTFOLIO
-              </span>
-            </div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
               <CreditCard className="w-6 h-6 text-blue-600 dark:text-amber-400" />
               <span>ພາບລວມການຜ່ອນຊຳລະ & ລູກຄ້າເງິນດາວ</span>
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-              ຕິດຕາມຍອດເງິນດາວ, ວົງເງິນສິນເຊື່ອກູ້ຢືມ, ແລະ ຕາຕະລາງຊຳລະຄ່າງວດຂອງລູກຄ້າຕົວຈິງ
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -867,9 +851,6 @@ export default function DashboardView({
             <div className="text-2xl sm:text-3xl font-black font-mono text-amber-600 dark:text-amber-400">
               ${portfolioMetrics.totalDownPaymentUSD.toLocaleString()} USD
             </div>
-            <div className="text-xs text-slate-600 dark:text-zinc-400 font-mono mt-1">
-              ~{portfolioMetrics.totalDownPaymentLAK.toLocaleString()} LAK
-            </div>
             <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-zinc-800/80 flex justify-between text-[11px] text-slate-600 dark:text-zinc-400">
               <span>ອັດຕາດາວສະເລ່ຍ:</span>
               <span className="text-slate-900 dark:text-white font-bold">{portfolioMetrics.averageDownPercent}% ຂອງມູນຄ່າລົດ</span>
@@ -889,9 +870,6 @@ export default function DashboardView({
             </div>
             <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
               ${portfolioMetrics.totalFinancedUSD.toLocaleString()} USD
-            </div>
-            <div className="text-xs text-slate-600 dark:text-zinc-400 font-mono mt-1">
-              ~{portfolioMetrics.totalFinancedLAK.toLocaleString()} LAK
             </div>
             <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-zinc-800/80 flex justify-between text-[11px] text-slate-600 dark:text-zinc-400">
               <span>ສັນຍາກູ້ຢືມທັງໝົດ:</span>
@@ -913,9 +891,6 @@ export default function DashboardView({
             <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400">
               ${portfolioMetrics.totalCollectedUSD.toLocaleString()} USD
             </div>
-            <div className="text-xs text-slate-600 dark:text-zinc-400 font-mono mt-1">
-              ~{portfolioMetrics.totalCollectedLAK.toLocaleString()} LAK
-            </div>
             <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-zinc-800/80 flex justify-between text-[11px] text-slate-600 dark:text-zinc-400">
               <span>ບິນຮັບເງິນງວດໃນລະບົບ:</span>
               <span className="text-emerald-600 dark:text-emerald-300 font-bold">{installmentBills.length} ໃບບິນ</span>
@@ -935,9 +910,6 @@ export default function DashboardView({
             </div>
             <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
               ${portfolioMetrics.totalOutstandingUSD.toLocaleString()} USD
-            </div>
-            <div className="text-xs text-slate-600 dark:text-zinc-400 font-mono mt-1">
-              ~{portfolioMetrics.totalOutstandingLAK.toLocaleString()} LAK
             </div>
             <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-zinc-800/80 flex justify-between text-[11px] text-slate-600 dark:text-zinc-400">
               <span>ຄວາມຄືບໜ້າການເກັບ:</span>
@@ -1065,6 +1037,7 @@ export default function DashboardView({
                     const downUSD = lead.downPaymentUSD || Math.round(basePrice * ((lead.downPaymentPercent || 30) / 100));
                     const loanUSD = Math.max(0, basePrice - downUSD);
                     const tenureMonths = lead.tenureMonths || 48;
+                    const monthlyUSD = lead.monthlyPaymentUSD || Math.round(loanUSD / tenureMonths);
                     const monthlyLAK = lead.monthlyPaymentLAK || Math.round((loanUSD * DEFAULT_EXCHANGE_RATE_LAK) / tenureMonths);
 
                     // Progress
@@ -1111,9 +1084,9 @@ export default function DashboardView({
                         </td>
 
                         {/* Monthly Payment */}
-                        <td className="py-3 px-4">
-                          <strong className="text-slate-900 dark:text-white block">~{monthlyLAK.toLocaleString()} LAK</strong>
-                          <span className="text-[10px] text-slate-500 dark:text-zinc-500 font-mono">~${Math.round(monthlyLAK / DEFAULT_EXCHANGE_RATE_LAK)} USD/ເດືອນ</span>
+                        <td className="py-3 px-4 font-mono">
+                          <strong className="text-slate-900 dark:text-white block font-bold">${monthlyUSD.toLocaleString()} USD/ເດືອນ</strong>
+
                         </td>
 
                         {/* Progress */}
@@ -1180,19 +1153,10 @@ export default function DashboardView({
       <div className="bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-6 shadow-sm dark:shadow-none">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-zinc-800">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 flex items-center gap-1">
-                <Activity className="w-3 h-3 text-blue-500" />
-                AFTER-SALES & TEST DRIVE HUB
-              </span>
-            </div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Wrench className="w-5 h-5 text-emerald-500" />
               <span>ສູນບໍລິການຫຼັງການຂາຍ & ຕາຕະລາງນັດທົດລອງຂັບ</span>
             </h2>
-            <p className="text-xs text-slate-600 dark:text-zinc-400 mt-0.5">
-              ຕິດຕາມສະຖານະການກວດສອບແບັດເຕີຣີ 800V, ອັບເດດ HarmonyOS ແລະ ຄິວນັດທົດລອງຂັບລົດ AVATR ແບບ Real-time
-            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1203,7 +1167,7 @@ export default function DashboardView({
                 className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ ນັດບໍລິການໃໝ່</span>
+                <span>ນັດບໍລິການໃໝ່</span>
               </button>
             )}
             {onOpenNewTestDrive && (
@@ -1213,7 +1177,7 @@ export default function DashboardView({
                 className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ ຈອງທົດລອງຂັບ</span>
+                <span>ຈອງທົດລອງຂັບ</span>
               </button>
             )}
           </div>
@@ -1233,9 +1197,6 @@ export default function DashboardView({
                     <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
                       <span>ສູນບໍລິການຫຼັງການຂາຍ & ກວດແບັດເຕີຣີ</span>
                     </h3>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      EV Diagnostic & 800V High-Voltage Health
-                    </p>
                   </div>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
@@ -1344,9 +1305,6 @@ export default function DashboardView({
                     <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
                       <span>ຕາຕະລາງລູກຄ້ານັດທົດລອງຂັບ</span>
                     </h3>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                      VIP Test Drive Booking & Route Schedule
-                    </p>
                   </div>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
@@ -1429,7 +1387,7 @@ export default function DashboardView({
               onClick={onOpenNewTestDrive ? onOpenNewTestDrive : () => onNavigateMenu('customers')}
               className="mt-3 w-full py-2 px-3 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
             >
-              <span>+ ເປີດຟອມຈອງທົດລອງຂັບ →</span>
+              <span> ເປີດຟອມຈອງທົດລອງຂັບ →</span>
             </button>
           </div>
         </div>
@@ -1443,9 +1401,6 @@ export default function DashboardView({
               <Car className="w-5 h-5 text-blue-600 dark:text-white" />
               <span>{t.inventoryStagesTitle}</span>
             </h2>
-            <p className="text-xs text-slate-600 dark:text-zinc-400 mt-0.5">
-              {t.inventoryStagesSubtitle}
-            </p>
           </div>
 
           {isAdmin && (
@@ -1615,9 +1570,6 @@ export default function DashboardView({
               <Users className="h-5 w-5 text-sky-500 dark:text-sky-400" />
               <span>{t.customerCategoryTitle}</span>
             </h2>
-            <p className="text-xs text-slate-600 dark:text-zinc-400 mt-0.5">
-              {t.customerCategorySubtitle}
-            </p>
           </div>
 
           <button
@@ -1760,19 +1712,10 @@ export default function DashboardView({
       <div className="dashboard-panel bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-6 shadow-sm dark:shadow-none">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-zinc-800">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-900 text-white dark:bg-white dark:text-black flex items-center gap-1 shadow-sm always-white-text">
-                <Flame className="w-3 h-3 fill-amber-400 text-amber-400 dark:fill-black dark:text-black shrink-0" />
-                ACTIVE CAMPAIGNS & PROMOTIONS
-              </span>
-            </div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-amber-500 dark:text-white" />
               <span>{t.eventsAndPromotionsTitle}</span>
             </h2>
-            <p className="text-xs text-slate-600 dark:text-zinc-400 mt-0.5">
-              {t.eventsAndPromotionsSubtitle}
-            </p>
           </div>
 
           <div className="flex items-center gap-2">

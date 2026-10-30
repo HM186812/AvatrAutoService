@@ -185,7 +185,6 @@ export default function InstallmentLedgerModal({
       'Period (ງວດທີ)',
       'Due Date (ວັນທີກຳນົດ)',
       'Amount USD (ຍອດງວດ)',
-      'Amount LAK (ຍອດກີບ)',
       'Principal USD (ເງິນຕົ້ນ)',
       'Interest USD (ດອກເບ້ຍ)',
       'Status (ສະຖານະ)',
@@ -199,7 +198,6 @@ export default function InstallmentLedgerModal({
       r.period,
       r.dueDate,
       r.amountUSD,
-      r.amountLAK,
       r.principalUSD,
       r.interestUSD,
       r.status,
@@ -413,13 +411,11 @@ export default function InstallmentLedgerModal({
           <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 space-y-1">
             <span className="text-[11px] text-zinc-400 font-medium block">ມູນຄ່າລົດທັງໝົດ</span>
             <div className="font-mono font-bold text-sm text-white">${summary.vehiclePriceUSD.toLocaleString()}</div>
-            <span className="text-[10px] text-zinc-500 font-mono block">~{summary.vehiclePriceLAK.toLocaleString()} LAK</span>
           </div>
 
           <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 space-y-1">
             <span className="text-[11px] text-zinc-400 font-medium block">ວາງດາວແລ້ວ ({summary.downPaymentPercent}%)</span>
             <div className="font-mono font-bold text-sm text-emerald-400">${summary.downPaymentUSD.toLocaleString()}</div>
-            <span className="text-[10px] text-zinc-500 font-mono block">~{summary.downPaymentLAK.toLocaleString()} LAK</span>
           </div>
 
           <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 space-y-1">
@@ -431,7 +427,6 @@ export default function InstallmentLedgerModal({
           <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 space-y-1">
             <span className="text-[11px] text-zinc-400 font-medium block">ຄ່າງວດ / ເດືອນ</span>
             <div className="font-mono font-bold text-sm text-white">${summary.monthlyPaymentUSD.toLocaleString()}</div>
-            <span className="text-[10px] text-emerald-400 font-mono block">~{summary.monthlyPaymentLAK.toLocaleString()} LAK</span>
           </div>
 
           <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 space-y-1">
@@ -527,7 +522,6 @@ export default function InstallmentLedgerModal({
                   <th className="py-2.5 px-3 text-center w-14 font-mono">ງວດທີ</th>
                   <th className="py-2.5 px-3">ວັນທີກຳນົດ</th>
                   <th className="py-2.5 px-3 text-right">ຄ່າງວດ ($ USD)</th>
-                  <th className="py-2.5 px-3 text-right">ຄ່າງວດ (LAK)</th>
                   <th className="py-2.5 px-3 text-right text-zinc-400 font-mono text-[11px]">ເງິນຕົ້ນ / ດອກເບ້ຍ</th>
                   <th className="py-2.5 px-3 text-center">ສະຖານະ</th>
                   <th className="py-2.5 px-3">ຂໍ້ມູນການຊຳລະ / ໃບຮັບເງິນ</th>
@@ -537,7 +531,7 @@ export default function InstallmentLedgerModal({
               <tbody className="divide-y divide-zinc-800/80 font-mono">
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-zinc-500 font-sans text-xs">
+                    <td colSpan={7} className="py-12 text-center text-zinc-500 font-sans text-xs">
                       ບໍ່ພົບຂໍ້ມູນງວດທີ່ຄົ້ນຫາ
                     </td>
                   </tr>
@@ -561,9 +555,6 @@ export default function InstallmentLedgerModal({
                         </td>
                         <td className="py-2.5 px-3 text-right font-bold text-white">
                           ${r.amountUSD.toLocaleString()}
-                        </td>
-                        <td className="py-2.5 px-3 text-right text-emerald-400 font-bold">
-                          {r.amountLAK.toLocaleString()}
                         </td>
                         <td className="py-2.5 px-3 text-right text-zinc-400 text-[11px]">
                           ${r.principalUSD.toLocaleString()} + ${r.interestUSD.toLocaleString()}
@@ -663,7 +654,7 @@ export default function InstallmentLedgerModal({
                   <div className="flex justify-between text-zinc-400">
                     <span>ຍອດງວດຕາມສັນຍາ:</span>
                     <strong className="text-emerald-400 font-mono">
-                      ${recordingPeriod.amountUSD.toLocaleString()} USD (~{recordingPeriod.amountLAK.toLocaleString()} LAK)
+                      ${recordingPeriod.amountUSD.toLocaleString()} USD
                     </strong>
                   </div>
                 </div>
@@ -677,9 +668,6 @@ export default function InstallmentLedgerModal({
                     onChange={(e) => setPayAmountUSD(Number(e.target.value))}
                     className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono font-bold focus:outline-none focus:border-white"
                   />
-                  <span className="text-[10px] text-zinc-400 font-mono mt-0.5 block">
-                    = {(payAmountUSD * DEFAULT_EXCHANGE_RATE_LAK).toLocaleString()} LAK
-                  </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">

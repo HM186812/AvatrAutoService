@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect, useRef, useDeferredValue } from 'react';
-import { 
-  InvoiceBillRecord, 
-  Language, 
-  BillType, 
-  Lead, 
-  VehicleModel, 
-  SystemUser, 
-  InstallmentPaymentRecord 
+import {
+  InvoiceBillRecord,
+  Language,
+  BillType,
+  Lead,
+  VehicleModel,
+  SystemUser,
+  InstallmentPaymentRecord
 } from '../../types';
 import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import { translations } from '../../data/translations';
@@ -57,7 +57,6 @@ import { saveLead, deleteBill, fetchBillsByDateRange, attachSlipToBill } from '.
 import SlipPreviewModal from '../modals/SlipPreviewModal';
 import IssuedDocumentsRegistryTab from './IssuedDocumentsRegistryTab';
 import { getIssuedDocumentLogs, deleteIssuedDocumentLog, logIssuedDocument, DOCUMENT_LOG_EVENT, fetchDocumentLogsFromCloud } from '../../utils/documentLogger';
-import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
 import type { IssuedDocumentRecord } from '../../types';
 
 interface BillsManagementViewProps {
@@ -204,12 +203,12 @@ export default function BillsManagementView({
 
     const targetDocType: DocumentType = (
       log.docType === 'credit_agreement' ? 'credit_agreement' :
-      log.docType === 'km7_release' ? 'km7_release' :
-      log.docType === 'receipt' ? 'receipt' :
-      log.docType === 'booking' ? 'booking' :
-      log.docType === 'handover' ? 'handover' :
-      log.docType === 'authorization' ? 'authorization' :
-      'installment_schedule'
+        log.docType === 'km7_release' ? 'km7_release' :
+          log.docType === 'receipt' ? 'receipt' :
+            log.docType === 'booking' ? 'booking' :
+              log.docType === 'handover' ? 'handover' :
+                log.docType === 'authorization' ? 'authorization' :
+                  'installment_schedule'
     );
 
     setSelectedCustomerForDocs({
@@ -941,12 +940,12 @@ export default function BillsManagementView({
     if (filterType === 'installment' && installmentSubTab === 'contracts') {
       const cHeaders = [
         'CustomerName', 'Phone', 'IDCard', 'Province', 'Model', 'VIN', 'PlateNumber',
-        'DownPaymentPercent', 'DownPaymentUSD', 'TenureMonths', 'MonthlyPaymentLAK', 'InstallmentStatus', 'PaymentDate'
+        'DownPaymentPercent', 'DownPaymentUSD', 'TenureMonths', 'InstallmentStatus', 'PaymentDate'
       ];
       const cRows = filteredInstallmentContracts.map(c => [
         csvCell(c.customerName), csvCell(c.phone), csvCell(c.idCardNumber), csvCell(c.province),
         csvCell(c.interestedModel), csvCell(c.vin), csvCell(c.plateNumber),
-        c.downPaymentPercent ?? '', c.downPaymentUSD ?? '', c.tenureMonths ?? '', c.monthlyPaymentLAK ?? '',
+        c.downPaymentPercent ?? '', c.downPaymentUSD ?? '', c.tenureMonths ?? '',
         csvCell(c.installmentStatus || c.status), csvCell(c.paymentDate || c.createdAt?.slice(0, 10))
       ]);
       const cContent = '\uFEFF' + [cHeaders.join(','), ...cRows.map(r => r.join(','))].join('\n');
@@ -972,9 +971,7 @@ export default function BillsManagementView({
       'UnitPriceUSD',
       'DownPaymentUSD',
       'TenureMonths',
-      'MonthlyPaymentLAK',
       'BillAmountUSD',
-      'BillAmountLAK',
       'RecordedBy'
     ];
 
@@ -989,9 +986,7 @@ export default function BillsManagementView({
       b.unitPriceUSD ?? '',
       b.downPaymentUSD ?? '',
       b.tenureMonths ?? '',
-      b.monthlyPaymentLAK ?? '',
       b.netTotalUSD ?? b.amountUSD ?? '',
-      b.amountLAK ?? '',
       csvCell(b.recordedBy)
     ]);
 
@@ -1016,18 +1011,9 @@ export default function BillsManagementView({
           <div className="pointer-events-none absolute -right-12 -top-16 h-56 w-56 rounded-full bg-amber-400/5 blur-3xl" />
           <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="max-w-2xl">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-300">
-                <FileText className="h-3.5 w-3.5 text-amber-400" />
-                <span>{lang === 'lo' ? 'ສູນລວມເອກະສານການເງິນ' : lang === 'th' ? 'ศูนย์รวมเอกสารการเงิน' : 'Financial records'}</span>
-              </div>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
                 {t.billsHeader || t.billsTitle}
               </h1>
-              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-zinc-400">
-                {lang === 'lo'
-                  ? 'ລວມປະຫວັດໃບຂາຍລົດ, ໃບຮັບເງິນດາວ & ຜ່ອນຊຳລະ ແລະ ໃບນຳເຂົ້າລົດສາງ'
-                  : t.billsHeaderSub || t.billsSubtitle}
-              </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -1147,9 +1133,6 @@ export default function BillsManagementView({
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                   {lang === 'lo' ? 'ຄົ້ນຫາ ແລະ ກັ່ນຕອງເອກະສານ' : lang === 'th' ? 'ค้นหาและกรองเอกสาร' : 'Find a document'}
                 </h2>
-                <p className="mt-0.5 text-xs text-zinc-400">
-                  {lang === 'lo' ? 'ຄົ້ນຫາຕາມເລກບິນ, ຊື່ລູກຄ້າ/ຜູ້ສະໜອງ, ເບີໂທ, ບັດປະຊາຊົນ, VIN/ປ້າຍລົດ, ເລກໂອນ BCEL, ຜູ້ອອກບິນ ແລະ ຊ່ວງເວລາ' : lang === 'th' ? 'ค้นหาจากเลขที่บิล ลูกค้า เบอร์โทร บัตรประชาชน VIN เลขโอน หรือช่วงเวลา' : 'Search by bill no., customer, phone, ID card, VIN/plate, transfer ref, or date range'}
-                </p>
               </div>
               <span className="text-xs text-zinc-400">
                 {lang === 'lo' ? 'ສະແດງ' : lang === 'th' ? 'แสดง' : 'Showing'} <strong className="text-zinc-100">{filteredBills.length}</strong> {lang === 'lo' ? 'ຈາກ' : lang === 'th' ? 'จาก' : 'of'} {allLoadedBills.length} {t.unitBills} • <strong className="font-mono text-amber-400">${filteredTotalUSD.toLocaleString()} USD</strong>
@@ -1174,32 +1157,32 @@ export default function BillsManagementView({
                   <option value="recordedBy">{lang === 'lo' ? 'ຜູ້ອອກບິນ' : lang === 'th' ? 'ผู้ออกบิล' : 'Recorded By'}</option>
                 </select>
                 <div className="relative flex-1">
-                <label className="sr-only" htmlFor="bills-search">{t.searchPlaceholder}</label>
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    aria-label={lang === 'lo' ? 'ລ້າງຄຳຄົ້ນຫາ' : 'Clear search'}
-                    onClick={() => {
-                      setSearchQuery('');
-                      searchInputRef.current?.focus();
-                    }}
-                    className="absolute right-2.5 top-1/2 z-10 -translate-y-1/2 rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white cursor-pointer"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <input
-                  id="bills-search"
-                  type="search"
-                  ref={searchInputRef}
-                  placeholder={searchPlaceholderByField[searchField]}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="min-h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-9 pr-9 text-sm font-medium text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-700"
-                />
+                  <label className="sr-only" htmlFor="bills-search">{t.searchPlaceholder}</label>
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      aria-label={lang === 'lo' ? 'ລ້າງຄຳຄົ້ນຫາ' : 'Clear search'}
+                      onClick={() => {
+                        setSearchQuery('');
+                        searchInputRef.current?.focus();
+                      }}
+                      className="absolute right-2.5 top-1/2 z-10 -translate-y-1/2 rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <input
+                    id="bills-search"
+                    type="search"
+                    ref={searchInputRef}
+                    placeholder={searchPlaceholderByField[searchField]}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="min-h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-9 pr-9 text-sm font-medium text-white placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-700"
+                  />
+                </div>
               </div>
-            </div>
 
               {/* Main Tabs */}
               <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 p-1" role="group" aria-label={lang === 'lo' ? 'ກັ່ນຕອງປະເພດເອກະສານ' : lang === 'th' ? 'กรองประเภทเอกสาร' : 'Filter by document type'}>
@@ -1208,8 +1191,8 @@ export default function BillsManagementView({
                   aria-pressed={filterType === 'all'}
                   onClick={() => setFilterType('all')}
                   className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${filterType === 'all'
-                      ? 'bg-white text-black font-bold shadow-sm'
-                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    ? 'bg-white text-black font-bold shadow-sm'
+                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                     }`}
                 >
                   {t.filterAllBills} ({timeFilteredBills.length})
@@ -1220,8 +1203,8 @@ export default function BillsManagementView({
                   aria-pressed={filterType === 'sale'}
                   onClick={() => setFilterType('sale')}
                   className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${filterType === 'sale'
-                      ? 'bg-white text-black font-bold shadow-sm'
-                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    ? 'bg-white text-black font-bold shadow-sm'
+                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                     }`}
                 >
                   <Receipt className="w-3.5 h-3.5" />
@@ -1235,8 +1218,8 @@ export default function BillsManagementView({
                   aria-pressed={filterType === 'installment'}
                   onClick={() => setFilterType('installment')}
                   className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${filterType === 'installment'
-                      ? 'bg-amber-400 text-black font-bold shadow-sm'
-                      : 'text-amber-500 hover:bg-zinc-800 hover:text-amber-400'
+                    ? 'bg-amber-400 text-black font-bold shadow-sm'
+                    : 'text-amber-500 hover:bg-zinc-800 hover:text-amber-400'
                     }`}
                 >
                   <CreditCard className="w-3.5 h-3.5" />
@@ -1249,8 +1232,8 @@ export default function BillsManagementView({
                   aria-pressed={filterType === 'import'}
                   onClick={() => setFilterType('import')}
                   className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${filterType === 'import'
-                      ? 'bg-white text-black font-bold shadow-sm'
-                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    ? 'bg-white text-black font-bold shadow-sm'
+                    : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                     }`}
                 >
                   <PackagePlus className="w-3.5 h-3.5" />
@@ -1264,8 +1247,8 @@ export default function BillsManagementView({
                   aria-pressed={filterType === 'issued_docs'}
                   onClick={() => setFilterType('issued_docs')}
                   className={`min-h-9 rounded-lg px-3 py-1.5 text-xs transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${filterType === 'issued_docs'
-                      ? 'bg-emerald-500 text-black font-bold shadow-sm'
-                      : 'text-emerald-400 hover:bg-zinc-800 hover:text-emerald-300'
+                    ? 'bg-emerald-500 text-black font-bold shadow-sm'
+                    : 'text-emerald-400 hover:bg-zinc-800 hover:text-emerald-300'
                     }`}
                 >
                   <FileCheck className="w-3.5 h-3.5" />
@@ -1294,11 +1277,10 @@ export default function BillsManagementView({
                     key={preset.id}
                     type="button"
                     onClick={() => handleSelectTimePreset(preset.id)}
-                    className={`min-h-8 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                      timePreset === preset.id && selectedYear === 'all' && selectedMonth === 'all' && !dateFrom && !dateTo
-                        ? 'bg-amber-400 text-black font-bold shadow-sm'
-                        : 'border border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                    }`}
+                    className={`min-h-8 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${timePreset === preset.id && selectedYear === 'all' && selectedMonth === 'all' && !dateFrom && !dateTo
+                      ? 'bg-amber-400 text-black font-bold shadow-sm'
+                      : 'border border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                      }`}
                   >
                     {preset.label}
                   </button>
@@ -1422,8 +1404,8 @@ export default function BillsManagementView({
                   <button
                     onClick={() => setInstallmentSubTab('bills')}
                     className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${installmentSubTab === 'bills'
-                        ? 'bg-amber-400 text-black shadow-sm'
-                        : 'text-zinc-400 hover:text-white'
+                      ? 'bg-amber-400 text-black shadow-sm'
+                      : 'text-zinc-400 hover:text-white'
                       }`}
                   >
                     ໃບບິນຮັບເງິນດາວ & ງວດ ({installmentBills.length})
@@ -1432,8 +1414,8 @@ export default function BillsManagementView({
                   <button
                     onClick={() => setInstallmentSubTab('contracts')}
                     className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${installmentSubTab === 'contracts'
-                        ? 'bg-amber-400 text-black shadow-sm'
-                        : 'text-zinc-400 hover:text-white'
+                      ? 'bg-amber-400 text-black shadow-sm'
+                      : 'text-zinc-400 hover:text-white'
                       }`}
                   >
                     ລາຍຊື່ສັນຍາລູກຄ້າຜ່ອນ ({installmentLeads.length})
@@ -1646,7 +1628,7 @@ export default function BillsManagementView({
                           {/* Monthly */}
                           <td className="py-2.5 px-2.5">
                             <strong className="text-white block text-xs">
-                              ~{(lead.monthlyPaymentLAK || Math.round(((basePrice - downUSD) * DEFAULT_EXCHANGE_RATE_LAK) / (lead.tenureMonths || 48))).toLocaleString()} LAK
+                              ~${Math.round((basePrice - downUSD) / (lead.tenureMonths || 48)).toLocaleString()} USD
                             </strong>
                             <span className="text-[10px] text-zinc-400 font-mono">/ເດືອນ</span>
                           </td>
@@ -1721,7 +1703,7 @@ export default function BillsManagementView({
                   <span>
                     {lang === 'th' ? `แสดง ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredInstallmentContracts.length)} จาก ${filteredInstallmentContracts.length} รายการ`
                       : lang === 'lo' ? `ສະແດງ ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredInstallmentContracts.length)} ຈາກ ${filteredInstallmentContracts.length} ລາຍການ`
-                      : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredInstallmentContracts.length)} of ${filteredInstallmentContracts.length}`}
+                        : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredInstallmentContracts.length)} of ${filteredInstallmentContracts.length}`}
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -1890,11 +1872,10 @@ export default function BillsManagementView({
                               </button>
                             ) : (
                               <label
-                                className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors cursor-pointer ${
-                                  isUploadingSlipId === bill.id
-                                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 border border-zinc-700"
-                                }`}
+                                className={`mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors cursor-pointer ${isUploadingSlipId === bill.id
+                                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                  : "bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 border border-zinc-700"
+                                  }`}
                                 title={lang === "lo" ? "ແນບສະລິບການໂອນ" : "แนบสลิปการโอน"}
                               >
                                 {isUploadingSlipId === bill.id ? (
@@ -1971,14 +1952,14 @@ export default function BillsManagementView({
                             ) : (
                               <div className="max-w-[160px]">
                                 <span className="text-zinc-200 font-medium text-xs block truncate">
-                                <button
-                                  type="button"
-                                  onClick={() => applyQuickSearch('customerName', bill.supplierName || 'AVATR Technology')}
-                                  className="text-zinc-200 hover:text-amber-300 font-medium text-xs block truncate text-left cursor-pointer"
-                                  title="ຄລິກເພື່ອເບິ່ງບິນນຳເຂົ້າຂອງຜູ້ສະໜອງນີ້"
-                                >
-                                  {bill.supplierName || 'AVATR Technology'}
-                                </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => applyQuickSearch('customerName', bill.supplierName || 'AVATR Technology')}
+                                    className="text-zinc-200 hover:text-amber-300 font-medium text-xs block truncate text-left cursor-pointer"
+                                    title="ຄລິກເພື່ອເບິ່ງບິນນຳເຂົ້າຂອງຜູ້ສະໜອງນີ້"
+                                  >
+                                    {bill.supplierName || 'AVATR Technology'}
+                                  </button>
                                 </span>
                                 {bill.customsDocNumber && (
                                   <span className="text-[10px] text-zinc-400 font-mono block truncate">B01: {bill.customsDocNumber}</span>
@@ -1990,16 +1971,9 @@ export default function BillsManagementView({
                           {/* Net Amount */}
                           <td className="py-2.5 px-2.5 whitespace-nowrap">
                             {isInstallment ? (
-                              <div>
-                                <span className="text-xs font-bold block text-amber-400 font-mono">
-                                  ${(bill.amountUSD || bill.downPaymentUSD || bill.netTotalUSD).toLocaleString()} USD
-                                </span>
-                                {bill.amountLAK && (
-                                  <span className="text-[10px] text-zinc-400 block font-mono">
-                                    ~{bill.amountLAK.toLocaleString()} LAK
-                                  </span>
-                                )}
-                              </div>
+                              <span className="text-xs font-bold block text-amber-400 font-mono">
+                                ${(bill.amountUSD || bill.downPaymentUSD || bill.netTotalUSD).toLocaleString()} USD
+                              </span>
                             ) : (
                               <span className="text-xs font-bold block text-white font-mono">
                                 ${bill.netTotalUSD.toLocaleString()} USD
@@ -2115,7 +2089,7 @@ export default function BillsManagementView({
                   <span>
                     {lang === 'th' ? `แสดง ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} จาก ${filteredBills.length} รายการ`
                       : lang === 'lo' ? `ສະແດງ ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} ຈາກ ${filteredBills.length} ລາຍການ`
-                      : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} of ${filteredBills.length}`}
+                        : `Showing ${((currentPage - 1) * PAGE_SIZE) + 1} - ${Math.min(currentPage * PAGE_SIZE, filteredBills.length)} of ${filteredBills.length}`}
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -2435,12 +2409,20 @@ export default function BillsManagementView({
                           <span>ໄລຍະເວລາຜ່ອນ:</span>
                           <span>{selectedBillForPrint.tenureMonths || 48} ເດືອນ</span>
                         </div>
-                        {selectedBillForPrint.monthlyPaymentLAK && (
-                          <div className="flex justify-between font-mono text-black">
-                            <span>ຄ່າງວດຕໍ່ເດືອນ:</span>
-                            <span>~{selectedBillForPrint.monthlyPaymentLAK.toLocaleString()} LAK/ເດືອນ</span>
-                          </div>
-                        )}
+                        <div className="flex justify-between font-mono text-black">
+                          <span>ຄ່າງວດຕໍ່ເດືອນ:</span>
+                          <span>
+                            ~${Math.round(
+                              (selectedBillForPrint.netTotalUSD -
+                                (selectedBillForPrint.downPaymentUSD ||
+                                  Math.round(
+                                    selectedBillForPrint.netTotalUSD *
+                                      ((selectedBillForPrint.downPaymentPercent || 30) / 100)
+                                  ))) /
+                                (selectedBillForPrint.tenureMonths || 48)
+                            ).toLocaleString()} USD/ເດືອນ
+                          </span>
+                        </div>
                         <div className="pt-0.5 mt-0.5 border-t border-black/30 flex justify-between font-mono font-black text-black">
                           <span>
                             {selectedBillForPrint.installmentType === 'monthly_installment'

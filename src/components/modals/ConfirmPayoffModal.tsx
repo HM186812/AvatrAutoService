@@ -36,7 +36,6 @@ export default function ConfirmPayoffModal({
   if (!isOpen || !customer) return null;
 
   const totalPaidUSD = (summary.totalPaidInstallmentsUSD || 0) + (summary.downPaymentUSD || 0);
-  const totalPaidLAK = (summary.totalPaidInstallmentsLAK || 0) + (summary.downPaymentLAK || 0);
 
   const handleConfirmPayoff = async () => {
     setIsSubmitting(true);
@@ -115,11 +114,11 @@ export default function ConfirmPayoffModal({
             </div>
 
             <div>
-              <span className="text-[10px] text-zinc-500 font-sans block">ຍອດລວມທີ່ຊຳລະແລ້ວ (LAK):</span>
+              <span className="text-[10px] text-zinc-500 font-sans block">ສະຖານະສັນຍາ:</span>
               <span className="text-base font-black text-white block mt-0.5">
-                ~{totalPaidLAK.toLocaleString()} LAK
+                ຄົບຖ້ວນ 100%
               </span>
-              <span className="text-[10px] text-zinc-400 font-sans">ໜີ້ຄົງເຫຼືອ: 0 USD</span>
+              <span className="text-[10px] text-zinc-400 font-sans">ໜີ້ຄົງເຫຼືອ: $0 USD</span>
             </div>
           </div>
 
