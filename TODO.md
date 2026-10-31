@@ -1,6 +1,6 @@
-# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 89 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
-> **วันที่อัปเดตล่าสุด**: 2026-10-29 14:25 (+07:00)
-> **สถานะ**: ระบบ Phase 1 และ Phase 2, การปรับปรุงประสิทธิภาพฐานข้อมูล P0-P1, ระบบแบ่งพาร์ติชัน 10 ปี (ข้อ 86-88), และระบบปิดช่องโหว่ความปลอดภัยระดับลึก (RLS Partition Child Guard + Positive Amount Constraint + Session Inactivity Auto-Logout - ข้อ 89) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC, RLS Policies และรัน Migration ขึ้น Production เรียบร้อย (ตัดข้อ 65, 67, 69, 76 และ 82 ออกตามความต้องการของผู้ใช้เนื่องจากเกินงบประมาณ)
+# 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 90 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
+> **วันที่อัปเดตล่าสุด**: 2026-10-31 20:30 (+07:00)
+> **สถานะ**: ระบบ Phase 1 และ Phase 2, การปรับปรุงประสิทธิภาพฐานข้อมูล P0-P1, ระบบแบ่งพาร์ติชัน 10 ปี (ข้อ 86-88), ระบบปิดช่องโหว่ความปลอดภัยระดับลึก (ข้อ 89), และการคลีนอัป RPC/Index/RLS Advisors ขั้นสุดท้าย (ข้อ 90) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC, RLS Policies และรัน Migration ครบ 42 ไฟล์ขึ้น Production เรียบร้อย (ตัดข้อ 65, 67, 69, 76 และ 82 ออกตามความต้องการของผู้ใช้เนื่องจากเกินงบประมาณ)
 
 ---
 
@@ -628,6 +628,13 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
     1. **เปิด RLS และนโยบายความปลอดภัยบนตารางลูก Partition ทั้ง 12 ตาราง**: บังคับ `ENABLE ROW LEVEL SECURITY` และสร้างนโยบาย SELECT เฉพาะ `public.is_active_staff()` บน `bills_archive_2023..2027, default` และ `bill_items_archive_2023..2027, default` ป้องกันการบายพาสตรง
     2. **สร้าง Financial Integrity Check Constraint บน `bills`**: ใส่ `CHECK (total_usd >= 0 AND total_lak >= 0 AND (down_payment_usd IS NULL OR down_payment_usd >= 0) AND (down_payment_percent IS NULL OR (down_payment_percent >= 0 AND down_payment_percent <= 100)))` ป้องกันการดักแก้ Payload ให้บิลยอดติดลบหรือยอด 0 บาทระดับฐานข้อมูล
     3. **Session Inactivity Auto-Logout 30 นาที**: เพิ่ม Activity Listener บน [App.tsx](file:///C:/Users/HP/Projects/AvatrAutoService/src/App.tsx) สั่ง `supabase.auth.signOut()` และล้างแคชอัตโนมัติหากไม่มีการเคลื่อนไหวเกิน 30 นาที ป้องกันการขโมย Token จากเครื่องโชว์รูมที่เปิดทิ้งไว้
+
+- [x] **90. แก้ไข RPC `get_sales_leaderboard` และคลีนอัป Database Performance Advisors ขั้นสุดท้าย (Zero Performance Warnings)**
+  - **ไฟล์เป้าหมาย**: `supabase/migrations/20261031201500_fix_leaderboard_rpc_and_cleanup_advisors.sql`
+  - **การดำเนินการ**:
+    1. **ซ่อม RPC `public.get_sales_leaderboard`**: แก้คอลัมน์ใน SQL ให้ตรงกับตารางจริง (`b.type`, `b.total_usd`, `COALESCE(b.status, 'completed') <> 'voided'`) และ `LEFT JOIN public.bill_items bi` เพื่อดึง `bi.discount_usd`
+    2. **ลบ Duplicate Indexes บน `public.bills`**: ลบ `idx_bills_type_date` (ซ้ำกับ `idx_bills_type_bill_date_desc`) และ `idx_bills_unique_bill_number` (ซ้ำกับ `bills_bill_number_key`)
+    3. **ยุบ RLS Policies ที่ซ้ำซ้อนและปรับ InitPlan**: ลบ `service_appointments_read` และ `test_drives_read` ที่ซ้อนกับ `*_select` และปรับ `document_issuance_logs` (`doc_logs_select_authenticated`, `doc_logs_insert_authenticated`) ให้ใช้ `public.is_active_staff()` ส่งผลให้ Supabase Performance Advisors เป็น 0 รายการ
 
 ---
 
