@@ -17,7 +17,7 @@ graph TD
         EdgeFn["Deno Edge Functions (create-staff, manage-staff)"]
         Storage["Supabase Storage (dealership-assets, avatr-assets, payment-slips)"]
         
-        subgraph "PostgreSQL 15+ Core Engine"
+        subgraph "PostgreSQL 17 Core Engine"
             Trigger["Auth Trigger (handle_new_auth_user)"]
             InitRPC["1-RTT Init RPC (get_showroom_initial_data)"]
             RLSHelpers["STABLE Security Definer Helpers (is_admin, is_super_admin)"]

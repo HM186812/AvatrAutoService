@@ -220,7 +220,7 @@ export async function signUpStaff(
     options: {
       data: { name: sanitizeText(name, 120), phone: sanitizePhone(phone, 30) },
       captchaToken,
-      emailRedirectTo: typeof window !== "undefined" ? (window.location.origin + "/") : "https://avatrautoservice.pheuangkeokisith.workers.dev/",
+      emailRedirectTo: typeof window !== "undefined" ? (window.location.origin + "/") : "https://avatrautoservice.bcsa7968.workers.dev/",
     },
   });
   if (error) throw error;
