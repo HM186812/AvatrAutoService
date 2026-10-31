@@ -1,6 +1,6 @@
 # 📝 TODO: รายการปรับปรุงและแก้ไขระบบ Avatr Auto Service (ครบ 89 ข้อ + แผนงาน Phase 2 & ระบบคลาวด์ซิงค์)
 > **วันที่อัปเดตล่าสุด**: 2026-10-29 14:25 (+07:00)
-> **สถานะ**: ระบบ Phase 1 และ Phase 2, การปรับปรุงประสิทธิภาพฐานข้อมูล P0-P1, ระบบแบ่งพาร์ติชัน 10 ปี (ข้อ 86-88), และระบบปิดช่องโหว่ความปลอดภัยระดับลึก (RLS Partition Child Guard + Positive Amount Constraint + Session Inactivity Auto-Logout - ข้อ 89) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC, RLS Policies และรัน Migration ขึ้น Production เรียบร้อย, ข้อ 81 มาร์กข้าม (เป็น Dummy Data), งาน Phase 2 ที่เหลือ (ข้อ 76, 82) พักไว้ตามคำสั่งเพื่อรักษาขอบเขตงาน
+> **สถานะ**: ระบบ Phase 1 และ Phase 2, การปรับปรุงประสิทธิภาพฐานข้อมูล P0-P1, ระบบแบ่งพาร์ติชัน 10 ปี (ข้อ 86-88), และระบบปิดช่องโหว่ความปลอดภัยระดับลึก (RLS Partition Child Guard + Positive Amount Constraint + Session Inactivity Auto-Logout - ข้อ 89) เสร็จสมบูรณ์ 100% พร้อมเชื่อมต่อ Supabase PostgreSQL RPC, RLS Policies และรัน Migration ขึ้น Production เรียบร้อย (ตัดข้อ 65, 67, 69, 76 และ 82 ออกตามความต้องการของผู้ใช้เนื่องจากเกินงบประมาณ)
 
 ---
 
@@ -202,8 +202,8 @@
   - **การแก้ไข**: เช็ก `bill.billType === 'sale' || bill.type === 'sale'` ก่อน set `item.status = 'sold'`
   - **สถานะ**: ✅ แก้ไขเรียบร้อยแล้ว — พร้อม commit
 
-- [ ] **35. อัปเดต `.env.test` หลังผู้ใช้เปลี่ยนบัญชี Supabase**
-  - **สถานะ**: ⏳ รอผู้ใช้เปลี่ยนบัญชีก่อน
+- [x] **35. อัปเดต `.env.test` หลังผู้ใช้เปลี่ยนบัญชี Supabase**
+  - **สถานะ**: ✅ อัปเดตชี้ไปยัง Singapore Instance (`ivybsqtzrfwdamibbumc`) เรียบร้อยแล้ว
 
 ---
 
@@ -450,25 +450,12 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
 
 > **วัตถุประสงค์**: ควบคุมทรัพยากรบน Supabase Free Tier ให้อยู่ได้ตลอดไปโดยไม่มีวันเต็ม รองรับวงจรชีวิตรถยนต์ไฟฟ้า (EV Lifecycle 8–10 ปี) ตั้งแต่ส่งมอบ, ตรวจเช็คสภาพตามระยะ, เคลมประกันแบตเตอรี่ SOH, และกำจัดข้อมูลขยะแบบอัตโนมัติ
 
-- [ ] **65. สร้าง Database Retention Function (`purge_old_ephemeral_data`)**
-  - **ไฟล์เป้าหมาย**: `supabase/migrations/20261025000000_data_retention_and_purge_cron.sql`
-  - **รายละเอียด**:
-    1. สร้าง Stored Procedure ลบข้อมูลนัดหมายสถานะ `cancelled` หรือ `failed` ที่เก่าเกิน 90 วัน
-    2. ลบประวัติการนัดหมายทดลองขับ `test_drives` ที่เก่าเกิน 1 ปี
-    3. ตั้งค่า `pg_cron` รันสคริปต์อัตโนมัติทุกวันอาทิตย์เวลาเที่ยงคืน คืนพื้นที่ตารางอย่างสม่ำเสมอ
-
-- [ ] **66. สร้าง Auto-Ping Keep-Alive ป้องกันฐานข้อมูล Supabase หลับ (7-Day Auto-Pause Prevention)**
+- [x] **66. สร้าง Auto-Ping Keep-Alive ป้องกันฐานข้อมูล Supabase หลับ (7-Day Auto-Pause Prevention)**
   - **ไฟล์เป้าหมาย**: `.github/workflows/supabase-keepalive.yml`
   - **รายละเอียด**:
-    1. สร้าง GitHub Actions Workflow ตั้งเวลาทำงานแบบ Cron (`0 0 */3 * *`) ทุก 3 วัน
-    2. ส่ง HTTP GET request เบาๆ ไปที่ Endpoint `/rest/v1/dealership_settings?select=id&limit=1`
-    3. ป้องกันไม่ให้โปรเจกต์ Supabase ถูก Freeze / Pause ในช่วงเทศกาลหรือวันหยุดยาวของศูนย์บริการ
-
-- [ ] **67. ปรับปรุงระบบบีบอัดรูปถ่ายตรวจเช็คสภาพรถ PDI และงานซ่อม (After-Sales Inspection WebP Compression)**
-  - **ไฟล์เป้าหมาย**: `src/utils/imageCompressor.ts`, `src/backend/data.ts`
-  - **รายละเอียด**:
-    1. ตรวจสอบให้มั่นใจว่ารูปที่ช่างถ่ายจากโทรศัพท์มือถือเข้าสู่ฟังก์ชัน `uploadDealershipAsset` จะถูกย่อเหลือความกว้างไม่เกิน 1280px และแปลงเป็น WebP คุณภาพ 80% (ขนาด <= 150 KB เสมอ)
-    2. ป้องกันไม่ให้รูปสภาพรถขนาด 5-10 MB กินพื้นที่ Storage 1 GB จนเต็ม
+    1. สร้าง GitHub Actions Workflow ตั้งเวลาทำงานแบบ Cron (`0 4 */3 * *`) ทุก 3 วัน (11:00 น. เวลาท้องถิ่น)
+    2. ยิง Authenticated HTTP GET heartbeat ไปที่ Endpoint `/rest/v1/dealership_settings?select=id&limit=1` พร้อม Fallback Anon Key ทำงานอัตโนมัติ 100%
+    3. ป้องกันไม่ให้โปรเจกต์ Supabase ถูก Freeze / Pause ในช่วงเทศกาลหรือวันหยุดยาวของศูนย์บริการ โดยไม่ต้องเสียค่าใช้จ่าย (0 บาท)
 
 - [x] **68.1 ระบบแนบสลิปการโอนเงิน, ตรวจสอบผ่าน Signed URL และแนบสลิปย้อนหลัง (Payment Slip Upload & Lazy Viewer)**
   - **ไฟล์**: `src/backend/data.ts`, `src/components/views/POSSalesView.tsx`, `src/components/views/BillsManagementView.tsx`, `src/components/modals/SlipPreviewModal.tsx`
@@ -481,13 +468,6 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
 - [ ] **68.2 นโยบายหมุนเวียนสลิปการเงินและการสำรองข้อมูลระยะยาว (Payment Slip 90-Day Rolling Policy & Export ZIP)**
   - **ไฟล์เป้าหมาย**: `src/backend/data.ts`, `src/components/views/BillsManagementView.tsx`
   - **รายละเอียด**: ดำเนินการเมื่อมีสลิปสะสมเกิน 90 วัน สำหรับดาวน์โหลดรวมชุดสลิป ZIP เก็บลงฮาร์ดดิสก์ และลบไฟล์ออกจาก Storage
-
-- [ ] **69. ระบบแจ้งเตือนรอบเข้าเช็คระยะอัตโนมัติ (EV Periodic Maintenance & Warranty Alert)**
-  - **ไฟล์เป้าหมาย**: `src/components/views/AppointmentsView.tsx`, `src/components/modals/CustomerAfterSalesModal.tsx`
-  - **รายละเอียด**:
-    1. นำข้อมูล `currentMileageKm` และ `warrantyStartDate` มาคำนวณรอบเช็คระยะถัดไป (เช่น ทุก 6 เดือน หรือทุก 10,000 กม.)
-    2. แสดง Badge สถานะเตือน "ใกล้ถึงรอบเช็คระยะ" หรือ "แจ้งเตือนตรวจสุขภาพแบตเตอรี่ (SOH)"
-    3. เพิ่มปุ่มคลิกส่งข้อความแจ้งเตือนผ่าน WhatsApp API ไปยังลูกค้าได้ในคลิกเดียว
 
 - [ ] **70. สรุปประวัติการซ่อมบำรุงเก่าเข้าสมุดประจำรถ (Service History Aggregator & Cold Archive)**
   - **ไฟล์เป้าหมาย**: `src/backend/data.ts`
@@ -550,18 +530,6 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
     5. อัปเกรด `saveLead` ให้ปลดล็อกการเปลี่ยน `assignedTo` ของลูกค้าเดิมได้อย่างถูกต้อง
     6. กรองตัดชื่อเซลส์ที่ถูก `suspended` ออกจาก Dropdown ในหน้าขาย POS (`POSSalesView.tsx`) อัตโนมัติ
 
-- [ ] **76. [PAUSED] การแบ่งสิทธิ์และระบบช่วยงานหน้าร้าน (Field-First RBAC & On-Floor CRM - พักไว้ตามคำสั่งเพื่อรักษาขอบเขตงาน)**
-  - **ไฟล์เป้าหมาย**: `src/components/views/CustomerView.tsx`, `src/components/views/BillsManagementView.tsx`, `src/App.tsx`
-  - **รายละเอียด**:
-    1. **หน้า CRM ลูกค้า (Floor Check & Quick Note)**:
-       - **เช็กกันชนเคส 3 วินาที**: ค้นหาด้วยชื่อ หรือเบอร์โทร 4 ตัวท้ายได้รวดเร็ว
-       - **หากเป็นเคสเพื่อนร่วมงาน**: หน้าจอแสดงชื่อลูกค้า, เบอร์โทร Mask (`020-XXXX-5678`), สถานะ และชื่อเซลส์เจ้าของเคสชัดเจน (ซ่อนข้อมูลไฟแนนซ์/สัญญา)
-       - **ปุ่มแตะด่วน "📌 ฝากเรื่อง / บันทึกแทน"**: เซลส์กดช่วยรับเรื่องแทนเพื่อนได้ทันทีผ่าน Quick Tags (`[แวะมาดูรถ]`, `[โทรมาตามเอกสาร]`, `[นัด Test Drive]`, `[ฝากเบอร์โทรกลับ]`) โดยระบบจะ Stamp ชื่อคนบันทึกและเวลาอัตโนมัติ **ไม่ต้องทำระบบขออนุมัติโอนเคสให้เสียเวลาขายของ**
-    2. **หน้าบิลและการเงิน (Bills & Live Audit Status)**:
-       - **ป้ายสถานะ 3 สีชัดเจน**: `🟡 รอตรวจสลิป`, `🟢 อนุมัติแล้ว`, `🔴 สลิปมีปัญหา` เซลส์เปิดจอมือถือเช็กได้ทันที ลดการทักถาม Admin ใน LINE
-       - **ล็อกบิลที่ตรวจแล้ว (Approved Lock)**: ปิดการแก้ไขบิลที่สถานะอนุมัติแล้ว มีไอคอนกุญแจ 🔒 เฉพาะ Admin เท่านั้นที่ปลดล็อกได้
-       - **ซ่อนต้นทุนรถ**: พนักงานขายเห็นเฉพาะบิลของตนเอง และซ่อนตัวเลขต้นทุน/กำไรโชว์รูม 100%
-
 - [x] **77. ระบบจัดอันดับ Top Sales & 4 เหรียญเกียรติยศฉบับเข้าใจง่ายใน 3 วินาที (`src/utils/salesLeaderboard.ts`)**
   - **ไฟล์เป้าหมาย**: `src/utils/salesRanking.ts` (สร้างใหม่)
   - **รายละเอียด**:
@@ -598,10 +566,6 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
 - [x] **81. [SKIPPED / ข้าม] เชื่อมโยงข้อมูลรถยนต์และการรับประกันให้ลูกค้าเก่า 11 คน (ยกเลิก - เป็นข้อมูลจำลอง Dummy Test Data ไม่จำเป็นต้องผูกข้อมูลจริง)**
   - **ปัญหา**: ลูกค้าในระบบ 12 คน มีเพียง 1 คนที่มีเลขตัวถัง (`vin`) และทะเบียนรถยนต์ อีก 11 คนยังไม่มีข้อมูลรถ เลขไมล์ หรือวันหมดประกันแบตเตอรี่ (SOH) ผูกอยู่ ทำให้แท็บ After-Sales แสดงผลไม่สมบูรณ์
   - **แนวทางแก้ไข**: จับคู่บิลขายเดิมเข้ากับลูกค้า และอัปเดตฟิลด์ `vin`, `plate_number`, `warranty_start_date`, `warranty_years` เข้าตาราง `customers` อัตโนมัติ
-
-- [ ] **82. [PAUSED] จัดระเบียบบัญชีพนักงานและเพิ่มบัญชีพนักงานขาย (Staff Role Realignment - พักไว้รอข้อมูลพนักงานจริง)**
-  - **ปัญหา**: ปัจจุบันในระบบมีพนักงานบทบาท `sales` เพียง 1 คน (`test02@gmail.com`) แต่มี `general_user` ที่เป็นบัญชี Dummy QA ถึง 9 คน ทำให้ไม่สามารถทดสอบ Flow การโอนเคสระหว่างเซลส์ (ข้อ 75) ได้อย่างสมบูรณ์
-  - **แนวทางแก้ไข**: สร้างหรือปรับสิทธิ์บัญชีพนักงานขายเพิ่มอีก 1-2 บัญชี และเคลียร์หรือปิดการใช้งานบัญชีทดสอบที่ไม่ได้ใช้งานจริง
 
 - [x] **83. ปรับแต่ง Playwright E2E Runner สำหรับ Node.js v22.17.1 (Test Environment Compatibility)**
   - **ปัญหา**: การรัน `npx playwright test` ใน Node v22.17.1 ติดขัดข้อผิดพลาด `Unexpected module status 3 from @supabase/auth-js/src/lib/webauthn.errors.ts`
@@ -686,8 +650,8 @@ E2E_ALLOWED_SUPABASE_ORIGIN="https://ivybsqtzrfwdamibbumc.supabase.co"
 - `auth.spec.ts` (3/3), `bills.spec.ts` (2/2), `crm.spec.ts` (2/2), `pos.spec.ts` (2/2), `stock.spec.ts` (2/2), `theme-lang.spec.ts` (2/2)
 
 ### 4. บัญชีรายการงานคงค้างสำหรับจัดทำเอกสารช่วงเย็น (Backlog Ledger)
-- **พักไว้ชั่วคราว (Paused)**: ข้อ 76 (ระบบช่วยงานหน้าร้าน & เช็กกันชนเคส 3 วินาที) และ ข้อ 82 (จัดระเบียบบัญชีเซลส์จริง)
-- **แผนงานระยะยาว Phase 2**: ข้อ 65 (ลบขยะอัตโนมัติ), ข้อ 66 (Keep-Alive Ping 3 วัน), ข้อ 67 (บีบอัดรูปช่าง PDI), ข้อ 68.2 (หมุนเวียนสลิป ZIP 90 วัน), ข้อ 69 (แจ้งเตือนเช็คระยะ/SOH), ข้อ 70 (Cold Archive ประวัติซ่อม 3 ปี)
+- **แผนงานระยะยาว Phase 2**: ข้อ 68.2 (หมุนเวียนสลิป ZIP 90 วัน), ข้อ 70 (Cold Archive ประวัติซ่อม 3 ปี - คงไว้พิจารณา)
+*(หมายเหตุ: ข้อ 66 Keep-Alive Ping ติดตั้งและเปิดใช้งานเรียบร้อยแล้ว)*
 
 
 

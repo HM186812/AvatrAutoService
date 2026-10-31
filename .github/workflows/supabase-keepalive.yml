@@ -14,18 +14,16 @@ jobs:
       - name: Ping Supabase Health Endpoint
         run: |
           SUPABASE_URL="https://ivybsqtzrfwdamibbumc.supabase.co"
+          # Use GitHub Secret if provided, otherwise fallback to the public anon key
+          DEFAULT_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2eWJzcXR6cmZ3ZGFtaWJidW1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4MTU5NTAsImV4cCI6MjEwODM5MTk1MH0.iz7kRSsD4DQ4_P0cG2QYM8bjyOhGfSRllE3QyntOnn0"
           ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}"
+          ANON_KEY="${ANON_KEY:-$DEFAULT_ANON_KEY}"
           
-          if [ -z "$ANON_KEY" ]; then
-            echo "⚠️ Secret VITE_SUPABASE_ANON_KEY is not set in GitHub Secrets, sending public health probe..."
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SUPABASE_URL/rest/v1/")
-          else
-            echo "Sending authenticated heartbeat probe to keep project active..."
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              -H "apikey: $ANON_KEY" \
-              -H "Authorization: Bearer $ANON_KEY" \
-              "$SUPABASE_URL/rest/v1/dealership_settings?select=id&limit=1")
-          fi
+          echo "Sending authenticated heartbeat probe to keep project active..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: $ANON_KEY" \
+            -H "Authorization: Bearer $ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/dealership_settings?select=id&limit=1")
           
           echo "Supabase heartbeat response status: $STATUS"
           if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 500 ]; then
