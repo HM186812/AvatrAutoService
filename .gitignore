@@ -76,3 +76,15 @@ skills-lock.json
 
 .superpowers/
 docs/superpowers/
+
+# -------------------------------------------------------------
+# INTERNAL HANDOVER & CLIENT LEGAL DOCUMENTS (LOCAL ONLY, NEVER ON GITHUB)
+# -------------------------------------------------------------
+*.docx
+docs/handover/
+docs/*HANDOVER*
+docs/*Interview*
+docs/*Compliance*
+docs/*Legal*
+docs/*FINAL*
+
