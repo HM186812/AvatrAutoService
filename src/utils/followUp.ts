@@ -68,6 +68,8 @@ export const CONTACT_TYPE_LABELS: Record<ContactLogType, { lo: string; en: strin
   visit: { lo: 'ມາໂຊວຣູມ', en: 'Showroom visit', th: 'มาโชว์รูม' },
   other: { lo: 'ອື່ນໆ', en: 'Other', th: 'อื่นๆ' },
   status: { lo: 'ປ່ຽນສະຖານະ', en: 'Status change', th: 'เปลี่ยนสถานะ' },
+  deposit: { lo: 'ຮັບມັດຈຳ', en: 'Deposit', th: 'รับมัดจำ' },
+  delivery: { lo: 'ມອບລົດ', en: 'Delivery', th: 'ส่งมอบรถ' },
 };
 
 /** Format YYYY-MM-DD as DD/MM/YYYY for display. */

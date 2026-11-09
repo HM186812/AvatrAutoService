@@ -65,6 +65,10 @@ import { deleteLead, saveLead, updateLeadStatus, saveBillRecord, fetchLeadsByDat
 import { newRecordId } from '../../backend/ids';
 import { isSupabaseConfigured } from '../../backend/client';
 import ContactLogModal from '../modals/ContactLogModal';
+import CustomerDetailView from './CustomerDetailView';
+import PipelineActionModal from '../modals/PipelineActionModal';
+import type { DocumentType } from '../modals/CustomerDocumentsModal';
+import { PIPELINE_LABELS, PIPELINE_STAGE_KEYS, getPipelineCurrentIndex, getPipelineDone } from '../../utils/pipeline';
 import { getFollowUpState, makeContactEntry, formatDateKey } from '../../utils/followUp';
 import InstallmentDashboardView from './InstallmentDashboardView';
 import { IssuedDocumentRecord } from '../../types';
@@ -254,7 +258,10 @@ export default function CustomerView({
     };
   }, []);
 
-  const getCustomerIssuedDocsCount = (customerName: string, phone?: string, vin?: string, leadId?: string) => {
+  const getCustomerIssuedDocsCount = (customerName: string, phone?: string, vin?: string, leadId?: string) =>
+    getCustomerIssuedDocs(customerName, phone, vin, leadId).length;
+
+  const getCustomerIssuedDocs = (customerName: string, phone?: string, vin?: string, leadId?: string) => {
     const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
     const cleanName = customerName.trim().toLowerCase();
     const cleanVin = vin ? vin.trim().toLowerCase() : '';
@@ -266,7 +273,7 @@ export default function CustomerView({
       if (cleanPhone.length >= 6 && log.customerPhone && log.customerPhone.replace(/\D/g, '') === cleanPhone) return true;
       if (cleanName && log.customerName && log.customerName.trim().toLowerCase() === cleanName) return true;
       return false;
-    }).length;
+    });
   };
 
   // Helper to identify if a lead has already completed a purchase (delivered, in bills, or has active installment)
@@ -331,15 +338,48 @@ export default function CustomerView({
   // Contact log / follow-up
   const [contactLead, setContactLead] = useState<Lead | null>(null);
   const [followUpFilter, setFollowUpFilter] = useState<'all' | 'today' | 'overdue'>('all');
+  // Customer detail page (one place for info, next step, documents and timeline)
+  const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
+  const detailLead = detailLeadId ? leads.find(l => l.id === detailLeadId) || null : null;
+  const openCustomerDetail = (lead: Lead) => {
+    setDetailLeadId(lead.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const isLeadInstallment = (lead: Lead) =>
+    Boolean(lead.installmentRecords && lead.installmentRecords.length > 0) ||
+    lead.paymentTypeConfirmed === 'installment' ||
+    lead.installmentStatus === 'active_repaying' ||
+    lead.installmentStatus === 'completed' ||
+    lead.installmentStatus === 'approved' ||
+    lead.installmentStatus === 'pending_approval' || // same rule as the installment tab
+    ((lead.paymentType === 'installment' || lead.paymentType === 'finance' || Boolean(lead.financeCompany)) && isLeadPurchased(lead));
+  const getLeadBills = (lead: Lead) => {
+    const phone = lead.phone ? lead.phone.replace(/\D/g, '') : '';
+    return bills.filter(b =>
+      b.billType !== 'import' &&
+      (b.leadId === lead.id || (phone.length >= 6 && b.customerPhone && b.customerPhone.replace(/\D/g, '') === phone))
+    );
+  };
 
   // ===== Sales pipeline: one clear "next step" per customer =====
-  const PIPELINE_STAGES: { key: LeadStatus | 'sale'; label: string }[] = [
-    { key: 'new', label: t.statusNew },
-    { key: 'contacted', label: t.statusContacted },
-    { key: 'test_drive', label: t.statusTestDrive },
-    { key: 'negotiation', label: t.statusNegotiation },
-    { key: 'sale', label: lang === 'lo' ? 'ຂາຍ / ອອກບິນ' : lang === 'th' ? 'ขาย / ออกบิล' : 'Sale / Invoice' },
-  ];
+  const PIPELINE_STAGES = PIPELINE_STAGE_KEYS.map(key => ({
+    key,
+    label: lang === 'en' ? PIPELINE_LABELS[key].en : lang === 'th' ? PIPELINE_LABELS[key].th : PIPELINE_LABELS[key].lo,
+  }));
+
+  // Booking (deposit) and delivery actions, then open the matching document
+  const [pipelineAction, setPipelineAction] = useState<{ mode: 'booking' | 'delivery'; leadId: string } | null>(null);
+  const [docsInitialDoc, setDocsInitialDoc] = useState<DocumentType | undefined>(undefined);
+  const openDocuments = (lead: Lead, initialDoc?: DocumentType) => {
+    setDocsInitialDoc(initialDoc);
+    setSelectedCustomerForDocs(lead);
+  };
+  const handlePipelineSave = async (updated: Lead, message: string) => {
+    const mode = pipelineAction?.mode;
+    await handleSaveContactLog(updated, message); // saves, updates state, toasts; throws on failure
+    setPipelineAction(null);
+    openDocuments(updated, mode === 'booking' ? 'booking' : 'handover');
+  };
 
   const handleIssueQuote = (lead: Lead) => {
     const vehicle = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
@@ -363,20 +403,21 @@ export default function CustomerView({
         </div>
       );
     }
-    const current = Math.max(0, PIPELINE_STAGES.findIndex(st => st.key === lead.status));
+    const done = getPipelineDone(lead, isLeadPurchased(lead));
+    const current = getPipelineCurrentIndex(done);
     return (
       <ol className="flex items-center gap-1 text-[10px] font-semibold" aria-label={lang === 'lo' ? 'ຂັ້ນຕອນການຂາຍ' : 'Sales stage'}>
         {PIPELINE_STAGES.map((st, i) => {
-          const done = i < current;
+          const isDone = done[i];
           const active = i === current;
           return (
             <li key={st.key} className="flex items-center gap-1 shrink-0" aria-current={active ? 'step' : undefined}>
               <span className={`whitespace-nowrap px-2 py-0.5 rounded-full border ${active
                 ? 'bg-blue-600 text-white border-blue-600'
-                : done
+                : isDone
                   ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
                   : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}>
-                {done ? '✓ ' : ''}{st.label}
+                {isDone ? '✓ ' : ''}{st.label}
               </span>
               {i < PIPELINE_STAGES.length - 1 && <span className="text-zinc-600" aria-hidden="true">›</span>}
             </li>
@@ -429,10 +470,26 @@ export default function CustomerView({
       </button>
     );
 
-    // negotiation -> next step is the sale; earlier stages -> next step is the quotation
-    return lead.status === 'negotiation'
-      ? <>{quoteButton(false)}{sellButton(true)}</>
-      : <>{sellButton(false)}{quoteButton(true)}</>;
+    const depositButton = (
+      <button type="button" onClick={() => setPipelineAction({ mode: 'booking', leadId: lead.id })}
+        className={`${primaryBase} bg-blue-600 hover:bg-blue-500`}
+        title={lang === 'lo' ? 'ຮັບເງິນມັດຈຳ ແລະ ອອກໃບສັນຍາສັ່ງຈອງ' : 'Take a deposit and issue the booking contract'}>
+        <CreditCard className={iconCls} />
+        <span>{lang === 'lo' ? 'ຮັບມັດຈຳ' : lang === 'th' ? 'รับมัดจำ' : 'Take Deposit'}</span>
+      </button>
+    );
+    const bookingDocButton = (
+      <button type="button" onClick={() => openDocuments(lead, 'booking')} className={secondaryBase}
+        title={lang === 'lo' ? 'ເປີດໃບສັນຍາສັ່ງຈອງ' : 'Open booking contract'}>
+        <FileText className={iconCls} />
+        <span>{lang === 'lo' ? 'ໃບຈອງ' : lang === 'th' ? 'ใบจอง' : 'Booking'}</span>
+      </button>
+    );
+
+    // booked -> invoice in POS; negotiation -> take deposit; earlier -> quotation
+    if (lead.bookingDate) return <>{bookingDocButton}{sellButton(true)}</>;
+    if (lead.status === 'negotiation') return <>{sellButton(false)}{depositButton}</>;
+    return <>{sellButton(false)}{quoteButton(true)}</>;
   };
 
   const handleSaveContactLog = async (updated: Lead, message: string) => {
@@ -1209,7 +1266,31 @@ export default function CustomerView({
   return (
     <div className="mx-auto max-w-screen-2xl space-y-6 pb-12">
       {/* WRAPPER FOR CRM VIEWS - SUPPRESSED DURING PRINT WHEN A CUSTOMER DOCUMENT IS OPEN */}
-      <div className={selectedCustomerForDocs ? "print:hidden hide-on-print-doc space-y-6" : "space-y-6"}>
+      {detailLead && (
+        <div className={selectedCustomerForDocs ? 'print:hidden hide-on-print-doc' : ''}>
+          <CustomerDetailView
+            lead={detailLead}
+            lang={lang}
+            vehicles={vehicles}
+            bills={getLeadBills(detailLead)}
+            issuedDocs={getCustomerIssuedDocs(detailLead.customerName, detailLead.phone, detailLead.vin, detailLead.id)}
+            isPurchased={isLeadPurchased(detailLead) || isLeadInstallment(detailLead)}
+            isInstallment={isLeadInstallment(detailLead)}
+            staffName={currentUser?.name}
+            onBack={() => setDetailLeadId(null)}
+            onEdit={onEditLead ? () => onEditLead(detailLead) : undefined}
+            onIssueQuote={() => handleIssueQuote(detailLead)}
+            onSell={onSelectCustomerForPOS ? () => onSelectCustomerForPOS(detailLead) : undefined}
+            onReopen={() => handleUpdateStatus(detailLead.id, 'contacted')}
+            onOpenDocuments={(doc) => openDocuments(detailLead, doc)}
+            onOpenInstallments={() => setSelectedCustomerForInstallments(detailLead)}
+            onRecordBooking={() => setPipelineAction({ mode: 'booking', leadId: detailLead.id })}
+            onRecordDelivery={() => setPipelineAction({ mode: 'delivery', leadId: detailLead.id })}
+            onSaveContact={handleSaveContactLog}
+          />
+        </div>
+      )}
+      <div className={`${selectedCustomerForDocs ? "print:hidden hide-on-print-doc space-y-6" : "space-y-6"}${detailLead ? ' hidden' : ''}`}>
         {/* Top Header */}
         <div className="theme-adaptive-dark-surface relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-950 to-black p-5 shadow-xl sm:p-7">
           <div className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full bg-white/4 blur-3xl" />
@@ -1702,12 +1783,12 @@ export default function CustomerView({
                           >
                             {/* Customer & Identity */}
                             <td className="py-3 px-3.5 align-top">
-                              <div className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800/80 bg-slate-50/80 dark:bg-zinc-900/50 hover:border-slate-300 dark:hover:border-zinc-700/80 transition-all shadow-xs min-w-[170px] max-w-[220px]">
+                              <div className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800/80 bg-slate-50/80 dark:bg-zinc-900/50 hover:border-slate-300 dark:hover:border-zinc-700/80 transition-all shadow-xs min-w-42.5 max-w-55">
                                 {/* Customer Name & VIP Badge */}
                                 <div className="flex items-center justify-between gap-1.5">
-                                  <strong className="text-xs font-bold text-slate-900 dark:text-white truncate block" title={lead.customerName}>
+                                  <button type="button" onClick={() => openCustomerDetail(lead)} className="text-xs font-bold text-slate-900 dark:text-white truncate block text-left hover:underline cursor-pointer" title={lead.customerName}>
                                     {lead.customerName}
-                                  </strong>
+                                  </button>
                                   {lead.priority === 'vip' && (
                                     <span className="text-[9px] font-mono px-1.5 py-0.5 bg-amber-400 text-black rounded-md font-extrabold shrink-0 shadow-xs">
                                       VIP
@@ -1748,11 +1829,11 @@ export default function CustomerView({
                                   <span>{lead.phone}</span>
                                   <WhatsAppIcon className="w-3 h-3 text-emerald-400" />
                                 </button>
-                                <span className="text-[10px] text-zinc-300 font-sans block leading-tight max-w-[200px]" title={[lead.village, lead.district, lead.province].filter(Boolean).join(', ')}>
+                                <span className="text-[10px] text-zinc-300 font-sans block leading-tight max-w-50" title={[lead.village, lead.district, lead.province].filter(Boolean).join(', ')}>
                                   {[lead.village, lead.district, lead.province].filter(Boolean).join(', ') || '-'}
                                 </span>
                                 {lead.notes && (
-                                  <span className="text-[10px] text-amber-800 dark:text-amber-300 font-sans block italic truncate max-w-[200px]" title={lead.notes}>
+                                  <span className="text-[10px] text-amber-800 dark:text-amber-300 font-sans block italic truncate max-w-50" title={lead.notes}>
                                     "{lead.notes}"
                                   </span>
                                 )}
@@ -1914,7 +1995,9 @@ export default function CustomerView({
                             <div className="min-w-0 space-y-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                                  {lead.customerName}
+                                  <button type="button" onClick={() => openCustomerDetail(lead)} className="text-left hover:underline underline-offset-2 cursor-pointer" title="ເປີດລາຍລະອຽດລູກຄ້າ">
+                                    {lead.customerName}
+                                  </button>
                                 </h3>
 
                                 {/* VIP Priority Badge */}
@@ -2036,7 +2119,7 @@ export default function CustomerView({
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
                           {/* Section A: Interested Vehicle & Dealership Source (4 cols) */}
                           <div className="md:col-span-4 space-y-1.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                               <Car className="w-3.5 h-3.5 text-emerald-400" />
                               <span>ລຸ້ນລົດທີ່ສົນໃຈ</span>
                             </span>
@@ -2053,7 +2136,7 @@ export default function CustomerView({
 
                           {/* Section B: Complete Customer Address & Staff (4 cols) */}
                           <div className="md:col-span-4 space-y-1.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                               <MapPin className="w-3.5 h-3.5 text-blue-400" />
                               <span>ທີ່ຢູ່ລູກຄ້າ (ເຫັນຄົບຖ້ວນ)</span>
                             </span>
@@ -2072,11 +2155,11 @@ export default function CustomerView({
 
                           {/* Section C: Complete Customer Notes (4 cols) */}
                           <div className="md:col-span-4 space-y-1.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                               <FileText className="w-3.5 h-3.5 text-amber-400" />
                               <span>ໝາຍເຫດ & ຄວາມຕ້ອງການ</span>
                             </span>
-                            <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 min-h-[64px] flex items-center">
+                            <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 min-h-16 flex items-center">
                               {lead.notes ? (
                                 <p className="text-zinc-200 italic leading-relaxed text-[11px]">
                                   "{lead.notes}"
@@ -2228,7 +2311,7 @@ export default function CustomerView({
             <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:p-5 shadow-sm space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 {/* Search Bar */}
-                <div className="relative flex-1 min-w-[260px]">
+                <div className="relative flex-1 min-w-65">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                   <input
                     type="text"
@@ -2337,7 +2420,7 @@ export default function CustomerView({
                         </div>
 
                         {/* Live Dynamic Warranty Status & Countdown Card */}
-                        <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800/80 min-w-[280px] sm:min-w-[320px] shadow-sm space-y-1.5">
+                        <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800/80 min-w-70 sm:min-w-[320px] shadow-sm space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-200">
                               <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -2380,8 +2463,8 @@ export default function CustomerView({
                           <div className="space-y-1 pt-0.5">
                             <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
                               <div
-                                className={`h-1.5 rounded-full transition-all duration-500 ${owner.warrantyStatus === 'active' ? 'bg-gradient-to-r from-emerald-500 to-teal-400' :
-                                  owner.warrantyStatus === 'expiring' ? 'bg-gradient-to-r from-amber-500 to-yellow-400' :
+                                className={`h-1.5 rounded-full transition-all duration-500 ${owner.warrantyStatus === 'active' ? 'bg-linear-to-r from-emerald-500 to-teal-400' :
+                                  owner.warrantyStatus === 'expiring' ? 'bg-linear-to-r from-amber-500 to-yellow-400' :
                                     'bg-rose-500'
                                   }`}
                                 style={{ width: `${owner.remainingPct}%` }}
@@ -2424,7 +2507,11 @@ export default function CustomerView({
                           </div>
 
                           <div>
-                            <p className="text-base font-extrabold text-white">{owner.customerName}</p>
+                            {owner.leadRecord ? (
+                              <button type="button" onClick={() => owner.leadRecord && openCustomerDetail(owner.leadRecord)} className="text-base font-extrabold text-white text-left hover:underline underline-offset-2 cursor-pointer" title="ເປີດລາຍລະອຽດລູກຄ້າ">{owner.customerName}</button>
+                            ) : (
+                              <p className="text-base font-extrabold text-white">{owner.customerName}</p>
+                            )}
                             <div className="flex items-center gap-2 mt-1">
                               <Phone className="w-3.5 h-3.5 text-zinc-400" />
                               <a
@@ -2734,6 +2821,7 @@ export default function CustomerView({
               lang={lang}
               onNavigateMenu={onNavigateMenu || (() => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined)}
               onNavigateTab={(tab) => setCustomerClassificationTab(tab)}
+              onOpenCustomer={openCustomerDetail}
             />
           </div>
         )}
@@ -2743,8 +2831,9 @@ export default function CustomerView({
       {selectedCustomerForDocs && (
         <CustomerDocumentsModal
           isOpen={!!selectedCustomerForDocs}
-          onClose={() => setSelectedCustomerForDocs(null)}
+          onClose={() => { setSelectedCustomerForDocs(null); setDocsInitialDoc(undefined); }}
           customer={selectedCustomerForDocs}
+          initialDoc={docsInitialDoc}
           vehicles={vehicles}
           currentUser={currentUser}
           lang={lang}
@@ -2778,6 +2867,22 @@ export default function CustomerView({
           onConfirmPayment={handleConfirmCustomerPayment}
         />
       )}
+
+      {/* Booking deposit / vehicle delivery */}
+      {pipelineAction && (() => {
+        const target = leads.find(l => l.id === pipelineAction.leadId);
+        return target ? (
+          <PipelineActionModal
+            mode={pipelineAction.mode}
+            lead={target}
+            staffName={currentUser?.name}
+            staffOptions={Array.from(new Set(leads.map(l => l.assignedTo).filter((n): n is string => Boolean(n))))}
+            lang={lang}
+            onClose={() => setPipelineAction(null)}
+            onSave={handlePipelineSave}
+          />
+        ) : null;
+      })()}
 
       {/* Contact Log & Follow-up Modal */}
       {contactLead && (

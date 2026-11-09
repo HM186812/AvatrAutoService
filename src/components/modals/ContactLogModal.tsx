@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { X, Phone, MessageCircle, Store, StickyNote, RefreshCw, CalendarClock, Trash2, Loader2, History } from 'lucide-react';
+import { X, Phone, MessageCircle, Store, StickyNote, RefreshCw, CalendarClock, Trash2, Loader2, History, CreditCard, KeyRound } from 'lucide-react';
 import type { ContactLogType, Language, Lead } from '../../types';
 import { CONTACT_TYPE_LABELS, addDaysKey, formatDateKey, getFollowUpState, localDateKey, makeContactEntry } from '../../utils/followUp';
 
@@ -19,6 +19,8 @@ const TYPE_ICONS: Record<ContactLogType, React.ComponentType<{ className?: strin
   visit: Store,
   other: StickyNote,
   status: RefreshCw,
+  deposit: CreditCard,
+  delivery: KeyRound,
 };
 
 const pick = (lang: Language, l: { lo: string; en: string; th: string }) => (lang === 'en' ? l.en : lang === 'th' ? l.th : l.lo);
@@ -195,7 +197,7 @@ export default function ContactLogModal({ lead, staffName, isAdmin, lang, onClos
                         <span className="font-mono">{new Date(entry.at).toLocaleString(lang === 'en' ? 'en-GB' : lang === 'th' ? 'th-TH' : 'lo-LA', { dateStyle: 'short', timeStyle: 'short' })}</span>
                         {entry.by && <span>· {entry.by}</span>}
                       </div>
-                      <p className="mt-0.5 text-xs text-slate-800 dark:text-zinc-200 whitespace-pre-wrap break-words">{entry.note}</p>
+                      <p className="mt-0.5 text-xs text-slate-800 dark:text-zinc-200 whitespace-pre-wrap wrap-break-word">{entry.note}</p>
                     </div>
                     {isAdmin && (
                       <button type="button" onClick={() => handleDeleteEntry(entry.id)} aria-label={L('ລົບລາຍການນີ້', 'Delete entry', 'ลบรายการนี้')} title={L('ລົບລາຍການນີ້', 'Delete entry', 'ลบรายการนี้')}

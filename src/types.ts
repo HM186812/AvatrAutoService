@@ -309,12 +309,21 @@ export interface Lead {
   warrantyTerms?: string; // ເງື່ອນໄຂ / ຊື່ແພັກເກັດການຮັບປະກັນ
   afterSalesNotes?: string; // ໝາຍເຫດການດູແລຫຼັງການຂາຍ
 
-  // CRM follow-up (frontend / offline storage only until a Supabase migration adds columns)
+  // CRM follow-up (columns added by migration 20261109120000_customer_pipeline_fields)
   nextFollowUpAt?: string; // ວັນນັດຕິດຕາມຄັ້ງຕໍ່ໄປ YYYY-MM-DD
   contactHistory?: ContactLogEntry[]; // ປະຫວັດການຕິດຕໍ່ (ໃໝ່ສຸດຢູ່ທ້າຍ)
+
+  // Pipeline: booking (deposit) and vehicle delivery stages
+  bookingDepositUSD?: number; // ເງິນມັດຈຳ USD
+  bookingPaymentMethod?: 'cash' | 'transfer';
+  bookingDate?: string; // YYYY-MM-DD
+  bookingNote?: string;
+  vehicleDeliveredAt?: string; // YYYY-MM-DD
+  vehicleDeliveredBy?: string;
+  deliveryNote?: string;
 }
 
-export type ContactLogType = 'call' | 'whatsapp' | 'visit' | 'other' | 'status';
+export type ContactLogType = 'call' | 'whatsapp' | 'visit' | 'other' | 'status' | 'deposit' | 'delivery';
 
 export interface ContactLogEntry {
   id: string;

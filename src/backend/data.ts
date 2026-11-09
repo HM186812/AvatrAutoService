@@ -409,6 +409,16 @@ function mapLead(row: DbRow, modelById: Map<string, VehicleModel>, staffById: Ma
     createdAt: row.created_at || '',
     lastFollowUp: row.last_follow_up || undefined,
     testDriveDate: row.next_test_drive_at || undefined,
+    // Pipeline columns (migration 20261109120000); absent until it is applied
+    nextFollowUpAt: row.next_follow_up_at || undefined,
+    contactHistory: Array.isArray(row.contact_history) ? row.contact_history : undefined,
+    bookingDepositUSD: row.booking_deposit_usd == null ? undefined : Number(row.booking_deposit_usd),
+    bookingPaymentMethod: row.booking_payment_method || undefined,
+    bookingDate: row.booking_date || undefined,
+    bookingNote: row.booking_note || undefined,
+    vehicleDeliveredAt: row.vehicle_delivered_at || undefined,
+    vehicleDeliveredBy: row.vehicle_delivered_by || undefined,
+    deliveryNote: row.delivery_note || undefined,
   };
 }
 
@@ -1048,6 +1058,28 @@ export async function saveLead(lead: Lead, assignedStaffId: string, saleBill?: I
     after_sales_notes: sanitizeText(lead.afterSalesNotes, 1000) || null,
   };
 
+  // Pipeline columns (migration 20261109120000_customer_pipeline_fields)
+  const pipelineLeadPayload: Record<string, unknown> = {
+    ...extendedLeadPayload,
+    next_follow_up_at: sanitizeText(lead.nextFollowUpAt, 10) || null,
+    contact_history: Array.isArray(lead.contactHistory)
+      ? lead.contactHistory.slice(-500).map(e => ({
+          id: sanitizeText(e.id, 80),
+          at: sanitizeText(e.at, 40),
+          type: e.type,
+          note: sanitizeText(e.note, 1000),
+          by: sanitizeText(e.by, 120) || null,
+        }))
+      : [],
+    booking_deposit_usd: lead.bookingDepositUSD != null ? sanitizeNumber(lead.bookingDepositUSD, 0) : null,
+    booking_payment_method: lead.bookingPaymentMethod === 'cash' || lead.bookingPaymentMethod === 'transfer' ? lead.bookingPaymentMethod : null,
+    booking_date: sanitizeText(lead.bookingDate, 10) || null,
+    booking_note: sanitizeText(lead.bookingNote, 500) || null,
+    vehicle_delivered_at: sanitizeText(lead.vehicleDeliveredAt, 10) || null,
+    vehicle_delivered_by: sanitizeText(lead.vehicleDeliveredBy, 120) || null,
+    delivery_note: sanitizeText(lead.deliveryNote, 1000) || null,
+  };
+
   if (saleBill) {
     await saveBillRecord(
       saleBill,
@@ -1059,11 +1091,18 @@ export async function saveLead(lead: Lead, assignedStaffId: string, saleBill?: I
     return;
   }
 
-  let { error } = await client.from('customers').upsert(extendedLeadPayload);
-  if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
+  const isMissingColumn = (e: { code?: string; message?: string } | null) =>
+    Boolean(e && (e.code === 'PGRST204' || e.code === '42703' || e.message?.includes('column')));
+
+  let { error } = await client.from('customers').upsert(pipelineLeadPayload);
+  if (isMissingColumn(error)) {
+    // Pipeline migration not applied yet: save everything else
+    console.warn('customers pipeline columns missing; run migration 20261109120000_customer_pipeline_fields');
+    ({ error } = await client.from('customers').upsert(extendedLeadPayload));
+  }
+  if (isMissingColumn(error)) {
     // Fallback if new after-sales columns have not been migrated on the remote DB yet
-    const retry = await client.from('customers').upsert(baseLeadPayload);
-    error = retry.error;
+    ({ error } = await client.from('customers').upsert(baseLeadPayload));
   }
   if (error) throw error;
 

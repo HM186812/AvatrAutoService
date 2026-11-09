@@ -55,6 +55,8 @@ interface InstallmentDashboardViewProps {
   currentUser?: SystemUser | null;
   onNavigateMenu?: (menu: ActiveMenu) => void;
   onNavigateTab?: (tab: 'new_leads' | 'existing_customers' | 'installment_customers') => void;
+  /** Opens the customer detail page */
+  onOpenCustomer?: (lead: Lead) => void;
 }
 
 export default function InstallmentDashboardView({
@@ -67,6 +69,7 @@ export default function InstallmentDashboardView({
   currentUser,
   onNavigateMenu,
   onNavigateTab,
+  onOpenCustomer,
 }: InstallmentDashboardViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'due' | 'completed'>('all');
@@ -596,7 +599,11 @@ export default function InstallmentDashboardView({
                   <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-zinc-800/80">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-base text-slate-900 dark:text-white">{lead.customerName}</h3>
+                        <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                          {onOpenCustomer && !lead.id.startsWith('inst-bill-') ? (
+                            <button type="button" onClick={() => onOpenCustomer(lead)} className="text-left hover:underline underline-offset-2 cursor-pointer" title="ເປີດລາຍລະອຽດລູກຄ້າ">{lead.customerName}</button>
+                          ) : lead.customerName}
+                        </h3>
                         <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-300">
                           {contractNo}
                         </span>
@@ -827,7 +834,11 @@ export default function InstallmentDashboardView({
                     <tr key={lead.id} className="hover:bg-zinc-900/50 transition-colors">
                       {/* Customer */}
                       <td className="py-3.5 px-4 font-sans">
-                        <strong className="text-white font-semibold block">{lead.customerName}</strong>
+                        {onOpenCustomer && !lead.id.startsWith('inst-bill-') ? (
+                          <button type="button" onClick={() => onOpenCustomer(lead)} className="text-white font-semibold block text-left hover:underline underline-offset-2 cursor-pointer" title="ເປີດລາຍລະອຽດລູກຄ້າ">{lead.customerName}</button>
+                        ) : (
+                          <strong className="text-white font-semibold block">{lead.customerName}</strong>
+                        )}
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-zinc-400 font-mono text-[11px]">{lead.phone}</span>
                           <a
