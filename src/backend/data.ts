@@ -24,7 +24,6 @@ function requireOfflineDemo() {
 import {
   DEFAULT_OFFLINE_USERS,
   getOfflineBackendData,
-  offlineClearActiveUser,
   offlineDeactivateUser,
   offlineDeleteBill,
   offlineDeleteInventoryItem,

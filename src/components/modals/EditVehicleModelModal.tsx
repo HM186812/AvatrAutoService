@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { VehicleModel, Language } from '../../types';
-import { X, Edit3, Image as ImageIcon, Upload, DollarSign, Tag, ShieldCheck, Sparkles } from 'lucide-react';
+import { X, Edit3, DollarSign, Tag, Sparkles } from 'lucide-react';
 
 interface EditVehicleModelModalProps {
   isOpen: boolean;
@@ -22,7 +22,6 @@ export default function EditVehicleModelModal({
   const [modelName, setModelName] = useState('');
   const [category, setCategory] = useState('');
   const [priceUSD, setPriceUSD] = useState<number | ''>('');
-  const [imageUrl, setImageUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -32,37 +31,11 @@ export default function EditVehicleModelModal({
       setModelName(model.name || '');
       setCategory(model.category || model.subTitle || '');
       setPriceUSD(model.priceStartingUSD || 45000);
-      setImageUrl(model.heroImage || '');
       setErrorMessage('');
     }
   }, [model, isOpen]);
 
   if (!isOpen || !model) return null;
-
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      setErrorMessage(
-        lang === 'lo'
-          ? 'ຂະໜາດຮູບພາບໃຫຍ່ເກີນໄປ! ກະລຸນາເລືອກຮູບທີ່ນ້ອຍກວ່າ 5MB'
-          : lang === 'th'
-          ? 'ขนาดรูปภาพใหญ่เกินไป! กรุณาเลือกไฟล์ที่น้อยกว่า 5MB'
-          : 'Image file too large! Please choose a file under 5MB.'
-      );
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        setImageUrl(dataUrl);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,10 +73,6 @@ export default function EditVehicleModelModal({
         tagline: category.trim() || model.tagline || 'ຍົນລະກຳອັດສະລິຍະພຣີມຽມ',
         priceStartingUSD: priceNum,
         priceStartingLAK: priceNum * 22000,
-        heroImage:
-          imageUrl.trim() ||
-          model.heroImage ||
-          'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80',
       };
 
       await onSave(updatedModel, oldName);
@@ -160,77 +129,6 @@ export default function EditVehicleModelModal({
             </div>
           )}
 
-          {/* Image Preview & Upload */}
-          <div className="p-3.5 bg-zinc-900/60 rounded-2xl border border-zinc-800 space-y-2.5">
-            <label className="text-zinc-300 font-semibold text-xs flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <ImageIcon className="w-4 h-4 text-zinc-400" />
-                <span>
-                  {lang === 'lo'
-                    ? 'ຮູບພາບລຸ້ນລົດ (Hero Image)'
-                    : lang === 'th'
-                    ? 'รูปภาพรุ่นรถยนต์ (Hero Image)'
-                    : 'Vehicle Model Image'}
-                </span>
-              </span>
-              {imageUrl && (
-                <button
-                  type="button"
-                  onClick={() => setImageUrl('')}
-                  className="text-[10px] text-zinc-400 hover:text-red-400 flex items-center gap-1 transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                  <span>{lang === 'lo' ? 'ລຶບຮູບ' : lang === 'th' ? 'ลบรูป' : 'Clear'}</span>
-                </button>
-              )}
-            </label>
-
-            <div className="flex items-center gap-3.5">
-              <div className="relative w-28 h-20 rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900 shrink-0 shadow-inner flex items-center justify-center">
-                {imageUrl ? (
-                  <img
-                    src={imageUrl}
-                    alt="Model Preview"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src =
-                        'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80';
-                    }}
-                  />
-                ) : (
-                  <ImageIcon className="w-6 h-6 text-zinc-600" />
-                )}
-              </div>
-
-              <div className="flex-1 space-y-1.5 min-w-0">
-                <input
-                  type="url"
-                  value={imageUrl.startsWith('data:') ? '' : imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  placeholder="https://... ຫຼື ອັບໂຫລດໄຟລ໌"
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white font-mono text-[11px] focus:outline-none focus:border-blue-500 truncate"
-                />
-                <div>
-                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl border border-zinc-700 font-semibold text-[11px] transition-colors shadow-sm">
-                    <Upload className="w-3 h-3 text-zinc-300" />
-                    <span>
-                      {lang === 'lo'
-                        ? 'ອັບໂຫລດຈາກອຸປະກອນ'
-                        : lang === 'th'
-                        ? 'อัปโหลดจากอุปกรณ์'
-                        : 'Upload File'}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageFileUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* Model Name */}
           <div>
@@ -254,7 +152,7 @@ export default function EditVehicleModelModal({
 
           {/* Category / Subtitle */}
           <div>
-            <label className="block text-zinc-400 font-medium mb-1 flex items-center gap-1.5">
+            <label className="text-zinc-400 font-medium mb-1 flex items-center gap-1.5">
               <Tag className="w-3.5 h-3.5 text-zinc-400" />
               <span>
                 {lang === 'lo'
@@ -275,7 +173,7 @@ export default function EditVehicleModelModal({
 
           {/* Starting Price ($ USD) */}
           <div>
-            <label className="block text-zinc-400 font-medium mb-1 flex items-center gap-1.5">
+            <label className="text-zinc-400 font-medium mb-1 flex items-center gap-1.5">
               <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
               <span>
                 {lang === 'lo'

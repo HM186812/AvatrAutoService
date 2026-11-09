@@ -4,22 +4,10 @@ import {
   Search, 
   Download, 
   Printer, 
-  FileText, 
-  ExternalLink, 
   Trash2, 
-  Calendar, 
-  User, 
-  Car, 
-  Filter, 
-  Sparkles,
-  CreditCard,
-  Building2,
-  Clock,
-  ShieldCheck,
-  CheckCircle2,
-  Receipt
+  Clock
 } from 'lucide-react';
-import type { IssuedDocumentRecord, IssuedDocType, IssuedDocumentAction, Language, Lead, VehicleModel, InvoiceBillRecord } from '../../types';
+import type { IssuedDocumentRecord, IssuedDocType, IssuedDocumentAction, Language } from '../../types';
 import { exportDocumentLogsCsv } from '../../utils/documentLogger';
 
 interface IssuedDocumentsRegistryTabProps {
@@ -34,7 +22,6 @@ export default function IssuedDocumentsRegistryTab({
   logs,
   onDeleteLog,
   onReopenDoc,
-  lang,
   canDelete = false,
 }: IssuedDocumentsRegistryTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,19 +58,6 @@ export default function IssuedDocumentsRegistryTab({
     });
   }, [logs, selectedDocType, selectedAction, searchQuery]);
 
-  const docTypeLabels: Record<string, string> = {
-    all: 'ທຸກປະເພດເອກະສານ',
-    credit_agreement: 'ໃບສັນຍາໜີ້ສິນ 3 ຝ່າຍ',
-    km7_release: 'ໃບເບີກລົດ KM7',
-    booking: 'ໃບສັນຍາສັ່ງຈອງ',
-    receipt: 'ໃບຮັບເງິນມັດຈຳ/ດາວ',
-    handover: 'ໃບມອບ-ຮັບລົດ',
-    authorization: 'ໃບມອບສິດຮັບລົດ',
-    installment_schedule: 'ຕາຕະລາງຜ່ອນ',
-    quotation: 'ໃບສະເໜີລາຄາ',
-    official_bill: 'ໃບບິນທາງການ',
-    pos_receipt: 'ໃບຮັບເງິນ POS',
-  };
 
   const getDocTypeBadge = (docType: IssuedDocType) => {
     switch (docType) {

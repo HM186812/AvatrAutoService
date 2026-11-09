@@ -4,16 +4,11 @@ import {
   ShieldCheck, 
   Car, 
   User, 
-  Phone, 
-  CreditCard, 
-  MapPin, 
   Calendar, 
   Gauge, 
   BatteryCharging, 
-  Sparkles, 
   Clock, 
   CheckCircle2, 
-  AlertTriangle,
   FileText
 } from 'lucide-react';
 import { VehicleModel, Language, Lead, InvoiceBillRecord, ServiceAppointment } from '../../types';

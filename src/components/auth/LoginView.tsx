@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { SystemUser, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { signInStaff, signUpStaff } from '../../backend/data';
+import { signInStaff } from '../../backend/data';
 import { isOfflineDemoEnabled, isSupabaseConfigured } from '../../backend/client';
 import { DEFAULT_OFFLINE_USERS } from '../../backend/offlineStore';
 import AvatrLogo from '../layout/AvatrLogo';
@@ -12,14 +12,9 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
-  ShieldCheck,
   AlertCircle,
   CheckCircle2,
   LogIn,
-  User,
-  Phone,
-  Check,
-  X,
   Loader2,
   Sun,
   Moon,
@@ -31,14 +26,11 @@ import {
 interface LoginViewProps {
   users: SystemUser[];
   onLoginSuccess: (user: SystemUser, rememberMe: boolean) => void;
-  onRegisterUser?: (newUser: SystemUser) => void;
   lang: Language;
   setLang?: (lang: Language) => void;
   theme?: 'dark' | 'light';
   onToggleTheme?: () => void;
 }
-
-type MainTab = 'signin' | 'signup';
 
 function formatAuthError(error: unknown, lang: Language): string {
   const msg = error instanceof Error ? error.message : String(error);
@@ -61,9 +53,7 @@ function formatAuthError(error: unknown, lang: Language): string {
 }
 
 export default function LoginView({
-  users,
   onLoginSuccess,
-  onRegisterUser,
   lang,
   setLang,
   theme: propTheme,
@@ -112,9 +102,6 @@ export default function LoginView({
     }
   };
 
-  // Main Tab State: Sign In vs Sign Up
-  const [mainTab, setMainTab] = useState<MainTab>('signin');
-
   // Sign In Form State
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -123,19 +110,7 @@ export default function LoginView({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  // Sign Up / Register Form State
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPhone, setRegPhone] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regConfirmPassword, setRegConfirmPassword] = useState('');
-  const [showRegPassword, setShowRegPassword] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-
-  useEffect(() => {
-    setTurnstileToken(null);
-  }, [mainTab]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,44 +129,6 @@ export default function LoginView({
     try {
       const user = await signInStaff(identifier, password, turnstileToken || undefined);
       setSuccessMessage(`${lang === 'th' ? 'เข้าสู่ระบบสำเร็จ' : lang === 'lo' ? 'ເຂົ້າລະບົບສຳເລັດ' : 'Signed in'}: ${user.name}`);
-      onLoginSuccess(user, rememberMe);
-    } catch (error) {
-      setErrorMessage(formatAuthError(error, lang));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    const cleanName = regName.trim();
-    const cleanEmail = regEmail.trim().toLowerCase();
-    const cleanPhone = regPhone.trim();
-
-    if (!cleanName || !cleanEmail || !cleanEmail.includes('@')) {
-      setErrorMessage(lang === 'th' ? 'กรอกชื่อและอีเมลให้ถูกต้อง' : lang === 'lo' ? 'ປ້ອນຊື່ ແລະ ອີເມວໃຫ້ຖືກຕ້ອງ' : 'Enter a name and valid email.');
-      return;
-    }
-    if (regPassword.length < 8 || regPassword !== regConfirmPassword) {
-      setErrorMessage(regPassword.length < 8
-        ? (lang === 'th' ? 'รหัสผ่านต้องมีอย่างน้อย 8 ตัว' : lang === 'lo' ? 'ລະຫັດຜ່ານຕ້ອງມີ 8 ຕົວຂຶ້ນໄປ' : 'Password must be at least 8 characters.')
-        : (lang === 'th' ? 'รหัสผ่านไม่ตรงกัน' : lang === 'lo' ? 'ລະຫັດຜ່ານບໍ່ກົງກັນ' : 'Passwords do not match.'));
-      return;
-    }
-
-    const isTurnstileConfigured = Boolean((import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim());
-    if (isTurnstileConfigured && !turnstileToken) {
-      setErrorMessage(lang === 'th' ? 'กรุณายืนยันการตรวจสอบความปลอดภัย (Cloudflare Turnstile)' : lang === 'lo' ? 'ກະລຸນາກວດສອບຄວາມປອດໄພ (Cloudflare Turnstile)' : 'Please complete the security check.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const user = await signUpStaff(cleanEmail, regPassword, cleanName, cleanPhone, turnstileToken || undefined);
-      setSuccessMessage(lang === 'th' ? 'สร้างบัญชี General User สำเร็จ' : lang === 'lo' ? 'ສ້າງບັນຊີ General User ສຳເລັດ' : 'General User account created.');
-      onRegisterUser?.(user);
       onLoginSuccess(user, rememberMe);
     } catch (error) {
       setErrorMessage(formatAuthError(error, lang));
@@ -247,19 +184,7 @@ export default function LoginView({
                 <span className={`font-black text-base tracking-widest ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   AVATR
                 </span>
-                <span
-                  className={`text-[9px] tracking-widest font-mono uppercase px-1.5 py-0.5 rounded font-bold border ${
-                    isDark
-                      ? 'bg-zinc-800 border-zinc-600 text-zinc-100'
-                      : 'bg-slate-100 border-slate-300 text-slate-800'
-                  }`}
-                >
-                  AUTO
-                </span>
               </div>
-              <p className={`text-[10px] font-mono tracking-wide ${isDark ? 'text-zinc-300 font-medium' : 'text-slate-500'}`}>
-                Changan × Huawei × CATL
-              </p>
             </div>
           </div>
 
@@ -343,61 +268,9 @@ export default function LoginView({
 
         {/* Header Title & Subtitle with high contrast */}
         <div className="space-y-1">
-          <h1 className={`text-xl font-black ${isDark ? 'text-white' : 'text-slate-950'}`}>
-            {mainTab === 'signin' ? t.authSignInTitle : t.authSignUpTitle}
+          <h1 className={`text-xl font-black text-center ${isDark ? 'text-white' : 'text-slate-950'}`}>
+            {t.authSignInTitle}
           </h1>
-          <p className={`text-xs font-medium leading-relaxed ${isDark ? 'text-zinc-200' : 'text-slate-600'}`}>
-            {mainTab === 'signin' ? t.authSignInDesc : t.authSignUpDesc}
-          </p>
-        </div>
-
-        {/* Tab Switcher: Sign In vs Sign Up */}
-        <div
-          className={`grid grid-cols-2 gap-1 p-1 border rounded-2xl text-xs font-semibold ${
-            isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-slate-100 border-slate-200'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setMainTab('signin');
-              setErrorMessage(null);
-              setSuccessMessage(null);
-            }}
-            className={`py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              mainTab === 'signin'
-                ? isDark
-                  ? 'bg-white text-black font-black shadow-md'
-                  : 'bg-white text-slate-950 font-black shadow-sm'
-                : isDark
-                ? 'text-zinc-300 hover:text-white hover:bg-zinc-800/60'
-                : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200/70'
-            }`}
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>{t.authSignInTitle}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setMainTab('signup');
-              setErrorMessage(null);
-              setSuccessMessage(null);
-            }}
-            className={`py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              mainTab === 'signup'
-                ? isDark
-                  ? 'bg-white text-black font-black shadow-md'
-                  : 'bg-white text-slate-950 font-black shadow-sm'
-                : isDark
-                ? 'text-zinc-300 hover:text-white hover:bg-zinc-800/60'
-                : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200/70'
-            }`}
-          >
-            <User className="w-3.5 h-3.5" />
-            <span>{t.authSignUpTitle}</span>
-          </button>
         </div>
 
         {/* Feedback Banners with High Visibility */}
@@ -492,8 +365,7 @@ export default function LoginView({
           </div>
         )}
 
-        {/* TAB 1: SIGN IN */}
-        {mainTab === 'signin' && (
+        {/* SIGN IN FORM */}
           <form onSubmit={handleLogin} className="space-y-4 text-xs">
             <div>
               <label
@@ -587,19 +459,6 @@ export default function LoginView({
                 />
                 <span>{t.authRememberMe}</span>
               </label>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMainTab('signup');
-                  setErrorMessage(null);
-                }}
-                className={`text-xs font-bold underline transition-colors cursor-pointer ${
-                  isDark ? 'text-zinc-200 hover:text-white' : 'text-slate-800 hover:text-slate-950'
-                }`}
-              >
-                {t.authNoAccount}
-              </button>
             </div>
 
             <TurnstileWidget
@@ -616,7 +475,7 @@ export default function LoginView({
               className={`w-full py-3 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-3 cursor-pointer group active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${
                 isDark
                   ? 'bg-white text-zinc-950 hover:bg-zinc-200 shadow-zinc-950/50'
-                  : 'bg-zinc-950 text-white hover:bg-zinc-800 shadow-slate-400/50'
+                  : 'login-submit-light always-white-text text-white shadow-slate-400/50'
               }`}
             >
               {isLoading ? (
@@ -635,257 +494,7 @@ export default function LoginView({
               )}
             </button>
           </form>
-        )}
 
-        {/* TAB 2: SIGN UP / REGISTER */}
-        {mainTab === 'signup' && (
-          <form onSubmit={handleRegister} className="space-y-3.5 text-xs">
-            {/* Full Name */}
-            <div>
-              <label
-                className={`block font-bold mb-1 ${
-                  isDark ? 'text-zinc-100' : 'text-slate-800'
-                }`}
-              >
-                {t.authFullName} *
-              </label>
-              <div className="relative group">
-                <User
-                  className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                    isDark
-                      ? 'text-zinc-400 group-focus-within:text-white'
-                      : 'text-slate-400 group-focus-within:text-slate-950'
-                  }`}
-                />
-                <input
-                  type="text"
-                  required
-                  value={regName}
-                  onChange={(e) => setRegName(e.target.value)}
-                  placeholder="ຊື່ ແລະ ນາມສະກຸນ"
-                  className={`w-full border rounded-xl pl-9 pr-3 py-2 font-medium text-xs outline-none transition-colors ${
-                    isDark
-                      ? 'bg-zinc-900 border-zinc-700 text-white placeholder-zinc-400 focus:border-white focus:ring-1 focus:ring-white'
-                      : 'bg-slate-50 border-slate-300 text-slate-950 placeholder-slate-400 focus:bg-white focus:border-slate-950 focus:ring-1 focus:ring-slate-950'
-                  }`}
-                />
-              </div>
-            </div>
-
-            {/* Phone and Email */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label
-                  className={`block font-bold mb-1 ${
-                    isDark ? 'text-zinc-100' : 'text-slate-800'
-                  }`}
-                >
-                  ເບີໂທລະສັບ (Phone)
-                </label>
-                <div className="relative group">
-                  <Phone
-                    className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                      isDark
-                        ? 'text-zinc-400 group-focus-within:text-white'
-                        : 'text-slate-400 group-focus-within:text-slate-950'
-                    }`}
-                  />
-                  <input
-                    type="tel"
-                    value={regPhone}
-                    onChange={(e) => setRegPhone(e.target.value)}
-                    placeholder="020 00000000"
-                    className={`w-full border rounded-xl pl-9 pr-3 py-2 font-medium text-xs outline-none transition-colors ${
-                      isDark
-                        ? 'bg-zinc-900 border-zinc-700 text-white placeholder-zinc-400 focus:border-white focus:ring-1 focus:ring-white'
-                        : 'bg-slate-50 border-slate-300 text-slate-950 placeholder-slate-400 focus:bg-white focus:border-slate-950 focus:ring-1 focus:ring-slate-950'
-                    }`}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label
-                  className={`block font-bold mb-1 ${
-                    isDark ? 'text-zinc-100' : 'text-slate-800'
-                  }`}
-                >
-                  ອີເມວ (Email)
-                </label>
-                <div className="relative group">
-                  <Mail
-                    className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                      isDark
-                        ? 'text-zinc-400 group-focus-within:text-white'
-                        : 'text-slate-400 group-focus-within:text-slate-950'
-                    }`}
-                  />
-                  <input
-                    type="email"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="user@email.com"
-                    className={`w-full border rounded-xl pl-9 pr-3 py-2 font-medium text-xs outline-none transition-colors ${
-                      isDark
-                        ? 'bg-zinc-900 border-zinc-700 text-white placeholder-zinc-400 focus:border-white focus:ring-1 focus:ring-white'
-                        : 'bg-slate-50 border-slate-300 text-slate-950 placeholder-slate-400 focus:bg-white focus:border-slate-950 focus:ring-1 focus:ring-slate-950'
-                    }`}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Passwords */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label
-                  className={`block font-bold mb-1 ${
-                    isDark ? 'text-zinc-100' : 'text-slate-800'
-                  }`}
-                >
-                  {t.authPassword} *
-                </label>
-                <div className="relative group">
-                  <Lock
-                    className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                      isDark
-                        ? 'text-zinc-400 group-focus-within:text-white'
-                        : 'text-slate-400 group-focus-within:text-slate-950'
-                    }`}
-                  />
-                  <input
-                    type={showRegPassword ? 'text' : 'password'}
-                    required
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className={`w-full border rounded-xl pl-9 pr-9 py-2 font-mono font-medium text-xs outline-none transition-colors ${
-                      isDark
-                        ? 'bg-zinc-900 border-zinc-700 text-white placeholder-zinc-400 focus:border-white focus:ring-1 focus:ring-white'
-                        : 'bg-slate-50 border-slate-300 text-slate-950 placeholder-slate-400 focus:bg-white focus:border-slate-950 focus:ring-1 focus:ring-slate-950'
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowRegPassword(!showRegPassword)}
-                    className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1 cursor-pointer transition-colors ${
-                      isDark
-                        ? 'text-zinc-300 hover:text-white'
-                        : 'text-slate-500 hover:text-slate-900'
-                    }`}
-                    aria-label="Toggle password visibility"
-                  >
-                    {showRegPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label
-                  className={`block font-bold mb-1 flex items-center justify-between ${
-                    isDark ? 'text-zinc-100' : 'text-slate-800'
-                  }`}
-                >
-                  <span>{t.authConfirmPassword} <span className="text-red-500">*</span></span>
-                  {regConfirmPassword && (
-                    regPassword === regConfirmPassword ? (
-                      <span className={`text-[10px] font-bold flex items-center gap-0.5 ${
-                        isDark ? 'text-emerald-400' : 'text-emerald-600'
-                      }`}>
-                        <Check className="w-3 h-3" />
-                      </span>
-                    ) : (
-                      <span className={`text-[10px] font-bold flex items-center gap-0.5 ${
-                        isDark ? 'text-red-400' : 'text-red-600'
-                      }`}>
-                        <X className="w-3 h-3" />
-                      </span>
-                    )
-                  )}
-                </label>
-                <div className="relative group">
-                  <ShieldCheck
-                    className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                      isDark
-                        ? 'text-zinc-400 group-focus-within:text-white'
-                        : 'text-slate-400 group-focus-within:text-slate-950'
-                    }`}
-                  />
-                  <input
-                    type={showRegPassword ? 'text' : 'password'}
-                    required
-                    value={regConfirmPassword}
-                    onChange={(e) => setRegConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className={`w-full border rounded-xl pl-9 pr-3 py-2 font-mono font-medium text-xs outline-none transition-colors ${
-                      isDark
-                        ? 'bg-zinc-900 border-zinc-700 text-white placeholder-zinc-400 focus:border-white focus:ring-1 focus:ring-white'
-                        : 'bg-slate-50 border-slate-300 text-slate-950 placeholder-slate-400 focus:bg-white focus:border-slate-950 focus:ring-1 focus:ring-slate-950'
-                    }`}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setMainTab('signin');
-                  setErrorMessage(null);
-                }}
-                className={`text-xs font-bold underline transition-colors cursor-pointer ${
-                  isDark ? 'text-zinc-200 hover:text-white' : 'text-slate-800 hover:text-slate-950'
-                }`}
-              >
-                {t.authHaveAccount}
-              </button>
-            </div>
-
-            <TurnstileWidget
-              action="signup"
-              theme={isDark ? 'dark' : 'light'}
-              onVerify={(token) => setTurnstileToken(token)}
-              onExpire={() => setTurnstileToken(null)}
-              onError={() => setTurnstileToken(null)}
-            />
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`w-full py-3 font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm mt-3 cursor-pointer group active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${
-                isDark
-                  ? 'bg-white text-zinc-950 hover:bg-zinc-200 shadow-zinc-950/50'
-                  : 'bg-zinc-950 text-white hover:bg-zinc-800 shadow-slate-400/50'
-              }`}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="font-black">
-                    {lang === 'lo' ? 'ກຳລັງສ້າງບັນຊີ...' : lang === 'th' ? 'กำลังสร้างบัญชี...' : 'Creating account...'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <User className="w-4 h-4" />
-                  <span className="font-black">{t.authSignUpBtn}</span>
-                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </>
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* Footer */}
-        <div
-          className={`pt-2 border-t flex items-center justify-between text-[10px] font-mono font-medium ${
-            isDark ? 'border-zinc-800 text-zinc-400' : 'border-slate-200 text-slate-500'
-          }`}
-        >
-          <span>AVATR Auto Service v1.2.0</span>
-          <span>Vientiane, Lao PDR</span>
-        </div>
       </div>
     </div>
   );

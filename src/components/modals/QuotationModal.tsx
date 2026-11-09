@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { VehicleModel, Language } from '../../types';
 import AvatrLogo from '../layout/AvatrLogo';
-import { X, Printer, Phone, Download, CheckCircle, ShieldCheck, Loader2, Calendar } from 'lucide-react';
+import { X, Printer, Download, CheckCircle, Loader2, Calendar } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { showToast } from '../common';
 import { logIssuedDocument, getLatestDocumentIssuance } from '../../utils/documentLogger';

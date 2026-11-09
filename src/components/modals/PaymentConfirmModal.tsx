@@ -3,14 +3,7 @@ import { Lead, VehicleModel, Language, SystemUser } from '../../types';
 import { 
   X, 
   CheckCircle2, 
-  CreditCard, 
-  Banknote, 
   Calendar, 
-  Receipt, 
-  Building2, 
-  ShieldCheck, 
-  User, 
-  FileCheck2,
   Car
 } from 'lucide-react';
 import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
@@ -31,7 +24,6 @@ export default function PaymentConfirmModal({
   customer,
   vehicles,
   currentUser,
-  lang = 'lo',
   onConfirmPayment,
 }: PaymentConfirmModalProps) {
   if (!isOpen || !customer) return null;

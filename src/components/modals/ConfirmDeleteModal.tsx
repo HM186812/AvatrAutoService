@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlertTriangle, Trash2, X, Loader2 } from 'lucide-react';
 import { Language } from '../../types';
 

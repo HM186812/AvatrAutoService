@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Calendar } from 'lucide-react';
 import { TestDriveBooking, Language } from '../../types';
-import { translations } from '../../data/translations';
 
 interface TestDriveModalProps {
   isOpen: boolean;
@@ -18,7 +17,6 @@ export default function TestDriveModal({
   initialModel = 'AVATR 12',
   lang = 'lo',
 }: TestDriveModalProps) {
-  const t = translations[lang] || translations.lo;
 
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');

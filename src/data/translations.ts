@@ -411,8 +411,6 @@ export interface TranslationSchema {
   pdiInspectorLabel: string;
   pdiNotesLabel: string;
   notesGeneral: string;
-  uploadCarImage: string;
-  imageUploadSuccess: string;
   generateRandomVinBtn: string;
   quickSetDays: string;
   eventCampaignName: string;
@@ -899,8 +897,6 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     pdiInspectorLabel: 'ຊ່າງກວດກາ PDI / ຊື່ຜູ້ກວດ',
     pdiNotesLabel: 'ຜົນການກວດກາ 68 ຈຸດ / ໝາຍເຫດ PDI',
     notesGeneral: 'ໝາຍເຫດທົ່ວໄປ',
-    uploadCarImage: 'ອັບໂຫຼດຮູບພາບລົດ',
-    imageUploadSuccess: 'ອັບໂຫຼດຮູບລົດຈາກອຸປະກອນສຳເລັດ!',
     generateRandomVinBtn: 'ສ້າງ VIN ອັດຕະໂນມັດ',
     quickSetDays: 'ວັນ',
     eventCampaignName: 'ຊື່ແຄມເປນ / ງານ Event',
@@ -1379,8 +1375,6 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     pdiInspectorLabel: 'PDI Certified Inspector Name',
     pdiNotesLabel: '68-point Inspection Notes',
     notesGeneral: 'General Remarks',
-    uploadCarImage: 'Upload Vehicle Photo',
-    imageUploadSuccess: 'Vehicle image uploaded successfully!',
     generateRandomVinBtn: 'Generate Standard VIN',
     quickSetDays: 'days',
     eventCampaignName: 'Campaign / Event Name',
@@ -1866,8 +1860,6 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     pdiInspectorLabel: 'ช่างผู้ตรวจสอบ PDI / ผู้ตรวจเช็ค',
     pdiNotesLabel: 'ผลการตรวจเช็ค 68 จุด / หมายเหตุ PDI',
     notesGeneral: 'หมายเหตุทั่วไป',
-    uploadCarImage: 'อัปโหลดรูปภาพรถยนต์',
-    imageUploadSuccess: 'อัปโหลดรูปภาพรถจากอุปกรณ์สำเร็จ!',
     generateRandomVinBtn: 'สุ่มสร้าง VIN อัตโนมัติ',
     quickSetDays: 'วัน',
     eventCampaignName: 'ชื่อแคมเปญ / งาน Event',

@@ -9,15 +9,12 @@ import {
   ShieldCheck,
   Car,
   SlidersHorizontal,
-  ChevronRight,
   Download,
   Loader2,
   CheckCircle2,
   CreditCard,
   Building2,
-  Calendar,
   Sparkles,
-  FileCheck,
   Truck,
   History
 } from 'lucide-react';
@@ -117,7 +114,7 @@ export default function CustomerDocumentsModal({
   const [showToolbar, setShowToolbar] = useState(false);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [isPaymentConfirmedNow, setIsPaymentConfirmedNow] = useState(customer.status === 'delivered');
+  const [, setIsPaymentConfirmedNow] = useState(customer.status === 'delivered');
   const [customerDocLogs, setCustomerDocLogs] = useState<IssuedDocumentRecord[]>(() =>
     getCustomerDocumentLogs({
       leadId: customer?.id,
@@ -247,8 +244,8 @@ export default function CustomerDocumentsModal({
   const [financeRateLAK, setFinanceRateLAK] = useState<number>(isChanmapha ? 23300 : 23200);
 
   // KM7 Release slip details for ໃບເບີກລົດ KM7
-  const [km7ReleaseDate, setKm7ReleaseDate] = useState<string>(isNuanchun ? '16/10/2026' : '16/10/2026');
-  const [km7PaymentNote, setKm7PaymentNote] = useState<string>(
+  const [km7ReleaseDate] = useState<string>(isNuanchun ? '16/10/2026' : '16/10/2026');
+  const [km7PaymentNote] = useState<string>(
     isNuanchun || isInstallment ? 'ລູກຄ້າຈັດ Finance' : 'ຊຳລະສົດ / ໂອນຄົບຖ້ວນ'
   );
   const [km7RequisitionNote, setKm7RequisitionNote] = useState<string>(
@@ -280,17 +277,17 @@ export default function CustomerDocumentsModal({
   const [colorOptionUSD, setColorOptionUSD] = useState<number>(0);
   const [specOptionUSD, setSpecOptionUSD] = useState<number>(0);
   const [depositUSD, setDepositUSD] = useState<number>(defaultDownPaymentUSD);
-  const [deliverySchedule, setDeliverySchedule] = useState<string>('ອອກງວດພາຍໃນເດືອນ 10 ປີ 2026');
+  const [deliverySchedule] = useState<string>('ອອກງວດພາຍໃນເດືອນ 10 ປີ 2026');
 
   // Free gifts & handover details
-  const [freeGiftsBooking, setFreeGiftsBooking] = useState<string>(
+  const [freeGiftsBooking] = useState<string>(
     'Adapter CCS2 1 ໜ່ວຍ, ບັດກວດໄຟຟ້າ Bluedot ມູນຄ່າ 1,000,000 ກີບ, ຕິດຟິມກັນຄວາມຮ້ອນ, ປູພື້ນພຣີມຽວ, ຕູ້ສາກໄຟ Home Charger 7kW ພ້ອມຕິດຕັ້ງສາຍໄຟ 15 ແມັດ ແລະ ຂຶ້ນທະບຽນ'
   );
-  const [freeGiftsDelivery, setFreeGiftsDelivery] = useState<string>(
+  const [freeGiftsDelivery] = useState<string>(
     'ແຖມ: Adapter No: PYNADAETG260709025 01 ໜ່ວຍ, ບັດກວດໄຟຟ້າ Bluedot ມູນຄ່າ 1,000,000 ກີບ, ຕິດຟິມກັນຄວາມຮ້ອນ, ປູພື້ນ, ຕູ້ສາກໄຟ 7kW ພ້ອມຕິດຕັ້ງຕູ້ສາກ ສາຍໄຟ 15 ແມັດ ແລະ ຂຶ້ນທະບຽນ'
   );
-  const [keyCount, setKeyCount] = useState<number>(2);
-  const [registrationProvince, setRegistrationProvince] = useState<string>(
+  const [keyCount] = useState<number>(2);
+  const [registrationProvince] = useState<string>(
     customer.province || 'ນະຄອນຫຼວງວຽງຈັນ'
   );
 
@@ -300,7 +297,7 @@ export default function CustomerDocumentsModal({
   const transferReferenceDisplay = payerSourceAccount
     .replace(/^(BCEL(?:\s+ONE)?|JDB(?:\s+SMART BANKING)?|LDB)(?:[-\s/]+)?/i, '')
     .trim();
-  const [paymentDateTime, setPaymentDateTime] = useState<string>(customer.paymentDate || '12/10/2026 18:30:21');
+  const [paymentDateTime] = useState<string>(customer.paymentDate || '12/10/2026 18:30:21');
 
   // Date & Sales staff
   const [docDate, setDocDate] = useState<string>(
@@ -315,7 +312,6 @@ export default function CustomerDocumentsModal({
   // Installment specifics
   const tenure = Number(customer.tenureMonths) || 48;
   const monthlyPaymentUSD = Math.round((remainingBalance * (1 + 0.075 * (tenure / 12))) / tenure);
-  const monthlyPaymentLAK = monthlyPaymentUSD * DEFAULT_EXCHANGE_RATE_LAK;
 
   // Generated schedule rows for Tab 5
   const installmentRows = generateInstallmentSchedule(customer, actualTotalPrice);

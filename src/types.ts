@@ -308,6 +308,20 @@ export interface Lead {
   warrantyDistanceKm?: number; // ໄລຍະທາງຮັບປະກັນ km ເຊັ່ນ 100,000, 160,000
   warrantyTerms?: string; // ເງື່ອນໄຂ / ຊື່ແພັກເກັດການຮັບປະກັນ
   afterSalesNotes?: string; // ໝາຍເຫດການດູແລຫຼັງການຂາຍ
+
+  // CRM follow-up (frontend / offline storage only until a Supabase migration adds columns)
+  nextFollowUpAt?: string; // ວັນນັດຕິດຕາມຄັ້ງຕໍ່ໄປ YYYY-MM-DD
+  contactHistory?: ContactLogEntry[]; // ປະຫວັດການຕິດຕໍ່ (ໃໝ່ສຸດຢູ່ທ້າຍ)
+}
+
+export type ContactLogType = 'call' | 'whatsapp' | 'visit' | 'other' | 'status';
+
+export interface ContactLogEntry {
+  id: string;
+  at: string; // ISO date-time
+  type: ContactLogType;
+  note: string;
+  by?: string; // staff name
 }
 
 export interface ServiceAppointment {

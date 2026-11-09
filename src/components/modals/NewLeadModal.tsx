@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
-import { X, UserPlus, MapPin, Calendar, Loader2, RotateCcw, Sparkles } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, UserPlus, MapPin, Calendar, Loader2, RotateCcw, Sparkles, Pencil } from 'lucide-react';
 import { Lead, CustomerCategory, Language, VehicleModel, SystemUser, InventoryItem } from '../../types';
-import { translations } from '../../data/translations';
 import { LAO_PROVINCES } from '../../data/laoProvinces';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
@@ -10,6 +9,13 @@ interface NewLeadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddLead: (lead: Omit<Lead, 'id' | 'createdAt'> & { createdAt?: string }) => Promise<void> | void;
+  /** When set, the modal edits this lead instead of creating a new one */
+  initialLead?: Lead | null;
+  onUpdateLead?: (lead: Lead) => Promise<void> | void;
+  /** Existing leads, used to warn about duplicate phone numbers */
+  existingLeads?: Lead[];
+  /** Staff names that a lead can be assigned to (edit mode) */
+  staffOptions?: string[];
   vehicles?: VehicleModel[];
   inventory?: InventoryItem[];
   currentUser?: SystemUser;
@@ -20,12 +26,15 @@ export default function NewLeadModal({
   isOpen, 
   onClose, 
   onAddLead, 
+  initialLead = null,
+  onUpdateLead,
+  existingLeads = [],
+  staffOptions = [],
   vehicles, 
   inventory = [],
   currentUser,
   lang = 'lo' 
 }: NewLeadModalProps) {
-  const t = translations[lang] || translations.lo;
 
   const getDefaultDate = () => new Date().toISOString().slice(0, 10);
   const getDefaultModel = () => vehicles?.[0]?.name || 'AVATR 12';
@@ -62,7 +71,44 @@ export default function NewLeadModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resetFeedback, setResetFeedback] = useState(false);
 
-  const officerInCharge = currentUser?.name || 'ທີມງານຂາຍ AVATR';
+  const isEditMode = Boolean(initialLead);
+  const [assignedTo, setAssignedTo] = useState('');
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const officerInCharge = isEditMode ? (assignedTo || initialLead?.assignedTo || '') : (currentUser?.name || 'ທີມງານຂາຍ AVATR');
+
+  // Prefill the form when opening in edit mode
+  useEffect(() => {
+    if (!isOpen || !initialLead) return;
+    const lead = initialLead;
+    setCustomerName(lead.customerName || '');
+    setRecordDate((lead.createdAt || '').slice(0, 10) || getDefaultDate());
+    setPhone(lead.phone || '');
+    setEmail(lead.email || '');
+    setIdCardNumber(lead.idCardNumber || '');
+    setInterestedModel(lead.interestedModel || getDefaultModel());
+    setPriority((lead.priority as 'vip' | 'high' | 'normal') || 'normal');
+    setCategory(lead.category || 'walk_in');
+    setEventSource(lead.category === 'event' ? (lead.source || '') : 'Event Lao Motor Expo 2026');
+    const prov = lead.province || 'ນະຄອນຫຼວງວຽງຈັນ';
+    const dist = lead.district || '';
+    setProvince(prov);
+    setDistrict(dist);
+    const knownVillages = LAO_PROVINCES.find(p => p.nameLo === prov)?.districts.find(d => d.nameLo === dist)?.popularVillages || [];
+    if (lead.village && !knownVillages.includes(lead.village)) {
+      setVillage('__custom__');
+      setCustomVillage(lead.village);
+    } else {
+      setVillage(lead.village || knownVillages[0] || '');
+      setCustomVillage('');
+    }
+    setNotes(lead.notes || '');
+    setAssignedTo(lead.assignedTo || '');
+    setPhoneError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialLead]);
+
+  const normalizePhone = (value: string) => value.replace(/[\s\-+().]/g, '');
+  const phoneKey = (value: string) => normalizePhone(value).replace(/^856/, '').replace(/^0/, '');
 
   const handleReset = () => {
     setCustomerName('');
@@ -89,9 +135,63 @@ export default function NewLeadModal({
     e.preventDefault();
     if (isSubmitting || !customerName.trim() || !phone.trim()) return;
 
+    // Phone format: digits only (spaces, +, -, brackets allowed) and 8-15 digits
+    const digits = normalizePhone(phone);
+    if (!/^\d{8,15}$/.test(digits)) {
+      setPhoneError(lang === 'lo' ? 'ເບີໂທບໍ່ຖືກຕ້ອງ: ໃຊ້ຕົວເລກ 8-15 ຫຼັກ (ຕົວຢ່າງ 020 5xxxxxxx)' : lang === 'th' ? 'เบอร์โทรไม่ถูกต้อง: ใช้ตัวเลข 8-15 หลัก' : 'Invalid phone: use 8-15 digits (e.g. 020 5xxxxxxx)');
+      return;
+    }
+    setPhoneError(null);
+
+    // Duplicate phone warning (not blocked: family members may share a number)
+    const key = phoneKey(phone);
+    const duplicates = existingLeads.filter(l => l.id !== initialLead?.id && l.phone && phoneKey(l.phone) === key);
+    if (duplicates.length > 0) {
+      const names = duplicates.slice(0, 3).map(l => l.customerName).join(', ');
+      const ok = window.confirm(
+        lang === 'lo'
+          ? 'ເບີໂທນີ້ມີໃນລະບົບແລ້ວ: ' + names + '\n\nຕ້ອງການບັນທຶກຕໍ່ບໍ່?'
+          : lang === 'th'
+          ? 'เบอร์นี้มีอยู่ในระบบแล้ว: ' + names + '\n\nต้องการบันทึกต่อหรือไม่?'
+          : 'This phone number already exists: ' + names + '\n\nSave anyway?'
+      );
+      if (!ok) return;
+    }
+
     setIsSubmitting(true);
     try {
       const effectiveVillage = village === '__custom__' ? customVillage.trim() : village;
+      const effectiveSource =
+        category === 'walk_in'
+          ? 'Walk-in Showroom'
+          : category === 'online'
+          ? 'Online Social'
+          : eventSource.trim() || 'Event Lao Motor Expo 2026';
+
+      if (isEditMode && initialLead) {
+        const originalDate = (initialLead.createdAt || '').slice(0, 10);
+        await onUpdateLead?.({
+          ...initialLead,
+          customerName: customerName.trim(),
+          createdAt: recordDate && recordDate !== originalDate
+            ? recordDate + ' ' + new Date().toTimeString().slice(0, 5)
+            : initialLead.createdAt,
+          phone: phone.trim(),
+          email: email.trim() || undefined,
+          idCardNumber: idCardNumber.trim() || undefined,
+          province,
+          district,
+          village: effectiveVillage,
+          category,
+          source: effectiveSource,
+          interestedModel,
+          priority,
+          notes,
+          assignedTo: assignedTo || initialLead.assignedTo,
+        });
+        onClose();
+        return;
+      }
 
       await onAddLead({
         customerName: customerName.trim(),
@@ -103,12 +203,7 @@ export default function NewLeadModal({
         district,
         village: effectiveVillage,
         category,
-        source:
-          category === 'walk_in'
-            ? 'Walk-in Showroom'
-            : category === 'online'
-            ? 'Online Social'
-            : eventSource.trim() || 'Event Lao Motor Expo 2026',
+        source: effectiveSource,
         interestedModel,
         status: 'new',
         priority,
@@ -120,6 +215,8 @@ export default function NewLeadModal({
       // Reset form completely so the next time it opens it is clean and ready
       handleReset();
       onClose();
+    } catch {
+      // Save failed: keep the modal open with the entered data (error toast is shown by the caller)
     } finally {
       setIsSubmitting(false);
     }
@@ -132,11 +229,13 @@ export default function NewLeadModal({
         <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-zinc-800">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-slate-900 dark:text-white">
-              <UserPlus className="w-5 h-5" />
+              {isEditMode ? <Pencil className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
             </div>
             <div>
               <h3 className="font-bold text-base sm:text-lg text-slate-900 dark:text-white tracking-tight">
-                {lang === 'lo' ? 'ເພີ່ມລູກຄ້າໃໝ່ເຂົ້າລະບົບ CRM' : lang === 'th' ? 'เพิ่มลูกค้าใหม่เข้าสู่ระบบ CRM' : 'Add New CRM Lead'}
+                {isEditMode
+                  ? (lang === 'lo' ? 'ແກ້ໄຂຂໍ້ມູນລູກຄ້າ' : lang === 'th' ? 'แก้ไขข้อมูลลูกค้า' : 'Edit Customer')
+                  : (lang === 'lo' ? 'ເພີ່ມລູກຄ້າໃໝ່ເຂົ້າລະບົບ CRM' : lang === 'th' ? 'เพิ่มลูกค้าใหม่เข้าสู่ระบบ CRM' : 'Add New CRM Lead')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
                 {lang === 'lo' ? 'ຜູ້ຮັບຜິດຊອບ:' : lang === 'th' ? 'ผู้รับผิดชอบ:' : 'Officer:'}{' '}
@@ -145,7 +244,7 @@ export default function NewLeadModal({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            {!isEditMode && <button
               type="button"
               onClick={handleReset}
               disabled={isSubmitting}
@@ -159,7 +258,7 @@ export default function NewLeadModal({
                   ? (lang === 'lo' ? 'ລ້າງແລ້ວ' : lang === 'th' ? 'ล้างแล้ว' : 'Reset') 
                   : (lang === 'lo' ? 'ລ້າງຂໍ້ມູນ' : lang === 'th' ? 'ล้างข้อมูล' : 'Reset')}
               </span>
-            </button>
+            </button>}
             <button
               type="button"
               onClick={onClose}
@@ -226,7 +325,9 @@ export default function NewLeadModal({
                   autoComplete="tel"
                   required
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => { setPhone(e.target.value); if (phoneError) setPhoneError(null); }}
+                  aria-invalid={Boolean(phoneError)}
+                  aria-describedby={phoneError ? 'lead-phone-error' : undefined}
                   placeholder="020 5xxxxxxx"
                   className="min-w-0 flex-1 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:border-slate-400 dark:focus:border-zinc-600 focus:ring-2 focus:ring-slate-400/20 dark:focus:ring-white/10 font-mono transition-all"
                 />
@@ -246,6 +347,9 @@ export default function NewLeadModal({
                   <span className="font-sans">WhatsApp</span>
                 </button>
               </div>
+              {phoneError && (
+                <p id="lead-phone-error" role="alert" className="mt-1.5 text-[11px] font-medium text-rose-600 dark:text-rose-400">{phoneError}</p>
+              )}
             </div>
 
             <div>
@@ -478,6 +582,25 @@ export default function NewLeadModal({
             )}
           </div>
 
+          {/* Assigned staff (edit mode only) */}
+          {isEditMode && (
+            <div>
+              <label htmlFor="lead-assigned-to" className="block text-slate-700 dark:text-zinc-300 mb-1.5 font-medium cursor-pointer">
+                {lang === 'lo' ? 'ພະນັກງານຜູ້ຮັບຜິດຊອບ' : lang === 'th' ? 'พนักงานผู้รับผิดชอบ' : 'Assigned Staff'}
+              </label>
+              <select
+                id="lead-assigned-to"
+                value={assignedTo}
+                onChange={(e) => setAssignedTo(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:border-slate-400 dark:focus:border-zinc-600 cursor-pointer"
+              >
+                {Array.from(new Set([assignedTo, ...staffOptions].filter(Boolean))).map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Row 6: Requirements & Notes */}
           <div>
             <label htmlFor="lead-notes" className="block text-slate-700 dark:text-zinc-300 mb-1.5 font-medium cursor-pointer">
@@ -510,7 +633,7 @@ export default function NewLeadModal({
               className="px-6 py-2.5 bg-slate-900 text-white dark:bg-white dark:text-black font-bold rounded-xl hover:bg-slate-800 dark:hover:bg-zinc-200 transition-all shadow-md cursor-pointer text-xs active:scale-[0.98] flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed always-white-text"
             >
               {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin always-white-icon" />}
-              <span>{lang === 'lo' ? 'ບັນທຶກລູກຄ້າໃໝ່' : lang === 'th' ? 'บันทึกลูกค้าใหม่' : 'Save Lead'}</span>
+              <span>{isEditMode ? (lang === 'lo' ? 'ບັນທຶກການແກ້ໄຂ' : lang === 'th' ? 'บันทึกการแก้ไข' : 'Save Changes') : (lang === 'lo' ? 'ບັນທຶກລູກຄ້າໃໝ່' : lang === 'th' ? 'บันทึกลูกค้าใหม่' : 'Save Lead')}</span>
             </button>
           </div>
         </form>

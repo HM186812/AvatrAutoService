@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { X, Wrench, Calendar, Clock } from 'lucide-react';
+import { X, Wrench, Calendar } from 'lucide-react';
 import { ServiceAppointment, Language } from '../../types';
-import { translations } from '../../data/translations';
 
 interface ServiceModalProps {
   isOpen: boolean;
@@ -28,7 +27,6 @@ export default function ServiceModal({
   initialMileageKm,
   initialBatteryHealthPercent,
 }: ServiceModalProps) {
-  const t = translations[lang] || translations.lo;
 
   const [customerName, setCustomerName] = useState(initialCustomerName);
   const [phone, setPhone] = useState(initialPhone);
@@ -36,7 +34,7 @@ export default function ServiceModal({
   const [model, setModel] = useState(initialModel);
   const [serviceType, setServiceType] = useState<ServiceAppointment['serviceType']>('periodic_maintenance');
   const [scheduledDate, setScheduledDate] = useState(new Date().toISOString().split('T')[0]);
-  const [scheduledTime, setScheduledTime] = useState('10:00');
+  const [scheduledTime] = useState('10:00');
   const [status, setStatus] = useState<ServiceAppointment['status']>('completed');
   const [mileageKm, setMileageKm] = useState<number | ''>(initialMileageKm ?? '');
   const [batteryHealthPercent, setBatteryHealthPercent] = useState<number | ''>(initialBatteryHealthPercent ?? '');

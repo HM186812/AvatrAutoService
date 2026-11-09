@@ -17,15 +17,12 @@ import { showToast, ToastType } from '../common';
 import {
   Receipt,
   FileText,
-  ShoppingBag,
   CheckCircle2,
   Car,
   Search,
   CreditCard,
-  DollarSign,
   User,
   Phone,
-  MapPin,
   Calendar,
   Sparkles,
   ShieldCheck,
@@ -36,18 +33,14 @@ import {
   Plus,
   Trash2,
   Banknote,
-  Smartphone,
   Building2,
   X,
   QrCode,
   Upload,
-  Image as ImageIcon,
   Check,
   Maximize2,
   RefreshCw,
-  Edit3,
   Lock,
-  Copy,
   Download,
   Loader2,
   ChevronDown
@@ -82,7 +75,6 @@ export default function POSSalesView({
   setBills,
   leads,
   setLeads,
-  stockLogs,
   setStockLogs,
   vehicles,
   currentUser,
@@ -212,7 +204,7 @@ export default function POSSalesView({
 
   // Payment Options - Zero pre-filled values
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'finance'>('transfer');
-  const [bankName, setBankName] = useState('ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ');
+  const [bankName] = useState('ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ');
   const [transferRef, setTransferRef] = useState('');
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [slipPreviewUrl, setSlipPreviewUrl] = useState<string | null>(null);
@@ -288,13 +280,13 @@ export default function POSSalesView({
   // Admin: Upload custom company QR Code to Supabase Storage / Cloud
   const handleCompanyQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!', 'error');
       return;
     }
     const file = e.target.files?.[0];
     if (file) {
       try {
-        triggerToast('ກຳລັງອັບໂຫຼດຮູບ QR Code ໄປຍັງ Supabase Storage...');
+        triggerToast('ກຳລັງອັບໂຫຼດຮູບ QR Code ໄປຍັງ Supabase Storage...', 'info');
         const downloadUrl = await uploadCompanyQrCodeToStorage(file, currentUser);
         const updated: CompanyBankInfo = {
           ...companyBankInfo,
@@ -349,13 +341,13 @@ export default function POSSalesView({
   const handleAddPackage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດເພີ່ມໝວດໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດເພີ່ມໝວດໄດ້!', 'error');
       return;
     }
     if (!newPackageInput.trim()) return;
     const trimmed = newPackageInput.trim();
     if (giftOptions.includes(trimmed)) {
-      triggerToast('ໝວດ/ແພັກເກດນີ້ມີຢູ່ໃນລາຍການແລ້ວ!');
+      triggerToast('ໝວດ/ແພັກເກດນີ້ມີຢູ່ໃນລາຍການແລ້ວ!', 'error');
       return;
     }
     const updated = [...giftOptions, trimmed];
@@ -373,7 +365,7 @@ export default function POSSalesView({
   const handleDeletePackage = (pkg: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດລົບໝວດໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດລົບໝວດໄດ້!', 'error');
       return;
     }
     setPackageToDelete(pkg);
@@ -593,12 +585,12 @@ export default function POSSalesView({
     if (isProcessingSale) return;
 
     if (!selectedVehicle) {
-      triggerToast('ກະລຸນາເລືອກລົດຍົນທີ່ຕ້ອງການຂາຍກ່ອນ!');
+      triggerToast('ກະລຸນາເລືອກລົດຍົນທີ່ຕ້ອງການຂາຍກ່ອນ!', 'error');
       return;
     }
 
     if (!customerName.trim() || !customerPhone.trim()) {
-      triggerToast('ກະລຸນາປ້ອນຊື່ ແລະ ເບີໂທລະສັບ ຂອງລູກຄ້າ!');
+      triggerToast('ກະລຸນາປ້ອນຊື່ ແລະ ເບີໂທລະສັບ ຂອງລູກຄ້າ!', 'error');
       return;
     }
 
@@ -617,12 +609,6 @@ export default function POSSalesView({
     ].filter(Boolean).join(', ');
 
     // 1. DEDUCT STOCK (ຕັດສະຕ໋ອກອອກ)
-    const updatedInventoryItem: InventoryItem = {
-      ...selectedVehicle,
-      stockQuantity: remainingQty,
-      status: remainingQty === 0 ? 'sold' : selectedVehicle.status,
-      reservedForCustomer: undefined,
-    };
 
     const normalizedPhone = customerPhone.replace(/\D/g, '');
     const matchedLead = prefilledCustomer
@@ -786,7 +772,12 @@ export default function POSSalesView({
         const nextCar = availableVehicles.find(v => v.vin !== soldVin);
         setSelectedVin(nextCar?.vin || '');
       }
-      triggerToast(msg);
+      const friendlyMsg = msg.includes('require Supabase')
+        ? 'ບໍ່ສາມາດບັນທຶກການຂາຍໄດ້: ໂໝດ Offline ເປັນພຽງການທົດລອງ, ການຂາຍຕ້ອງເຊື່ອມຕໍ່ຖານຂໍ້ມູນ'
+        : msg.includes('already has a stock-out movement') || msg.includes('already sold') || msg.includes('not available')
+          ? 'ລົດຄັນນີ້ຖືກຂາຍ ຫຼື ຕັດສະຕ໋ອກໄປແລ້ວ ກະລຸນາເລືອກຄັນອື່ນ'
+          : msg;
+      triggerToast(friendlyMsg, 'error');
       return;
     } finally {
       setIsProcessingSale(false);
@@ -925,8 +916,8 @@ export default function POSSalesView({
       {/* WRAPPER FOR POS VIEWS - SUPPRESSED DURING PRINT WHEN BILL IS BEING PRINTED */}
       <div className={createdBill ? "print:hidden hide-on-print-pos space-y-6" : "space-y-6"}>
         {/* Top Banner */}
-        <div className="theme-adaptive-dark-surface relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black border border-zinc-800 p-5 sm:p-7 rounded-3xl shadow-xl">
-          <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full bg-white/[0.04] blur-3xl pointer-events-none" />
+        <div className="theme-adaptive-dark-surface relative overflow-hidden bg-linear-to-br from-zinc-900 via-zinc-950 to-black border border-zinc-800 p-5 sm:p-7 rounded-3xl shadow-xl">
+          <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full bg-white/4 blur-3xl pointer-events-none" />
           <div className="relative flex flex-wrap items-center justify-between gap-5">
             <div className="min-w-0">
 
@@ -994,7 +985,7 @@ export default function POSSalesView({
                   </span>
                 </div>
 
-                {/* 1.1 Category Cards: All Models + Each Model with Photo */}
+                {/* 1.1 Category Cards: All Models + Each Model */}
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-zinc-400 font-medium flex items-center gap-1.5">
@@ -1011,21 +1002,17 @@ export default function POSSalesView({
                     <button
                       type="button"
                       onClick={() => handleSelectModelCategory('all')}
-                      className={`relative flex-shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${selectedModelCategory === 'all'
+                      className={`relative shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${selectedModelCategory === 'all'
                         ? 'border-white bg-zinc-900 shadow-lg ring-2 ring-white/20'
                         : 'border-zinc-800 bg-zinc-950/80 hover:border-zinc-700 hover:bg-zinc-900/60'
                         }`}
                     >
                       <div className="relative h-16 w-full bg-zinc-900 overflow-hidden">
-                        <img
-                          src="https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=400&q=80"
-                          alt="All Models"
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105 opacity-85"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                        <div className="absolute inset-0 flex items-center justify-center pb-3"><Car className="w-7 h-7 text-zinc-700" /></div>
+                        <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent" />
                         {selectedModelCategory === 'all' && (
                           <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-white text-black flex items-center justify-center shadow-md">
-                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            <Check className="w-2.5 h-2.5 stroke-3" />
                           </span>
                         )}
                         <span className="absolute bottom-1.5 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/80 text-white border border-zinc-700 always-white-text">
@@ -1042,7 +1029,7 @@ export default function POSSalesView({
                       </div>
                     </button>
 
-                    {/* Category Cards: Each Registered Model with Photo */}
+                    {/* Category Cards: Each Registered Model */}
                     {modelCategories.map((cat) => {
                       const isSelected = selectedModelCategory === cat.name;
                       return (
@@ -1050,26 +1037,17 @@ export default function POSSalesView({
                           type="button"
                           key={cat.name}
                           onClick={() => handleSelectModelCategory(cat.name)}
-                          className={`relative flex-shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${isSelected
+                          className={`relative shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${isSelected
                             ? 'border-white bg-zinc-900 shadow-lg ring-2 ring-white/20'
                             : 'border-zinc-800 bg-zinc-950/80 hover:border-zinc-700 hover:bg-zinc-900/60'
                             }`}
                         >
                           <div className="relative h-16 w-full bg-zinc-900 overflow-hidden">
-                            <img
-                              src={cat.image}
-                              alt={cat.name}
-                              onError={(e) => {
-                                const target = e.currentTarget;
-                                target.onerror = null;
-                                target.src = '/avatr-logo.png';
-                              }}
-                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                            <div className="absolute inset-0 flex items-center justify-center pb-3"><Car className="w-7 h-7 text-zinc-700" /></div>
+                            <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent" />
                             {isSelected && (
                               <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-white text-black flex items-center justify-center shadow-md">
-                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                <Check className="w-2.5 h-2.5 stroke-3" />
                               </span>
                             )}
                             <span className={`absolute bottom-1.5 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border always-white-text ${cat.count > 0
@@ -1106,11 +1084,9 @@ export default function POSSalesView({
                 </div>
 
                 {/* Vehicle Options List: Visual Car Cards */}
-                <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                <div className="max-h-85 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                   {filteredAvailableVehicles.map((item) => {
                     const isSelected = selectedVin === item.vin;
-                    const vehicleDef = vehicles.find(v => v.name === item.model);
-                    const displayImage = item.image || vehicleDef?.heroImage || '/avatr-logo.png';
 
                     return (
                       <button
@@ -1123,26 +1099,16 @@ export default function POSSalesView({
                           : 'bg-zinc-900/40 border-zinc-800/80 hover:border-zinc-700 text-zinc-400 hover:bg-zinc-900/70'
                           } w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex gap-3 items-center`}
                       >
-                        {/* Car Thumbnail Image */}
-                        <div className="relative w-16 h-14 rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 flex-shrink-0">
-                          <img
-                            src={displayImage}
-                            alt={item.model}
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              target.onerror = null;
-                              target.src = '/avatr-logo.png';
-                            }}
-                            className="w-full h-full object-cover"
-                          />
                           {isSelected && (
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                              <span className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shadow">
-                                <Check className="w-3 h-3 stroke-[3]" />
-                              </span>
-                            </div>
+                            <span className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shadow shrink-0">
+                              <Check className="w-3 h-3 stroke-3" aria-hidden="true" />
+                            </span>
                           )}
-                        </div>
+
+                          {/* Car Thumbnail Image */}
+                          <div className="relative w-16 h-14 rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 shrink-0">
+                            <div className="absolute inset-0 flex items-center justify-center"><Car className="w-6 h-6 text-zinc-600" /></div>
+                          </div>
 
                         {/* Details */}
                         <div className="flex-1 min-w-0">
@@ -1152,8 +1118,14 @@ export default function POSSalesView({
                               ${item.priceUSD.toLocaleString()}
                             </span>
                           </div>
-                          <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
+                          <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-zinc-400">
                             <span className="truncate">VIN: {item.vin}</span>
+                            {isSelected && (
+                              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-current px-1.5 py-0.5 text-[10px] font-sans font-bold leading-none">
+                                <Check className="h-3 w-3" aria-hidden="true" />
+                                {lang === 'lo' ? 'ເລືອກແລ້ວ' : lang === 'th' ? 'เลือกแล้ว' : 'Selected'}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1">
                             <span className="flex items-center gap-1.5 truncate">
@@ -1192,16 +1164,7 @@ export default function POSSalesView({
                 {selectedVehicle && (
                   <div className="pt-4 border-t border-zinc-800 space-y-3">
                     <div className="relative h-36 rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800">
-                      <img
-                        src={selectedVehicle.image || selectedVehicle.imageUrl || vehicles.find(v => v.name === selectedVehicle.model)?.heroImage || '/avatr-logo.png'}
-                        alt={selectedVehicle.model}
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          target.onerror = null;
-                          target.src = '/avatr-logo.png';
-                        }}
-                        className="w-full h-full object-cover filter contrast-125"
-                      />
+                      <div className="absolute inset-0 flex items-center justify-center"><Car className="w-12 h-12 text-zinc-700 stroke-[1.5]" /></div>
                       <div className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-black/80 text-white border border-zinc-700 font-mono shadow-md backdrop-blur-md always-white-text">
                         <span className="text-white" style={{ color: '#ffffff' }}>{t.tableStock}: {selectedVehicle.stockQuantity} {t.unitCars}</span>
                       </div>
@@ -1217,7 +1180,7 @@ export default function POSSalesView({
                       </div>
                       <div className="flex justify-between text-zinc-400">
                         <span>{t.trimSpec}:</span>
-                        <span className="text-white font-medium text-right truncate max-w-[170px]">{selectedVehicle.trim}</span>
+                        <span className="text-white font-medium text-right truncate max-w-42.5">{selectedVehicle.trim}</span>
                       </div>
                       <div className="flex justify-between text-zinc-400">
                         <span>{lang === 'lo' ? 'ແບັດເຕີຣີ:' : lang === 'th' ? 'แบตเตอรี่:' : 'Battery:'}</span>
@@ -1229,7 +1192,7 @@ export default function POSSalesView({
                       </div>
                       <div className="flex justify-between text-zinc-400">
                         <span>{t.warehouseDest}:</span>
-                        <span className="text-zinc-300 font-medium truncate max-w-[170px]">{selectedVehicle.location}</span>
+                        <span className="text-zinc-300 font-medium truncate max-w-42.5">{selectedVehicle.location}</span>
                       </div>
                     </div>
                   </div>
@@ -1289,7 +1252,7 @@ export default function POSSalesView({
                   </div>
 
                   <div className="min-w-0">
-                    <label className="block text-zinc-400 mb-1 font-medium flex items-center gap-1.5 truncate">
+                    <label className="text-zinc-400 mb-1 font-medium flex items-center gap-1.5 truncate">
                       <Calendar className="w-3.5 h-3.5 text-white shrink-0" />
                       <span className="truncate">ວັນທີອອກບິນ (ວັນ/ເດືອນ/ປີ) <span className="text-red-500 font-bold ml-1">*</span></span>
                     </label>
@@ -1306,7 +1269,7 @@ export default function POSSalesView({
                     <div className="flex items-center justify-between gap-1.5 mb-1 min-w-0">
                       <label className="text-zinc-400 font-medium truncate">{t.buyerPhone} <span className="text-red-500 font-bold ml-1">*</span></label>
                       {canOpenWhatsApp && (
-                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50 shrink-0 max-w-[130px] truncate">
+                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50 shrink-0 max-w-32.5 truncate">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
                           <span className="truncate">WA: {formatWhatsAppDisplay(customerPhone)}</span>
                         </span>
@@ -1376,12 +1339,13 @@ export default function POSSalesView({
                     </datalist>
                   </div>
 
-                  {/* Province Selector (All 18 Provinces) */}
-                  <div className="min-w-0">
-                    <label className="block text-zinc-400 mb-1 font-medium truncate">
-                      ແຂວງ / ນະຄອນຫຼວງ (18 ແຂວງ) <span className="text-red-500 font-bold ml-1">*</span>
-                    </label>
-                    <div className="relative min-w-0" ref={provinceDropdownRef}>
+                  <div className="sm:col-span-2 2xl:col-span-3 grid grid-cols-1 gap-4 sm:grid-cols-3 min-w-0">
+                    {/* Province Selector */}
+                    <div className="min-w-0">
+                      <label className="block text-zinc-400 mb-1 font-medium truncate">
+                        ແຂວງ / ນະຄອນຫຼວງ <span className="text-red-500 font-bold ml-1">*</span>
+                      </label>
+                      <div className="relative min-w-0" ref={provinceDropdownRef}>
                       <button
                         type="button"
                         aria-haspopup="listbox"
@@ -1395,11 +1359,6 @@ export default function POSSalesView({
                       >
                         <span className="truncate">
                           {selectedProvince?.nameLo || customerProvince}
-                          {selectedProvince?.nameEn && (
-                            <span className="ml-1 text-zinc-400">
-                              ({selectedProvince.nameEn})
-                            </span>
-                          )}
                         </span>
                         <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isProvinceDropdownOpen ? 'rotate-180' : ''}`} />
                       </button>
@@ -1432,15 +1391,15 @@ export default function POSSalesView({
                           ))}
                         </div>
                       )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* District Selector */}
-                  <div className="min-w-0">
-                    <label className="block text-zinc-400 mb-1 font-medium truncate">
-                      ເມືອງ (District) <span className="text-red-500 font-bold ml-1">*</span>
-                    </label>
-                    <div className="relative min-w-0" ref={districtDropdownRef}>
+                    {/* District Selector */}
+                    <div className="min-w-0">
+                      <label className="block text-zinc-400 mb-1 font-medium truncate">
+                        ເມືອງ <span className="text-red-500 font-bold ml-1">*</span>
+                      </label>
+                      <div className="relative min-w-0" ref={districtDropdownRef}>
                       <button
                         type="button"
                         aria-haspopup="listbox"
@@ -1454,7 +1413,6 @@ export default function POSSalesView({
                       >
                         <span className="truncate">
                           {districtOptions.find(district => district.nameLo === selectedDistrictName)?.nameLo || selectedDistrictName}
-                          {selectedDistrict?.nameEn && <span className="ml-1 text-zinc-400">({selectedDistrict.nameEn})</span>}
                         </span>
                         <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isDistrictDropdownOpen ? 'rotate-180' : ''}`} />
                       </button>
@@ -1486,15 +1444,15 @@ export default function POSSalesView({
                           ))}
                         </div>
                       )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Village Selector */}
-                  <div className="min-w-0">
-                    <label className="block text-zinc-400 mb-1 font-medium">
-                      ບ້ານ (Village) <span className="text-red-500 font-bold ml-1">*</span>
-                    </label>
-                    <div className="relative" ref={villageDropdownRef}>
+                    {/* Village Selector */}
+                    <div className="min-w-0">
+                      <label className="block text-zinc-400 mb-1 font-medium">
+                        ບ້ານ <span className="text-red-500 font-bold ml-1">*</span>
+                      </label>
+                      <div className="relative" ref={villageDropdownRef}>
                       <button
                         type="button"
                         aria-haspopup="listbox"
@@ -1508,7 +1466,7 @@ export default function POSSalesView({
                       >
                         <span className="truncate">
                           {customerVillage === '__custom__'
-                            ? '+ ລະບຸບ້ານອື່ນໆ...'
+                            ? '+ ບ້ານອື່ນ...'
                             : customerVillage || 'ເລືອກບ້ານ'}
                         </span>
                         <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isVillageDropdownOpen ? 'rotate-180' : ''}`} />
@@ -1550,17 +1508,18 @@ export default function POSSalesView({
                               : 'text-zinc-300 hover:bg-zinc-800'
                               }`}
                           >
-                            <span>+ ລະບຸບ້ານອື່ນໆ...</span>
+                            <span>+ ບ້ານອື່ນ...</span>
                           </button>
                         </div>
                       )}
+                      </div>
                     </div>
                   </div>
 
                   {customerVillage === '__custom__' && (
                     <div>
                       <label className="block text-zinc-400 mb-1 font-medium">
-                        ລະບຸຊື່ບ້ານ (Custom Village) *
+                        ຊື່ບ້ານ *
                       </label>
                       <input
                         type="text"
@@ -1573,16 +1532,15 @@ export default function POSSalesView({
                     </div>
                   )}
 
-                  {/* House No. / Street Details */}
-                  <div className="sm:col-span-2">
+                  <div className="sm:col-span-2 2xl:col-span-3">
                     <label className="block text-zinc-400 mb-1 font-medium">
-                      ເຮືອນເລກທີ / ຖະໜົນ / ຮ່ອມ (Street / House Details)
+                      ເຮືອນເລກທີ / ຖະໜົນ / ຮ່ອມ
                     </label>
                     <input
                       type="text"
                       value={customerAddressDetail}
                       onChange={(e) => setCustomerAddressDetail(e.target.value)}
-                      placeholder="ຕົວຢ່າງ: ເຮືອນເລກທີ 45, ຮ່ອມ 12, ຖະໜົນ ໄກສອນ ພົມວິຫານ"
+                      placeholder="ເຊັ່ນ 45, ຮ່ອມ 12"
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
                     />
                   </div>
@@ -1732,7 +1690,7 @@ export default function POSSalesView({
                         </div>
 
                         {/* Display Custom Uploaded QR or Stylized Vector QR */}
-                        <div className="relative p-2.5 bg-white rounded-2xl border-2 border-black flex items-center justify-center min-h-[180px] w-full max-w-[210px] overflow-hidden shadow-inner">
+                        <div className="relative p-2.5 bg-white rounded-2xl border-2 border-black flex items-center justify-center min-h-45 w-full max-w-52.5 overflow-hidden shadow-inner">
                           {companyBankInfo.qrCodeUrl ? (
                             <img
                               src={companyBankInfo.qrCodeUrl}
@@ -1873,7 +1831,7 @@ export default function POSSalesView({
                               ) : (
                                 <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-red-400">PDF</div>
                               )}
-                              <span className="text-[11px] text-zinc-300 truncate max-w-[120px]">{slipFile?.name}</span>
+                              <span className="text-[11px] text-zinc-300 truncate max-w-30">{slipFile?.name}</span>
                             </div>
                             <button
                               type="button"
@@ -2069,7 +2027,7 @@ export default function POSSalesView({
                       <button
                         type="button"
                         onClick={handleAddPackage}
-                        className="px-3.5 py-2 bg-white hover:bg-zinc-200 text-black font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors flex-shrink-0 shadow-sm"
+                        className="px-3.5 py-2 bg-white hover:bg-zinc-200 text-black font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors shrink-0 shadow-sm"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>{t.save}</span>
@@ -2105,7 +2063,7 @@ export default function POSSalesView({
                           <button
                             type="button"
                             onClick={(e) => handleDeletePackage(gift, e)}
-                            className="p-1 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0"
+                            className="p-1 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors shrink-0"
                             title="Delete"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -2282,7 +2240,7 @@ export default function POSSalesView({
               </div>
 
               {/* Step 6: Final Price Summary & Execute Sale Button */}
-              <div className="theme-adaptive-dark-surface rounded-3xl border border-zinc-700 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 shadow-xl sm:p-6 space-y-4">
+              <div className="theme-adaptive-dark-surface rounded-3xl border border-zinc-700 bg-linear-to-br from-zinc-900 to-zinc-950 p-5 shadow-xl sm:p-6 space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
                   <Receipt className="w-4 h-4 text-white" />
                   <span>6. {lang === 'lo' ? 'ສະຫຼຸບຍອດເງິນ & ຢືນຢັນການຂາຍ' : lang === 'th' ? 'สรุปยอดเงิน & ยืนยันการขาย' : 'Final Price Summary & Execute Sale'}</span>
@@ -2525,7 +2483,7 @@ export default function POSSalesView({
             {/* Bill Preview Card */}
             <div
               id="printable-pos-receipt"
-              className="a4-document-canvas w-full max-w-[794px] mx-auto p-6 sm:p-8 official-dealer-document bg-white text-black rounded-lg space-y-3.5 text-[11px] font-sans shadow-xl print:m-0 print:p-0 print:border-none print:shadow-none"
+              className="a4-document-canvas w-full max-w-198.5 mx-auto p-6 sm:p-8 official-dealer-document bg-white text-black rounded-lg space-y-3.5 text-[11px] font-sans shadow-xl print:m-0 print:p-0 print:border-none print:shadow-none"
               style={{ backgroundColor: '#ffffff', color: '#000000', border: 'none' }}
             >
               <div className="border-b-2 border-black pb-2.5">

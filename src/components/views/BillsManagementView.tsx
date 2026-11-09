@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect, useRef, useDeferredValue } from 'react';
 import {
   InvoiceBillRecord,
   Language,
-  BillType,
   Lead,
   VehicleModel,
   SystemUser,
@@ -19,7 +18,6 @@ import {
   Download,
   X,
   CheckCircle2,
-  Car,
   Calendar,
   CreditCard,
   ShieldCheck,
@@ -28,19 +26,12 @@ import {
   Phone,
   User,
   Sparkles,
-  ArrowUpRight,
-  Filter,
   Receipt,
   PackagePlus,
   QrCode,
   Trash2,
   Loader2,
-  Coins,
-  BadgePercent,
   Plus,
-  ChevronRight,
-  TrendingUp,
-  SlidersHorizontal,
   Clock,
   FileCheck,
   ReceiptText,
@@ -49,7 +40,7 @@ import {
 import { exportElementToPdf } from '../../utils/pdfExport';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl } from '../../utils/whatsapp';
-import { saveBillToSupabase } from '../../supabase';
+import { isSupabaseConfigured } from '../../supabase';
 import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 import QuotationModal from '../modals/QuotationModal';
@@ -1120,7 +1111,7 @@ export default function BillsManagementView({
             </div>
             <div className="mt-4 flex items-center justify-between gap-2 border-t border-zinc-800 pt-3 text-xs text-zinc-400">
               <span>{t.tableStatus}:</span>
-              <span className="font-semibold text-zinc-200">{isLoadingRangeBills ? (lang === 'lo' ? 'ກຳລັງດຶງຂໍ້ມູນຕາມຊ່ວງເວລາ...' : 'Loading range...') : t.supabaseLiveSync}</span>
+              <span className="font-semibold text-zinc-200">{isLoadingRangeBills ? (lang === 'lo' ? 'ກຳລັງດຶງຂໍ້ມູນຕາມຊ່ວງເວລາ...' : 'Loading range...') : isSupabaseConfigured ? t.supabaseLiveSync : (lang === 'lo' ? 'Offline Demo (ບັນທຶກໃນເຄື່ອງ)' : lang === 'th' ? 'Offline Demo (บันทึกในเครื่อง)' : 'Offline Demo (Local only)')}</span>
             </div>
           </div>
         </section>

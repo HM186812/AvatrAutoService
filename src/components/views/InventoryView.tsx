@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SaleLogRecord, SystemUser, InvoiceBillRecord } from '../../types';
+import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SystemUser, InvoiceBillRecord } from '../../types';
 import { translations } from '../../data/translations';
 import { getModelStockSummaries, LOW_STOCK_THRESHOLD } from '../../data/stockSummary';
 import {
@@ -8,7 +8,7 @@ import {
   saveVehicleModelToSupabase
 } from '../../supabase';
 import { ConfirmDeleteModal, EditVehicleModelModal } from '../modals';
-import { showToast } from '../common';
+import { showToast, ToastType } from '../common';
 import {
   Car,
   Search,
@@ -18,37 +18,25 @@ import {
   ShieldCheck,
   CheckCircle2,
   Clock,
-  FileText,
   X,
   DollarSign,
   MapPin,
   History,
   Check,
-  ShoppingBag,
-  UserCheck,
   Sparkles,
-  Printer,
-  ChevronDown,
   ArrowDownLeft,
   ArrowUpRight,
   Phone,
-  PackagePlus,
   Trash2,
-  Upload,
   Calendar,
-  Lock,
   AlertTriangle,
-  Image as ImageIcon,
   LayoutGrid,
   List,
   Copy,
-  Tag,
-  Wrench
+  Tag
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
-import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
-import { newRecordId } from '../../backend/ids';
-import { saveBillRecord } from '../../backend/data';
+import { getWhatsAppUrl } from '../../utils/whatsapp';
 
 interface InventoryViewProps {
   inventory: InventoryItem[];
@@ -73,10 +61,8 @@ export default function InventoryView({
   setStockLogs,
   vehicles,
   setVehicles,
-  currentUser,
   isSuperAdmin = false,
   lang,
-  onOpenQuote,
   onNavigateToStockIn,
 }: InventoryViewProps) {
   const t = translations[lang];
@@ -153,8 +139,8 @@ export default function InventoryView({
   }, [editingItem?.eventStartDate, editingItem?.eventEndDate]);
 
   // Toast message
-  const triggerToast = (msg: string) => {
-    showToast(msg, 'success');
+  const triggerToast = (msg: string, type: ToastType = 'success') => {
+    showToast(msg, type);
   };
 
   // Edit Vehicle Model / Category State
@@ -164,7 +150,7 @@ export default function InventoryView({
   const handleRequestEditModel = (e: React.MouseEvent, v: VehicleModel) => {
     e.stopPropagation();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດແກ້ໄຂໝວດ/ລຸ້ນຍານຍົນໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດແກ້ໄຂໝວດ/ລຸ້ນຍານຍົນໄດ້!', 'error');
       return;
     }
     setModelToEdit(v);
@@ -220,7 +206,7 @@ export default function InventoryView({
     try {
       await saveInventoryItemToSupabase(updatedItem);
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be saved.');
+      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be saved.', 'error');
       setIsSavingEdit(false);
       return;
     }
@@ -237,11 +223,11 @@ export default function InventoryView({
 
   const handleRequestDeleteItem = (item: InventoryItem) => {
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!');
+      triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!', 'error');
       return;
     }
     if (item.status === 'sold') {
-      triggerToast('ລົດຄັນນີ້ຂາຍອອກແລ້ວ! ກະລຸນາລົບບິນຂາຍໃນໜ້າຈັດການບິນກ່ອນ.');
+      triggerToast('ລົດຄັນນີ້ຂາຍອອກແລ້ວ! ກະລຸນາລົບບິນຂາຍໃນໜ້າຈັດການບິນກ່ອນ.', 'error');
       return;
     }
     setInventoryToDelete(item);
@@ -255,7 +241,7 @@ export default function InventoryView({
     try {
       await deleteInventoryItemFromSupabase(target.vin);
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be deleted.');
+      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be deleted.', 'error');
       setIsDeletingInventory(false);
       return;
     }
@@ -268,21 +254,6 @@ export default function InventoryView({
     setIsDeletingInventory(false);
     setInventoryToDelete(null);
     triggerToast(`ລົບລົດ ${target.model} (VIN: ${target.vin}) ອອກຈາກຖານຂໍ້ມູນສຳເລັດແລ້ວ!`);
-  };
-
-  const handleEditImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && editingItem) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setEditingItem({
-          ...editingItem,
-          image: event.target?.result as string,
-        });
-        triggerToast('ອັບໂຫຼດຮູບລົດຈາກອຸປະກອນສຳເລັດ!');
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   // Filtered Inventory
@@ -505,22 +476,9 @@ export default function InventoryView({
                     )}
 
                     <div className="flex items-center gap-3 mb-2.5">
-                      {/* Model Logo / Photo */}
+                      {/* Model Icon */}
                       <div className="w-14 h-11 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-950 shrink-0 flex items-center justify-center shadow-inner">
-                        {(modelObj.heroImage || summary.model?.heroImage) ? (
-                          <img
-                            src={modelObj.heroImage || summary.model?.heroImage}
-                            alt={summary.modelName}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              target.onerror = null;
-                              target.src = '/avatr-logo.png';
-                            }}
-                          />
-                        ) : (
-                          <Car className="w-5 h-5 text-slate-400 dark:text-zinc-600" />
-                        )}
+                        <Car className="w-5 h-5 text-slate-400 dark:text-zinc-600" />
                       </div>
 
                       <div className="min-w-0 flex-1 pr-7">
@@ -789,7 +747,6 @@ export default function InventoryView({
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredInventory.map((item) => {
-                const vehicle = vehicles.find(v => v.name === item.model) || vehicles[0];
 
                 return (
                   <div
@@ -797,21 +754,8 @@ export default function InventoryView({
                     className="bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-2xl overflow-hidden flex flex-col justify-between transition-all hover:shadow-xl group"
                   >
                     {/* Compact Image & Badges */}
-                    <div className="relative h-32 bg-zinc-900 overflow-hidden">
-                      <img
-                        src={item.image || vehicle?.heroImage || '/avatr-logo.png'}
-                        alt={item.model}
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          target.onerror = null;
-                          if (vehicle?.heroImage && target.src !== vehicle.heroImage) {
-                            target.src = vehicle.heroImage;
-                          } else {
-                            target.src = '/avatr-logo.png';
-                          }
-                        }}
-                        className="w-full h-full object-cover filter contrast-125 transition-transform duration-500 group-hover:scale-105"
-                      />
+                    <div className="relative h-32 bg-zinc-900 overflow-hidden flex items-center justify-center">
+                      <Car className="w-10 h-10 text-zinc-700 stroke-[1.5]" />
 
                       {/* Status Badge */}
                       <div className="absolute left-2 top-2 flex flex-wrap gap-1">
@@ -935,20 +879,12 @@ export default function InventoryView({
                 </thead>
                 <tbody className="divide-y divide-zinc-850">
                   {filteredInventory.map((item) => {
-                    const vehicle = vehicles.find(v => v.name === item.model) || vehicles[0];
                     return (
                       <tr key={item.vin} className="hover:bg-zinc-900/40 transition-colors">
                         <td className="py-2 px-3">
-                          <img
-                            src={item.image || vehicle?.heroImage || '/avatr-logo.png'}
-                            alt={item.model}
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              target.onerror = null;
-                              target.src = '/avatr-logo.png';
-                            }}
-                            className="w-12 h-8 rounded-lg object-cover border border-zinc-800 shrink-0"
-                          />
+                          <div className="w-12 h-8 rounded-lg border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center">
+                            <Car className="w-4 h-4 text-zinc-600" />
+                          </div>
                         </td>
                         <td className="py-2 px-3 font-semibold text-white">
                           <div className="font-bold">{item.model}</div>
@@ -1328,7 +1264,7 @@ export default function InventoryView({
                     }`}
                 >
                   <Car className="w-4 h-4 shrink-0 text-cyan-400" />
-                  <span className="truncate">{lang === 'lo' ? '2. ຂໍ້ມູນລົດ & ຮູບພາບ' : lang === 'th' ? '2. ข้อมูลสเปก & รูปภาพ' : '2. Specs & Media'}</span>
+                  <span className="truncate">{lang === 'lo' ? '2. ຂໍ້ມູນລົດ' : lang === 'th' ? '2. ข้อมูลสเปก' : '2. Specs'}</span>
                 </button>
 
                 <button
@@ -1631,76 +1567,6 @@ export default function InventoryView({
                     </div>
                   </div>
 
-                  {/* Vehicle Image Upload & Preview Card */}
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4.5 sm:p-5 space-y-4">
-                    <div className="border-b border-zinc-800/80 pb-2.5 flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                          <ImageIcon className="w-4 h-4 text-cyan-400" />
-                          <span>{t.uploadCarImage}</span>
-                        </h4>
-                        <p className="text-xs text-zinc-400 mt-0.5">
-                          {lang === 'lo' ? 'ຮູບພາບລົດຄັນນີ້ສຳລັບສະແດງໃນລະບົບສະຕ໋ອກ ແລະ ໃບສະເໜີລາຄາ' : 'Vehicle photo preview for inventory catalog & quotes'}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 uppercase px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
-                        16:9 HD
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                      {/* Image Preview Box */}
-                      <div className="md:col-span-6 aspect-video rounded-2xl bg-zinc-950 border border-zinc-800 overflow-hidden relative flex items-center justify-center">
-                        {editingItem.image || editingItem.imageUrl ? (
-                          <img
-                            src={editingItem.image || editingItem.imageUrl}
-                            alt={editingItem.model}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center text-zinc-600 gap-1.5 p-4 text-center">
-                            <Car className="w-8 h-8 stroke-[1.5]" />
-                            <span className="text-xs">{lang === 'lo' ? 'ບໍ່ມີຮູບພາບລົດ' : 'No photo uploaded'}</span>
-                          </div>
-                        )}
-                        <span className="absolute bottom-2 left-2 rounded-md bg-black/70 backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold text-white always-white-text">
-                          {editingItem.model}
-                        </span>
-                      </div>
-
-                      {/* Image Actions */}
-                      <div className="md:col-span-6 space-y-3">
-                        <label className="w-full cursor-pointer inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl border border-zinc-700 font-semibold text-xs transition-colors cursor-pointer active:scale-95">
-                          <Upload className="w-4 h-4 text-white" />
-                          <span>{lang === 'lo' ? 'ອັບໂຫຼດຮູບຈາກອຸປະກອນ' : 'Upload Photo from Device'}</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleEditImageUpload}
-                            className="hidden"
-                          />
-                        </label>
-                        <p className="text-[11px] text-zinc-500 leading-relaxed">
-                          {lang === 'lo'
-                            ? 'ຮອງຮັບໄຟລ໌ JPG, PNG, WEBP (ແນະນຳອັດຕາສ່ວນ 16:9 ເພື່ອຄວາມຄົມຊັດ)'
-                            : 'Supports JPG, PNG, WEBP (Recommended 16:9 ratio)'}
-                        </p>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
-                            {lang === 'lo' ? 'ຫຼື ປ້ອນລິ້ງຮູບພາບ (Image URL):' : 'Or enter direct image URL:'}
-                          </label>
-                          <input
-                            type="url"
-                            value={editingItem.image || ''}
-                            onChange={(e) => setEditingItem({ ...editingItem, image: e.target.value })}
-                            placeholder="https://example.com/car.jpg"
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-300 font-mono placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               )}
 

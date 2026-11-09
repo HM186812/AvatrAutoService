@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   Lead,
   VehicleModel,
   Language,
   LeadStatus,
-  LeadPriority,
   CustomerCategory,
   SystemUser,
   InstallmentPaymentRecord,
@@ -13,20 +12,16 @@ import {
   ActiveMenu
 } from '../../types';
 import { translations } from '../../data/translations';
-import { LAO_PROVINCES } from '../../data/laoProvinces';
 import { showToast } from '../common';
 import {
   Users,
   Search,
   Plus,
   Phone,
-  MessageSquare,
   Car,
-  Filter,
   Star,
   Store,
   Globe,
-  CalendarCheck,
   Calendar,
   FileText,
   UserPlus,
@@ -34,31 +29,26 @@ import {
   Sparkles,
   Trash2,
   ChevronDown,
-  ChevronUp,
   ShoppingBag,
   CreditCard,
   Download,
   Printer,
   MapPin,
-  FileCheck,
   User as UserIcon,
   Banknote,
   Clock,
-  AlertCircle,
-  Check,
   Loader2,
   LayoutGrid,
   List,
   X,
   ShieldCheck,
   Wrench,
-  Shield,
-  Award,
   RotateCcw,
   Gauge,
   BatteryCharging,
   AlertTriangle,
-  History
+  Pencil,
+  CalendarClock,
 } from 'lucide-react';
 import {
   ConfirmDeleteModal,
@@ -73,6 +63,9 @@ import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
 import { deleteLead, saveLead, updateLeadStatus, saveBillRecord, fetchLeadsByDateRange, updateServiceAppointment } from '../../backend/data';
 import { newRecordId } from '../../backend/ids';
+import { isSupabaseConfigured } from '../../backend/client';
+import ContactLogModal from '../modals/ContactLogModal';
+import { getFollowUpState, makeContactEntry, formatDateKey } from '../../utils/followUp';
 import InstallmentDashboardView from './InstallmentDashboardView';
 import { IssuedDocumentRecord } from '../../types';
 import { getIssuedDocumentLogs, fetchDocumentLogsFromCloud, DOCUMENT_LOG_EVENT } from '../../utils/documentLogger';
@@ -94,6 +87,7 @@ interface CustomerViewProps {
   onAddService?: (service: Omit<ServiceAppointment, 'id'>) => Promise<void> | void;
   onUpdateServiceStatus?: (id: string, status: ServiceAppointment['status']) => Promise<void> | void;
   initialClassificationTab?: 'new_leads' | 'existing_customers' | 'installment_customers';
+  onEditLead?: (lead: Lead) => void;
 }
 
 export default function CustomerView({
@@ -113,8 +107,11 @@ export default function CustomerView({
   onAddService,
   onUpdateServiceStatus,
   initialClassificationTab,
+  onEditLead,
 }: CustomerViewProps) {
   const t = translations[lang] || translations.lo;
+  // Deleting customer records is restricted to administrators
+  const isAdminUser = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
 
   // View Mode: Cards vs Table
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
@@ -239,9 +236,6 @@ export default function CustomerView({
   };
 
   // Toast notification feedback
-  const triggerLocalToast = (msg: string) => {
-    showToast(msg, 'success');
-  };
 
   // Modal states
   const [selectedCustomerForDocs, setSelectedCustomerForDocs] = useState<Lead | null>(null);
@@ -306,6 +300,11 @@ export default function CustomerView({
 
   // Separated Counts (calculated exclusively for prospective leads):
   // 1. Acquisition Channel counts
+  const followUpCounts = {
+    today: prospectiveLeads.filter(l => getFollowUpState(l) === 'today').length,
+    overdue: prospectiveLeads.filter(l => getFollowUpState(l) === 'overdue').length,
+  };
+
   const channelCounts = {
     all: prospectiveLeads.length,
     walk_in: prospectiveLeads.filter(l => l.category === 'walk_in').length,
@@ -317,7 +316,8 @@ export default function CustomerView({
 
   // 3. Status / Lifecycle counts for active prospective pipeline
   const statusCounts = {
-    all: prospectiveLeads.length,
+    all: prospectiveLeads.filter(l => l.status !== 'lost').length,
+    lost: prospectiveLeads.filter(l => l.status === 'lost').length,
     new: prospectiveLeads.filter(l => l.status === 'new').length,
     contacted: prospectiveLeads.filter(l => l.status === 'contacted').length,
     test_drive: prospectiveLeads.filter(l => l.status === 'test_drive').length,
@@ -328,28 +328,172 @@ export default function CustomerView({
 
   // Modal delete state for modern confirmation popup
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  // Contact log / follow-up
+  const [contactLead, setContactLead] = useState<Lead | null>(null);
+  const [followUpFilter, setFollowUpFilter] = useState<'all' | 'today' | 'overdue'>('all');
+
+  // ===== Sales pipeline: one clear "next step" per customer =====
+  const PIPELINE_STAGES: { key: LeadStatus | 'sale'; label: string }[] = [
+    { key: 'new', label: t.statusNew },
+    { key: 'contacted', label: t.statusContacted },
+    { key: 'test_drive', label: t.statusTestDrive },
+    { key: 'negotiation', label: t.statusNegotiation },
+    { key: 'sale', label: lang === 'lo' ? 'ຂາຍ / ອອກບິນ' : lang === 'th' ? 'ขาย / ออกบิล' : 'Sale / Invoice' },
+  ];
+
+  const handleIssueQuote = (lead: Lead) => {
+    const vehicle = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
+    if (!vehicle) {
+      showToast('ບໍ່ພົບຂໍ້ມູນລຸ້ນລົດ ສຳລັບອອກໃບສະເໜີລາຄາ', 'error');
+      return;
+    }
+    onOpenQuote(vehicle, lead.customerName);
+    // Issuing a quotation moves the customer into the negotiation stage
+    if (lead.status === 'new' || lead.status === 'contacted' || lead.status === 'test_drive') {
+      void handleUpdateStatus(lead.id, 'negotiation');
+    }
+  };
+
+  const renderPipelineStepper = (lead: Lead) => {
+    if (lead.status === 'lost') {
+      return (
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className="px-2 py-0.5 rounded-full font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">{t.statusLost}</span>
+          <span className="text-zinc-500">{lang === 'lo' ? 'ເຄສນີ້ປິດແລ້ວ — ເປີດຄືນໄດ້ຖ້າລູກຄ້າກັບມາ' : 'This lead is closed — reopen it if the customer returns'}</span>
+        </div>
+      );
+    }
+    const current = Math.max(0, PIPELINE_STAGES.findIndex(st => st.key === lead.status));
+    return (
+      <ol className="flex items-center gap-1 text-[10px] font-semibold" aria-label={lang === 'lo' ? 'ຂັ້ນຕອນການຂາຍ' : 'Sales stage'}>
+        {PIPELINE_STAGES.map((st, i) => {
+          const done = i < current;
+          const active = i === current;
+          return (
+            <li key={st.key} className="flex items-center gap-1 shrink-0" aria-current={active ? 'step' : undefined}>
+              <span className={`whitespace-nowrap px-2 py-0.5 rounded-full border ${active
+                ? 'bg-blue-600 text-white border-blue-600'
+                : done
+                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                  : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}>
+                {done ? '✓ ' : ''}{st.label}
+              </span>
+              {i < PIPELINE_STAGES.length - 1 && <span className="text-zinc-600" aria-hidden="true">›</span>}
+            </li>
+          );
+        })}
+      </ol>
+    );
+  };
+
+  /** Primary "next step" button (+ one secondary option) for a prospective lead */
+  const renderNextStep = (lead: Lead, size: 'sm' | 'md') => {
+    const primaryCls = size === 'md'
+      ? 'px-4 py-2 rounded-xl text-xs'
+      : 'px-2.5 py-1 rounded-lg text-[10px]';
+    const secondaryCls = size === 'md'
+      ? 'px-3 py-2 rounded-xl text-xs'
+      : 'px-2 py-1 rounded-lg text-[10px]';
+    const iconCls = size === 'md' ? 'w-3.5 h-3.5' : 'w-3 h-3';
+    const primaryBase = `${primaryCls} whitespace-nowrap font-bold text-white flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer`;
+    const secondaryBase = `${secondaryCls} whitespace-nowrap font-semibold text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 flex items-center gap-1 transition-colors cursor-pointer`;
+
+    if (lead.status === 'lost') {
+      return (
+        <button type="button" onClick={() => handleUpdateStatus(lead.id, 'contacted')} className={`${primaryBase} bg-zinc-700 hover:bg-zinc-600`}
+          title={lang === 'lo' ? 'ເປີດເຄສຄືນ ແລະ ກັບໄປຕິດຕາມລູກຄ້າ' : 'Reopen lead'}>
+          <RotateCcw className={iconCls} />
+          <span>{lang === 'lo' ? 'ເປີດເຄສຄືນ' : lang === 'th' ? 'เปิดเคสใหม่' : 'Reopen'}</span>
+        </button>
+      );
+    }
+
+    const sellButton = (primary: boolean) => onSelectCustomerForPOS && (
+      <button type="button" onClick={() => onSelectCustomerForPOS(lead)}
+        className={primary ? `${primaryBase} bg-emerald-600 hover:bg-emerald-500` : secondaryBase}
+        title={lang === 'lo' ? 'ເປີດບິນຂາຍ POS ພ້ອມຂໍ້ມູນລູກຄ້າຄົນນີ້' : 'Open POS with this customer'}>
+        <ShoppingBag className={iconCls} />
+        <span>{primary
+          ? (lang === 'lo' ? 'ອອກບິນຂາຍ (POS)' : lang === 'th' ? 'ออกบิลขาย (POS)' : 'Create Invoice (POS)')
+          : (lang === 'lo' ? 'ຂາຍເລີຍ' : lang === 'th' ? 'ขายเลย' : 'Sell now')}</span>
+      </button>
+    );
+    const quoteButton = (primary: boolean) => (
+      <button type="button" onClick={() => handleIssueQuote(lead)}
+        className={primary ? `${primaryBase} bg-blue-600 hover:bg-blue-500` : secondaryBase}
+        title={lang === 'lo' ? 'ອອກໃບສະເໜີລາຄາໃຫ້ລູກຄ້າຄົນນີ້' : 'Issue a quotation'}>
+        <FileText className={iconCls} />
+        <span>{primary
+          ? (lang === 'lo' ? 'ອອກໃບສະເໜີລາຄາ' : lang === 'th' ? 'ออกใบเสนอราคา' : 'Issue Quotation')
+          : (lang === 'lo' ? 'ສະເໜີລາຄາໃໝ່' : lang === 'th' ? 'เสนอราคาใหม่' : 'New quote')}</span>
+      </button>
+    );
+
+    // negotiation -> next step is the sale; earlier stages -> next step is the quotation
+    return lead.status === 'negotiation'
+      ? <>{quoteButton(false)}{sellButton(true)}</>
+      : <>{sellButton(false)}{quoteButton(true)}</>;
+  };
+
+  const handleSaveContactLog = async (updated: Lead, message: string) => {
+    try {
+      if (!currentUser?.id) throw new Error('Sign in again before saving the contact log.');
+      await saveLead(updated, currentUser.id);
+      setLeads(prev => prev.map(l => (l.id === updated.id ? updated : l)));
+      if (contactLead?.id === updated.id) setContactLead(updated);
+      showToast(message, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Contact log could not be saved.', 'error');
+      throw error;
+    }
+  };
 
   const handleConfirmDeleteCustomer = async () => {
     if (!leadToDelete) return;
+    if (!isAdminUser) {
+      showToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ລົບຂໍ້ມູນລູກຄ້າໄດ້!', 'error');
+      setLeadToDelete(null);
+      return;
+    }
     try {
       await deleteLead(leadToDelete.id);
       setLeads(prev => prev.filter(l => l.id !== leadToDelete.id));
+      showToast(`ລົບຂໍ້ມູນລູກຄ້າ ${leadToDelete.customerName} ສຳເລັດ`, 'success');
       setLeadToDelete(null);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Customer could not be deleted.');
+      showToast(error instanceof Error ? error.message : 'Customer could not be deleted.', 'error');
     }
   };
 
   const handleUpdateStatus = async (leadId: string, newStatus: LeadStatus) => {
     try {
       await updateLeadStatus(leadId, newStatus);
-      setLeads(prev => prev.map(l => l.id === leadId ? {
-        ...l,
-        status: newStatus,
-        lastFollowUp: new Date().toISOString()
-      } : l));
+      const statusText: Record<string, string> = {
+        new: t.statusNew, contacted: t.statusContacted, test_drive: t.statusTestDrive,
+        negotiation: t.statusNegotiation, delivered: t.statusDelivered || 'ຈ່າຍແລ້ວ', lost: t.statusLost,
+      };
+      const target = leads.find(l => l.id === leadId);
+      const name = target?.customerName || '';
+      if (target) {
+        // Automatic contact-history entry for every status change
+        const updatedLead: Lead = {
+          ...target,
+          status: newStatus,
+          lastFollowUp: new Date().toISOString(),
+          contactHistory: [
+            ...(target.contactHistory || []),
+            makeContactEntry('status', `${statusText[target.status] || target.status} → ${statusText[newStatus] || newStatus}`, currentUser?.name),
+          ],
+        };
+        setLeads(prev => prev.map(l => (l.id === leadId ? updatedLead : l)));
+        // Offline storage keeps the whole lead; online, history needs a DB column first
+        if (!isSupabaseConfigured && currentUser?.id) {
+          await saveLead(updatedLead, currentUser.id).catch(() => undefined);
+        }
+      }
+      showToast(`ອັບເດດສະຖານະ ${name}: ${statusText[newStatus] || newStatus}`, 'success');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Customer status could not be updated.');
+      showToast(error instanceof Error ? error.message : 'Customer status could not be updated.', 'error');
     }
   };
 
@@ -372,30 +516,12 @@ export default function CustomerView({
       }
       showToast(lang === 'lo' ? 'ອັບເດດສະຖານະການບໍລິການສຳເລັດ!' : 'Service status updated successfully!');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not update service status.');
+      showToast(error instanceof Error ? error.message : 'Could not update service status.', 'error');
     } finally {
       setUpdatingServiceId(null);
     }
   };
 
-  const handleUpdateInstallmentStatus = async (leadId: string, newStatus: any) => {
-    const targetLead = leads.find(l => l.id === leadId);
-    if (!targetLead) throw new Error('Customer record not found.');
-    const updatedLead: Lead = {
-      ...targetLead,
-      installmentStatus: newStatus,
-      lastFollowUp: new Date().toISOString(),
-    };
-    try {
-      if (!currentUser?.id) throw new Error('Sign in again before updating installment status.');
-      await saveLead(updatedLead, currentUser.id);
-      setLeads(prev => prev.map(l => l.id === leadId ? updatedLead : l));
-      showToast('ອັບເດດສະຖານະການຜ່ອນຊຳລະສຳເລັດແລ້ວ');
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Installment status could not be updated.');
-      throw error;
-    }
-  };
 
   const handleUpdateCustomerRecords = async (customerId: string, newRecords: InstallmentPaymentRecord[]) => {
     const targetLead = leads.find(l => l.id === customerId);
@@ -414,7 +540,7 @@ export default function CustomerView({
       }
       showToast('ບັນທຶກ ແລະ ອັບເດດຕາຕະລາງເກັບເງິນງວດຮຽບຮ້ອຍແລ້ວ');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Installment ledger could not be saved.');
+      showToast(error instanceof Error ? error.message : 'Installment ledger could not be saved.', 'error');
       throw error;
     }
   };
@@ -437,7 +563,7 @@ export default function CustomerView({
           : `ຢືນຢັນການຊຳລະເງິນ "${updatedLead.customerName}" ສຳເລັດແລ້ວ! ຍ້າຍໄປໜ້າ "ລູກຄ້າເກົ່າ (100%)" ຮຽບຮ້ອຍ.`
       );
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Payment confirmation could not be saved.');
+      showToast(error instanceof Error ? error.message : 'Payment confirmation could not be saved.', 'error');
       throw error;
     }
   };
@@ -575,7 +701,7 @@ export default function CustomerView({
 
       showToast(`ບັນທຶກຂໍ້ມູນຫຼັງການຂາຍ ແລະ ໄລຍະຮັບປະກັນຂອງ "${updatedData.customerName}" ສຳເລັດແລ້ວ!`);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not save after-sales data.');
+      showToast(error instanceof Error ? error.message : 'Could not save after-sales data.', 'error');
     }
   };
 
@@ -947,6 +1073,11 @@ export default function CustomerView({
 
       // 2. Status Filter (ສະຖານະລູກຄ້າ)
       if (selectedStatus !== 'all' && lead.status !== selectedStatus) return false;
+      // Lost / cancelled leads are hidden unless explicitly filtered
+      if (selectedStatus === 'all' && lead.status === 'lost') return false;
+
+      // 3. Follow-up reminder filter
+      if (followUpFilter !== 'all' && getFollowUpState(lead) !== followUpFilter) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -964,7 +1095,7 @@ export default function CustomerView({
       }
       return true;
     });
-  }, [prospectiveLeads, channelFilter, selectedStatus, searchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
+  }, [prospectiveLeads, channelFilter, selectedStatus, followUpFilter, searchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
 
   // Pagination for high scalability & Surface Pro friendly RAM usage
   const [currentPage, setCurrentPage] = useState(1);
@@ -973,7 +1104,7 @@ export default function CustomerView({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [channelFilter, selectedStatus, searchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
+  }, [channelFilter, selectedStatus, followUpFilter, searchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
 
   const paginatedLeads = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -1290,14 +1421,6 @@ export default function CustomerView({
                     <span>Dashboard ຜ່ອນຊຳລະ</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined}
-                  className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-black rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span> ສັນຍາຜ່ອນໃໝ່ (POS)</span>
-                </button>
               </div>
             )}
           </div>
@@ -1395,6 +1518,7 @@ export default function CustomerView({
                       <option value="contacted">{t.statusContacted} ({statusCounts.contacted})</option>
                       <option value="test_drive">{t.statusTestDrive} ({statusCounts.test_drive})</option>
                       <option value="negotiation">{t.statusNegotiation} ({statusCounts.negotiation})</option>
+                      <option value="lost">{t.statusLost} ({statusCounts.lost})</option>
                     </select>
 
                     {/* View Mode Toggle: Cards vs Table */}
@@ -1452,6 +1576,36 @@ export default function CustomerView({
                           >
                             <span>{tab.label}</span>
                             <span className={`text-[10px] font-mono px-1 rounded-full ${isSelected ? 'bg-zinc-300 text-black' : 'text-zinc-500'}`}>
+                              {tab.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Follow-up Reminder Pills */}
+                    <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800/80">
+                      <span className="text-[10px] text-zinc-400 font-bold px-1.5 uppercase flex items-center gap-1">
+                        <CalendarClock className="w-3 h-3" />ຕິດຕາມ:
+                      </span>
+                      {([
+                        { key: 'today' as const, label: 'ຕ້ອງຕິດຕາມມື້ນີ້', count: followUpCounts.today, tone: 'bg-amber-400 text-black' },
+                        { key: 'overdue' as const, label: 'ເລີຍກຳນົດ', count: followUpCounts.overdue, tone: 'bg-rose-600 text-white' },
+                      ]).map((tab) => {
+                        const isSelected = followUpFilter === tab.key;
+                        return (
+                          <button
+                            key={tab.key}
+                            type="button"
+                            aria-pressed={isSelected}
+                            onClick={() => setFollowUpFilter(isSelected ? 'all' : tab.key)}
+                            className={`px-2 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer ${isSelected
+                              ? 'bg-zinc-200 text-black font-bold shadow-sm'
+                              : 'text-zinc-400 hover:text-white'
+                              }`}
+                          >
+                            <span>{tab.label}</span>
+                            <span className={`text-[10px] font-mono px-1.5 rounded-full ${tab.count > 0 ? tab.tone : (isSelected ? 'bg-zinc-300 text-black' : 'text-zinc-500')}`}>
                               {tab.count}
                             </span>
                           </button>
@@ -1638,7 +1792,7 @@ export default function CustomerView({
                                 <option value="contacted">{t.statusContacted}</option>
                                 <option value="test_drive">{t.statusTestDrive}</option>
                                 <option value="negotiation">{t.statusNegotiation}</option>
-                                <option value="delivered">{t.statusDelivered || 'ຈ່າຍແລ້ວ'}</option>
+                                <option value="lost">{t.statusLost}</option>
                               </select>
                             </td>
 
@@ -1652,18 +1806,8 @@ export default function CustomerView({
                             {/* Table Actions */}
                             <td className="py-3 px-3.5 align-top text-right">
                               <div className="flex items-center justify-end gap-1.5">
-                                {/* POS Sale Button */}
-                                {onSelectCustomerForPOS && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onSelectCustomerForPOS(lead)}
-                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] flex items-center gap-1 transition-colors cursor-pointer shadow-sm active:scale-95"
-                                    title="ເປີດບິນຂາຍ POS ສຳລັບລູກຄ້ານີ້"
-                                  >
-                                    <ShoppingBag className="w-3 h-3" />
-                                    <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'POS'}</span>
-                                  </button>
-                                )}
+                                {/* Next step (pipeline) */}
+                                {renderNextStep(lead, 'sm')}
 
 
                                 {/* Customer Documents Suite & Audit History Button */}
@@ -1696,15 +1840,52 @@ export default function CustomerView({
                                   <WhatsAppIcon className="w-3 h-3" />
                                 </a>
 
-                                {/* Delete Button */}
+                                {/* Contact log / follow-up */}
+                                {(() => {
+                              const fu = getFollowUpState(lead);
+                              const tone = fu === 'overdue'
+                                ? 'bg-rose-950/50 border-rose-800 text-rose-300 hover:bg-rose-900/60'
+                                : fu === 'today'
+                                  ? 'bg-amber-950/40 border-amber-700 text-amber-300 hover:bg-amber-900/50'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600';
+                              return (
                                 <button
                                   type="button"
-                                  onClick={() => setLeadToDelete(lead)}
-                                  className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
-                                  title="ລົບລູກຄ້າ"
+                                  onClick={() => setContactLead(lead)}
+                                  className={`p-1 rounded-xl border transition-colors cursor-pointer flex items-center gap-1 font-semibold ${tone}`}
+                                  title={lead.nextFollowUpAt ? `ນັດຕິດຕາມ: ${formatDateKey(lead.nextFollowUpAt)}` : 'ບັນທຶກການຕິດຕໍ່ / ນັດຕິດຕາມ'}
+                                  aria-label="Contact Log"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <CalendarClock className="w-3.5 h-3.5" />
+                                  {lead.nextFollowUpAt && <span className="text-[10px] font-mono">{formatDateKey(lead.nextFollowUpAt).slice(0, 5)}</span>}
                                 </button>
+                              );
+                            })()}
+
+                                {/* Edit Button */}
+                                {onEditLead && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onEditLead(lead)}
+                                    className="p-1 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                                    title="ແກ້ໄຂຂໍ້ມູນລູກຄ້າ"
+                                    aria-label="Edit Lead"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                )}
+
+                                {/* Delete Button (admin only) */}
+                                {isAdminUser && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setLeadToDelete(lead)}
+                                    className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                                    title="ລົບລູກຄ້າ"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1803,9 +1984,43 @@ export default function CustomerView({
                               <option value="contacted">{t.statusContacted}</option>
                               <option value="test_drive">{t.statusTestDrive}</option>
                               <option value="negotiation">{t.statusNegotiation}</option>
+                              <option value="lost">{t.statusLost}</option>
                             </select>
 
-                            <button
+                            {(() => {
+                              const fu = getFollowUpState(lead);
+                              const tone = fu === 'overdue'
+                                ? 'bg-rose-950/50 border-rose-800 text-rose-300 hover:bg-rose-900/60'
+                                : fu === 'today'
+                                  ? 'bg-amber-950/40 border-amber-700 text-amber-300 hover:bg-amber-900/50'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600';
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setContactLead(lead)}
+                                  className={`p-2 rounded-xl border transition-colors cursor-pointer flex items-center gap-1 font-semibold ${tone}`}
+                                  title={lead.nextFollowUpAt ? `ນັດຕິດຕາມ: ${formatDateKey(lead.nextFollowUpAt)}` : 'ບັນທຶກການຕິດຕໍ່ / ນັດຕິດຕາມ'}
+                                  aria-label="Contact Log"
+                                >
+                                  <CalendarClock className="w-3.5 h-3.5" />
+                                  {lead.nextFollowUpAt && <span className="text-[10px] font-mono">{formatDateKey(lead.nextFollowUpAt).slice(0, 5)}</span>}
+                                </button>
+                              );
+                            })()}
+
+                            {onEditLead && (
+                              <button
+                                type="button"
+                                onClick={() => onEditLead(lead)}
+                                className="p-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl border border-zinc-800 hover:border-zinc-600 transition-colors cursor-pointer"
+                                title="ແກ້ໄຂຂໍ້ມູນລູກຄ້າ"
+                                aria-label="Edit Lead"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {isAdminUser && <button
                               type="button"
                               onClick={() => setLeadToDelete(lead)}
                               className="p-2 bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 rounded-xl border border-zinc-800 hover:border-red-800 transition-colors cursor-pointer shrink-0 active:scale-95"
@@ -1813,7 +2028,7 @@ export default function CustomerView({
                               aria-label="Delete Lead"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            </button>}
                           </div>
                         </div>
 
@@ -1873,6 +2088,9 @@ export default function CustomerView({
                           </div>
                         </div>
 
+                        {/* Sales pipeline stage */}
+                        <div className="overflow-x-auto pt-1">{renderPipelineStepper(lead)}</div>
+
                         {/* 3. Card Bottom Actions Toolbar */}
                         <div className="pt-2.5 border-t border-zinc-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
                           {/* Left: Quick Direct Contact */}
@@ -1898,7 +2116,7 @@ export default function CustomerView({
                           </div>
 
                           {/* Right: Actions */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
                             {/* Customer Documents Suite & Audit History Button */}
                             <button
                               type="button"
@@ -1918,17 +2136,7 @@ export default function CustomerView({
                               })()}
                             </button>
 
-                            {onSelectCustomerForPOS && (
-                              <button
-                                type="button"
-                                onClick={() => onSelectCustomerForPOS(lead)}
-                                className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 text-xs"
-                                title="ເປີດບິນຂາຍລົດ (POS) ແລະ ຕັດສະຕ໋ອກສຳລັບລູກຄ້ານີ້"
-                              >
-                                <ShoppingBag className="w-3.5 h-3.5" />
-                                <span>{lang === 'lo' ? 'ເປີດບິນຂາຍ POS' : lang === 'th' ? 'เปิดบิลขาย POS' : 'Sell POS'}</span>
-                              </button>
-                            )}
+                            {renderNextStep(lead, 'md')}
                           </div>
                         </div>
                       </div>
@@ -2094,7 +2302,6 @@ export default function CustomerView({
               <div className="grid grid-cols-1 gap-5">
                 {filteredExistingCustomers.map((owner) => {
                   const recentServices = owner.services || [];
-                  const leadData = owner.leadRecord;
 
                   return (
                     <div
@@ -2525,7 +2732,7 @@ export default function CustomerView({
               vehicles={vehicles}
               currentUser={currentUser}
               lang={lang}
-              onNavigateMenu={onNavigateMenu || ((menu) => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined)}
+              onNavigateMenu={onNavigateMenu || (() => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined)}
               onNavigateTab={(tab) => setCustomerClassificationTab(tab)}
             />
           </div>
@@ -2569,6 +2776,18 @@ export default function CustomerView({
           currentUser={currentUser}
           lang={lang}
           onConfirmPayment={handleConfirmCustomerPayment}
+        />
+      )}
+
+      {/* Contact Log & Follow-up Modal */}
+      {contactLead && (
+        <ContactLogModal
+          lead={leads.find(l => l.id === contactLead.id) || contactLead}
+          staffName={currentUser?.name}
+          isAdmin={isAdminUser}
+          lang={lang}
+          onClose={() => setContactLead(null)}
+          onSave={handleSaveContactLog}
         />
       )}
 

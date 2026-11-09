@@ -313,20 +313,9 @@ export default function StockAlertsView({
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                     {/* Model Info */}
                     <div className="flex items-start sm:items-center gap-4 min-w-0">
-                      {item.model?.heroImage ? (
-                        <img
-                          src={item.model.heroImage}
-                          alt={item.modelName}
-                          className="w-24 h-16 rounded-xl object-cover border border-zinc-300 dark:border-zinc-700 shrink-0 bg-zinc-100 dark:bg-zinc-900 shadow-sm"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-24 h-16 rounded-xl border border-zinc-300 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 grid place-items-center shrink-0">
-                          <Car className="w-7 h-7 text-black dark:text-zinc-500" />
-                        </div>
-                      )}
+                      <div className="w-24 h-16 rounded-xl border border-zinc-300 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 grid place-items-center shrink-0">
+                        <Car className="w-7 h-7 text-black dark:text-zinc-500" />
+                      </div>
 
                       <div className="min-w-0 space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">

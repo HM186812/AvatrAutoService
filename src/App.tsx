@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { 
   Lead, 
   ServiceAppointment, 
@@ -26,6 +26,7 @@ import {
   updateServiceAppointment,
 } from './backend/data';
 import { DEFAULT_OFFLINE_USERS } from './backend/offlineStore';
+import { getDueFollowUps } from './utils/followUp';
 import { newRecordId } from './backend/ids';
 // Categorized Components & Views
 import { Sidebar } from './components/layout';
@@ -64,18 +65,9 @@ import {
   AlertTriangle, 
   Key, 
   User as UserIcon, 
-  LogOut, 
-  DollarSign, 
-  Coins, 
-  Plus, 
-  ChevronRight, 
-  ShieldCheck, 
-  Lock,
-  Cloud,
-  CloudCheck,
-  Radio,
   Sun,
-  Moon
+  Moon,
+  Languages
 } from 'lucide-react';
 
 export default function App() {
@@ -134,6 +126,22 @@ export default function App() {
     }
   }, [theme]);
 
+  // Header language menu (opens below the language icon button)
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
+  const langMenuRef = useRef<HTMLDivElement>(null);
+  const langButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!isLangMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setIsLangMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isLangMenuOpen]);
+
   const handleSetLang = (newLang: Language) => {
     setLang(newLang);
     try {
@@ -148,7 +156,6 @@ export default function App() {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  const [activeSection, setActiveSection] = useState('home');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const FALLBACK_EMPTY_USER: SystemUser = {
@@ -178,6 +185,31 @@ export default function App() {
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [currentUser, setCurrentUser] = useState<SystemUser>(FALLBACK_EMPTY_USER);
   const [leads, setLeads] = useState<Lead[]>([]);
+
+  // Keep the signed-in user in sync when an admin edits their own account
+  // from User Management (role, permissions, name, phone, department).
+  useEffect(() => {
+    const me = users.find(u => u.id === currentUser.id);
+    if (!me) return;
+    const changed =
+      me.role !== currentUser.role ||
+      me.roleTitleLo !== currentUser.roleTitleLo ||
+      me.name !== currentUser.name ||
+      me.phone !== currentUser.phone ||
+      me.department !== currentUser.department ||
+      JSON.stringify(me.permissions) !== JSON.stringify(currentUser.permissions);
+    if (!changed) return;
+    setCurrentUser(prev => ({
+      ...prev,
+      role: me.role,
+      roleTitleLo: me.roleTitleLo,
+      permissions: me.permissions,
+      name: me.name,
+      phone: me.phone,
+      department: me.department,
+      avatarInitials: me.avatarInitials || prev.avatarInitials,
+    }));
+  }, [users, currentUser]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [services, setServices] = useState<ServiceAppointment[]>([]);
   const [testDrives, setTestDrives] = useState<TestDriveBooking[]>([]);
@@ -242,7 +274,8 @@ export default function App() {
         }
       }
     }
-    setBackendError(data.warnings.length ? data.warnings.join(' ') : null);
+    // Offline demo warnings are informational, not database errors
+    setBackendError(isSupabaseConfigured && data.warnings.length ? data.warnings.join(' ') : null);
   }, []);
 
   useEffect(() => {
@@ -387,11 +420,13 @@ export default function App() {
 
   // Modal States
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
+  const [leadToEdit, setLeadToEdit] = useState<Lead | null>(null);
+  const followUpDueCount = useMemo(() => getDueFollowUps(leads).length, [leads]);
   const [isServiceOpen, setIsServiceOpen] = useState(false);
   const [isTestDriveOpen, setIsTestDriveOpen] = useState(false);
   const [testDriveInitialModel, setTestDriveInitialModel] = useState('AVATR 12');
   
-  const [selectedVehicleForModal, setSelectedVehicleForModal] = useState<VehicleModel | null>(null);
+  const [selectedVehicleForModal] = useState<VehicleModel | null>(null);
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
 
   const [quoteVehicle, setQuoteVehicle] = useState<VehicleModel | null>(null);
@@ -525,7 +560,19 @@ export default function App() {
       setLeads(prev => [newLead, ...prev]);
       triggerToast(`ເພີ່ມຂໍ້ມູນລູກຄ້າ ${newLead.customerName} ສຳເລັດ`);
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Customer could not be saved.');
+      triggerToast(error instanceof Error ? error.message : 'Customer could not be saved.', 'error');
+      throw error; // keep the form open with the entered data
+    }
+  };
+
+  const handleUpdateLead = async (updatedLead: Lead) => {
+    try {
+      await saveLead(updatedLead, currentUser.id);
+      setLeads(prev => prev.map(l => (l.id === updatedLead.id ? updatedLead : l)));
+      triggerToast(`ແກ້ໄຂຂໍ້ມູນລູກຄ້າ ${updatedLead.customerName} ສຳເລັດ`);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Customer could not be updated.', 'error');
+      throw error;
     }
   };
 
@@ -536,7 +583,7 @@ export default function App() {
       setServices(prev => [newService, ...prev]);
       triggerToast(`ນັດບໍລິການ ${newService.model} ບັນທຶກແລ້ວ`);
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Appointment could not be saved.');
+      triggerToast(error instanceof Error ? error.message : 'Appointment could not be saved.', 'error');
     }
   };
 
@@ -575,28 +622,11 @@ export default function App() {
     setIsQuoteOpen(true);
   };
 
-  const handleSelectVehicle = (vehicle: VehicleModel) => {
-    setSelectedVehicleForModal(vehicle);
-    setIsVehicleModalOpen(true);
-  };
 
-  const handleSubmitWebInquiry = async (name: string, phone: string, model: string, message: string) => {
-    await handleAddLead({
-      customerName: name,
-      phone: phone,
-      category: 'online',
-      interestedModel: model as any,
-      status: 'new',
-      priority: 'high',
-      source: 'web',
-      notes: message || 'ສອບຖາມຜ່ານແບບຟອມໜ້າເວັບໄຊທ໌',
-      assignedTo: currentUser?.name || 'Admin',
-    });
-  };
 
   if (isAuthLoading) {
     return (
-      <div className="min-h-[100dvh] w-full bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden select-none">
+      <div className="min-h-dvh w-full bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden select-none">
         <div className="absolute w-96 h-96 rounded-full bg-blue-600/10 blur-[120px] pointer-events-none" />
         
         <div className="relative z-10 flex flex-col items-center gap-5 text-center">
@@ -614,7 +644,7 @@ export default function App() {
           </div>
 
           <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden mt-2">
-            <div className="w-1/2 h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full animate-pulse" />
+            <div className="w-1/2 h-full bg-linear-to-r from-blue-500 to-emerald-400 rounded-full animate-pulse" />
           </div>
         </div>
       </div>
@@ -632,7 +662,6 @@ export default function App() {
           setBackendError(null);
           void refreshBackendData();
         }}
-        onRegisterUser={(newUser) => setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)])}
         lang={lang}
         setLang={handleSetLang}
         theme={theme}
@@ -642,7 +671,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell min-h-[100dvh] bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
+    <div className="app-shell min-h-dvh bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
       {/* Modern High-Agency Luxury Toast Container */}
       <ToastContainer />
 
@@ -651,8 +680,8 @@ export default function App() {
         currentMenu={currentMenu}
         setCurrentMenu={setCurrentMenu}
         lang={lang}
-        setLang={handleSetLang}
         leadCount={leads.length}
+        followUpDueCount={followUpDueCount}
         stockCount={inventory.length}
         lowStockCount={lowStockCount}
         outOfStockCount={outOfStockCount}
@@ -663,25 +692,23 @@ export default function App() {
         isMobileOpen={isMobileSidebarOpen}
         setIsMobileOpen={setIsMobileSidebarOpen}
         onLogout={handleLogout}
-        theme={theme}
-        onToggleTheme={toggleTheme}
       />
 
       {/* MAIN CONTENT CANVAS */}
-      <div className="lg:pl-72 flex-1 flex flex-col min-w-0 min-h-[100dvh]">
+      <div className="lg:pl-20 flex-1 flex flex-col min-w-0 min-h-dvh">
         {/* Top Header Strip inside Main Area */}
         <header className="app-header sticky top-0 z-30 bg-white/90 dark:bg-black/90 backdrop-blur-md border-b border-slate-200/90 dark:border-zinc-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="lg:hidden p-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-colors flex-shrink-0"
+              className="lg:hidden p-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-colors shrink-0"
             >
               <Menu className="w-5 h-5" />
             </button>
 
             {/* Current Active Section Heading */}
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="p-2 rounded-xl bg-blue-50 dark:bg-zinc-900 border border-blue-200 dark:border-zinc-800 text-blue-600 dark:text-white flex-shrink-0 shadow-2xs">
+              <span className="p-2 rounded-xl bg-blue-50 dark:bg-zinc-900 border border-blue-200 dark:border-zinc-800 text-blue-600 dark:text-white shrink-0 shadow-2xs">
                 {currentMenu === 'dashboard' && <LayoutDashboard className="w-4 h-4" />}
                 {currentMenu === 'sales_leaderboard' && <Trophy className="w-4 h-4 text-amber-500" />}
                 {currentMenu === 'pos_sales' && <ShoppingBag className="w-4 h-4 text-blue-600 dark:text-emerald-400" />}
@@ -714,36 +741,88 @@ export default function App() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             {/* Database Connection Status Indicator */}
             <div 
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 font-mono text-[11px]"
               title={backendError || (isSupabaseConfigured ? 'Supabase configured' : 'ໂໝດ Localhost Offline (ຕັດການເຊື່ອມຕໍ່ຖານຂໍ້ມູນແລ້ວ)')}
             >
-              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured && !backendError ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+              <span className={`w-2 h-2 rounded-full ${backendError ? 'bg-rose-500' : isSupabaseConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
               <span className="text-slate-600 dark:text-zinc-300 font-medium">
                 {backendError ? 'DB Error' : isSupabaseConfigured ? 'Supabase Cloud' : 'Localhost (Offline)'}
               </span>
             </div>
 
-            {/* Theme Toggle Button (Light / Night Mode) */}
+            {/* Theme Toggle (icon button, same style as the sidebar menu icons) */}
             <button
+              type="button"
               onClick={toggleTheme}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs bg-slate-50 hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+              aria-label={theme === 'dark' ? t.lightMode : t.darkMode}
               title={theme === 'dark' ? t.lightMode : t.darkMode}
+              className="header-icon-btn flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-800 transition-colors hover:bg-slate-200 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
             >
-              {theme === 'dark' ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-zinc-200" />
-                  <span className="text-[11px] font-medium hidden sm:inline">{t.lightMode}</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-slate-700" />
-                  <span className="text-[11px] font-medium hidden sm:inline">{t.darkMode}</span>
-                </>
-              )}
+              {theme === 'dark'
+                ? <Sun aria-hidden="true" className="h-5 w-5" />
+                : <Moon aria-hidden="true" className="h-5 w-5" />}
             </button>
+
+            {/* Language Switcher (icon button + dropdown) */}
+            <div
+              ref={langMenuRef}
+              className="relative"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setIsLangMenuOpen(false);
+                  langButtonRef.current?.focus();
+                }
+              }}
+            >
+              <button
+                ref={langButtonRef}
+                type="button"
+                onClick={() => setIsLangMenuOpen((isOpen) => !isOpen)}
+                aria-label={lang === 'lo' ? 'ເລືອກພາສາ' : lang === 'th' ? 'เลือกภาษา' : 'Choose language'}
+                aria-expanded={isLangMenuOpen}
+                aria-controls="header-language-options"
+                title={lang === 'lo' ? 'ເລືອກພາສາ' : lang === 'th' ? 'เลือกภาษา' : 'Choose language'}
+                className="header-icon-btn flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-800 transition-colors hover:bg-slate-200 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+              >
+                <Languages aria-hidden="true" className="h-5 w-5" />
+              </button>
+              {isLangMenuOpen && (
+                <div
+                  id="header-language-options"
+                  role="group"
+                  aria-label={lang === 'lo' ? 'ເລືອກພາສາ' : lang === 'th' ? 'เลือกภาษา' : 'Choose language'}
+                  className="absolute right-0 top-full z-[60] mt-2 flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  {([
+                    { code: 'lo', short: 'LO', label: 'ລາວ' },
+                    { code: 'en', short: 'EN', label: 'English' },
+                    { code: 'th', short: 'TH', label: 'ไทย' },
+                  ] as const).map(({ code, short, label }) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => {
+                        handleSetLang(code);
+                        setIsLangMenuOpen(false);
+                      }}
+                      aria-label={label}
+                      aria-pressed={lang === code}
+                      title={label}
+                      className={`flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                        lang === code
+                          ? 'bg-blue-100 text-blue-800 dark:bg-zinc-700 dark:text-white'
+                          : 'text-slate-700 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      {short}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <span className="px-3 py-1.5 rounded-xl text-xs font-bold border border-blue-200 dark:border-zinc-700 bg-blue-50 dark:bg-zinc-900 text-blue-700 dark:text-zinc-200">{currentUser.roleTitleLo}</span>
           </div>
@@ -801,6 +880,7 @@ export default function App() {
             <CustomerView
               leads={leads}
               setLeads={setLeads}
+              onEditLead={(lead) => setLeadToEdit(lead)}
               vehicles={vehicles}
               currentUser={currentUser}
               lang={lang}
@@ -937,6 +1017,8 @@ export default function App() {
               onClose={() => setCurrentMenu('dashboard')}
               users={users}
               setUsers={setUsers}
+              leads={leads}
+              setLeads={setLeads}
             />
           )}
           </Suspense>
@@ -947,11 +1029,16 @@ export default function App() {
 
       {/* Lazy-loaded Modals with Suspense */}
       <Suspense fallback={null}>
-        {isNewLeadOpen && (
+        {(isNewLeadOpen || leadToEdit) && (
           <NewLeadModal
-            isOpen={isNewLeadOpen}
-            onClose={() => setIsNewLeadOpen(false)}
+            key={leadToEdit ? `edit-${leadToEdit.id}` : 'new'}
+            isOpen={isNewLeadOpen || Boolean(leadToEdit)}
+            onClose={() => { setIsNewLeadOpen(false); setLeadToEdit(null); }}
             onAddLead={handleAddLead}
+            initialLead={leadToEdit}
+            onUpdateLead={handleUpdateLead}
+            existingLeads={leads}
+            staffOptions={users.filter(u => u.status !== 'suspended' && (u.role === 'sales' || u.role === 'admin' || u.role === 'super_admin')).map(u => u.name)}
             vehicles={vehicles}
             inventory={inventory}
             currentUser={currentUser}

@@ -1,27 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Trophy,
-  Medal,
   TrendingUp,
   Car,
-  Calendar,
-  Users,
   ChevronRight,
-  ArrowUpRight,
   DollarSign,
-  ShieldCheck,
   Search,
   Sparkles,
   FileText,
-  CreditCard,
-  CheckCircle2,
   X,
   Award,
-  Filter,
   Download
 } from 'lucide-react';
 import { InvoiceBillRecord, Lead, VehicleModel, SystemUser, Language, ActiveMenu } from '../../types';
-import { translations } from '../../data/translations';
 import {
   computeLeaderboard,
   assignRanks,
@@ -46,14 +37,11 @@ export type { LeaderboardPeriod, RepPerformanceRecord };
 export default function SalesLeaderboardView({
   bills,
   leads,
-  vehicles,
-  currentUser,
   lang,
   initialPeriod,
   onPeriodChange,
   onNavigateMenu,
 }: SalesLeaderboardViewProps) {
-  const t = translations[lang];
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod || 'month');
 
   useEffect(() => {
@@ -78,7 +66,6 @@ export default function SalesLeaderboardView({
   // Overall summary metrics
   const totalPeriodUnits = useMemo(() => leaderboardStats.reduce((sum, r) => sum + r.totalUnits, 0), [leaderboardStats]);
   const totalPeriodRevenueUSD = useMemo(() => leaderboardStats.reduce((sum, r) => sum + r.totalRevenueUSD, 0), [leaderboardStats]);
-  const totalPeriodRevenueLAK = useMemo(() => leaderboardStats.reduce((sum, r) => sum + r.totalRevenueLAK, 0), [leaderboardStats]);
 
   // Search filter
   const filteredLeaderboard = useMemo(() => {

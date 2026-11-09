@@ -1,20 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Trophy,
-  Medal,
-  TrendingUp,
-  Car,
-  Calendar,
-  Users,
-  ChevronRight,
   ArrowUpRight,
-  DollarSign,
-  ShieldCheck,
-  Search,
   Sparkles
 } from 'lucide-react';
-import { computeLeaderboard, assignRanks, getPeriodLabel, type LeaderboardPeriod } from '../../utils/salesLeaderboard';
-import { InvoiceBillRecord, Lead, VehicleModel, SystemUser, Language, ActiveMenu } from '../../types';
+import { computeLeaderboard, assignRanks, type LeaderboardPeriod } from '../../utils/salesLeaderboard';
+import { InvoiceBillRecord, Lead, VehicleModel, Language } from '../../types';
 
 export interface TopSalesWidgetProps {
   bills: InvoiceBillRecord[];
@@ -32,7 +23,6 @@ export type { LeaderboardPeriod };
 export default function TopSalesWidget({
   bills,
   leads,
-  lang,
   activeTimeframe,
   onTimeframeChange,
   onNavigateLeaderboard,
@@ -59,12 +49,6 @@ export default function TopSalesWidget({
   const top3 = leaderboardData[2];
   const restReps = leaderboardData.slice(3, 5);
 
-  const periodLabels = {
-    day: getPeriodLabel('day', lang),
-    week: getPeriodLabel('week', lang),
-    month: getPeriodLabel('month', lang),
-    year: getPeriodLabel('year', lang),
-  };
 
   return (
     <div className="dashboard-panel bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-6 shadow-sm">

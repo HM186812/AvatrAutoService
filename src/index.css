@@ -202,7 +202,7 @@ html.light .theme-adaptive-dark-surface p {
   color: #475569 !important;
 }
 
-html.light .theme-adaptive-dark-surface span.font-mono {
+html.light .theme-adaptive-dark-surface span.font-mono:not(.always-white-text) {
   color: #334155 !important;
 }
 
@@ -688,19 +688,19 @@ html.light button[type="submit"].bg-white:not(.pos-confirm-sale-button):hover {
 }
 
 html.light .pos-confirm-sale-button {
-  background-color: #ffffff !important;
-  border: 1px solid #cbd5e1 !important;
-  color: #09090b !important;
+  background-color: #09090b !important;
+  border: 1px solid #09090b !important;
+  color: #ffffff !important;
   box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.08) !important;
 }
 
 html.light .pos-confirm-sale-button:hover {
-  background-color: #f1f5f9 !important;
-  border-color: #94a3b8 !important;
+  background-color: #27272a !important;
+  border-color: #27272a !important;
 }
 
 html.light .pos-confirm-sale-button svg {
-  color: #09090b !important;
+  color: #ffffff !important;
   stroke: currentColor !important;
   fill: currentColor !important;
 }
@@ -708,7 +708,7 @@ html.light .pos-confirm-sale-button svg {
 html.light .pos-confirm-sale-button span {
   background-color: transparent !important;
   border: none !important;
-  color: #09090b !important;
+  color: #ffffff !important;
 }
 
 /* Universal Non-Inverting Hover for all light elements */
@@ -2553,14 +2553,6 @@ html.dark .dashboard-view {
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.055);
 }
 
-.dashboard-view > .dashboard-hero::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: linear-gradient(180deg, #3b82f6, #14b8a6);
-  content: "";
-}
-
 .dashboard-view > .dashboard-hero h1 {
   font-size: clamp(1.4rem, 2.4vw, 1.9rem);
 }
@@ -2832,17 +2824,17 @@ html.dark .dashboard-view {
   }
 
   html.light .app-shell button.pos-confirm-sale-button {
-    background-color: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    color: #09090b !important;
+    background-color: #09090b !important;
+    border: 1px solid #09090b !important;
+    color: #ffffff !important;
   }
 
   html.light .app-shell button.pos-confirm-sale-button:hover {
-    background-color: #f8fafc !important;
+    background-color: #27272a !important;
   }
 
   html.light .app-shell button.pos-confirm-sale-button svg {
-    color: #09090b !important;
+    color: #ffffff !important;
     stroke: currentColor !important;
   }
 
@@ -3012,4 +3004,56 @@ html.light .dashboard-panel {
   border-color: #e2e8f0 !important;
   color: #09090b !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 10px 25px -5px rgba(15, 23, 42, 0.03) !important;
+}
+
+/* Keep focused/invalid form fields clear of the sticky top header */
+input,
+select,
+textarea {
+  scroll-margin-top: 96px;
+}
+
+/* Stock-In: icon box inside the selected (inverted) model card */
+.model-icon-selected {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+html.dark .model-icon-selected {
+  background-color: #f4f4f5 !important;
+}
+
+/* Login: keep the primary Sign In button dark in Light Mode
+   (overrides the global light-mode .bg-zinc-950 -> white surface rule) */
+html.light button.login-submit-light {
+  background-color: #09090b !important;
+  border-color: #09090b !important;
+  color: #ffffff !important;
+}
+
+html.light button.login-submit-light:hover {
+  background-color: #27272a !important;
+}
+
+@layer base {
+  /* Keep app visuals flat while preserving focus outlines and interaction states. */
+  #root .app-shell *,
+  #root .app-shell *::before,
+  #root .app-shell *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  #root .app-shell [class*="blur-"][class*="pointer-events-none"] {
+    display: none !important;
+  }
+
+  #root .app-shell .absolute.inset-0[class*="bg-linear-"],
+  #root .app-shell .absolute.inset-0[class*="bg-gradient-"],
+  #root .app-shell .absolute.inset-0[class*="bg-black/"] {
+    background-color: transparent !important;
+    background-image: none !important;
+  }
 }

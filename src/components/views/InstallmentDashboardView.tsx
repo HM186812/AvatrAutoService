@@ -9,7 +9,6 @@ import {
   InstallmentPaymentRecord,
   IssuedDocumentRecord
 } from '../../types';
-import { translations } from '../../data/translations';
 import { showToast } from '../common';
 import {
   getIssuedDocumentLogs,
@@ -17,7 +16,6 @@ import {
   DOCUMENT_LOG_EVENT,
 } from '../../utils/documentLogger';
 import {
-  Users,
   CheckCircle2,
   Clock,
   Search,
@@ -25,20 +23,12 @@ import {
   FileText,
   CreditCard,
   Coins,
-  BadgePercent,
   AlertTriangle,
-  Building2,
   Car,
   LayoutGrid,
   List,
   Plus,
-  ArrowUpRight,
-  ShieldCheck,
-  Check,
-  Sparkles,
-  Phone,
   MapPin,
-  FileCheck,
   Lock
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
@@ -78,7 +68,6 @@ export default function InstallmentDashboardView({
   onNavigateMenu,
   onNavigateTab,
 }: InstallmentDashboardViewProps) {
-  const t = translations[lang] || translations.lo;
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'due' | 'completed'>('all');
   const [modelFilter, setModelFilter] = useState<string>('all');
@@ -114,9 +103,6 @@ export default function InstallmentDashboardView({
     }).length;
   };
 
-  const triggerToast = (msg: string) => {
-    showToast(msg, 'success');
-  };
 
   // 1. Filter installment customers (leads with installment type, down payment, leasing, or from bills)
   const installmentLeads = useMemo(() => {
@@ -210,7 +196,7 @@ export default function InstallmentDashboardView({
 
   // 3. Filtered Customers
   const filteredCustomers = useMemo(() => {
-    return leadsWithSummaries.filter(({ lead, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
+    return leadsWithSummaries.filter(({ lead, summary, isDueSoon, isOverdue, contractNo }) => {
       // Model Filter
       if (modelFilter !== 'all' && lead.interestedModel !== modelFilter) return false;
 
@@ -836,7 +822,7 @@ export default function InstallmentDashboardView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/80 font-mono">
-                {filteredCustomers.map(({ lead, basePrice, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
+                {filteredCustomers.map(({ lead, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
                   return (
                     <tr key={lead.id} className="hover:bg-zinc-900/50 transition-colors">
                       {/* Customer */}

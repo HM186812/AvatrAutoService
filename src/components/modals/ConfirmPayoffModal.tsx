@@ -1,12 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   X, 
   CheckCircle2, 
-  Car, 
-  CreditCard, 
-  Coins, 
-  Calendar, 
-  FileCheck, 
   Loader2,
   ArrowRight,
   ShieldCheck

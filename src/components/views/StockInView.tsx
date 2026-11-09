@@ -9,9 +9,8 @@ import {
   deleteVehicleModelFromSupabase,
   saveInventoryItemToSupabase
 } from '../../supabase';
-import AvatrLogo from '../layout/AvatrLogo';
 import { ConfirmDeleteModal, EditVehicleModelModal } from '../modals';
-import { showToast } from '../common';
+import { showToast, ToastType } from '../common';
 import {
   PackagePlus,
   Truck,
@@ -22,17 +21,11 @@ import {
   FileText,
   DollarSign,
   Calendar,
-  User,
-  Printer,
-  ArrowRight,
   Sparkles,
   X,
-  Upload,
-  Image as ImageIcon,
   Clock,
   Gift,
   BadgePercent,
-  Flame,
   Plus,
   Lock,
   Trash2,
@@ -61,7 +54,6 @@ export default function StockInView({
   setInventory,
   bills,
   setBills,
-  stockLogs,
   setStockLogs,
   vehicles,
   setVehicles,
@@ -85,7 +77,6 @@ export default function StockInView({
   const [quantity] = useState<number>(1);
   const [priceValue, setPriceValue] = useState<number | ''>('');
   const [status, setStatus] = useState<StockStatus>('ready');
-  const [customImage, setCustomImage] = useState<string>('');
   const [eventCampaign, setEventCampaign] = useState<string>('');
   // Schedule and Campaign fields for Event & Promotion
   const [eventStartDate, setEventStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
@@ -106,18 +97,6 @@ export default function StockInView({
     setEventEndDate(end.toISOString().slice(0, 10));
   };
 
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setCustomImage(event.target?.result as string);
-        triggerToast('ອັບໂຫຼດຮູບລົດຈາກອຸປະກອນສຳເລັດ!');
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   // Customs & Logistics - Auto-generate B01 Document Number
   const generateAutoB01 = () => {
     const year = new Date().getFullYear();
@@ -134,7 +113,6 @@ export default function StockInView({
   // PDI Inspection - Empty by default
   const [pdiStatus, setPdiStatus] = useState<PDIStatus>('passed');
   const [pdiInspector, setPdiInspector] = useState('');
-  const [pdiNotes, setPdiNotes] = useState('');
 
   const [recordedBy, setRecordedBy] = useState(() => currentUser?.name || currentUser?.email || 'Admin');
   const [notes, setNotes] = useState('');
@@ -149,8 +127,8 @@ export default function StockInView({
   // Created Bill for instant preview modal
   const [createdBill, setCreatedBill] = useState<InvoiceBillRecord | null>(null);
 
-  const triggerToast = (msg: string) => {
-    showToast(msg, 'success');
+  const triggerToast = (msg: string, type: ToastType = 'success') => {
+    showToast(msg, type);
   };
 
   // Model selection without forcing auto-filled text onto blank form
@@ -159,15 +137,6 @@ export default function StockInView({
   };
 
   // Generate a random standard VIN
-  const generateRandomVin = () => {
-    const chars = '0123456789ABCDEFGHJKLMNPRSTUVWXYZ';
-    let randomSuffix = '';
-    for (let i = 0; i < 6; i++) {
-      randomSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    const prefix = model.includes('12') ? 'LVV9C12E' : model.includes('11') ? 'LVV9C11E' : model.includes('07') ? 'LVV9C07E' : 'LVV9C88E';
-    setVin(`${prefix}7RA${randomSuffix}`);
-  };
 
   // Admin: Add New Vehicle Model State & Handlers
   const [isAddModelOpen, setIsAddModelOpen] = useState(false);
@@ -176,39 +145,19 @@ export default function StockInView({
   const [newModelPriceUSD, setNewModelPriceUSD] = useState<number>(45000);
   const [newModelBattery, setNewModelBattery] = useState('94.5 kWh CATL (700 km)');
   const [newModelPowertrain, setNewModelPowertrain] = useState('Dual-Motor AWD (578 hp)');
-  const [newModelImage, setNewModelImage] = useState('');
-
-  const handleNewModelImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      triggerToast('ຂະໜາດຮູບພາບບໍ່ຄວນເກີນ 5MB!');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        setNewModelImage(result);
-        triggerToast('ອັບໂຫຼດຮູບລຸ້ນລົດສຳເລັດແລ້ວ!');
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleAddNewVehicleModel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນໄດ້!', 'error');
       return;
     }
     if (!newModelName.trim()) {
-      triggerToast('ກະລຸນາປ້ອນຊື່ລຸ້ນຍານຍົນ!');
+      triggerToast('ກະລຸນາປ້ອນຊື່ລຸ້ນຍານຍົນ!', 'error');
       return;
     }
     const cleanName = newModelName.trim();
     if (vehicles.some(v => v.name.toLowerCase() === cleanName.toLowerCase())) {
-      triggerToast('ລຸ້ນຍານຍົນນີ້ມີຢູ່ໃນລະບົບແລ້ວ!');
+      triggerToast('ລຸ້ນຍານຍົນນີ້ມີຢູ່ໃນລະບົບແລ້ວ!', 'error');
       return;
     }
 
@@ -240,7 +189,7 @@ export default function StockInView({
         'CATL Shenxing Ultra-Fast Charging Battery',
       ],
       stockCount: 0,
-      heroImage: newModelImage.trim() || 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80',
+      heroImage: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80',
       gallery: [
         'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80',
       ],
@@ -250,7 +199,7 @@ export default function StockInView({
     try {
       await saveVehicleModelToSupabase(newVehicle);
     } catch (e) {
-      triggerToast(e instanceof Error ? e.message : 'Vehicle model could not be saved.');
+      triggerToast(e instanceof Error ? e.message : 'Vehicle model could not be saved.', 'error');
       return;
     }
     if (setVehicles) {
@@ -263,7 +212,6 @@ export default function StockInView({
     setIsAddModelOpen(false);
     triggerToast(`Admin ໄດ້ເພີ່ມຕົວເລືອກລຸ້ນ ${cleanName} ເຂົ້າສູ່ລະບົບສຳເລັດແລ້ວ!`);
     setNewModelName('');
-    setNewModelImage('');
   };
 
   // Delete vehicle model state for modern confirmation modal
@@ -277,7 +225,7 @@ export default function StockInView({
   const handleRequestEditModel = (e: React.MouseEvent, v: VehicleModel) => {
     e.stopPropagation();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດແກ້ໄຂໝວດ/ລຸ້ນຍານຍົນໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດແກ້ໄຂໝວດ/ລຸ້ນຍານຍົນໄດ້!', 'error');
       return;
     }
     setModelToEdit(v);
@@ -320,11 +268,11 @@ export default function StockInView({
   const handleRequestDeleteModel = (e: React.MouseEvent, v: VehicleModel) => {
     e.stopPropagation();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດລົບລຸ້ນຍານຍົນໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດລົບລຸ້ນຍານຍົນໄດ້!', 'error');
       return;
     }
     if (vehicles.length <= 1) {
-      triggerToast('ບໍ່ສາມາດລົບໄດ້ ເພາະຕ້ອງມີຢ່າງໜ້ອຍ 1 ລຸ້ນໃນລະບົບ!');
+      triggerToast('ບໍ່ສາມາດລົບໄດ້ ເພາະຕ້ອງມີຢ່າງໜ້ອຍ 1 ລຸ້ນໃນລະບົບ!', 'error');
       return;
     }
     setModelToDelete(v);
@@ -340,7 +288,7 @@ export default function StockInView({
     try {
       await deleteVehicleModelFromSupabase(modelId);
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Vehicle model could not be deleted.');
+      triggerToast(err instanceof Error ? err.message : 'Vehicle model could not be deleted.', 'error');
       setIsDeletingModel(false);
       return;
     }
@@ -368,12 +316,12 @@ export default function StockInView({
     if (isSubmittingStockIn) return;
 
     if (!vin.trim()) {
-      triggerToast('ກະລຸນາປ້ອນເລກຖັງ (VIN) ກ່ອນ!');
+      triggerToast('ກະລຸນາປ້ອນເລກຖັງ (VIN) ກ່ອນ!', 'error');
       return;
     }
 
     if (!supplierName.trim()) {
-      triggerToast('ກະລຸນາປ້ອນ ແຫຼ່ງທີ່ມາ / ຊື່ຜູ້ສະໜອງ (Supplier)!');
+      triggerToast('ກະລຸນາປ້ອນ ແຫຼ່ງທີ່ມາ / ຊື່ຜູ້ສະໜອງ (Supplier)!', 'error');
       return;
     }
 
@@ -385,39 +333,39 @@ export default function StockInView({
         ? 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80'
         : 'https://images.unsplash.com/photo-1541348263662-e0c8de4259ba?auto=format&fit=crop&w=800&q=80');
 
-    const finalImage = customImage || heroFallback;
+    const finalImage = heroFallback;
     const cleanVin = vin.toUpperCase().trim();
     const cleanEngine = engineNumber.toUpperCase().trim();
     const qty = 1;
 
     if (!cleanVin || !/^[A-Z0-9]{17}$/.test(cleanVin)) {
-      triggerToast('ເລກຕົວຖັງ (VIN) ຕ້ອງເປັນຕົວອັກສອນ A-Z, 0-9 ຄວາມຍາວ 17 ຫຼັກພໍດີ!');
+      triggerToast('ເລກຕົວຖັງ (VIN) ຕ້ອງເປັນຕົວອັກສອນ A-Z, 0-9 ຄວາມຍາວ 17 ຫຼັກພໍດີ!', 'error');
       return;
     }
 
     if (!cleanEngine) {
-      triggerToast('ກະລຸນາປ້ອນເລກຈັກ (Engine / Motor Number) ກ່ອນ!');
+      triggerToast('ກະລຸນາປ້ອນເລກຈັກ (Engine / Motor Number) ກ່ອນ!', 'error');
       return;
     }
 
     if (inventory.some(item => item.vin.toUpperCase().trim() === cleanVin)) {
-      triggerToast('ເລກຖັງ (VIN) ນີ້ມີໃນສາງແລ້ວ! ເລກຕົວຖັງບໍ່ສາມາດຊໍ້າກັນໄດ້ເດັດຂາດ');
+      triggerToast('ເລກຖັງ (VIN) ນີ້ມີໃນສາງແລ້ວ! ເລກຕົວຖັງບໍ່ສາມາດຊໍ້າກັນໄດ້ເດັດຂາດ', 'error');
       return;
     }
 
     if (inventory.some(item => (item.engineNumber || '').toUpperCase().trim() === cleanEngine)) {
-      triggerToast('ເລກຈັກ (Engine No.) ນີ້ມີໃນສາງແລ້ວ! ເລກຈັກບໍ່ສາມາດຊໍ້າກັນໄດ້ເດັດຂາດ');
+      triggerToast('ເລກຈັກ (Engine No.) ນີ້ມີໃນສາງແລ້ວ! ເລກຈັກບໍ່ສາມາດຊໍ້າກັນໄດ້ເດັດຂາດ', 'error');
       return;
     }
 
     // Validate Event / Promotion Timeframe
     if (status === 'event' || status === 'promotion') {
       if (!eventStartDate || !eventEndDate) {
-        triggerToast('ກະລຸນາກຳນົດວັນທີເລີ່ມຕົ້ນ ແລະ ວັນທີສິ້ນສຸດ ສຳລັບສິນຄ້າ Event / ໂປຣໂມຊັນ!');
+        triggerToast('ກະລຸນາກຳນົດວັນທີເລີ່ມຕົ້ນ ແລະ ວັນທີສິ້ນສຸດ ສຳລັບສິນຄ້າ Event / ໂປຣໂມຊັນ!', 'error');
         return;
       }
       if (eventEndDate < eventStartDate) {
-        triggerToast('ວັນທີສິ້ນສຸດ ຕ້ອງເທົ່າກັບ ຫຼື ຫຼັງຈາກວັນທີເລີ່ມຕົ້ນ!');
+        triggerToast('ວັນທີສິ້ນສຸດ ຕ້ອງເທົ່າກັບ ຫຼື ຫຼັງຈາກວັນທີເລີ່ມຕົ້ນ!', 'error');
         return;
       }
     }
@@ -502,7 +450,7 @@ export default function StockInView({
     try {
       await saveBillToSupabase(newBill, newItem);
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Stock-in could not be saved.');
+      triggerToast(error instanceof Error ? error.message : 'Stock-in could not be saved.', 'error');
       return;
     } finally {
       setIsSubmittingStockIn(false);
@@ -614,7 +562,7 @@ export default function StockInView({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold shadow-md transition-all cursor-pointer border border-zinc-300"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span> ພີ່ມຕົວເລືອກລຸ້ນຍານຍົນ (Admin)</span>
+                  <span>ເພີ່ມຕົວເລືອກລຸ້ນຍານຍົນ (Admin)</span>
                 </button>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 text-[11px] font-mono">
@@ -645,20 +593,11 @@ export default function StockInView({
                       className="w-full rounded-[inherit] p-3.5 pr-12 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
                     >
                       <div className="flex items-center gap-3">
-                        {/* Vehicle Model Logo / Image */}
-                        <div className="relative w-16 h-12 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 shrink-0 bg-slate-100 dark:bg-zinc-950 flex items-center justify-center shadow-inner">
-                          {v.heroImage ? (
-                            <img
-                              src={v.heroImage}
-                              alt={v.name}
-                              className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            <Car className="w-5 h-5 text-slate-400 dark:text-zinc-600" />
-                          )}
+                        {/* Vehicle Model Icon */}
+                        <div className={`relative w-16 h-12 rounded-xl overflow-hidden border shrink-0 flex items-center justify-center ${isSelected
+                          ? 'model-icon-selected border-white/20 dark:border-zinc-300'
+                          : 'border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-950 shadow-inner'}`}>
+                          <Car className="w-5 h-5 text-slate-400 dark:text-zinc-600" />
                         </div>
 
                         <div className="min-w-0 flex-1">
@@ -724,52 +663,6 @@ export default function StockInView({
           </div>
 
           <div className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2 lg:grid-cols-3">
-            {/* Stock Image: Choose or Upload from Device */}
-            <div className="sm:col-span-2 lg:col-span-3 p-4 bg-zinc-900/60 rounded-2xl border border-zinc-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-zinc-300 font-semibold text-xs flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-white" />
-                  <span>{t.uploadCarImage}</span>
-                </label>
-                {customImage && (
-                  <button
-                    type="button"
-                    onClick={() => setCustomImage('')}
-                    className="text-[10px] text-zinc-400 hover:text-white hover:underline flex items-center gap-1"
-                  >
-                    <X className="w-3 h-3" /> {lang === 'lo' ? 'ລ້າງຮູບທີ່ອັບໂຫຼດ' : lang === 'th' ? 'ลบรูปภาพที่อัปโหลด' : 'Clear Uploaded Image'}
-                  </button>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-800">
-                  <img
-                    src={customImage || (model === 'AVATR 12' ? 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80' : model === 'AVATR 11' ? 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80' : 'https://images.unsplash.com/photo-1541348263662-e0c8de4259ba?auto=format&fit=crop&w=800&q=80')}
-                    alt="Stock preview"
-                    className="w-full h-full object-cover"
-                  />
-                  {customImage && (
-                    <span className="absolute bottom-1 right-1 px-1 py-0.2 bg-white text-black text-[8px] font-bold rounded">
-                      Device File
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="cursor-pointer inline-flex items-center gap-2 px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl border border-zinc-700 font-semibold text-xs transition-colors shadow-sm">
-                    <Upload className="w-3.5 h-3.5 text-white" />
-                    <span>{t.uploadCarImage}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageFileUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
 
             {/* VIN - Manual Entry Only */}
             <div>
@@ -1480,108 +1373,6 @@ export default function StockInView({
                   />
                 </div>
 
-                {/* Image Upload & Live Preview Section */}
-                <div className="sm:col-span-2 space-y-3 pt-2 border-t border-zinc-800/80">
-                  <div className="flex items-center justify-between">
-                    <label className="text-zinc-300 font-bold flex items-center gap-2">
-                      <ImageIcon className="w-4 h-4 text-white" />
-                      <span>ຮູບພາບລຸ້ນຍານຍົນ & ຕົວຢ່າງສະແດງຜົນ (Vehicle Image & Preview)</span>
-                    </label>
-                    <span className="text-[11px] text-zinc-500 font-mono">
-                      ຮອງຮັບ PNG, JPG, WEBP (&lt; 5MB)
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-start">
-                    {/* Upload Controls */}
-                    <div className="space-y-2.5">
-                      {/* File Upload Button / Dropzone */}
-                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-zinc-700 hover:border-white rounded-2xl bg-zinc-900/60 hover:bg-zinc-900 transition-all cursor-pointer group text-center">
-                        <Upload className="w-6 h-6 text-zinc-400 group-hover:text-white transition-colors mb-1.5" />
-                        <span className="text-xs font-bold text-zinc-200 group-hover:text-white">
-                          ກົດເພື່ອເລືອກອັບໂຫຼດຮູບຈາກເຄື່ອງ
-                        </span>
-                        <span className="text-[10px] text-zinc-500 mt-0.5">
-                          ອັບໂຫຼດຈາກຄອມພິວເຕີ ຫຼື ໂທລະສັບ
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleNewModelImageUpload}
-                          className="hidden"
-                        />
-                      </label>
-
-                      {/* Or paste URL */}
-                      <div>
-                        <label className="block text-[11px] text-zinc-400 font-medium mb-1">
-                          ຫຼື ວາງລິ້ງຮູບພາບ (Image URL):
-                        </label>
-                        <input
-                          type="url"
-                          value={newModelImage}
-                          onChange={(e) => setNewModelImage(e.target.value)}
-                          placeholder="https://images.unsplash.com/..."
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-zinc-500"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Live Preview Card */}
-                    <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-3 space-y-2">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-bold text-zinc-400 flex items-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full ${newModelImage ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`} />
-                          ຕົວຢ່າງສະແດງຜົນ (Live Preview)
-                        </span>
-                        {newModelImage && (
-                          <button
-                            type="button"
-                            onClick={() => setNewModelImage('')}
-                            className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-red-500/10 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>ລົບຮູບ</span>
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 flex items-center justify-center group">
-                        {newModelImage ? (
-                          <>
-                            <img
-                              src={newModelImage}
-                              alt={newModelName || 'Model Preview'}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=1200&q=80';
-                              }}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
-                            <div className="absolute bottom-2 left-2.5 right-2.5 pointer-events-none">
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white border border-white/20 font-bold block w-fit mb-0.5 always-white-text">
-                                {newModelCategory || 'Custom Model'}
-                              </span>
-                              <div className="text-xs font-bold text-white truncate">
-                                {newModelName || 'ຊື່ລຸ້ນຍານຍົນ'}
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center p-4 text-center">
-                            <ImageIcon className="w-8 h-8 text-zinc-700 mb-1.5" />
-                            <span className="text-xs text-zinc-500 font-medium">
-                              ຍັງບໍ່ທັນມີຮູບ
-                            </span>
-                            <span className="text-[10px] text-zinc-600 mt-0.5">
-                              (ຖ້າບໍ່ອັບໂຫຼດ ລະບົບຈະໃຊ້ຮູບມາດຕະຖານ AVATR ໃຫ້ອັດຕະໂນມັດ)
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
 
               {/* Action Buttons */}
