@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isAdminRole } from '../../utils/roles';
 import { SystemUser, Language, Lead } from '../../types';
 import { translations } from '../../data/translations';
 import UserManagementView from './UserManagementView';
@@ -81,8 +82,8 @@ export default function ProfileView({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
-  const isSuperAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
-  const canManageUsers = isSuperAdmin || Boolean(currentUser.permissions?.canManageUsers);
+  const isSuperAdmin = isAdminRole(currentUser);
+  const canManageUsers = isSuperAdmin;
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();

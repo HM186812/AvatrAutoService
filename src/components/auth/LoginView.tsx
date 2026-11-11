@@ -19,8 +19,7 @@ import {
   Sun,
   Moon,
   Crown,
-  Briefcase,
-  Wrench
+  Briefcase
 } from 'lucide-react';
 
 interface LoginViewProps {
@@ -323,12 +322,10 @@ export default function LoginView({
                   }`}
                 >
                   <div className={`font-bold text-[11px] truncate flex items-center gap-1.5 ${isDark ? 'text-white group-hover:text-amber-400' : 'text-slate-900 group-hover:text-amber-600'}`}>
-                    {demoUser.role === 'super_admin' ? (
+                    {demoUser.role === 'admin' ? (
                       <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    ) : demoUser.role === 'sales' ? (
-                      <Briefcase className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                     ) : (
-                      <Wrench className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <Briefcase className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                     )}
                     <span className="truncate">{demoUser.roleTitleLo}</span>
                   </div>

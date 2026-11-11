@@ -146,6 +146,7 @@ export default function QuotationModal({
             <button
               type="button"
               onClick={onClose}
+              aria-label={lang === 'lo' ? 'ປິດ' : lang === 'th' ? 'ปิด' : 'Close'}
               className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />

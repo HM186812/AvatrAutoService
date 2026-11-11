@@ -17,6 +17,8 @@ import {
 } from '../data/mockData';
 import type { BackendData } from './data';
 import { isOfflineDemoEnabled } from './client';
+import { normalizeRole, ROLE_LABELS, NO_ROLE_MESSAGE } from '../utils/roles';
+import { isMonthlyInstallmentBill } from '../utils/installment';
 
 const STORAGE_KEY_PREFIX = 'avatr_offline_';
 
@@ -26,22 +28,10 @@ export const DEFAULT_OFFLINE_USERS: SystemUser[] = [
     name: 'ຜູ້ດູແລລະບົບ (Admin)',
     email: 'admin@avatr.la',
     phone: '020 55559999',
-    role: 'super_admin',
+    role: 'admin',
     roleTitleLo: 'Admin',
     department: 'Executive Board',
     avatarInitials: 'AD',
-    permissions: {
-      canManageUsers: true,
-      canDeleteUsers: true,
-      canGrantRoles: true,
-      canEditInventory: true,
-      canUploadQR: true,
-      canAddModels: true,
-      canDeductPOS: true,
-      canViewFinancials: true,
-      canUpdatePDI: true,
-      canViewVehicles: true,
-    },
     status: 'active',
     createdAt: '2026-10-01T00:00:00Z',
     lastLogin: '2026-10-17T12:00:00Z',
@@ -52,26 +42,27 @@ export const DEFAULT_OFFLINE_USERS: SystemUser[] = [
     email: 'sales@avatr.la',
     phone: '020 55112233',
     role: 'sales',
-    roleTitleLo: 'Sales Consultant',
+    roleTitleLo: 'Sales',
     department: 'Sales & Showroom',
     avatarInitials: 'SP',
-    permissions: {
-      canManageUsers: false,
-      canDeleteUsers: false,
-      canGrantRoles: false,
-      canEditInventory: false,
-      canUploadQR: false,
-      canAddModels: false,
-      canDeductPOS: true,
-      canViewFinancials: false,
-      canUpdatePDI: false,
-      canViewVehicles: true,
-    },
     status: 'active',
     createdAt: '2026-10-02T00:00:00Z',
     lastLogin: '2026-10-17T10:00:00Z',
   }
 ];
+
+/** Users saved in this browser before the two-role change: legacy roles become Admin, or a suspended Sales account. */
+function normalizeOfflineUser(raw: SystemUser): SystemUser {
+  const { permissions: _legacyPermissions, ...user } = raw as SystemUser & { permissions?: unknown };
+  const role = normalizeRole(user.role);
+  return {
+    ...user,
+    name: (user.name || '').replace(/Supers*Admin/gi, 'Admin').trim(),
+    role: role || 'sales',
+    roleTitleLo: ROLE_LABELS[role || 'sales'],
+    status: role ? user.status : 'suspended',
+  };
+}
 
 export const DEFAULT_OFFLINE_INVENTORY: InventoryItem[] = [
   {
@@ -184,11 +175,7 @@ export function getOfflineBackendData(): BackendData {
   const rawUsers = readStorage<SystemUser[]>('users', DEFAULT_OFFLINE_USERS);
   const users = rawUsers
     .filter((u) => u.id !== 'user-tech-01' && !u.name?.includes('ຊ່າງເຕັກນິກ'))
-    .map((u) => ({
-      ...u,
-      name: u.name.replace(/Super Admin/gi, 'Admin').trim(),
-      roleTitleLo: u.roleTitleLo === 'Super Admin' ? 'Admin' : u.roleTitleLo,
-    }));
+    .map(normalizeOfflineUser);
   const vehicles = readStorage<VehicleModel[]>('vehicles', AVATR_VEHICLES);
   const rawLeads = readStorage<Lead[]>('leads', INITIAL_LEADS);
   const leads = [...rawLeads];
@@ -256,57 +243,24 @@ export function getOfflineBackendData(): BackendData {
 export function offlineSignIn(emailOrId: string): SystemUser {
   const clean = emailOrId.trim().toLowerCase();
   const rawUsers = readStorage<SystemUser[]>('users', DEFAULT_OFFLINE_USERS);
-  const users = rawUsers.filter((u) => u.id !== 'user-tech-01' && !u.name?.includes('ຊ່າງເຕັກນິກ'));
+  const users = rawUsers
+    .filter((u) => u.id !== 'user-tech-01' && !u.name?.includes('ຊ່າງເຕັກນິກ'))
+    .map(normalizeOfflineUser);
   const matched = users.find(
-    (u) => u.email.toLowerCase() === clean || u.id.toLowerCase() === clean || (clean === 'admin' && u.role === 'super_admin')
+    (u) => u.email.toLowerCase() === clean || u.id.toLowerCase() === clean || (clean === 'admin' && u.role === 'admin')
   );
 
-  const rawActive = matched || DEFAULT_OFFLINE_USERS[0];
-  const activeUser = {
-    ...rawActive,
-    name: rawActive.name.replace(/Super Admin/gi, 'Admin').trim(),
-    roleTitleLo: rawActive.roleTitleLo === 'Super Admin' ? 'Admin' : rawActive.roleTitleLo,
-  };
+  const activeUser = matched || DEFAULT_OFFLINE_USERS[0];
+  if (activeUser.status === 'suspended') {
+    throw new Error(normalizeRole((rawUsers.find(u => u.id === activeUser.id) || activeUser).role) ? 'This account is suspended.' : NO_ROLE_MESSAGE);
+  }
   writeStorage('active_user', activeUser);
   return activeUser;
 }
 
-export function offlineSignUp(email: string, name: string, phone: string): SystemUser {
-  const users = readStorage<SystemUser[]>('users', DEFAULT_OFFLINE_USERS);
-  const newUser: SystemUser = {
-    id: `offline-user-${Date.now()}`,
-    name: name || 'Demo Staff',
-    email: email.toLowerCase(),
-    phone,
-    role: 'general_user',
-    roleTitleLo: 'General User',
-    department: 'General Staff',
-    avatarInitials: (name || 'DS').slice(0, 2).toUpperCase(),
-    permissions: {
-      canManageUsers: false,
-      canDeleteUsers: false,
-      canGrantRoles: false,
-      canEditInventory: false,
-      canUploadQR: false,
-      canAddModels: false,
-      canDeductPOS: false,
-      canViewFinancials: false,
-      canUpdatePDI: false,
-      canViewVehicles: true,
-    },
-    status: 'active',
-    createdAt: new Date().toISOString(),
-    lastLogin: new Date().toISOString(),
-  };
-
-  users.push(newUser);
-  writeStorage('users', users);
-  writeStorage('active_user', newUser);
-  return newUser;
-}
-
 export function offlineGetActiveUser(): SystemUser | null {
-  return readStorage<SystemUser | null>('active_user', null);
+  const user = readStorage<SystemUser | null>('active_user', null);
+  return user ? normalizeOfflineUser(user) : null;
 }
 
 export function offlineClearActiveUser(): void {
@@ -450,7 +404,7 @@ export function offlineSaveBill(bill: InvoiceBillRecord, vehicle?: InventoryItem
     };
     stockLogs.unshift(logEntry);
     writeStorage('stockLogs', stockLogs);
-  } else if ((billType === 'sale' || billType === 'installment') && bill.installmentType !== 'monthly_installment' && bill.vin) {
+  } else if ((billType === 'sale' || billType === 'installment') && !isMonthlyInstallmentBill(bill) && bill.vin) {
     const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
     const item = inventory.find((i) => i.vin === bill.vin);
     if (item) {
@@ -484,17 +438,26 @@ export function offlineSaveBill(bill: InvoiceBillRecord, vehicle?: InventoryItem
   }
 }
 
+export function offlineSaveSettingsPatch(patch: Record<string, unknown>): Record<string, unknown> {
+  const config = { ...readStorage<Record<string, unknown>>('settings', {}), ...patch };
+  writeStorage('settings', config);
+  return config;
+}
+
 export function offlineDeleteBill(id: string): void {
   const bills = readStorage<InvoiceBillRecord[]>('bills', INITIAL_BILLS);
   const target = bills.find((b) => b.id === id);
   if (target) {
     target.status = 'voided';
     writeStorage('bills', bills);
-    if (target.vin && (target.billType === 'sale' || target.type === 'sale' || target.billType === 'installment')) {
+    if (target.vin && !isMonthlyInstallmentBill(target) && (target.billType === 'sale' || target.type === 'sale' || target.billType === 'installment')) {
       const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
       const item = inventory.find((i) => i.vin === target.vin);
       if (item) {
-        item.status = 'ready';
+        // Returned car is inspected again before it can be sold
+        item.status = 'pdi';
+        item.pdiStatus = 'pending';
+        item.reservedForCustomer = undefined;
         item.stockQuantity = 1;
         writeStorage('inventory', inventory);
       }

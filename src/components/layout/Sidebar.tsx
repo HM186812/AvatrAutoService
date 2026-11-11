@@ -1,4 +1,5 @@
 import { Language, ActiveMenu, SystemUser } from '../../types';
+import { isAdminRole } from '../../utils/roles';
 import { translations } from '../../data/translations';
 import AvatrLogo from './AvatrLogo';
 import { 
@@ -7,7 +8,6 @@ import {
   Car, 
   AlertTriangle, 
   PackagePlus, 
-  ShoppingBag, 
   FileText, 
   Trophy,
   LogOut
@@ -67,7 +67,7 @@ export default function Sidebar({
   setIsMobileOpen,
   onLogout,
 }: SidebarProps) {
-  const isSuperAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+  const isSuperAdmin = isAdminRole(currentUser);
   const isAdmin = isSuperAdmin;
 
   // Grouped Menu Structure for Maximum Ergonomics & Convenience
@@ -84,17 +84,6 @@ export default function Sidebar({
           labelTh: 'Dashboard (ภาพรวม)',
           icon: LayoutDashboard,
           badge: null,
-          adminOnly: false,
-        },
-        {
-          id: 'pos_sales',
-          labelLo: 'POS ຂາຍລົດຍົນ',
-          labelEn: 'Vehicle POS Sales',
-          labelTh: 'POS ขายรถยนต์',
-          subLo: 'ອອກບິນ & ຕັດສະຕ໋ອກ',
-          icon: ShoppingBag,
-          badge: 'POS',
-          badgeColor: 'text-emerald-300 bg-emerald-950/80 border-emerald-800 font-bold',
           adminOnly: false,
         },
         {
@@ -232,7 +221,7 @@ export default function Sidebar({
               >
                 {visibleItems.map((item) => {
                   const Icon = item.icon;
-                  const isActive = currentMenu === item.id;
+                  const isActive = currentMenu === item.id || (item.id === 'customers' && currentMenu === 'pos_sales');
                   const label = lang === 'lo' ? item.labelLo : lang === 'th' ? item.labelTh : item.labelEn;
                   const badgeText = item.badge === 'ຂາຍ' ? t.badgeSale : item.badge === 'ນຳເຂົ້າ' ? t.badgeImport : item.badge;
                   const hasNumericBadge = typeof badgeText === 'number' || (typeof badgeText === 'string' && /^\d+$/.test(badgeText));

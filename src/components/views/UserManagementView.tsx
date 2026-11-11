@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { SystemUser, UserRole, UserPermissions, Language } from '../../types';
+import { SystemUser, UserRole, Language } from '../../types';
+import { isAdminRole, normalizeRole, ROLE_LABELS, ROLE_OPTIONS } from '../../utils/roles';
 import { translations } from '../../data/translations';
 import { createStaffAccount, deactivateStaffProfile, reactivateStaffProfile, deleteStaffProfile, saveStaffProfile, handoverStaffPendingLeads } from '../../backend/data';
 import type { Lead } from '../../types';
@@ -15,7 +16,6 @@ import {
   Mail, 
   X,
   UserX, 
-  Check, 
   Crown,
   UserCheck,
   Shield,
@@ -30,30 +30,6 @@ interface UserManagementViewProps {
   leads?: Lead[];
   setLeads?: React.Dispatch<React.SetStateAction<Lead[]>>;
   lang: Language;
-}
-
-const ROLE_TITLES: Record<UserRole, string> = {
-  super_admin: 'Admin',
-  admin: 'Admin',
-  sales: 'Sales',
-  technician: 'Technician',
-  general_user: 'General User',
-};
-
-function getPermissionsForRole(role: UserRole): UserPermissions {
-  const isAdmin = role === 'super_admin' || role === 'admin';
-  return {
-    canManageUsers: isAdmin,
-    canDeleteUsers: isAdmin,
-    canGrantRoles: isAdmin,
-    canEditInventory: isAdmin || role === 'technician',
-    canUploadQR: isAdmin,
-    canAddModels: isAdmin,
-    canDeductPOS: role !== 'technician',
-    canViewFinancials: isAdmin || role === 'sales',
-    canUpdatePDI: isAdmin || role === 'technician',
-    canViewVehicles: true,
-  };
 }
 
 export default function UserManagementView({
@@ -71,7 +47,6 @@ export default function UserManagementView({
   // Modal states
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
-  const [originalEditingRole, setOriginalEditingRole] = useState<UserRole | null>(null);
   const [deletingUser, setDeletingUser] = useState<SystemUser | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
@@ -156,9 +131,12 @@ export default function UserManagementView({
     setTimeout(() => setActionSuccessMsg(null), 4000);
   };
 
-  const isAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
-  const canDeleteUsers = isAdmin || Boolean(currentUser.permissions?.canDeleteUsers);
-  const canGrantRoles = isAdmin || Boolean(currentUser.permissions?.canGrantRoles);
+  // Only Admin manages accounts
+  const isAdmin = isAdminRole(currentUser);
+  const canDeleteUsers = isAdmin;
+  const canGrantRoles = isAdmin;
+  /** Old Technician / General User account that has not been given Admin or Sales yet */
+  const hasNoRole = (user: SystemUser) => user.dbRole !== undefined && !normalizeRole(user.dbRole);
 
   // Toggle user active / suspended status
   const handleToggleUserStatus = async (userToToggle: SystemUser) => {
@@ -170,6 +148,11 @@ export default function UserManagementView({
     const updated: SystemUser = { ...userToToggle, status: newStatus };
     try {
       if (newStatus === 'active') {
+        if (hasNoRole(userToToggle)) {
+          // Store the Sales role before giving access
+          const saved = await saveStaffProfile({ ...userToToggle, role: 'sales', roleTitleLo: ROLE_LABELS.sales });
+          updated.dbRole = saved.dbRole;
+        }
         await reactivateStaffProfile(updated.id);
       } else {
         await deactivateStaffProfile(updated.id);
@@ -196,11 +179,11 @@ export default function UserManagementView({
     }
 
     const remainingAdmins = users.filter(
-      u => (u.role === 'admin' || u.role === 'super_admin') && 
+      u => u.role === 'admin' && 
            u.status === 'active' && 
            u.id !== deletingUser.id
     );
-    if ((deletingUser.role === 'admin' || deletingUser.role === 'super_admin') && remainingAdmins.length === 0) {
+    if (deletingUser.role === 'admin' && remainingAdmins.length === 0) {
       showToast('ບໍ່ສາມາດລົບ Admin ຄົນສຸດທ້າຍອອກຈາກລະບົບໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນໃນລະບົບ.', 'warning');
       setDeletingUser(null);
       return;
@@ -227,16 +210,12 @@ export default function UserManagementView({
     }
   };
 
-  // 2. GRANT ROLE & PERMISSIONS HANDLER
-  const handleSaveRoleAndPermissions = async (e: React.FormEvent) => {
+  // 2. SAVE ACCOUNT & ROLE HANDLER (permissions follow the role)
+  const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser || isSavingUser) return;
 
-    // Never demote an existing super_admin to plain admin when saving as Admin
-    const finalRole: UserRole =
-      originalEditingRole === 'super_admin' && (editingUser.role === 'admin' || editingUser.role === 'super_admin')
-        ? 'super_admin'
-        : editingUser.role;
+    const finalRole: UserRole = editingUser.role;
 
     const cleanName = (editingUser.name || '').trim();
     if (!cleanName) {
@@ -246,11 +225,11 @@ export default function UserManagementView({
 
     // Guard: never leave the system without an active admin
     const target = users.find(u => u.id === editingUser.id);
-    const wasActiveAdmin = Boolean(target && (target.role === 'admin' || target.role === 'super_admin') && target.status !== 'suspended');
-    const willBeAdmin = finalRole === 'admin' || finalRole === 'super_admin';
+    const wasActiveAdmin = Boolean(target && target.role === 'admin' && target.status !== 'suspended');
+    const willBeAdmin = finalRole === 'admin';
     if (wasActiveAdmin && !willBeAdmin) {
       const otherActiveAdmins = users.filter(
-        u => u.id !== editingUser.id && (u.role === 'admin' || u.role === 'super_admin') && u.status !== 'suspended'
+        u => u.id !== editingUser.id && u.role === 'admin' && u.status !== 'suspended'
       );
       if (otherActiveAdmins.length === 0) {
         showToast('ບໍ່ສາມາດປ່ຽນບົດບາດຂອງ Admin ຄົນສຸດທ້າຍໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນໃນລະບົບ.', 'warning');
@@ -276,8 +255,7 @@ export default function UserManagementView({
       department: (editingUser.department || '').trim(),
       avatarInitials: initials,
       role: finalRole,
-      roleTitleLo: ROLE_TITLES[finalRole] || 'General User',
-      permissions: getPermissionsForRole(finalRole),
+      roleTitleLo: ROLE_LABELS[finalRole],
     };
 
     setIsSavingUser(true);
@@ -286,7 +264,6 @@ export default function UserManagementView({
       setUsers(prev => prev.map(u => (u.id === updatedUser.id ? saved : u)));
       triggerFeedback(`${t.success}: ${updatedUser.name}`);
       setEditingUser(null);
-      setOriginalEditingRole(null);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not update this account.', 'error');
     } finally {
@@ -309,7 +286,7 @@ export default function UserManagementView({
         email: newEmail.trim().toLowerCase(),
         phone: newPhone.trim(),
         department: newDepartment.trim(),
-        role: newRole === 'super_admin' ? 'admin' : newRole,
+        role: newRole,
         password: newPassword.trim(),
       });
       setUsers(prev => [newUser, ...prev]);
@@ -328,15 +305,24 @@ export default function UserManagementView({
 
   // Distinct Avatar Color Gradients per Role
   const getUserAvatarStyle = (role: UserRole) => {
-    if (role === 'super_admin' || role === 'admin') {
+    if (role === 'admin') {
       return 'bg-gradient-to-tr from-slate-700 to-slate-500 text-white font-black shadow-sm border border-slate-500';
     }
     return 'bg-gradient-to-tr from-slate-600 to-slate-500 text-white font-bold shadow-sm border border-slate-500';
   };
 
   // Use restrained role colors so status remains the clearest account signal.
-  const getRoleBadge = (role: UserRole) => {
-    if (role === 'super_admin' || role === 'admin') {
+  const getRoleBadge = (user: SystemUser) => {
+    const role = user.role;
+    if (hasNoRole(user)) {
+      return (
+        <span className="user-management-role-badge user-management-role-user px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 w-fit" title="ບັນຊີເກົ່າ: ເປີດໃຊ້ງານເພື່ອມອບບົດບາດ Sales ຫຼື ແກ້ໄຂເພື່ອເລືອກບົດບາດ">
+          <AlertTriangle className="w-3.5 h-3.5" />
+          <span>ຍັງບໍ່ມີບົດບາດ</span>
+        </span>
+      );
+    }
+    if (role === 'admin') {
       return (
         <span className="user-management-role-badge user-management-role-admin px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 w-fit">
           <Shield className="w-3.5 h-3.5" />
@@ -347,7 +333,7 @@ export default function UserManagementView({
     return (
       <span className="user-management-role-badge user-management-role-user px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 w-fit">
         <UserCheck className="w-3.5 h-3.5" />
-        <span>{ROLE_TITLES[role] || 'User'}</span>
+        <span>{ROLE_LABELS[role]}</span>
       </span>
     );
   };
@@ -374,11 +360,7 @@ export default function UserManagementView({
   // Filtered users (excluding removed technician demo account)
   const activeUsers = users.filter(u => u.id !== 'user-tech-01' && !u.name?.includes('ຊ່າງເຕັກນິກ'));
   const filteredUsers = activeUsers.filter(user => {
-    if (selectedRoleFilter === 'admin') {
-      if (user.role !== 'admin' && user.role !== 'super_admin') return false;
-    } else if (selectedRoleFilter !== 'all') {
-      if (user.role !== selectedRoleFilter) return false;
-    }
+    if (selectedRoleFilter !== 'all' && user.role !== selectedRoleFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
@@ -392,7 +374,7 @@ export default function UserManagementView({
   });
 
   // RESTRICTED VIEW: If current logged in user is not an Admin
-  if (!isAdmin && !currentUser.permissions?.canManageUsers) {
+  if (!isAdmin) {
     return (
       <div className="user-management-view space-y-6 pb-12">
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8 text-center max-w-2xl mx-auto space-y-4 my-8 shadow-2xl">
@@ -467,7 +449,7 @@ export default function UserManagementView({
             <span className="user-management-stat-icon user-management-stat-icon-amber"><Shield className="h-4 w-4" /></span>
             <div>
               <p className="text-xs text-slate-500 dark:text-zinc-400">ຜູ້ດູແລລະບົບ (Admin)</p>
-              <p className="mt-0.5 text-xl font-bold font-mono text-slate-900 dark:text-white">{activeUsers.filter(user => user.role === 'admin' || user.role === 'super_admin').length}</p>
+              <p className="mt-0.5 text-xl font-bold font-mono text-slate-900 dark:text-white">{activeUsers.filter(user => user.role === 'admin').length}</p>
             </div>
           </div>
         </div>
@@ -499,8 +481,6 @@ export default function UserManagementView({
               <option value="all" className="bg-zinc-900 text-white">ທັງໝົດ ({activeUsers.length})</option>
               <option value="admin" className="bg-zinc-900 text-white">Admin</option>
               <option value="sales" className="bg-zinc-900 text-white">Sales</option>
-              <option value="technician" className="bg-zinc-900 text-white">Technician</option>
-              <option value="general_user" className="bg-zinc-900 text-white">General User</option>
             </select>
           </div>
         </div>
@@ -528,13 +508,12 @@ export default function UserManagementView({
           )}
           {filteredUsers.map((user) => {
             const isCurrentUser = user.id === currentUser.id;
-            const rolePerms = getPermissionsForRole(user.role);
             const pendingLeadCount = isAdmin ? getUserPendingLeads(user).length : 0;
 
             return (
               <div
                 key={user.id}
-                className="user-management-account-row p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 xl:grid xl:grid-cols-[minmax(0,1.35fr)_minmax(180px,0.9fr)_minmax(220px,1.2fr)_auto] hover:bg-slate-50/80 dark:hover:bg-zinc-900/40 transition-colors text-xs"
+                className="user-management-account-row p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 xl:grid xl:grid-cols-[minmax(0,1.35fr)_minmax(180px,1fr)_auto] hover:bg-slate-50/80 dark:hover:bg-zinc-900/40 transition-colors text-xs"
               >
                 {/* User Identity with Role Gradient Avatar */}
                 <div className="flex items-center gap-3.5 min-w-65">
@@ -567,67 +546,12 @@ export default function UserManagementView({
                 {/* Role Badge & Status Badge */}
                 <div className="space-y-1.5 min-w-37.5">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {getRoleBadge(user.role)}
+                    {getRoleBadge(user)}
                     {getStatusBadge(user.status, !isCurrentUser ? () => handleToggleUserStatus(user) : undefined)}
                   </div>
                   <span className="text-[11px] text-zinc-500 font-mono block">
                     ເຂົ້າສູ່ລະບົບ: {user.lastLogin || '-'}
                   </span>
-                </div>
-
-                {/* Permissions Category-Coded Badges */}
-                <div className="hidden xl:block space-y-1 text-[11px]">
-                  <span className="text-zinc-500 uppercase font-mono text-[10px] block font-bold">ສິດອະນຸຍາດຕາມຕຳແໜ່ງ:</span>
-                  <div className="flex flex-wrap gap-1 max-w-xs">
-                    {rolePerms.canManageUsers && (
-                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>ຈັດການຜູ້ໃຊ້</span>
-                      </span>
-                    )}
-                    {rolePerms.canDeleteUsers && (
-                      <span className="user-management-permission-badge user-management-permission-danger px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>ລົບຜູ້ໃຊ້ໄດ້</span>
-                      </span>
-                    )}
-                    {rolePerms.canGrantRoles && (
-                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>ມອບສິດໄດ້</span>
-                      </span>
-                    )}
-                    {rolePerms.canEditInventory && (
-                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>ແກ້ສະຕ໋ອກ & PDI</span>
-                      </span>
-                    )}
-                    {rolePerms.canUploadQR && (
-                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>ອັບໂຫລດ QR</span>
-                      </span>
-                    )}
-                    {rolePerms.canAddModels && (
-                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>ເພີ່ມລຸ້ນລົດ</span>
-                      </span>
-                    )}
-                    {rolePerms.canDeductPOS && (
-                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>ຕັດສະຕ໋ອກ POS</span>
-                      </span>
-                    )}
-                    {rolePerms.canViewFinancials && (
-                      <span className="user-management-permission-badge px-1.5 py-0.5 rounded flex items-center gap-1">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>ການເງິນ</span>
-                      </span>
-                    )}
-                  </div>
                 </div>
 
                 {/* ADMIN ACTIONS: HANDOVER, GRANT ROLE & DELETE USER */}
@@ -651,11 +575,7 @@ export default function UserManagementView({
                   {canGrantRoles && (
                     <button
                       onClick={() => {
-                        setOriginalEditingRole(user.role);
-                        setEditingUser({
-                          ...user,
-                          permissions: getPermissionsForRole(user.role),
-                        });
+                        setEditingUser({ ...user });
                       }}
                       aria-label="ມອບສິດ ແລະ ປ່ຽນບົດບາດ"
                       className="user-management-grant-button inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border font-semibold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -760,10 +680,10 @@ export default function UserManagementView({
               >
                 <option value="" className="bg-zinc-900 text-zinc-400">-- ເລືອກພະນັກງານຂາຍທີ່ມີສະຖານະ Active --</option>
                 {users
-                  .filter(u => u.id !== handoverUser.id && u.status === 'active' && (u.role === 'sales' || u.role === 'admin' || u.role === 'super_admin'))
+                  .filter(u => u.id !== handoverUser.id && u.status === 'active' && !hasNoRole(u))
                   .map(target => (
                     <option key={target.id} value={target.id} className="bg-zinc-900 text-white">
-                      {target.name} ({target.role === 'super_admin' || target.role === 'admin' ? 'Admin' : 'Sales'}) - {target.phone}
+                      {target.name} ({ROLE_LABELS[target.role]}) - {target.phone}
                     </option>
                   ))}
               </select>
@@ -817,7 +737,6 @@ export default function UserManagementView({
                 type="button"
                 onClick={() => {
                   setEditingUser(null);
-                  setOriginalEditingRole(null);
                 }}
                 className="user-management-modal-close p-1.5 rounded-xl border transition-colors cursor-pointer"
               >
@@ -825,7 +744,7 @@ export default function UserManagementView({
               </button>
             </div>
 
-            <form onSubmit={handleSaveRoleAndPermissions} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveRole} className="space-y-4 text-xs">
               {/* Staff details (email is the login identity and stays read-only) */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
@@ -878,61 +797,21 @@ export default function UserManagementView({
                   ເລືອກບົດບາດ (Role) ທີ່ຕ້ອງການມອບໃຫ້:
                 </label>
                 <select
-                  value={editingUser.role === 'super_admin' ? 'admin' : editingUser.role}
+                  value={editingUser.role}
                   onChange={(e) => {
                     const selected = e.target.value as UserRole;
                     setEditingUser({
                       ...editingUser,
                       role: selected,
-                      roleTitleLo: ROLE_TITLES[selected] || 'User',
-                      permissions: getPermissionsForRole(selected),
+                      roleTitleLo: ROLE_LABELS[selected],
                     });
                   }}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-white cursor-pointer"
                 >
-                  <option value="admin" className="bg-zinc-900 text-white">Admin (ຜູ້ດູແລລະບົບ / Admin)</option>
-                  <option value="sales" className="bg-zinc-900 text-white">Sales (ພະນັກງານຂາຍ / Sales Executive)</option>
-                  <option value="technician" className="bg-zinc-900 text-white">Technician (ຊ່າງເຕັກນິກ & PDI / Technician)</option>
-                  <option value="general_user" className="bg-zinc-900 text-white">General User (ຜູ້ໃຊ້ທົ່ວໄປ / User)</option>
+                  {ROLE_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value} className="bg-zinc-900 text-white">{option.label}</option>
+                  ))}
                 </select>
-              </div>
-
-              {/* Read-Only Role Permissions Summary */}
-              <div className="space-y-2 pt-2 border-t border-zinc-800">
-                <span className="text-zinc-300 font-semibold block text-xs">
-                  ສິດອະນຸຍາດຕາມຕຳແໜ່ງ (Read-only Role Permissions):
-                </span>
-
-                {[
-                  { key: 'canManageUsers', title: 'ຈັດການຜູ້ໃຊ້ອື່ນ (Manage Users)', desc: 'ສາມາດເບິ່ງ ແລະ ແກ້ໄຂຂໍ້ມູນພະນັກງານໃນລະບົບໄດ້' },
-                  { key: 'canDeleteUsers', title: 'ລົບຜູ້ໃຊ້ອື່ນອອກຈາກລະບົບ (Delete Users)', desc: 'ອະນຸຍາດໃຫ້ລົບ ແລະ ຍົກເລີກສິດຜູ້ໃຊ້ອື່ນ' },
-                  { key: 'canGrantRoles', title: 'ມອບສິດ & ປ່ຽນບົດບາດ (Grant Roles)', desc: 'ສາມາດແຕ່ງຕັ້ງ ຫຼື ປ່ຽນ Role ໃຫ້ພະນັກງານຄົນອື່ນ' },
-                  { key: 'canEditInventory', title: 'ແກ້ໄຂສະຕ໋ອກລົດ & PDI (Edit Stock)', desc: 'ສາມາດເພີ່ມ, ແກ້ໄຂເລກ VIN, ທະບຽນ ແລະ ສະຖານະ PDI' },
-                  { key: 'canUploadQR', title: 'ອັບໂຫລດ QR ບໍລິສັດ (Upload Company QR)', desc: 'ສິດອັບໂຫລດ ແລະ ປ່ຽນຮູບ QR ບໍລິສັດທາງການ' },
-                  { key: 'canDeductPOS', title: 'ຕັດສະຕ໋ອກ & ອອກໃບຮັບເງິນ POS (POS Deduction)', desc: 'ສາມາດຕັດຍອດລົດອອກຈາກສາງເມື່ອມີການຂາຍ' },
-                ].map((perm) => {
-                  const granted = Boolean(getPermissionsForRole(editingUser.role)[perm.key as keyof UserPermissions]);
-                  return (
-                    <div
-                      key={perm.key}
-                      className={`user-management-permission-row flex items-center justify-between gap-2.5 p-2.5 rounded-xl border ${
-                        granted
-                          ? 'border-emerald-700/50 bg-emerald-950/20 text-white'
-                          : 'border-zinc-800 bg-zinc-900/40 text-zinc-500'
-                      }`}
-                    >
-                      <div>
-                        <span className={`font-medium block ${granted ? 'text-white' : 'text-zinc-400'}`}>{perm.title}</span>
-                        <span className="text-zinc-500 text-[11px]">{perm.desc}</span>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                        granted ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-zinc-800 text-zinc-500'
-                      }`}>
-                        {granted ? 'ອະນຸຍາດ' : 'ບໍ່ມີສິດ'}
-                      </span>
-                    </div>
-                  );
-                })}
               </div>
 
               <div className="pt-4 border-t border-zinc-800 flex justify-end gap-3">
@@ -940,7 +819,6 @@ export default function UserManagementView({
                   type="button"
                   onClick={() => {
                     setEditingUser(null);
-                    setOriginalEditingRole(null);
                   }}
                   disabled={isSavingUser}
                   className="user-management-modal-cancel px-4 py-2 rounded-xl border cursor-pointer disabled:opacity-50"
@@ -1076,14 +954,13 @@ export default function UserManagementView({
                 <div>
                   <label className="block text-zinc-300 mb-1 font-medium">ປະເພດບັນຊີ (Role) <span className="text-red-500 font-bold ml-1">*</span></label>
                   <select
-                    value={newRole === 'super_admin' ? 'admin' : newRole}
+                    value={newRole}
                     onChange={(e) => setNewRole(e.target.value as UserRole)}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white cursor-pointer font-medium"
                   >
-                    <option value="admin" className="bg-zinc-900 text-white">Admin (ຜູ້ດູແລລະບົບ)</option>
-                    <option value="sales" className="bg-zinc-900 text-white">Sales (ພະນັກງານຂາຍ)</option>
-                    <option value="technician" className="bg-zinc-900 text-white">Technician (ຊ່າງເຕັກນິກ & PDI)</option>
-                    <option value="general_user" className="bg-zinc-900 text-white">General User (ຜູ້ໃຊ້ທົ່ວໄປ)</option>
+                    {ROLE_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value} className="bg-zinc-900 text-white">{option.label}</option>
+                    ))}
                   </select>
                 </div>
 

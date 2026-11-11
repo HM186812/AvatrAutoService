@@ -13,6 +13,7 @@ import {
 } from '../../utils/followUp';
 import { PIPELINE_LABELS, PIPELINE_STAGE_KEYS, getPipelineCurrentIndex, getPipelineDone } from '../../utils/pipeline';
 import type { DocumentType } from '../modals/CustomerDocumentsModal';
+import { DEFAULT_GIFT_BUDGET_USD, giftTotalUSD } from '../../data/giftCatalog';
 
 interface CustomerDetailViewProps {
   lead: Lead;
@@ -444,6 +445,37 @@ export default function CustomerDetailView({
                   <dd className="font-semibold">{money(lead.bookingDepositUSD)} <span className="font-normal text-slate-500 dark:text-zinc-400">· {lead.bookingPaymentMethod === 'transfer' ? L('ໂອນ', 'transfer', 'โอน') : L('ເງິນສົດ', 'cash', 'เงินสด')}</span></dd>
                   <dt className="text-slate-600 dark:text-zinc-400">{L('ວັນທີຈອງ', 'Booked on', 'วันที่จอง')}</dt>
                   <dd>{formatDateKey(lead.bookingDate)}</dd>
+                  {lead.listPriceUSD != null && <>
+                    <dt className="text-slate-600 dark:text-zinc-400">{L('ລາຄາ', 'Price', 'ราคา')}</dt>
+                    <dd>
+                      {money(lead.listPriceUSD)}{lead.discountUSD ? <span className="text-slate-500 dark:text-zinc-400"> − {money(lead.discountUSD)}</span> : null}
+                      {' = '}<strong>{money(lead.listPriceUSD - (lead.discountUSD || 0))}</strong>
+                    </dd>
+                    <dt className="text-slate-600 dark:text-zinc-400">{L('ຄ້າງຈ່າຍ', 'Remaining', 'คงค้าง')}</dt>
+                    <dd className="font-semibold">{money(lead.listPriceUSD - (lead.discountUSD || 0) - (lead.bookingDepositUSD || 0))}</dd>
+                  </>}
+                  {lead.deliveryWindow && <>
+                    <dt className="text-slate-600 dark:text-zinc-400">{L('ກຳນົດສົ່ງ', 'Delivery due', 'กำหนดส่ง')}</dt>
+                    <dd>{lead.deliveryWindow}</dd>
+                  </>}
+                  {lead.giftItems && lead.giftItems.length > 0 && (() => {
+                    const total = giftTotalUSD(lead.giftItems);
+                    const left = (lead.giftBudgetUSD ?? DEFAULT_GIFT_BUDGET_USD) - total;
+                    return <>
+                      <dt className="text-slate-600 dark:text-zinc-400">{L('ຂອງແຖມ', 'Gifts', 'ของแถม')}</dt>
+                      <dd>
+                        <ul className="space-y-0.5">
+                          {lead.giftItems.map((g, i) => <li key={i} className="flex justify-between gap-2"><span className="wrap-break-word">{g.name}</span><span className="font-mono text-slate-600 dark:text-zinc-400">{money(g.costUSD)}</span></li>)}
+                        </ul>
+                        <p className="mt-1 text-xs">
+                          {L('ລວມ', 'Total', 'รวม')} <strong>{money(total)}</strong> ·{' '}
+                          <span className={left < 0 ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-emerald-700 dark:text-emerald-400'}>
+                            {left < 0 ? L('ເກີນງົບ', 'over budget', 'เกินงบ') : L('ຄົງເຫຼືອງົບ', 'budget left', 'งบคงเหลือ')} {money(Math.abs(left))}
+                          </span>
+                        </p>
+                      </dd>
+                    </>;
+                  })()}
                   {lead.bookingNote && <><dt className="text-slate-600 dark:text-zinc-400">{L('ໝາຍເຫດ', 'Note', 'หมายเหตุ')}</dt><dd className="wrap-break-word">{lead.bookingNote}</dd></>}
                 </>}
                 {isDelivered && <>

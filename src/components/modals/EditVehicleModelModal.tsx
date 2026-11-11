@@ -21,6 +21,7 @@ export default function EditVehicleModelModal({
 }: EditVehicleModelModalProps) {
   const [modelName, setModelName] = useState('');
   const [category, setCategory] = useState('');
+  const [brand, setBrand] = useState('AVATR');
   const [priceUSD, setPriceUSD] = useState<number | ''>('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -30,6 +31,7 @@ export default function EditVehicleModelModal({
     if (model) {
       setModelName(model.name || '');
       setCategory(model.category || model.subTitle || '');
+      setBrand(model.brand || 'AVATR');
       setPriceUSD(model.priceStartingUSD || 45000);
       setErrorMessage('');
     }
@@ -68,6 +70,7 @@ export default function EditVehicleModelModal({
       const updatedModel: VehicleModel = {
         ...model,
         name: cleanName,
+        brand: brand.trim() || 'AVATR',
         category: category.trim() || model.category || 'Next-Gen Intelligent EV',
         subTitle: category.trim() || model.subTitle || 'Next-Gen Intelligent EV',
         tagline: category.trim() || model.tagline || 'ຍົນລະກຳອັດສະລິຍະພຣີມຽມ',
@@ -148,6 +151,25 @@ export default function EditVehicleModelModal({
               placeholder="e.g. AVATR 12, AVATR 11, AVATR 07"
               className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-white font-bold text-sm focus:outline-none focus:border-blue-500"
             />
+          </div>
+
+          {/* Brand */}
+          <div>
+            <label htmlFor="evm-brand" className="block text-zinc-400 font-medium mb-1">
+              {lang === 'lo' ? 'ຍີ່ຫໍ້ (Brand)' : lang === 'th' ? 'ยี่ห้อ (Brand)' : 'Brand'}
+            </label>
+            <input
+              id="evm-brand"
+              type="text"
+              list="evm-brand-options"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              placeholder="AVATR"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-blue-500"
+            />
+            <datalist id="evm-brand-options">
+              {['AVATR', 'Maxus', 'Volkswagen'].map((b) => <option key={b} value={b} />)}
+            </datalist>
           </div>
 
           {/* Category / Subtitle */}

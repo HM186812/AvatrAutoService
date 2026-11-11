@@ -1,4 +1,5 @@
 import type { InvoiceBillRecord, Lead } from '../types';
+import { isMonthlyInstallmentBill } from './installment';
 
 export type LeaderboardPeriod = 'day' | 'week' | 'month' | 'year';
 
@@ -28,7 +29,8 @@ export interface RepPerformanceRecord {
   avgDealSizeUSD: number;
   deliveredLeadsCount: number;
   activeLeadsCount: number;
-  conversionRate: number;
+  /** Closed deals ÷ (closed + still-open leads) in the period; null when there is nothing to measure. */
+  conversionRate: number | null;
   salesBreakdown: RepSale[];
 }
 
@@ -53,6 +55,25 @@ export function parseBillDate(value: unknown): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+/** Monday 00:00 of the current week (local time). */
+export function startOfWeek(now = new Date()): Date {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const offset = (d.getDay() + 6) % 7; // Monday = 0
+  d.setDate(d.getDate() - offset);
+  return d;
+}
+
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** Date range (YYYY-MM-DD, inclusive) covered by a period, for loading bills from the database. */
+export function periodRange(period: LeaderboardPeriod, now = new Date()): { dateFrom: string; dateTo: string } {
+  const to = ymd(now);
+  if (period === 'day') return { dateFrom: to, dateTo: to };
+  if (period === 'week') return { dateFrom: ymd(startOfWeek(now)), dateTo: to };
+  if (period === 'month') return { dateFrom: `${to.slice(0, 7)}-01`, dateTo: to };
+  return { dateFrom: `${to.slice(0, 4)}-01-01`, dateTo: to };
+}
+
 export function isInPeriod(date: Date | null, period: LeaderboardPeriod, now = new Date()): boolean {
   if (!date) return false;
   if (date.getTime() > now.getTime() + 24 * 60 * 60 * 1000) return false; // ignore future-dated records
@@ -63,7 +84,7 @@ export function isInPeriod(date: Date | null, period: LeaderboardPeriod, now = n
       date.getDate() === now.getDate()
     );
   }
-  if (period === 'week') return date.getTime() >= now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  if (period === 'week') return date.getTime() >= startOfWeek(now).getTime();
   if (period === 'month') return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
   return date.getFullYear() === now.getFullYear();
 }
@@ -80,13 +101,14 @@ export function getInitials(name: string): string {
   return (clean.slice(0, 2) || 'SP').toUpperCase();
 }
 
-function isSaleBill(b: InvoiceBillRecord): boolean {
+/** A live vehicle sale or down-payment bill. Voided bills and monthly installment receipts never count. */
+export function isSaleBill(b: InvoiceBillRecord): boolean {
   const t = b.billType || b.type;
-  return (t === 'sale' || t === 'installment') && b.installmentType !== 'monthly_installment';
+  return (t === 'sale' || t === 'installment') && b.status !== 'voided' && !isMonthlyInstallmentBill(b);
 }
 
 /** One physical vehicle = one deal. Installment down-payment and sale bills share the same VIN. */
-function dealKey(b: InvoiceBillRecord): string {
+export function dealKey(b: InvoiceBillRecord): string {
   if (b.vin) return `vin:${b.vin}`;
   if (b.leadId) return `lead:${b.leadId}`;
   return `bill:${b.id}`;
@@ -178,26 +200,61 @@ export function computeLeaderboard(
     });
   });
 
-  // 2. Lead conversion (period-filtered, same name normalization as bills)
+  // 1b. Delivered customers without any sale bill (past sales imported from Excel):
+  //     count them by delivery date so the ranking includes historical sales.
+  const billedLeadIds = new Set((bills || []).map(b => b.leadId).filter(Boolean));
+  (leads || []).forEach((lead) => {
+    if (!lead.vehicleDeliveredAt) return;
+    if ((lead.vin && deals.has(`vin:${lead.vin}`)) || deals.has(`lead:${lead.id}`) || billedLeadIds.has(lead.id)) return;
+    const closeDate = parseBillDate(lead.vehicleDeliveredAt);
+    if (!isInPeriod(closeDate, period, now)) return;
+    // Imported rows keep the Excel salesperson in vehicleDeliveredBy; others use the assigned rep
+    const rep = normalizeRepName(lead.source === 'Excel import' && lead.vehicleDeliveredBy ? lead.vehicleDeliveredBy : lead.assignedTo);
+    if (!repMap.has(rep)) {
+      repMap.set(rep, {
+        repName: rep, avatarInitials: getInitials(rep), totalUnits: 0, totalRevenueUSD: 0, totalRevenueLAK: 0,
+        avgDealSizeUSD: 0, deliveredLeadsCount: 0, activeLeadsCount: 0, conversionRate: 0, salesBreakdown: [],
+      });
+    }
+    const rec = repMap.get(rep)!;
+    // Sale value is the agreed car price; the paid amount may only be the deposit
+    const revUSD = lead.listPriceUSD != null
+      ? Math.max(0, lead.listPriceUSD - (lead.discountUSD ?? 0))
+      : Number(lead.paidAmountUSD) || 0;
+    rec.totalUnits += 1;
+    rec.totalRevenueUSD += revUSD;
+    rec.totalRevenueLAK += revUSD * DEFAULT_LAK_PER_USD;
+    rec.salesBreakdown.push({
+      id: lead.id,
+      billNumber: '—',
+      customerName: lead.customerName || 'ລູກຄ້າທົ່ວໄປ',
+      customerPhone: lead.phone || '-',
+      model: lead.interestedModel || 'AVATR',
+      vin: lead.vin || 'N/A',
+      amountUSD: revUSD,
+      amountLAK: revUSD * DEFAULT_LAK_PER_USD,
+      paymentMethod: lead.paymentType || 'transfer',
+      date: lead.vehicleDeliveredAt,
+      notes: lead.notes,
+    });
+  });
+
+  // 2. Lead conversion for the period: closed deals vs. leads still being worked that came in during the period.
+  //    Lost leads are not open opportunities; delivered leads are already counted as deals above.
   (leads || []).forEach((lead) => {
     if (!lead.assignedTo) return;
-    const rep = normalizeRepName(lead.assignedTo);
-    const rec = repMap.get(rep);
+    const rec = repMap.get(normalizeRepName(lead.assignedTo));
     if (!rec) return;
-    if (lead.status === 'delivered') {
-      const d = parseBillDate(lead.paymentDate) || parseBillDate(lead.createdAt);
-      if (isInPeriod(d, period, now)) rec.deliveredLeadsCount += 1;
-    } else {
-      rec.activeLeadsCount += 1;
-    }
+    if (lead.status === 'delivered' || lead.status === 'lost') return;
+    if (isInPeriod(parseBillDate(lead.createdAt), period, now)) rec.activeLeadsCount += 1;
   });
 
   repMap.forEach((rec) => {
     rec.avgDealSizeUSD = rec.totalUnits > 0 ? Math.round(rec.totalRevenueUSD / rec.totalUnits) : 0;
-    const closedDeals = Math.max(rec.totalUnits, rec.deliveredLeadsCount);
+    const closedDeals = rec.totalUnits;
     rec.deliveredLeadsCount = closedDeals;
     const totalOpportunities = closedDeals + rec.activeLeadsCount;
-    rec.conversionRate = totalOpportunities > 0 ? Math.round((closedDeals / totalOpportunities) * 100) : 100;
+    rec.conversionRate = totalOpportunities > 0 ? Math.round((closedDeals / totalOpportunities) * 100) : null;
     rec.salesBreakdown.sort((a, b) => (parseBillDate(b.date)?.getTime() || 0) - (parseBillDate(a.date)?.getTime() || 0));
   });
 
@@ -205,7 +262,7 @@ export function computeLeaderboard(
   return Array.from(repMap.values()).sort((a, b) =>
     b.totalUnits - a.totalUnits ||
     b.totalRevenueUSD - a.totalRevenueUSD ||
-    b.conversionRate - a.conversionRate ||
+    (b.conversionRate ?? -1) - (a.conversionRate ?? -1) ||
     a.repName.localeCompare(b.repName),
   );
 }
@@ -228,7 +285,10 @@ export function getPeriodLabel(period: LeaderboardPeriod, lang: string, now = ne
   const th = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
   const en = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   if (period === 'day') return lang === 'lo' ? `ວັນນີ້ (${now.getDate()} ${lo[monthIdx]} ${y})` : lang === 'th' ? `วันนี้ (${now.getDate()} ${th[monthIdx]} ${y})` : `Today (${en[monthIdx]} ${now.getDate()}, ${y})`;
-  if (period === 'week') return lang === 'lo' ? 'ອາທິດນີ້ (7 ມື້ຜ່ານມາ)' : lang === 'th' ? 'สัปดาห์นี้ (7 วันที่ผ่านมา)' : 'Past 7 Days';
+  if (period === 'week') {
+    const m = startOfWeek(now);
+    return lang === 'lo' ? `ອາທິດນີ້ (ວັນຈັນ ${m.getDate()} ${lo[m.getMonth()]} → ມື້ນີ້)` : lang === 'th' ? `สัปดาห์นี้ (จันทร์ ${m.getDate()} ${th[m.getMonth()]} → วันนี้)` : `This week (Mon ${en[m.getMonth()]} ${m.getDate()} → today)`;
+  }
   if (period === 'month') return lang === 'lo' ? `ເດືອນນີ້ (${lo[monthIdx]} ${y})` : lang === 'th' ? `เดือนนี้ (${th[monthIdx]} ${y})` : `${en[monthIdx]} ${y}`;
   return lang === 'lo' ? `ປີນີ້ (${y})` : lang === 'th' ? `ปีนี้ (${y})` : `Year ${y}`;
 }

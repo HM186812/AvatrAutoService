@@ -42,6 +42,41 @@ interface CustomerDocumentsModalProps {
   customerGroup?: 'new_leads' | 'existing_customers' | 'installment_customers';
 }
 
+interface FinanceLenderPreset {
+  label: string;
+  match: RegExp;
+  name: string;
+  phone: string;
+  village: string;
+  district: string;
+  rateLAK: number;
+  guarantor: string;
+}
+
+/** Known lenders: their own contact details and standard terms only (no customer data). */
+const FINANCE_LENDER_PRESETS: FinanceLenderPreset[] = [
+  {
+    label: 'KB Kolao Leasing',
+    match: /kolao|ໂຄລາວ/i,
+    name: 'ບໍລິສັດ ເຄບີ ໂຄລາວ ເຊົ່າສິນເຊື່ອ ຈຳກັດ ( ຝ່າຍສິນເຊື່ອ)',
+    phone: '020 417900',
+    village: 'ທາດຫຼວງໂນນ',
+    district: 'ໄຊເສດຖາ',
+    rateLAK: 23300,
+    guarantor: 'ບໍ່ມີຫຼັກຊັບຄ້ຳປະກັນ',
+  },
+  {
+    label: 'Maruhan Japan Bank',
+    match: /maruhan|ມາຣູຮານ/i,
+    name: 'MARUHAN Japan Bank Lao ທະນາຄານ ມາຣູຮານ ເຈແປນ ລາວ (ຝ່າຍສິນເຊື່ອ)',
+    phone: '+85621411777',
+    village: 'ຫັດສະດີ',
+    district: 'ຈັນທະບູລີ',
+    rateLAK: 23200,
+    guarantor: 'ບໍ່ມີຜູ້ກູ້ຮ່ວມຄໍ້າປະກັນ',
+  },
+];
+
 export type DocumentType =
   | 'booking'
   | 'receipt'
@@ -68,25 +103,17 @@ export default function CustomerDocumentsModal({
   const matchingVehicle = vehicles.find(v => v.name === customer.interestedModel) || vehicles[0];
   const defaultModelName = customer.interestedModel || matchingVehicle?.name || 'AVATR 07';
 
-  // Check if this is the customer from the real official document:
-  // 1) ທ່ານ ນາງ ຈັນມະພາ ສະເໝີທາ (ໃບສັນຍາໜີ້ສິນ 011/KM7 - ບ/ສ ເຄບີ ໂຄລາວ ເຊົ່າສິນເຊື່ອ)
-  const isChanmapha =
-    customer.customerName?.includes('ຈັນມະພາ') ||
-    customer.id === 'LD-1026' ||
-    customer.paymentReceiptNo?.includes('011') ||
-    customer.phone?.includes('5411');
-
-  // 2) ທ່ານ ນາງ ນວນຈັນ ທໍາມະວົງສາ (ໃບສັນຍາ 020/KM7 - Maruhan Japan Bank)
-  const isNuanchun =
-    customer.customerName?.includes('ນວນຈັນ') ||
-    customer.id === 'LD-1025' ||
-    customer.phone?.includes('7894');
-
-  const defaultBasePrice = isChanmapha
-    ? 43400
-    : isNuanchun
-      ? 42900
-      : (matchingVehicle?.priceStartingUSD || 45000);
+  // Every value below comes from the customer's own record. Nothing is invented:
+  // a missing value stays empty, and issuing is blocked until it is filled in.
+  const agreedPrice = customer.listPriceUSD != null
+    ? customer.listPriceUSD - (customer.discountUSD || 0)
+    : undefined;
+  const defaultBasePrice = agreedPrice ?? matchingVehicle?.priceStartingUSD ?? 0;
+  const todayDisplay = (() => {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  })();
+  const giftsText = (customer.giftItems || []).map(g => g.name.trim()).filter(Boolean).join(', ');
 
   const isInstallment =
     customer.paymentType === 'installment' ||
@@ -96,9 +123,31 @@ export default function CustomerDocumentsModal({
     Boolean(customer.installmentRecords && customer.installmentRecords.length > 0) ||
     customer.installmentStatus === 'active_repaying' ||
     customer.installmentStatus === 'approved' ||
-    customer.installmentStatus === 'pending_approval' ||
-    isNuanchun ||
-    isChanmapha;
+    customer.installmentStatus === 'pending_approval';
+
+  // Workflow stage: each document opens only once its step has happened.
+  const hasDeposit = Boolean(
+    customer.bookingDepositUSD || customer.paidAmountUSD || customer.downPaymentUSD || customer.paymentTypeConfirmed
+  );
+  const isSold =
+    customer.status === 'delivered' ||
+    Boolean(customer.vehicleDeliveredAt) ||
+    customer.paymentTypeConfirmed === 'full' ||
+    customer.paymentTypeConfirmed === 'down_payment' ||
+    customer.paymentTypeConfirmed === 'installment_completed' ||
+    customer.installmentStatus === 'active_repaying' ||
+    customer.installmentStatus === 'completed' ||
+    customer.installmentStatus === 'contract_signed';
+  const stageLockReason: Partial<Record<DocumentType, string>> = {};
+  if (!hasDeposit && !isSold) {
+    stageLockReason.booking = 'ບັນທຶກເງິນມັດຈຳກ່ອນ (ປຸ່ມ "ຮັບມັດຈຳ")';
+    stageLockReason.receipt = 'ບັນທຶກເງິນມັດຈຳ ຫຼື ການຊຳລະກ່ອນ';
+  }
+  if (!isSold) {
+    stageLockReason.handover = 'ຂາຍ / ອອກບິນ ໃນ POS ກ່ອນ';
+    stageLockReason.authorization = 'ຂາຍ / ອອກບິນ ໃນ POS ກ່ອນ';
+    stageLockReason.km7_release = 'ຂາຍ / ອອກບິນ ໃນ POS ກ່ອນ';
+  }
 
   // Debt & installment documents (Tab 5 & Tab 6) are strictly restricted to the Installment Customers group
   const showDebtAndInstallmentDocs = customerGroup
@@ -162,37 +211,16 @@ export default function CustomerDocumentsModal({
     };
   }, [activeDoc, customer?.customerName, customer?.id, customer?.phone, customer?.vin]);
 
-  const defaultDownPaymentUSD = isChanmapha
-    ? 21700
-    : isNuanchun
-      ? 25740
-      : isInstallment
-        ? (customer.downPaymentUSD || Math.round(defaultBasePrice * ((customer.downPaymentPercent || 50) / 100)))
-        : (customer.paidAmountUSD || 2000);
+  const defaultDownPaymentUSD = isInstallment
+    ? (customer.downPaymentUSD ||
+      (customer.downPaymentPercent && defaultBasePrice ? Math.round(defaultBasePrice * (customer.downPaymentPercent / 100)) : 0))
+    : (customer.bookingDepositUSD || customer.paidAmountUSD || 0);
 
   const numId = customer.id.replace(/\D/g, '') || '185';
-  const defaultVin = customer.vin || (
-    isChanmapha
-      ? 'S6J3E1E3TK50217'
-      : isNuanchun
-        ? 'LS6J3E1E8TK504736'
-        : `LS6J3E1E2TK${numId.padEnd(6, '0').slice(0, 6)}`
-  );
-  const defaultMotorNo = customer.engineNumber || (
-    isChanmapha
-      ? 'THMAC001983'
-      : isNuanchun
-        ? 'THMAC003373'
-        : `THMAC00${numId.padEnd(4, '0').slice(0, 4)}`
-  );
-  const defaultColor = customer.color || (
-    isChanmapha
-      ? 'Contton Whith / ສີຂາວ'
-      : isNuanchun
-        ? 'Mineral Rock Black/Full Caramel Luxe'
-        : (matchingVehicle?.colors?.[0]?.name || 'Damson Metallic')
-  );
-  const defaultInterior = isChanmapha ? 'ເບາະ Full Caramel luxe' : 'Glacier Caramel';
+  const defaultVin = customer.vin || '';
+  const defaultMotorNo = customer.engineNumber || '';
+  const defaultColor = customer.color || '';
+  const defaultInterior = '';
 
   // State variables synchronized with customer & dealership
   const [selectedModel, setSelectedModel] = useState<string>(defaultModelName);
@@ -206,50 +234,33 @@ export default function CustomerDocumentsModal({
   const [receiptNo, setReceiptNo] = useState<string>(customer.paymentReceiptNo || `R${numId}/KM7`);
   const [deliveryNo, setDeliveryNo] = useState<string>(`D${numId}`);
   const [scheduleNo, setScheduleNo] = useState<string>(`SCH${numId}/KM7`);
+  // No shared default: every credit agreement needs its own number (auto-numbering comes in phase 2).
   const [creditAgreementNo, setCreditAgreementNo] = useState<string>(
-    isChanmapha
-      ? '011/KM7'
-      : isNuanchun
-        ? '020/KM7'
-        : customer.paymentReceiptNo?.includes('KM7')
-          ? customer.paymentReceiptNo
-          : `011/KM7`
+    customer.paymentReceiptNo?.includes('KM7') ? customer.paymentReceiptNo : ''
   );
   const [km7ReleaseNo, setKm7ReleaseNo] = useState<string>(`KM7-${numId}`);
 
   // Financing & Bank specifications for ໃບສັນຍາໜີ້ສິນ (Tripartite Credit Agreement)
-  const [financeBankName, setFinanceBankName] = useState<string>(
-    customer.financeCompany || (
-      isChanmapha
-        ? 'ບໍລິສັດ ເຄບີ ໂຄລາວ ເຊົ່າສິນເຊື່ອ ຈຳກັດ ( ຝ່າຍສິນເຊື່ອ)'
-        : isNuanchun
-          ? 'MARUHAN Japan Bank Lao ທະນາຄານ ມາຣູຮານ ເຈແປນ ລາວ (ຝ່າຍສິນເຊື່ອ)'
-          : 'ບໍລິສັດ ເຄບີ ໂຄລາວ ເຊົ່າສິນເຊື່ອ ຈຳກັດ ( ຝ່າຍສິນເຊື່ອ)'
-    )
-  );
-  const [financeBankPhone, setFinanceBankPhone] = useState<string>(
-    isChanmapha ? '020 417900' : isNuanchun ? '+85621411777' : '020 417900'
-  );
-  const [financeBankVillage, setFinanceBankVillage] = useState<string>(
-    isChanmapha ? 'ທາດຫຼວງໂນນ' : isNuanchun ? 'ຫັດສະດີ' : 'ທາດຫຼວງໂນນ'
-  );
-  const [financeBankDistrict, setFinanceBankDistrict] = useState<string>(
-    isChanmapha ? 'ໄຊເສດຖາ' : isNuanchun ? 'ຈັນທະບູລີ' : 'ໄຊເສດຖາ'
-  );
+  // Lender details: from the customer's finance company, or filled by picking a lender preset.
+  const lenderPreset = FINANCE_LENDER_PRESETS.find(p => customer.financeCompany && p.match.test(customer.financeCompany));
+  const [financeBankName, setFinanceBankName] = useState<string>(lenderPreset?.name || customer.financeCompany || '');
+  const [financeBankPhone, setFinanceBankPhone] = useState<string>(lenderPreset?.phone || '');
+  const [financeBankVillage, setFinanceBankVillage] = useState<string>(lenderPreset?.village || '');
+  const [financeBankDistrict, setFinanceBankDistrict] = useState<string>(lenderPreset?.district || '');
   const [financeBankProvince, setFinanceBankProvince] = useState<string>('ນະຄອນຫຼວງວຽງຈັນ');
   const [financeDays, setFinanceDays] = useState<string>('ພາຍໃນ 7 ວັນລັດຖະການ');
   const [financeInterestRate, setFinanceInterestRate] = useState<string>('0% ຕໍ່ເດືອນ');
   const [financeGuarantor, setFinanceGuarantor] = useState<string>('ບໍ່ມີຫຼັກຊັບຄ້ຳປະກັນ');
   const [financePenaltyRate, setFinancePenaltyRate] = useState<string>('02% ຕໍ່ເດືອນ');
-  const [financeRateLAK, setFinanceRateLAK] = useState<number>(isChanmapha ? 23300 : 23200);
+  const [financeRateLAK, setFinanceRateLAK] = useState<number>(lenderPreset?.rateLAK || 23200);
 
   // KM7 Release slip details for ໃບເບີກລົດ KM7
-  const [km7ReleaseDate] = useState<string>(isNuanchun ? '16/10/2026' : '16/10/2026');
+  const [km7ReleaseDate] = useState<string>(todayDisplay);
   const [km7PaymentNote] = useState<string>(
-    isNuanchun || isInstallment ? 'ລູກຄ້າຈັດ Finance' : 'ຊຳລະສົດ / ໂອນຄົບຖ້ວນ'
+    isInstallment ? 'ລູກຄ້າຈັດ Finance' : 'ຊຳລະສົດ / ໂອນຄົບຖ້ວນ'
   );
   const [km7RequisitionNote, setKm7RequisitionNote] = useState<string>(
-    isNuanchun ? 'ຂໍເບີກ Adapter CCS2 ແລະ ຊຸດຂອງແຖມມາດຕະຖານຄົບຊຸດ' : 'ຂໍເບີກ Adapter CCS2 ແລະ ຊຸດຂອງແຖມມາດຕະຖານຄົບຊຸດ'
+    giftsText ? `ຂໍເບີກຂອງແຖມ: ${giftsText}` : ''
   );
   const [km7SlipLayout, setKm7SlipLayout] = useState<'triplicate' | 'single'>('single');
 
@@ -277,15 +288,11 @@ export default function CustomerDocumentsModal({
   const [colorOptionUSD, setColorOptionUSD] = useState<number>(0);
   const [specOptionUSD, setSpecOptionUSD] = useState<number>(0);
   const [depositUSD, setDepositUSD] = useState<number>(defaultDownPaymentUSD);
-  const [deliverySchedule] = useState<string>('ອອກງວດພາຍໃນເດືອນ 10 ປີ 2026');
+  const [deliverySchedule] = useState<string>(customer.deliveryWindow || '');
 
-  // Free gifts & handover details
-  const [freeGiftsBooking] = useState<string>(
-    'Adapter CCS2 1 ໜ່ວຍ, ບັດກວດໄຟຟ້າ Bluedot ມູນຄ່າ 1,000,000 ກີບ, ຕິດຟິມກັນຄວາມຮ້ອນ, ປູພື້ນພຣີມຽວ, ຕູ້ສາກໄຟ Home Charger 7kW ພ້ອມຕິດຕັ້ງສາຍໄຟ 15 ແມັດ ແລະ ຂຶ້ນທະບຽນ'
-  );
-  const [freeGiftsDelivery] = useState<string>(
-    'ແຖມ: Adapter No: PYNADAETG260709025 01 ໜ່ວຍ, ບັດກວດໄຟຟ້າ Bluedot ມູນຄ່າ 1,000,000 ກີບ, ຕິດຟິມກັນຄວາມຮ້ອນ, ປູພື້ນ, ຕູ້ສາກໄຟ 7kW ພ້ອມຕິດຕັ້ງຕູ້ສາກ ສາຍໄຟ 15 ແມັດ ແລະ ຂຶ້ນທະບຽນ'
-  );
+  // Free gifts & handover details: the gifts recorded with the deposit or the POS sale
+  const [freeGiftsBooking] = useState<string>(giftsText);
+  const [freeGiftsDelivery] = useState<string>(giftsText ? `ແຖມ: ${giftsText}` : '');
   const [keyCount] = useState<number>(2);
   const [registrationProvince] = useState<string>(
     customer.province || 'ນະຄອນຫຼວງວຽງຈັນ'
@@ -297,13 +304,11 @@ export default function CustomerDocumentsModal({
   const transferReferenceDisplay = payerSourceAccount
     .replace(/^(BCEL(?:\s+ONE)?|JDB(?:\s+SMART BANKING)?|LDB)(?:[-\s/]+)?/i, '')
     .trim();
-  const [paymentDateTime] = useState<string>(customer.paymentDate || '12/10/2026 18:30:21');
+  const [paymentDateTime] = useState<string>(customer.paymentDate || customer.bookingDate || '');
 
   // Date & Sales staff
-  const [docDate, setDocDate] = useState<string>(
-    isChanmapha ? '7/24/2026' : (isNuanchun ? '16/10/2026' : '7/24/2026')
-  );
-  const officerInCharge = currentUser?.name || customer.assignedTo || 'ທ້າວ ແສງອຸໄທ ສັນຕິສີໄວ';
+  const [docDate, setDocDate] = useState<string>(todayDisplay);
+  const officerInCharge = currentUser?.name || customer.assignedTo || '';
 
   // Derived financials
   const actualTotalPrice = basePriceUSD + colorOptionUSD + specOptionUSD;
@@ -317,53 +322,61 @@ export default function CustomerDocumentsModal({
   const installmentRows = generateInstallmentSchedule(customer, actualTotalPrice);
 
   // Address fields
-  const village = customer.village || (isChanmapha ? 'ສະພັງເມິກ' : (isNuanchun ? 'ໜອງພະຍາ' : 'ຊຽງຍືນ'));
-  const district = customer.district || (isChanmapha ? 'ໄຊທານີ' : (isNuanchun ? 'ໄຊທານີ' : 'ຈັນທະບູລີ'));
-  const province = customer.province || 'ນະຄອນຫຼວງວຽງຈັນ';
+  const village = customer.village || '';
+  const district = customer.district || '';
+  const province = customer.province || '';
 
-  // Template loaders for ໃບສັນຍາໜີ້ສິນ
-  const loadKbKolaoTemplate = () => {
-    setCreditAgreementNo('011/KM7');
-    setFinanceBankName('ບໍລິສັດ ເຄບີ ໂຄລາວ ເຊົ່າສິນເຊື່ອ ຈຳກັດ ( ຝ່າຍສິນເຊື່ອ)');
-    setFinanceBankPhone('020 417900');
-    setFinanceBankVillage('ທາດຫຼວງໂນນ');
-    setFinanceBankDistrict('ໄຊເສດຖາ');
+  // Lender presets for ໃບສັນຍາໜີ້ສິນ: fill only the lender's own details and terms.
+  // They never touch the customer's VIN, price, deposit, date or contract number.
+  const applyLenderPreset = (preset: FinanceLenderPreset) => {
+    setFinanceBankName(preset.name);
+    setFinanceBankPhone(preset.phone);
+    setFinanceBankVillage(preset.village);
+    setFinanceBankDistrict(preset.district);
     setFinanceBankProvince('ນະຄອນຫຼວງວຽງຈັນ');
-    setFinanceRateLAK(23300);
-    setBasePriceUSD(43400);
-    setDepositUSD(21700);
-    setDocVin('S6J3E1E3TK50217');
-    setDocMotorNo('THMAC001983');
-    setDocColor('Contton Whith / ສີຂາວ');
-    setDocInterior('ເບາະ Full Caramel luxe');
+    setFinanceRateLAK(preset.rateLAK);
     setFinanceDays('ພາຍໃນ 7 ວັນລັດຖະການ');
     setFinanceInterestRate('0% ຕໍ່ເດືອນ');
-    setFinanceGuarantor('ບໍ່ມີຫຼັກຊັບຄ້ຳປະກັນ');
+    setFinanceGuarantor(preset.guarantor);
     setFinancePenaltyRate('02% ຕໍ່ເດືອນ');
-    setDocDate('7/24/2026');
-    showToast('ໂຫຼດແມ່ແບບໃບສັນຍາໜີ້ສິນ 011/KM7 (KB Kolao Leasing) ຮຽບຮ້ອຍ', 'success');
+    showToast(`ໃສ່ຂໍ້ມູນ ${preset.label} ແລ້ວ`, 'success');
   };
 
-  const loadMaruhanTemplate = () => {
-    setCreditAgreementNo('020/KM7');
-    setFinanceBankName('MARUHAN Japan Bank Lao ທະນາຄານ ມາຣູຮານ ເຈແປນ ລາວ (ຝ່າຍສິນເຊື່ອ)');
-    setFinanceBankPhone('+85621411777');
-    setFinanceBankVillage('ຫັດສະດີ');
-    setFinanceBankDistrict('ຈັນທະບູລີ');
-    setFinanceBankProvince('ນະຄອນຫຼວງວຽງຈັນ');
-    setFinanceRateLAK(23200);
-    setBasePriceUSD(42900);
-    setDepositUSD(25740);
-    setDocVin('LS6J3E1E8TK504736');
-    setDocMotorNo('THMAC003373');
-    setDocColor('Mineral Rock Black/Full Caramel Luxe');
-    setDocInterior('Glacier Caramel');
-    setFinanceDays('ພາຍໃນ 7 ວັນລັດຖະການ');
-    setFinanceInterestRate('0% ຕໍ່ເດືອນ');
-    setFinanceGuarantor('ບໍ່ມີຜູ້ກູ້ຮ່ວມຄໍ້າປະກັນ');
-    setFinancePenaltyRate('02% ຕໍ່ເດືອນ');
-    setDocDate('16/10/2026');
-    showToast('ໂຫຼດແມ່ແບບໃບສັນຍາໜີ້ສິນ 020/KM7 (Maruhan Japan Bank) ຮຽບຮ້ອຍ', 'success');
+  // Required data per document. Issuing is blocked while anything is missing.
+  const missingFields = (doc: DocumentType): string[] => {
+    const missing: string[] = [];
+    const need = (ok: unknown, label: string) => { if (!ok) missing.push(label); };
+    need(customer.customerName?.trim(), 'ຊື່ລູກຄ້າ');
+    need(docChassisNo?.trim(), 'ເລກທີເອກະສານ');
+    if (doc === 'booking' || doc === 'installment_schedule' || doc === 'credit_agreement') need(actualTotalPrice > 0, 'ລາຄາລົດ');
+    if (doc === 'booking' || doc === 'receipt' || doc === 'installment_schedule' || doc === 'credit_agreement') {
+      need(depositUSD > 0, isInstallment ? 'ເງິນດາວ' : 'ເງິນມັດຈຳ / ຈຳນວນທີ່ຮັບ');
+    }
+    if (doc === 'booking') need(customer.phone?.trim(), 'ເບີໂທລູກຄ້າ');
+    if (doc === 'handover' || doc === 'authorization' || doc === 'credit_agreement' || doc === 'km7_release') need(docVin.trim(), 'ເລກຖັງ (VIN)');
+    if (doc === 'handover' || doc === 'credit_agreement') {
+      need(docMotorNo.trim(), 'ເລກຈັກ / ມໍເຕີ');
+      need(docColor.trim(), 'ສີລົດ');
+    }
+    if (doc === 'credit_agreement') need(financeBankName.trim(), 'ຊື່ບໍລິສັດສິນເຊື່ອ / ທະນາຄານ');
+    if (doc === 'km7_release') need(giftsText || km7RequisitionNote.trim(), 'ລາຍການຂອງແຖມ');
+    return missing;
+  };
+
+  /** Returns true when the active document may be issued; otherwise explains why. */
+  const canIssue = (): boolean => {
+    const locked = stageLockReason[activeDoc];
+    if (locked) {
+      showToast(`ຍັງອອກເອກະສານນີ້ບໍ່ໄດ້: ${locked}`, 'error');
+      return false;
+    }
+    const missing = missingFields(activeDoc);
+    if (missing.length > 0) {
+      setShowToolbar(true);
+      showToast(`ຂໍ້ມູນຍັງບໍ່ຄົບ: ${missing.join(', ')}`, 'error');
+      return false;
+    }
+    return true;
   };
 
   // Auto update price if user picks different model in toolbar
@@ -416,11 +429,13 @@ export default function CustomerDocumentsModal({
   };
 
   const handlePrint = () => {
+    if (!canIssue()) return;
     recordDocIssuance('print', isLandscapeDoc ? 'Print (A4 ແນວນອນ)' : 'Print / ພິມ');
     window.print();
   };
 
   const handleDownloadPdf = async () => {
+    if (!canIssue()) return;
     try {
       setIsExportingPdf(true);
       const docNames: Record<DocumentType, string> = {
@@ -668,7 +683,8 @@ export default function CustomerDocumentsModal({
           <button
             type="button"
             onClick={() => setActiveDoc('booking')}
-            className={`p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'booking'
+            title={stageLockReason.booking ? `🔒 ${stageLockReason.booking}` : undefined}
+            className={`${stageLockReason.booking ? 'opacity-50 ' : ''}p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'booking'
               ? 'tab-btn-active bg-white text-black border-white shadow-lg font-bold'
               : 'tab-btn-inactive bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
               }`}
@@ -686,7 +702,8 @@ export default function CustomerDocumentsModal({
           <button
             type="button"
             onClick={() => setActiveDoc('receipt')}
-            className={`p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'receipt'
+            title={stageLockReason.receipt ? `🔒 ${stageLockReason.receipt}` : undefined}
+            className={`${stageLockReason.receipt ? 'opacity-50 ' : ''}p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'receipt'
               ? 'tab-btn-active bg-white text-black border-white shadow-lg font-bold'
               : 'tab-btn-inactive bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
               }`}
@@ -704,7 +721,8 @@ export default function CustomerDocumentsModal({
           <button
             type="button"
             onClick={() => setActiveDoc('handover')}
-            className={`p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'handover'
+            title={stageLockReason.handover ? `🔒 ${stageLockReason.handover}` : undefined}
+            className={`${stageLockReason.handover ? 'opacity-50 ' : ''}p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'handover'
               ? 'tab-btn-active bg-white text-black border-white shadow-lg font-bold'
               : 'tab-btn-inactive bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
               }`}
@@ -722,7 +740,8 @@ export default function CustomerDocumentsModal({
           <button
             type="button"
             onClick={() => setActiveDoc('authorization')}
-            className={`p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'authorization'
+            title={stageLockReason.authorization ? `🔒 ${stageLockReason.authorization}` : undefined}
+            className={`${stageLockReason.authorization ? 'opacity-50 ' : ''}p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'authorization'
               ? 'tab-btn-active bg-white text-black border-white shadow-lg font-bold'
               : 'tab-btn-inactive bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
               }`}
@@ -781,7 +800,8 @@ export default function CustomerDocumentsModal({
           <button
             type="button"
             onClick={() => setActiveDoc('km7_release')}
-            className={`p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'km7_release'
+            title={stageLockReason.km7_release ? `🔒 ${stageLockReason.km7_release}` : undefined}
+            className={`${stageLockReason.km7_release ? 'opacity-50 ' : ''}p-2.5 rounded-xl border text-left transition-all ${activeDoc === 'km7_release'
               ? 'tab-btn-active bg-white text-black border-white shadow-lg font-bold'
               : 'tab-btn-inactive bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
               }`}
@@ -796,10 +816,41 @@ export default function CustomerDocumentsModal({
           </button>
         </div>
 
+        {/* Issue readiness: stage lock or missing data, shown before anyone prints */}
+        {(() => {
+          const locked = stageLockReason[activeDoc];
+          const missing = locked ? [] : missingFields(activeDoc);
+          if (!locked && missing.length === 0) {
+            return (
+              <div role="status" className="print:hidden flex items-center gap-2 rounded-xl border border-emerald-700/50 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>ຂໍ້ມູນຄົບ, ພ້ອມອອກເອກະສານ. ກວດສອບໃຫ້ຖືກຕ້ອງກ່ອນພິມ.</span>
+              </div>
+            );
+          }
+          return (
+            <div role="alert" className="print:hidden flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-600/50 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
+              <span>
+                <strong className="font-bold">{locked ? 'ຍັງບໍ່ຮອດຂັ້ນຕອນນີ້: ' : 'ຂໍ້ມູນຍັງບໍ່ຄົບ: '}</strong>
+                {locked || missing.join(', ')}
+              </span>
+              {!locked && (
+                <button type="button" onClick={() => setShowToolbar(true)} className="rounded-lg border border-amber-500/50 px-2.5 py-1 font-semibold hover:bg-amber-500/10 cursor-pointer">
+                  ຕື່ມຂໍ້ມູນ
+                </button>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Expandable Parameters Toolbar (Hidden when printing) */}
         {
           showToolbar && (
             <div className="toolbar-box bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3 text-xs print:hidden animate-fadeIn">
+              <p className="text-[11px] text-zinc-400">
+                ການແກ້ໄຂໃນນີ້ໃຊ້ກັບເອກະສານສະບັບນີ້ເທົ່ານັ້ນ ແລະ ບໍ່ບັນທຶກກັບຂໍ້ມູນລູກຄ້າ.
+                ຖ້າຂໍ້ມູນລູກຄ້າຜິດ (VIN, ລາຄາ, ມັດຈຳ, ຂອງແຖມ) ໃຫ້ແກ້ທີ່ໜ້າລູກຄ້າ ຫຼື ບິນ ເພື່ອໃຫ້ທຸກເອກະສານກົງກັນ.
+              </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-zinc-400 mb-1 text-[11px]">ລຸ້ນລົດ</label>
@@ -923,23 +974,19 @@ export default function CustomerDocumentsModal({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-amber-400 font-bold text-[11px] flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      ແມ່ແບບສັນຍາໜີ້ສິນ (Official Templates):
+                      ເລືອກສະຖາບັນການເງິນ (ໃສ່ຂໍ້ມູນຜູ້ໃຫ້ກູ້ເທົ່ານັ້ນ):
                     </span>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={loadKbKolaoTemplate}
-                        className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                      >
-                        <span>📋 ແມ່ແບບ 011/KM7 (KB Kolao - ທ່ານ ນາງ ຈັນມະພາ)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={loadMaruhanTemplate}
-                        className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                      >
-                        <span>📋 ແມ່ແບບ 020/KM7 (Maruhan Japan Bank)</span>
-                      </button>
+                      {FINANCE_LENDER_PRESETS.map(preset => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => applyLenderPreset(preset)}
+                          className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <span>{preset.label}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -2292,7 +2339,7 @@ export default function CustomerDocumentsModal({
                           <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
                           <td className="border border-black px-2 py-1.5 text-center">ໜ່ວຍ</td>
                           <td className="border border-black px-2.5 py-1.5 text-center font-bold">ເບີກຈ່າຍພ້ອມລົດ</td>
-                          <td className="border border-black px-3 py-1.5 font-mono text-[11px]">{km7RequisitionNote || 'Adapter No: PYNADAETG260709025'}</td>
+                          <td className="border border-black px-3 py-1.5 font-mono text-[11px]">{km7RequisitionNote}</td>
                         </tr>
                         <tr>
                           <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">02</td>

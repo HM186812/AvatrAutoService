@@ -1,4 +1,13 @@
-import { Lead, InstallmentPaymentRecord } from '../types';
+import { Lead, InstallmentPaymentRecord, InvoiceBillRecord } from '../types';
+
+/**
+ * A monthly installment receipt (ໃບຮັບຄ່າງວດ), as opposed to the down-payment / sale bill.
+ * `installmentType` is not stored in the database, so fall back to the period number:
+ * receipts carry period >= 1, the down-payment bill has none (or 0).
+ */
+export function isMonthlyInstallmentBill(bill: Pick<InvoiceBillRecord, 'installmentType' | 'installmentPeriod'>): boolean {
+  return bill.installmentType === 'monthly_installment' || (bill.installmentPeriod ?? 0) >= 1;
+}
 
 export const DEFAULT_EXCHANGE_RATE_LAK = 22000;
 export const DEFAULT_ANNUAL_INTEREST_RATE = 0.075; // 7.5% per year
@@ -48,26 +57,12 @@ export function generateInstallmentSchedule(
     const day = String(dueDateObj.getDate()).padStart(2, '0');
     const dueDateStr = `${year}-${month}-${day}`;
 
-    // Determine initial status based on due date
-    let status: 'paid' | 'due' | 'pending' | 'overdue' = 'pending';
-    let paidDate: string | undefined = undefined;
-    let receiptNo: string | undefined = undefined;
-    let transferRef: string | undefined = undefined;
-    let paymentMethod: 'cash' | 'transfer' | undefined = undefined;
-
-    // If customer's status is already 'delivered' and contract is signed, or historical demo
-    if (customer.status === 'delivered' && i === 1) {
-      status = 'paid';
-      paidDate = `${year}-${month}-08`;
-      receiptNo = `REC-INS-${customer.id.replace(/\D/g, '') || '01'}-01`;
-      transferRef = `TRF-${Math.floor(100000 + Math.random() * 900000)}`;
-      paymentMethod = 'transfer';
-    } else if (dueDateObj < today) {
-      // Past due
-      status = 'due';
-    } else {
-      status = 'pending';
-    }
+    // A generated schedule has no payments yet: nothing is marked paid until a real receipt is recorded.
+    const status: 'paid' | 'due' | 'pending' | 'overdue' = dueDateObj < today ? 'due' : 'pending';
+    const paidDate: string | undefined = undefined;
+    const receiptNo: string | undefined = undefined;
+    const transferRef: string | undefined = undefined;
+    const paymentMethod: 'cash' | 'transfer' | undefined = undefined;
 
     schedule.push({
       period: i,
@@ -78,14 +73,14 @@ export function generateInstallmentSchedule(
       interestUSD: monthlyInterestUSD,
       status,
       paidDate,
-      paidAmountUSD: status === 'paid' ? monthlyTotalUSD : undefined,
-      paidAmountLAK: status === 'paid' ? monthlyTotalLAK : undefined,
+      paidAmountUSD: undefined,
+      paidAmountLAK: undefined,
       paymentMethod,
       receiptNo,
       transferRef,
       bankName: undefined,
       notes: i === 1 ? 'ງວດທີ 1 ຫຼັງຮັບລົດ' : undefined,
-      collectedBy: status === 'paid' ? (customer.assignedTo || 'Admin') : undefined,
+      collectedBy: undefined,
     });
   }
 

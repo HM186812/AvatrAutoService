@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
-import { X, CreditCard, KeyRound, Loader2 } from 'lucide-react';
-import type { Language, Lead } from '../../types';
+import { X, CreditCard, KeyRound, Loader2, Trash2 } from 'lucide-react';
+import type { GiftItem, Language, Lead } from '../../types';
 import { formatDateKey, localDateKey, makeContactEntry } from '../../utils/followUp';
+import { DEFAULT_GIFT_BUDGET_USD, DEFAULT_GIFT_CATALOG, giftTotalUSD } from '../../data/giftCatalog';
+
+const usd = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const toNum = (s: string) => (s.trim() === '' ? undefined : Number(s));
 
 interface PipelineActionModalProps {
   mode: 'booking' | 'delivery';
@@ -27,8 +31,39 @@ export default function PipelineActionModal({ mode, lead, staffName, staffOption
   const [date, setDate] = useState<string>((isBooking ? lead.bookingDate : lead.vehicleDeliveredAt) || today);
   const [deliveredBy, setDeliveredBy] = useState<string>(lead.vehicleDeliveredBy || staffName || '');
   const [note, setNote] = useState<string>((isBooking ? lead.bookingNote : lead.deliveryNote) || '');
+  const [listPrice, setListPrice] = useState<string>(lead.listPriceUSD != null ? String(lead.listPriceUSD) : '');
+  const [discount, setDiscount] = useState<string>(lead.discountUSD != null ? String(lead.discountUSD) : '');
+  const [deliveryWindow, setDeliveryWindow] = useState<string>(lead.deliveryWindow || '');
+  const [gifts, setGifts] = useState<GiftItem[]>(lead.giftItems || []);
+  const [giftBudget, setGiftBudget] = useState<string>(String(lead.giftBudgetUSD ?? DEFAULT_GIFT_BUDGET_USD));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const listPriceNum = toNum(listPrice);
+  const discountNum = toNum(discount) ?? 0;
+  const netPrice = listPriceNum != null && Number.isFinite(listPriceNum) ? listPriceNum - discountNum : undefined;
+  const depositNum = Number(amount) || 0;
+  const remaining = netPrice != null ? netPrice - depositNum : undefined;
+  const giftTotal = giftTotalUSD(gifts);
+  const budgetNum = Number(giftBudget) || 0;
+  const budgetLeft = budgetNum - giftTotal;
+
+  // The form always shows one empty row after the gifts; typing in it creates the next gift (no add button).
+  const giftRows: GiftItem[] = [...gifts, { name: '', costUSD: 0 }];
+  const updateGift = (i: number, patch: Partial<GiftItem>) => {
+    const next = giftRows.map((g, idx) => {
+      if (idx !== i) return g;
+      const merged = { ...g, ...patch };
+      // Picking a catalog name fills its usual cost when no cost was typed yet.
+      if (patch.name !== undefined && !Number(g.costUSD)) {
+        const preset = DEFAULT_GIFT_CATALOG.find(c => c.name === patch.name!.trim());
+        if (preset) merged.costUSD = preset.costUSD;
+      }
+      return merged;
+    });
+    while (next.length && !next[next.length - 1].name && !Number(next[next.length - 1].costUSD)) next.pop();
+    setGifts(next);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,6 +83,23 @@ export default function PipelineActionModal({ mode, lead, staffName, staffOption
         setError(L('ກະລຸນາປ້ອນຈຳນວນເງິນມັດຈຳທີ່ຖືກຕ້ອງ (ຫຼາຍກວ່າ 0)', 'Enter a valid deposit amount (above 0)', 'กรุณากรอกเงินมัดจำที่ถูกต้อง'));
         return;
       }
+      if (listPriceNum != null && (!Number.isFinite(listPriceNum) || listPriceNum < 0)) {
+        setError(L('ລາຄາເຕັມບໍ່ຖືກຕ້ອງ', 'List price is not valid', 'ราคาเต็มไม่ถูกต้อง'));
+        return;
+      }
+      if (!Number.isFinite(discountNum) || discountNum < 0 || (listPriceNum != null && discountNum > listPriceNum)) {
+        setError(L('ສ່ວນຫຼຸດຕ້ອງບໍ່ຕິດລົບ ແລະ ບໍ່ເກີນລາຄາເຕັມ', 'Discount must be 0 or more and not above the list price', 'ส่วนลดต้องไม่ติดลบและไม่เกินราคาเต็ม'));
+        return;
+      }
+      const namedGifts = gifts.filter(g => g.name.trim());
+      if (gifts.some(g => !g.name.trim() && Number(g.costUSD) > 0)) {
+        setError(L('ມີຕົ້ນທຶນຂອງແຖມທີ່ຍັງບໍ່ມີຊື່', 'A gift cost has no gift name', 'มีต้นทุนของแถมที่ยังไม่มีชื่อ'));
+        return;
+      }
+      if (namedGifts.some(g => !Number.isFinite(Number(g.costUSD)) || Number(g.costUSD) < 0)) {
+        setError(L('ຂອງແຖມທຸກລາຍການຕ້ອງມີຊື່ ແລະ ຕົ້ນທຶນບໍ່ຕິດລົບ', 'Every gift needs a name and a cost of 0 or more', 'ของแถมทุกรายการต้องมีชื่อและต้นทุนไม่ติดลบ'));
+        return;
+      }
       const methodLabel = method === 'cash' ? L('ເງິນສົດ', 'cash', 'เงินสด') : L('ໂອນ', 'transfer', 'โอน');
       updated = {
         ...lead,
@@ -55,6 +107,11 @@ export default function PipelineActionModal({ mode, lead, staffName, staffOption
         bookingPaymentMethod: method,
         bookingDate: date,
         bookingNote: note.trim() || undefined,
+        listPriceUSD: listPriceNum,
+        discountUSD: listPriceNum != null || discountNum > 0 ? discountNum : undefined,
+        deliveryWindow: deliveryWindow.trim() || undefined,
+        giftItems: namedGifts.length > 0 ? namedGifts.map(g => ({ name: g.name.trim(), costUSD: Number(g.costUSD) || 0 })) : undefined,
+        giftBudgetUSD: budgetNum,
         contactHistory: [
           ...(lead.contactHistory || []),
           makeContactEntry('deposit', `${L('ຮັບເງິນມັດຈຳ', 'Deposit received', 'รับเงินมัดจำ')} $${value.toLocaleString()} (${methodLabel}) · ${formatDateKey(date)}${note.trim() ? ` — ${note.trim()}` : ''}`, staffName),
@@ -127,6 +184,78 @@ export default function PipelineActionModal({ mode, lead, staffName, staffOption
                       {m === 'cash' ? L('ເງິນສົດ', 'Cash', 'เงินสด') : L('ໂອນ / QR', 'Transfer / QR', 'โอน / QR')}
                     </button>
                   ))}
+                </div>
+              </fieldset>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="pa-list" className={labelCls}>{L('ລາຄາເຕັມ (USD)', 'List price (USD)', 'ราคาเต็ม (USD)')}</label>
+                  <input id="pa-list" type="number" inputMode="decimal" min="0" step="0.01" value={listPrice} onChange={(e) => setListPrice(e.target.value)} placeholder="42900" className={`${inputCls} font-mono`} />
+                </div>
+                <div>
+                  <label htmlFor="pa-discount" className={labelCls}>{L('ສ່ວນຫຼຸດ (USD)', 'Discount (USD)', 'ส่วนลด (USD)')}</label>
+                  <input id="pa-discount" type="number" inputMode="decimal" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="500" className={`${inputCls} font-mono`} />
+                </div>
+              </div>
+              {netPrice != null && (
+                <dl className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-xl bg-slate-50 dark:bg-zinc-900 px-3 py-2"><dt className="text-xs text-slate-600 dark:text-zinc-400">{L('ລາຄາສຸດທິ', 'Net price', 'ราคาสุทธิ')}</dt><dd className="font-bold font-mono">{usd(netPrice)}</dd></div>
+                  <div className="rounded-xl bg-slate-50 dark:bg-zinc-900 px-3 py-2"><dt className="text-xs text-slate-600 dark:text-zinc-400">{L('ຍອດຄ້າງຈ່າຍ', 'Remaining', 'ยอดคงค้าง')}</dt><dd className="font-bold font-mono">{remaining != null ? usd(remaining) : '—'}</dd></div>
+                </dl>
+              )}
+
+              <div>
+                <label htmlFor="pa-window" className={labelCls}>{L('ກຳນົດສົ່ງມອບ', 'Delivery window', 'กำหนดส่งมอบ')}</label>
+                <input id="pa-window" type="text" list="pa-window-options" maxLength={120} value={deliveryWindow} onChange={(e) => setDeliveryWindow(e.target.value)} placeholder={L('ພາຍໃນເດືອນ 5-6', 'e.g. within month 5-6', 'ภายในเดือน 5-6')} className={inputCls} />
+                <datalist id="pa-window-options">
+                  {Array.from({ length: 6 }, (_, k) => {
+                    const m = ((new Date().getMonth() + k) % 12) + 1;
+                    const m2 = (m % 12) + 1;
+                    return [<option key={`a${k}`} value={`ພາຍໃນເດືອນ ${m}`} />, <option key={`b${k}`} value={`ພາຍໃນເດືອນ ${m}-${m2}`} />];
+                  })}
+                </datalist>
+              </div>
+
+              <fieldset className="space-y-2">
+                <legend className={labelCls}>{L('ຂອງແຖມ ແລະ ຕົ້ນທຶນ', 'Gifts and cost', 'ของแถมและต้นทุน')}</legend>
+                <ul className="space-y-1.5">
+                  {giftRows.map((g, i) => {
+                    const isBlank = i === giftRows.length - 1;
+                    return (
+                      <li key={i} className="flex items-center gap-2">
+                        <input id={`pa-gift-${i}`} aria-label={L(`ຊື່ຂອງແຖມ ${i + 1}`, `Gift name ${i + 1}`, `ชื่อของแถม ${i + 1}`)} type="text" list="pa-gift-options" maxLength={120} value={g.name}
+                          onChange={(e) => updateGift(i, { name: e.target.value })}
+                          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                          placeholder={isBlank ? L('ເລືອກ ຫຼື ພິມຂອງແຖມ (ແຖວໃໝ່ຂຶ້ນເອງ)', 'Pick or type a gift (new row appears)', 'เลือกหรือพิมพ์ของแถม (แถวใหม่ขึ้นเอง)') : ''}
+                          className={`${inputCls} flex-1 min-w-0 py-2`} />
+                        <input id={`pa-gift-cost-${i}`} aria-label={L(`ຕົ້ນທຶນ USD ${i + 1}`, `Cost USD ${i + 1}`, `ต้นทุน USD ${i + 1}`)} type="number" inputMode="decimal" min="0" step="0.01"
+                          value={isBlank && !g.costUSD ? '' : g.costUSD} placeholder="$0"
+                          onChange={(e) => updateGift(i, { costUSD: e.target.value === '' ? 0 : Number(e.target.value) })}
+                          className={`${inputCls.replace('w-full ', '')} w-24 shrink-0 py-2 font-mono`} />
+                        {isBlank ? (
+                          <span className="w-8 shrink-0" aria-hidden="true" />
+                        ) : (
+                          <button type="button" onClick={() => setGifts(prev => prev.filter((_, idx) => idx !== i))} aria-label={L('ລົບ', 'Remove', 'ลบ')} className="p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer shrink-0">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <datalist id="pa-gift-options">
+                  {DEFAULT_GIFT_CATALOG.map(g => <option key={g.name} value={g.name}>{usd(g.costUSD)}</option>)}
+                </datalist>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <label htmlFor="pa-budget" className="block text-xs text-slate-600 dark:text-zinc-400 mb-1">{L('ງົບຕໍ່ຄັນ', 'Budget / car', 'งบต่อคัน')}</label>
+                    <input id="pa-budget" type="number" inputMode="decimal" min="0" step="1" value={giftBudget} onChange={(e) => setGiftBudget(e.target.value)} className={`${inputCls} py-2 font-mono`} />
+                  </div>
+                  <div className="rounded-xl bg-slate-50 dark:bg-zinc-900 px-3 py-2"><span className="block text-xs text-slate-600 dark:text-zinc-400">{L('ລວມຕົ້ນທຶນ', 'Gift cost', 'รวมต้นทุน')}</span><span className="font-bold font-mono">{usd(giftTotal)}</span></div>
+                  <div className={`rounded-xl px-3 py-2 ${budgetLeft < 0 ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-400'}`}>
+                    <span className="block text-xs">{budgetLeft < 0 ? L('ເກີນງົບ', 'Over budget', 'เกินงบ') : L('ຄົງເຫຼືອ', 'Left', 'คงเหลือ')}</span>
+                    <span className="font-bold font-mono">{usd(Math.abs(budgetLeft))}</span>
+                  </div>
                 </div>
               </fieldset>
             </>

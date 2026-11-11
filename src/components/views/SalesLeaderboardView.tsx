@@ -13,6 +13,8 @@ import {
   Download
 } from 'lucide-react';
 import { InvoiceBillRecord, Lead, VehicleModel, SystemUser, Language, ActiveMenu } from '../../types';
+import MonthlyBrandReport from './MonthlyBrandReport';
+import { usePeriodBills } from '../../utils/usePeriodBills';
 import {
   computeLeaderboard,
   assignRanks,
@@ -37,6 +39,7 @@ export type { LeaderboardPeriod, RepPerformanceRecord };
 export default function SalesLeaderboardView({
   bills,
   leads,
+  vehicles,
   lang,
   initialPeriod,
   onPeriodChange,
@@ -58,9 +61,10 @@ export default function SalesLeaderboardView({
   const [selectedRep, setSelectedRep] = useState<RepPerformanceRecord | null>(null);
 
   // Compute stats across reps (shared logic with dashboard widget)
+  const { bills: periodBills, loading: loadingPeriodBills, limitHit } = usePeriodBills(bills, period);
   const leaderboardStats = useMemo(
-    () => computeLeaderboard(bills, leads, period),
-    [bills, leads, period],
+    () => computeLeaderboard(periodBills, leads, period),
+    [periodBills, leads, period],
   );
 
   // Overall summary metrics
@@ -100,7 +104,7 @@ export default function SalesLeaderboardView({
       r.totalRevenueUSD,
       r.totalRevenueLAK,
       r.avgDealSizeUSD,
-      `${r.conversionRate}%`
+      r.conversionRate == null ? "-" : `${r.conversionRate}%`
     ]);
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -122,6 +126,18 @@ export default function SalesLeaderboardView({
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
             <span>ຈັດອັນດັບພະນັກງານຂາຍ Top Sales</span>
           </h1>
+          <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400" role="status">
+            {loadingPeriodBills
+              ? (lang === 'lo' ? 'ກຳລັງໂຫຼດບິນທັງໝົດຂອງຊ່ວງເວລານີ້...' : 'Loading every bill in this period...')
+              : periodLabels[period]}
+          </p>
+          {limitHit && (
+            <p role="alert" className="mt-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              {lang === 'lo'
+                ? 'ຊ່ວງເວລານີ້ມີບິນເກີນ 1,000 ໃບ: ອັນດັບອາດບໍ່ຄົບ. ເລືອກ "ເດືອນນີ້" ເພື່ອໃຫ້ຖືກຕ້ອງ.'
+                : 'This period has over 1,000 bills, so the ranking may be incomplete. Choose "This month" for exact figures.'}
+            </p>
+          )}
         </div>
 
         {/* Controls: Period Switcher & CSV Export */}
@@ -505,7 +521,7 @@ export default function SalesLeaderboardView({
 
                         <td className="py-3.5 px-4 text-center font-mono">
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            {r.conversionRate}%
+                            {r.conversionRate == null ? "—" : `${r.conversionRate}%`}
                           </span>
                           <span className="text-[10px] text-slate-500 dark:text-zinc-500 block mt-0.5">
                             ປິດ {r.deliveredLeadsCount}/{r.deliveredLeadsCount + r.activeLeadsCount}
@@ -537,6 +553,8 @@ export default function SalesLeaderboardView({
           </div>
         )}
       </div>
+
+      <MonthlyBrandReport bills={bills} leads={leads} vehicles={vehicles} lang={lang} />
 
       {/* DRILL-DOWN MODAL FOR SELECTED REP */}
       {selectedRep && (
@@ -587,7 +605,7 @@ export default function SalesLeaderboardView({
                 </div>
                 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800 font-mono">
                   <span className="text-[10px] uppercase text-slate-500 dark:text-zinc-500 block">ອັດຕາປິດການຂາຍ</span>
-                  <span className="text-xl font-black text-blue-600 dark:text-blue-400">{selectedRep.conversionRate}%</span>
+                  <span className="text-xl font-black text-blue-600 dark:text-blue-400">{selectedRep.conversionRate == null ? "—" : `${selectedRep.conversionRate}%`}</span>
                 </div>
               </div>
 

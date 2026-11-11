@@ -3,6 +3,7 @@ import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceB
 import { translations } from '../../data/translations';
 import { newRecordId } from '../../backend/ids';
 import { generateNextBillNumber } from '../../backend/data';
+import { SALE_READY_STATUSES } from '../../data/stockSummary';
 import {
   saveBillToSupabase,
   saveVehicleModelToSupabase,
@@ -66,9 +67,12 @@ export default function StockInView({
   const t = translations[lang] || translations.lo;
 
   // Form State - Empty by default
-  const [model, setModel] = useState<string>('AVATR 12');
+  const [model, setModel] = useState<string>(() => vehicles[0]?.name || '');
   const [vin, setVin] = useState('');
   const [engineNumber, setEngineNumber] = useState('');
+  const [frontMotorNumber, setFrontMotorNumber] = useState('');
+  const [rearMotorNumber, setRearMotorNumber] = useState('');
+  const [powertrainType, setPowertrainType] = useState<'' | 'BEV' | 'REEV'>('');
   const [plateNumber, setPlateNumber] = useState('');
   const [color, setColor] = useState('');
   const [interiorColor, setInteriorColor] = useState('');
@@ -76,7 +80,9 @@ export default function StockInView({
   const [battery, setBattery] = useState('');
   const [quantity] = useState<number>(1);
   const [priceValue, setPriceValue] = useState<number | ''>('');
-  const [status, setStatus] = useState<StockStatus>('ready');
+  // New arrivals start as "imported, PDI pending": nobody has inspected them yet.
+  const [status, setStatus] = useState<StockStatus>('imported');
+  const [expectedArrivalDate, setExpectedArrivalDate] = useState('');
   const [eventCampaign, setEventCampaign] = useState<string>('');
   // Schedule and Campaign fields for Event & Promotion
   const [eventStartDate, setEventStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
@@ -111,7 +117,7 @@ export default function StockInView({
   const [destinationWarehouse, setDestinationWarehouse] = useState('');
 
   // PDI Inspection - Empty by default
-  const [pdiStatus, setPdiStatus] = useState<PDIStatus>('passed');
+  const [pdiStatus, setPdiStatus] = useState<PDIStatus>('pending');
   const [pdiInspector, setPdiInspector] = useState('');
 
   const [recordedBy, setRecordedBy] = useState(() => currentUser?.name || currentUser?.email || 'Admin');
@@ -343,8 +349,16 @@ export default function StockInView({
       return;
     }
 
-    if (!cleanEngine) {
-      triggerToast('ກະລຸນາປ້ອນເລກຈັກ (Engine / Motor Number) ກ່ອນ!', 'error');
+    const cleanFront = frontMotorNumber.toUpperCase().trim();
+    const cleanRear = rearMotorNumber.toUpperCase().trim();
+    if (!cleanEngine && !cleanFront && !cleanRear) {
+      triggerToast('ກະລຸນາປ້ອນເລກມໍເຕີໜ້າ, ມໍເຕີຫຼັງ ຫຼື ເລກເຄື່ອງຈັກ ຢ່າງໜ້ອຍ 1 ຊ່ອງ!', 'error');
+      return;
+    }
+    const takenMotor = [cleanFront, cleanRear].find(no => no && inventory.some(item =>
+      [item.frontMotorNumber, item.rearMotorNumber].some(x => (x || '').toUpperCase().trim() === no)));
+    if (takenMotor) {
+      triggerToast(`ເລກມໍເຕີ ${takenMotor} ມີໃນສາງແລ້ວ! ບໍ່ສາມາດຊໍ້າກັນໄດ້`, 'error');
       return;
     }
 
@@ -353,7 +367,7 @@ export default function StockInView({
       return;
     }
 
-    if (inventory.some(item => (item.engineNumber || '').toUpperCase().trim() === cleanEngine)) {
+    if (cleanEngine && inventory.some(item => (item.engineNumber || '').toUpperCase().trim() === cleanEngine)) {
       triggerToast('ເລກຈັກ (Engine No.) ນີ້ມີໃນສາງແລ້ວ! ເລກຈັກບໍ່ສາມາດຊໍ້າກັນໄດ້ເດັດຂາດ', 'error');
       return;
     }
@@ -370,7 +384,22 @@ export default function StockInView({
       }
     }
 
-    const rawVal = Number(priceValue) || (model === 'AVATR 12' ? 45000 : model === 'AVATR 11' ? 42000 : 38000);
+    // Sale-ready statuses need a passed PDI; in-transit units need an expected arrival date.
+    if (SALE_READY_STATUSES.includes(status) && pdiStatus !== 'passed') {
+      triggerToast('ຕັ້ງເປັນ "ພ້ອມຂາຍ / Event / ໂປຣໂມຊັນ" ບໍ່ໄດ້ ເພາະ PDI ຍັງບໍ່ຜ່ານ', 'error');
+      return;
+    }
+    if (status === 'in_transit' && !expectedArrivalDate) {
+      triggerToast('ກະລຸນາປ້ອນວັນທີຄາດວ່າລົດຈະຮອດສາງ', 'error');
+      return;
+    }
+
+    const catalogPrice = vehicles.find(v => v.name === model)?.priceStartingUSD || 0;
+    const rawVal = Number(priceValue) || catalogPrice;
+    if (!rawVal) {
+      triggerToast('ກະລຸນາປ້ອນລາຄາລົດ', 'error');
+      return;
+    }
     const finalPriceUSD = rawVal;
     const finalPriceLAK = Math.round(finalPriceUSD * 22000);
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -382,6 +411,9 @@ export default function StockInView({
     const newItem: InventoryItem = {
       vin: cleanVin,
       engineNumber: engineNumber.trim() || undefined,
+      frontMotorNumber: cleanFront || undefined,
+      rearMotorNumber: cleanRear || undefined,
+      powertrainType: powertrainType || undefined,
       model,
       trim,
       plateNumber: plateNumber.trim() ? plateNumber.trim() : undefined,
@@ -395,10 +427,11 @@ export default function StockInView({
       pdiStatus,
       destinationWarehouse,
       arrivalDate: importDateTime,
+      expectedArrivalDate: status === 'in_transit' ? expectedArrivalDate : undefined,
       importDocNumber: customsDocNumber || undefined,
       image: finalImage,
       imageUrl: finalImage,
-      notes: notes || 'ຮັບເຂົ້າສາງທາງການ ຜ່ານດ່ານສາກົນບໍ່ເຕັນ ກວດສອບສະພາບ 100%',
+      notes: notes.trim() || undefined,
       pdiInspector,
       eventCampaign: (status === 'event' || status === 'promotion') ? eventCampaign : undefined,
       eventStartDate: (status === 'event' || status === 'promotion') ? eventStartDate : undefined,
@@ -443,7 +476,7 @@ export default function StockInView({
       eventEndDate: (status === 'event' || status === 'promotion') ? eventEndDate : undefined,
       eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
       recordedBy,
-      notes: notes || 'ຮັບເຂົ້າສາງທາງການ ຜ່ານດ່ານສາກົນບໍ່ເຕັນ ກວດສອບສະພາບ 100%',
+      notes: notes.trim() || undefined,
     };
 
     setIsSubmittingStockIn(true);
@@ -489,6 +522,13 @@ export default function StockInView({
 
     // Reset Form for next entry
     setVin('');
+    // Next unit starts uninspected again
+    setStatus('imported');
+    setPdiStatus('pending');
+    setExpectedArrivalDate('');
+    setEngineNumber('');
+    setFrontMotorNumber('');
+    setRearMotorNumber('');
     setCustomsDocNumber(generateAutoB01());
     setRecordedBy(currentUser?.name || currentUser?.email || 'Admin');
   };
@@ -678,15 +718,46 @@ export default function StockInView({
               />
             </div>
 
-            {/* Engine / Motor Number */}
+            {/* Powertrain + motor numbers (at least one number required) */}
+            <div>
+              <label htmlFor="si-powertrain" className="mb-1 block font-medium text-zinc-400">
+                {lang === 'lo' ? 'ປະເພດເຄື່ອງ' : lang === 'th' ? 'ประเภทขับเคลื่อน' : 'Powertrain'}
+              </label>
+              <select
+                id="si-powertrain"
+                value={powertrainType}
+                onChange={(e) => setPowertrainType(e.target.value as '' | 'BEV' | 'REEV')}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
+              >
+                <option value="">—</option>
+                <option value="BEV">BEV</option>
+                <option value="REEV">REEV</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="si-front" className="mb-1 block font-medium text-zinc-400">
+                {lang === 'lo' ? 'ເລກມໍເຕີໜ້າ' : lang === 'th' ? 'เลขมอเตอร์หน้า' : 'Front motor no.'}
+              </label>
+              <input id="si-front" type="text" maxLength={60} value={frontMotorNumber} onChange={(e) => setFrontMotorNumber(e.target.value)}
+                placeholder="e.g. 2102312SCR10SC100462"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-white" />
+            </div>
+            <div>
+              <label htmlFor="si-rear" className="mb-1 block font-medium text-zinc-400">
+                {lang === 'lo' ? 'ເລກມໍເຕີຫຼັງ' : lang === 'th' ? 'เลขมอเตอร์หลัง' : 'Rear motor no.'}
+              </label>
+              <input id="si-rear" type="text" maxLength={60} value={rearMotorNumber} onChange={(e) => setRearMotorNumber(e.target.value)}
+                placeholder="e.g. 210260026910T2100157"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-white" />
+            </div>
             <div>
               <label className="mb-1 block font-medium text-zinc-400">
-                {lang === 'lo' ? 'ເລກຈັກ (Engine / Motor Number)' : lang === 'th' ? 'เลขเครื่องยนต์ / มอเตอร์ (Engine No.)' : 'Engine / Motor No.'}
-                {' '}<span className="text-red-500 font-bold ml-1">*</span>
+                {powertrainType === 'REEV'
+                  ? (lang === 'lo' ? 'ເລກເຄື່ອງຈັກ (REEV)' : lang === 'th' ? 'เลขเครื่องยนต์ (REEV)' : 'Engine no. (REEV)')
+                  : (lang === 'lo' ? 'ເລກຈັກ (ອື່ນໆ)' : lang === 'th' ? 'เลขเครื่อง (อื่นๆ)' : 'Engine / other no.')}
               </label>
               <input
                 type="text"
-                required
                 value={engineNumber}
                 onChange={(e) => setEngineNumber(e.target.value)}
                 placeholder="e.g. TZ210XYA-098821"
@@ -883,12 +954,25 @@ export default function StockInView({
                 onChange={(e) => setStatus(e.target.value as any)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white"
               >
-                <option value="ready">{t.stage3Ready}</option>
-                <option value="pdi">{t.stage2PDI}</option>
                 <option value="imported">{t.stage1Imported}</option>
-                <option value="event">{t.stage5Event}</option>
-                <option value="promotion">{t.stage6Promo}</option>
+                <option value="in_transit">{lang === 'lo' ? 'ກຳລັງມາ (ຍັງບໍ່ຮອດສາງ)' : lang === 'th' ? 'กำลังมา (ยังไม่ถึงคลัง)' : 'In transit (not yet arrived)'}</option>
+                <option value="pdi">{t.stage2PDI}</option>
+                <option value="ready" disabled={pdiStatus !== 'passed'}>{t.stage3Ready}{pdiStatus !== 'passed' ? (lang === 'lo' ? ' (ຕ້ອງຜ່ານ PDI)' : ' (needs PDI pass)') : ''}</option>
+                <option value="event" disabled={pdiStatus !== 'passed'}>{t.stage5Event}{pdiStatus !== 'passed' ? (lang === 'lo' ? ' (ຕ້ອງຜ່ານ PDI)' : ' (needs PDI pass)') : ''}</option>
+                <option value="promotion" disabled={pdiStatus !== 'passed'}>{t.stage6Promo}{pdiStatus !== 'passed' ? (lang === 'lo' ? ' (ຕ້ອງຜ່ານ PDI)' : ' (needs PDI pass)') : ''}</option>
               </select>
+              {status === 'in_transit' && (
+                <label className="mt-2 block text-[11px] font-medium text-zinc-400">
+                  {lang === 'lo' ? 'ວັນທີຄາດວ່າຈະຮອດສາງ *' : 'Expected arrival date *'}
+                  <input
+                    id="si-expected-arrival"
+                    type="date"
+                    value={expectedArrivalDate}
+                    onChange={(e) => setExpectedArrivalDate(e.target.value)}
+                    className="mt-1 w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
+                  />
+                </label>
+              )}
             </div>
 
             <div>
@@ -1095,7 +1179,12 @@ export default function StockInView({
               <label className="block text-zinc-400 mb-1 font-medium">{t.pdiStatusLabel}</label>
               <select
                 value={pdiStatus}
-                onChange={(e) => setPdiStatus(e.target.value as any)}
+                onChange={(e) => {
+                  const next = e.target.value as PDIStatus;
+                  setPdiStatus(next);
+                  // Leaving "passed" pulls a sale-ready status back to PDI, so the form never holds an impossible pair
+                  if (next !== 'passed' && SALE_READY_STATUSES.includes(status)) setStatus('pdi');
+                }}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none"
               >
                 <option value="passed">{t.pdiPassedLabel}</option>

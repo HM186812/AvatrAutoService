@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Fragment } from 'react';
 import { InventoryItem, VehicleModel, Language } from '../../types';
 import { translations } from '../../data/translations';
 import {
@@ -63,16 +63,13 @@ export default function StockAlertsView({
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchName = m.modelName.toLowerCase().includes(q);
-        const matchCat = m.category.toLowerCase().includes(q);
-        return matchName || matchCat;
+        return [m.modelName, m.category, m.brand].some(v => v.toLowerCase().includes(q));
       }
       return true;
     }).sort((a, b) => {
-      // Prioritize out of stock (0), then low stock (< 5), then healthy
-      const scoreA = a.isOutOfStock ? 0 : a.isLowStock ? 1 : 2;
-      const scoreB = b.isOutOfStock ? 0 : b.isLowStock ? 1 : 2;
-      return scoreA - scoreB;
+      // Brand first (summaries arrive brand → model sorted); inside a brand: out of stock, low, healthy, never stocked
+      const score = (m: typeof a) => m.isOutOfStock ? 0 : m.isLowStock ? 1 : m.isTracked ? 2 : 3;
+      return a.brand.localeCompare(b.brand, undefined, { numeric: true, sensitivity: 'base' }) || score(a) - score(b);
     });
   }, [modelSummaries, filterType, searchQuery]);
 
@@ -302,12 +299,16 @@ export default function StockAlertsView({
               </p>
             </div>
           ) : (
-            displayedModels.map((item) => {
+            displayedModels.map((item, idx) => {
               const percent = Math.min(100, Math.round((item.count / LOW_STOCK_THRESHOLD) * 100));
+              const newBrand = idx === 0 || displayedModels[idx - 1].brand !== item.brand;
 
               return (
+                <Fragment key={item.modelName}>
+                {newBrand && (
+                  <h3 className="pt-2 first:pt-0 text-sm font-black uppercase tracking-wider text-black dark:text-white">{item.brand}</h3>
+                )}
                 <div
-                  key={item.modelName}
                   className="category-alert-card rounded-2xl border transition-all p-5 sm:p-6 shadow-sm bg-white border-zinc-200 hover:border-zinc-400 dark:bg-zinc-950 dark:border-zinc-800 dark:hover:border-zinc-700"
                 >
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
@@ -337,6 +338,10 @@ export default function StockAlertsView({
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                               <span>{t.badgeLowStock} {item.count} {t.unitCars} (&lt; {LOW_STOCK_THRESHOLD})</span>
                             </span>
+                          ) : !item.isTracked ? (
+                            <span title={lang === 'lo' ? 'ລຸ້ນນີ້ຍັງບໍ່ເຄີຍມີລົດໃນສາງ ຈຶ່ງບໍ່ແຈ້ງເຕືອນ' : 'Never stocked, so no alert'} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
+                              <span>{lang === 'lo' ? 'ຍັງບໍ່ເຄີຍມີລົດ (ບໍ່ເຕືອນ)' : 'Never stocked (no alert)'}</span>
+                            </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -345,7 +350,9 @@ export default function StockAlertsView({
                           )}
                         </div>
                         <p className="text-xs text-black font-semibold dark:text-zinc-400 dark:font-normal truncate">
-                          {item.model?.subTitle || item.model?.tagline || 'AVATR Intelligent Luxury EV'}
+                          {lang === 'lo'
+                            ? `ຂາຍໄດ້ດຽວນີ້ ${item.sellableCount} · ຈອງແລ້ວ ${item.reservedCount}${item.inTransitCount ? ` · ກຳລັງມາ ${item.inTransitCount}` : ''} · ຂາຍແລ້ວ ${item.soldCount}`
+                            : `Sellable ${item.sellableCount} · Reserved ${item.reservedCount}${item.inTransitCount ? ` · In transit ${item.inTransitCount}` : ''} · Sold ${item.soldCount}`}
                         </p>
                       </div>
                     </div>
@@ -437,6 +444,7 @@ export default function StockAlertsView({
                     </div>
                   </div>
                 </div>
+                </Fragment>
               );
             })
           )}

@@ -10,7 +10,8 @@ interface ContactLogModalProps {
   lang: Language;
   onClose: () => void;
   /** Persist the updated lead (history + next follow-up). Throw on failure. */
-  onSave: (updated: Lead, message: string) => Promise<void>;
+  /** removedContactIds: entries deleted on purpose (everything else already in the database is kept) */
+  onSave: (updated: Lead, message: string, removedContactIds?: string[]) => Promise<void>;
 }
 
 const TYPE_ICONS: Record<ContactLogType, React.ComponentType<{ className?: string }>> = {
@@ -77,7 +78,8 @@ export default function ContactLogModal({ lead, staffName, isAdmin, lang, onClos
     try {
       await onSave(
         { ...lead, contactHistory: (lead.contactHistory || []).filter(e => e.id !== id) },
-        L('ລົບປະຫວັດສຳເລັດ', 'History entry deleted', 'ลบประวัติสำเร็จ')
+        L('ລົບປະຫວັດສຳເລັດ', 'History entry deleted', 'ลบประวัติสำเร็จ'),
+        [id]
       );
     } catch {
       // toast shown by caller

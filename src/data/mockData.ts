@@ -1,4 +1,4 @@
-import { VehicleModel, Lead, ServiceAppointment, TestDriveBooking, InventoryItem, SystemUser, StockLogRecord, InvoiceBillRecord, PendingMemberRequest } from '../types';
+import { VehicleModel, Lead, ServiceAppointment, TestDriveBooking, InventoryItem, SystemUser, StockLogRecord, InvoiceBillRecord } from '../types';
 
 export const AVATR_VEHICLES: VehicleModel[] = [
   {
@@ -640,4 +640,3 @@ export const INITIAL_BILLS: InvoiceBillRecord[] = [
   }
 ];
 
-export const INITIAL_PENDING_MEMBERS: PendingMemberRequest[] = [];

@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Sparkles
 } from 'lucide-react';
+import { usePeriodBills } from '../../utils/usePeriodBills';
 import { computeLeaderboard, assignRanks, type LeaderboardPeriod } from '../../utils/salesLeaderboard';
 import { InvoiceBillRecord, Lead, VehicleModel, Language } from '../../types';
 
@@ -41,7 +42,8 @@ export default function TopSalesWidget({
   };
 
   // Shared computation with the full leaderboard page (single source of truth)
-  const leaderboardData = useMemo(() => computeLeaderboard(bills, leads, period), [bills, leads, period]);
+  const { bills: periodBills } = usePeriodBills(bills, period);
+  const leaderboardData = useMemo(() => computeLeaderboard(periodBills, leads, period), [periodBills, leads, period]);
   const ranks = useMemo(() => assignRanks(leaderboardData), [leaderboardData]);
 
   const top1 = leaderboardData[0];
