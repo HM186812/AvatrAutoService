@@ -1,4 +1,5 @@
 import { withVehicleFromBills } from '../../utils/documentCustomer';
+import { phoneMatches } from '../../utils/search';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Lead,
@@ -156,7 +157,8 @@ export default function InstallmentDashboardView({
         const q = searchQuery.toLowerCase();
         return (
           lead.customerName.toLowerCase().includes(q) ||
-          lead.phone.toLowerCase().includes(q) ||
+          phoneMatches(lead.phone, q) ||
+          (lead.vin && lead.vin.toLowerCase().includes(q)) ||
           (lead.interestedModel && lead.interestedModel.toLowerCase().includes(q)) ||
           (lead.province && lead.province.toLowerCase().includes(q)) ||
           contractNo.toLowerCase().includes(q)
@@ -654,7 +656,7 @@ export default function InstallmentDashboardView({
                     </div>
                     <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
                       <div
-                        className={`h-full rounded-full transition-all duration-500 ${summary.isFullyPaid ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-amber-300'
+                        className={`h-full rounded-full transition-all duration-500 ${summary.isFullyPaid ? 'bg-emerald-500' : 'bg-linear-to-r from-amber-500 to-amber-300'
                           }`}
                         style={{ width: `${summary.progressPercent}%` }}
                       />

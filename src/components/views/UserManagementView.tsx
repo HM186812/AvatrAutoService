@@ -564,7 +564,7 @@ export default function UserManagementView({
                         setHandoverUser(user);
                       }}
                       aria-label={`ໂອນເຄສຄັ່ງຄ້າງ ${pendingLeadCount} ລາຍການ`}
-                      className="user-management-grant-button inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-xl border px-2 font-semibold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                      className="user-management-grant-button inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-xl border px-2 font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2"
                       title={`ໂອນເຄສລູກຄ້າທີ່ຄ້າງ ${pendingLeadCount} ລາຍການ`}
                     >
                       <ArrowRightLeft aria-hidden="true" className="w-4 h-4" />
@@ -578,7 +578,7 @@ export default function UserManagementView({
                         setEditingUser({ ...user });
                       }}
                       aria-label="ມອບສິດ ແລະ ປ່ຽນບົດບາດ"
-                      className="user-management-grant-button inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border font-semibold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                      className="user-management-grant-button inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2"
                       title="ມອບສິດ ແລະ ປ່ຽນບົດບາດ"
                     >
                       <Key aria-hidden="true" className="w-4 h-4" />
@@ -590,7 +590,7 @@ export default function UserManagementView({
                       onClick={() => setDeletingUser(user)}
                       disabled={!canDeleteUsers}
                       aria-label={!canDeleteUsers ? 'ທ່ານບໍ່ມີສິດລົບຜູ້ໃຊ້' : `ລົບບັນຊີ ${user.name}`}
-                      className={`user-management-delete-button inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border font-semibold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                      className={`user-management-delete-button inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 ${
                         !canDeleteUsers
                           ? 'bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-50'
                           : 'bg-zinc-900 hover:bg-rose-950/60 text-zinc-300 hover:text-rose-300 border-zinc-800 hover:border-rose-800/60'

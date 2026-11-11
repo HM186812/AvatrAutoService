@@ -1,4 +1,5 @@
 import { withVehicleFromBills } from '../../utils/documentCustomer';
+import { phoneMatches } from '../../utils/search';
 import { useState, useMemo, useEffect } from 'react';
 import {
   Lead,
@@ -243,7 +244,7 @@ export default function DashboardView({
         const q = installmentSearchQuery.toLowerCase();
         return (
           lead.customerName.toLowerCase().includes(q) ||
-          lead.phone.toLowerCase().includes(q) ||
+          phoneMatches(lead.phone, q) ||
           (lead.interestedModel && lead.interestedModel.toLowerCase().includes(q)) ||
           (lead.province && lead.province.toLowerCase().includes(q))
         );
@@ -421,7 +422,7 @@ export default function DashboardView({
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-slate-900 dark:text-white">{kpiData.leads}</span>
+            <span className="text-4xl font-black font-mono text-slate-900 dark:text-white">{kpiData.leads}</span>
             <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">ລູກຄ້າ</span>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-white">
@@ -445,12 +446,12 @@ export default function DashboardView({
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-slate-900 dark:text-white">{sellableCars.length}</span>
-            <span className="text-xs text-emerald-600 dark:text-white font-semibold font-mono">
+            <span className="text-4xl font-black font-mono text-slate-900 dark:text-white">{sellableCars.length}</span>
+            <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">
               ຄັນ {onHandCars.length > 0 ? `/ ${onHandCars.length} ໃນສາງ` : ''}
             </span>
           </div>
-          <div className={`mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 ${isAdmin ? 'group-hover:text-emerald-600 dark:group-hover:text-white' : ''
+          <div className={`mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 ${isAdmin ? 'group-hover:text-blue-600 dark:group-hover:text-white' : ''
             }`}>
             <span>
               {lowStockModels.length > 0 ? (
@@ -463,7 +464,7 @@ export default function DashboardView({
               )}
             </span>
             {isAdmin && (
-              <span className="flex items-center gap-1 text-emerald-600 dark:text-white font-medium group-hover:underline">
+              <span className="flex items-center gap-1 text-slate-500 dark:text-zinc-400 font-medium group-hover:text-blue-600 dark:group-hover:text-white group-hover:underline">
                 <span>{lowStockModels.length > 0 ? 'ເຕືອນສາງ' : 'ກວດສາງ'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </span>
@@ -483,7 +484,7 @@ export default function DashboardView({
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-slate-900 dark:text-white">{kpiData.salesCount}</span>
+            <span className="text-4xl font-black font-mono text-slate-900 dark:text-white">{kpiData.salesCount}</span>
             <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">ຄັນທີ່ຂາຍອອກ</span>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-white">
@@ -505,7 +506,7 @@ export default function DashboardView({
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
+            <span className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white">
               ${kpiData.revenueUSD.toLocaleString()}
             </span>
             <span className="text-xs text-blue-600 font-mono font-bold">USD</span>

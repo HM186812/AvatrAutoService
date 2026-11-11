@@ -1975,7 +1975,7 @@ export default function BillsManagementView({
                         <tr
                           key={bill.id}
                           className={`hover:bg-zinc-900/50 transition-colors ${selectedBillIds.includes(bill.id) ? 'bg-zinc-900/40' : ''
-                            } ${isInstallment ? 'bg-amber-500/[0.02]' : ''}`}
+                            } ${isInstallment ? 'bg-amber-500/2' : ''}`}
                         >
                           {/* Selection Checkbox */}
                           <td className="py-2.5 pl-3 pr-1 text-center">
@@ -2030,7 +2030,7 @@ export default function BillsManagementView({
                               )}
                             </div>
                             {bill.status === 'voided' && bill.voidReason && (
-                              <span className="block max-w-[220px] text-[10px] text-red-300/90 font-sans whitespace-normal" title={bill.voidReason}>
+                              <span className="block max-w-55 text-[10px] text-red-300/90 font-sans whitespace-normal" title={bill.voidReason}>
                                 {lang === 'lo' ? 'ເຫດຜົນ' : 'Reason'}: {bill.voidReason}
                                 {(bill.voidedBy || bill.voidedAt) && (
                                   <span className="block text-zinc-500">
@@ -2088,11 +2088,11 @@ export default function BillsManagementView({
 
                           {/* Vehicle Details */}
                           <td className="py-2.5 px-2.5">
-                            <strong className="text-white font-sans text-xs block truncate max-w-[150px]">{bill.model}</strong>
+                            <strong className="text-white font-sans text-xs block truncate max-w-37.5">{bill.model}</strong>
                             <button
                               type="button"
                               onClick={() => applyQuickSearch('vinPlate', bill.vin)}
-                              className="text-zinc-400 hover:text-amber-300 text-[10px] font-mono block truncate max-w-[150px] text-left cursor-pointer"
+                              className="text-zinc-400 hover:text-amber-300 text-[10px] font-mono block truncate max-w-37.5 text-left cursor-pointer"
                               title="ຄລິກເພື່ອເບິ່ງບິນທັງໝົດຂອງລົດຄັນນີ້ (VIN)"
                             >
                               {bill.vin}
@@ -2106,7 +2106,7 @@ export default function BillsManagementView({
                           {/* Customer or Supplier */}
                           <td className="py-2.5 px-2.5 font-sans">
                             {bill.billType === 'sale' || isInstallment ? (
-                              <div className="max-w-[160px]">
+                              <div className="max-w-40">
                                 {bill.customerName ? (
                                   <button
                                     type="button"
@@ -2141,7 +2141,7 @@ export default function BillsManagementView({
                                 )}
                               </div>
                             ) : (
-                              <div className="max-w-[160px]">
+                              <div className="max-w-40">
                                 <span className="text-zinc-200 font-medium text-xs block truncate">
                                   <button
                                     type="button"
@@ -2183,7 +2183,7 @@ export default function BillsManagementView({
                                 {bill.paymentMethod === 'transfer' ? t.paymentTransfer : t.paymentCash}
                               </span>
                             ) : (
-                              <span className="text-zinc-400 font-sans text-[10px] truncate max-w-[110px] block">
+                              <span className="text-zinc-400 font-sans text-[10px] truncate max-w-27.5 block">
                                 {bill.destinationWarehouse || 'Showroom Depot'}
                               </span>
                             )}
@@ -2365,7 +2365,7 @@ export default function BillsManagementView({
             {/* PRINTABLE BILL CANVAS (Borderless Full A4 Sheet Layout) */}
             <div
               id="printable-official-bill"
-              className="official-dealer-document a4-document-canvas w-full max-w-[794px] mx-auto p-6 sm:p-8 bg-white text-black font-sans text-xs leading-normal rounded-sm shadow-xl flex flex-col justify-between print:m-0 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto print:max-h-[278mm] print:break-inside-avoid print:page-break-inside-avoid print:page-break-after-avoid print:overflow-hidden"
+              className="official-dealer-document a4-document-canvas w-full max-w-198.5 mx-auto p-6 sm:p-8 bg-white text-black font-sans text-xs leading-normal rounded-sm shadow-xl flex flex-col justify-between print:m-0 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto print:max-h-[278mm] print:break-inside-avoid print:page-break-inside-avoid print:page-break-after-avoid print:overflow-hidden"
               style={{ backgroundColor: '#ffffff', color: '#000000', border: 'none', position: 'relative' }}
             >
               {/* VOID mark: printed and exported with the bill, so a voided bill can never pass as valid */}
@@ -2536,7 +2536,7 @@ export default function BillsManagementView({
                 {/* Free Gifts & Warranty Terms for Sales */}
                 {selectedBillForPrint.freeGifts && selectedBillForPrint.freeGifts.length > 0 && (
                   <div className="p-2 bg-zinc-50 rounded border border-black space-y-0.5 text-[10px]">
-                    <span className="font-bold text-black uppercase block flex items-center gap-1">
+                    <span className="font-bold text-black uppercase flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-black" />
                       <span>ຊຸດຂອງແຖມ & ສິດທິພິເສດ (Dealership Privileges):</span>
                     </span>
@@ -2564,7 +2564,7 @@ export default function BillsManagementView({
                         <p className="text-[9px] text-black">LAO THANI TRACTOR SOLE CO., LTD</p>
                       </div>
 
-                      <div className="w-12 h-12 bg-white p-0.5 rounded border border-black flex items-center justify-center flex-shrink-0">
+                      <div className="w-12 h-12 bg-white p-0.5 rounded border border-black flex items-center justify-center shrink-0">
                         {getStoredCompanyBankInfo().qrCodeUrl ? (
                           <img src={getStoredCompanyBankInfo().qrCodeUrl!} alt="QR" className="w-full h-full object-contain" />
                         ) : (
@@ -2599,7 +2599,7 @@ export default function BillsManagementView({
 
                     {/* Dedicated Installment / Financing Breakdown */}
                     {isInstallmentBill(selectedBillForPrint) && (
-                      <div className="pt-0.5 mt-0.5 border-t border-black/60 text-[10px] font-sans space-y-0.5 bg-amber-500/10 p-1.5 rounded border border-amber-500/30">
+                      <div className="pt-0.5 mt-0.5 text-[10px] font-sans space-y-0.5 bg-amber-500/10 p-1.5 rounded border border-amber-500/30">
                         <div className="flex justify-between font-mono font-bold text-black">
                           <span>ເງິນດາວ ({selectedBillForPrint.downPaymentPercent || 30}%):</span>
                           <span>${(selectedBillForPrint.downPaymentUSD || Math.round(selectedBillForPrint.netTotalUSD * ((selectedBillForPrint.downPaymentPercent || 30) / 100))).toLocaleString()} USD</span>

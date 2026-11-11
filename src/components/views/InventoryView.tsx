@@ -1,7 +1,7 @@
 import { useState, useMemo, Fragment } from 'react';
 import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SystemUser, InvoiceBillRecord } from '../../types';
 import { translations } from '../../data/translations';
-import { getModelStockSummaries, LOW_STOCK_THRESHOLD, brandOf, compareInventory, isSellable, notSellableReason, SALE_READY_STATUSES } from '../../data/stockSummary';
+import { getModelStockSummaries, LOW_STOCK_THRESHOLD, brandOf, compareInventory, isSellable, isOnHand, isListedInStock, notSellableReason, SALE_READY_STATUSES } from '../../data/stockSummary';
 import {
   saveInventoryItemToSupabase,
   deleteInventoryItemFromSupabase,
@@ -39,6 +39,8 @@ import {
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl } from '../../utils/whatsapp';
+import { fetchStockMovements, STOCK_HISTORY_PAGE_SIZE } from '../../backend/data';
+import { isSupabaseConfigured } from '../../backend/client';
 
 interface InventoryViewProps {
   inventory: InventoryItem[];
@@ -94,7 +96,10 @@ export default function InventoryView({
   };
 
   const [activeTab, setActiveTab] = useState<'inventory' | 'sales_history'>('inventory');
-  const [historyFilter, setHistoryFilter] = useState<'all' | 'stock_in' | 'stock_out'>('all');
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'stock_in' | 'stock_out' | 'reversed'>('all');
+  // Older history is loaded page by page from the database
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
+  const [historyExhausted, setHistoryExhausted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [selectedModelFilter, setSelectedModelFilter] = useState<string>('all');
@@ -330,10 +335,48 @@ export default function InventoryView({
     }
     return true;
   }).sort(compareInventory(vehicles));
+  // Same rules as the Dashboard and POS: listed = not sold, on hand = in the warehouse, sellable = POS can sell it
   const sellableCount = inventory.filter(i => isSellable(i)).length;
+  const listedStockCount = inventory.filter(isListedInStock).length;
+  const onHandCount = inventory.filter(isOnHand).length;
+  const notArrivedOrProblemCount = listedStockCount - onHandCount;
+  // Movements of voided bills stay in the history (marked) but no longer count
+  // Stored timestamps are UTC; show them as local (Laos) date and time
+  const formatLogTime = (value?: string) => {
+    if (!value) return '';
+    if (!/[zZ]|[+-]d{2}:?d{2}$/.test(value)) return value;
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+  const isReversal = (log: StockLogRecord) => log.type === 'stock_return' || log.type === 'import_void';
+  const activeStockIns = stockLogs.filter(l => l.type === 'stock_in' && !l.billVoided);
+  const activeStockOuts = stockLogs.filter(l => l.type === 'stock_out' && !l.billVoided);
+  const reversalLogs = stockLogs.filter(isReversal);
   const filteredStockLogs = stockLogs.filter(log => (
-    historyFilter === 'all' || log.type === historyFilter
+    historyFilter === 'all' ||
+    (historyFilter === 'reversed' ? isReversal(log) : log.type === historyFilter)
   ));
+  const canLoadMoreHistory = isSupabaseConfigured && !historyExhausted &&
+    stockLogs.filter(l => !l.id.startsWith('LOG-')).length >= STOCK_HISTORY_PAGE_SIZE;
+  const handleLoadMoreHistory = async () => {
+    if (isLoadingMoreHistory) return;
+    setIsLoadingMoreHistory(true);
+    try {
+      const offset = stockLogs.filter(l => !l.id.startsWith('LOG-')).length;
+      const older = await fetchStockMovements(offset, STOCK_HISTORY_PAGE_SIZE);
+      if (older.length < STOCK_HISTORY_PAGE_SIZE) setHistoryExhausted(true);
+      setStockLogs(prev => {
+        const seen = new Set(prev.map(l => l.id));
+        return [...prev, ...older.filter(l => !seen.has(l.id))];
+      });
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Could not load older history', 'error');
+    } finally {
+      setIsLoadingMoreHistory(false);
+    }
+  };
   const withoutStageNumber = (label: string) => label.replace(/^\d+\.\s*/, '');
   const inventoryStatusLabels: Record<StockStatus, string> = {
     ready: t.readyForSale,
@@ -346,6 +389,7 @@ export default function InventoryView({
     in_transit: XS.in_transit,
     problem: XS.problem,
     parts_donor: XS.parts_donor,
+    removed: lang === 'lo' ? 'ຍົກເລີກນຳເຂົ້າ' : lang === 'th' ? 'ยกเลิกนำเข้า' : 'Import voided',
   };
   const pdiStatusLabel = (status: PDIStatus) => {
     if (status === 'passed') return t.pdiPassedLabel;
@@ -378,7 +422,7 @@ export default function InventoryView({
                 }`}
             >
               <Car className="w-4 h-4" />
-              <span>{t.tabStockList} ({inventory.length})</span>
+              <span>{t.tabStockList} ({listedStockCount})</span>
             </button>
 
             <button
@@ -864,16 +908,45 @@ export default function InventoryView({
                     <h3 className="col-span-full mt-2 first:mt-0 text-sm font-black uppercase tracking-wider text-white">{brand}</h3>
                   )}
                   {newModel && (
-                    <div className="col-span-full flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-1.5 text-xs">
-                      <span className="font-bold text-zinc-200">{item.model}</span>
+                    <div className="col-span-full flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-zinc-800 pb-3 pt-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-zinc-100">{item.model}</span>
+                        {summary?.isLowStock && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-300">
+                            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                            {lang === 'lo' ? 'ໃກ້ໝົດ' : lang === 'th' ? 'ใกล้หมด' : 'Low stock'}
+                          </span>
+                        )}
+                      </div>
                       {summary && (
-                        <span className="text-zinc-500">
-                          {lang === 'lo'
-                            ? `ຂາຍໄດ້ ${summary.sellableCount} · ວ່າງ ${summary.count} · ຈອງ ${summary.reservedCount}${summary.inTransitCount ? ` · ກຳລັງມາ ${summary.inTransitCount}` : ''}`
-                            : `Sellable ${summary.sellableCount} · Free ${summary.count} · Reserved ${summary.reservedCount}${summary.inTransitCount ? ` · In transit ${summary.inTransitCount}` : ''}`}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          {[
+                            {
+                              label: lang === 'lo' ? 'ຂາຍໄດ້' : lang === 'th' ? 'พร้อมขาย' : 'Sellable',
+                              value: summary.sellableCount,
+                            },
+                            {
+                              label: lang === 'lo' ? 'ວ່າງ' : lang === 'th' ? 'ว่าง' : 'Available',
+                              value: summary.count,
+                            },
+                            {
+                              label: lang === 'lo' ? 'ຈອງ' : lang === 'th' ? 'จอง' : 'Reserved',
+                              value: summary.reservedCount,
+                            },
+                            ...(summary.inTransitCount > 0
+                              ? [{
+                                  label: lang === 'lo' ? 'ກຳລັງມາ' : lang === 'th' ? 'กำลังมา' : 'In transit',
+                                  value: summary.inTransitCount,
+                                }]
+                              : []),
+                          ].map(({ label, value }) => (
+                            <span key={label} className="inline-flex items-baseline gap-1.5 rounded-lg border border-zinc-800/80 bg-zinc-900/60 px-2.5 py-1.5">
+                              <span className="text-zinc-400">{label}</span>
+                              <span className="font-bold tabular-nums text-zinc-100">{value}</span>
+                            </span>
+                          ))}
+                        </div>
                       )}
-                      {summary?.isLowStock && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-300">{lang === 'lo' ? 'ໃກ້ໝົດ' : 'Low stock'}</span>}
                     </div>
                   )}
                   <div
@@ -1115,10 +1188,10 @@ export default function InventoryView({
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
-                {stockLogs.filter(l => l.type === 'stock_in').reduce((acc, curr) => acc + curr.quantity, 0)} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
+                {activeStockIns.reduce((acc, curr) => acc + curr.quantity, 0)} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
               <p className="text-[11px] text-zinc-400 mt-1">
-                {stockLogs.filter(l => l.type === 'stock_in').length} {t.unitBills}
+                {activeStockIns.length} {t.unitBills}
               </p>
             </div>
 
@@ -1134,11 +1207,16 @@ export default function InventoryView({
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
-                {stockLogs.filter(l => l.type === 'stock_out').length} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
+                {activeStockOuts.length} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
               <div className="text-[11px] text-white font-mono font-bold mt-1">
-                ${stockLogs.filter(l => l.type === 'stock_out').reduce((acc, curr) => acc + curr.priceUSD, 0).toLocaleString()}
+                ${activeStockOuts.reduce((acc, curr) => acc + curr.priceUSD, 0).toLocaleString()}
               </div>
+              {reversalLogs.length > 0 && (
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  {lang === 'lo' ? `ບໍ່ນັບ ${reversalLogs.length} ລາຍການທີ່ບິນຖືກຍົກເລີກ` : `${reversalLogs.length} voided not counted`}
+                </p>
+              )}
             </div>
 
             {/* In-Stock Balance Summary */}
@@ -1146,17 +1224,22 @@ export default function InventoryView({
               <div className="flex items-center justify-between text-zinc-400 mb-2">
                 <span className="font-semibold text-xs text-zinc-300 flex items-center gap-1.5">
                   <Car className="w-4 h-4 text-zinc-300" />
-                  <span>{t.stockAvailable}</span>
+                  <span>{lang === 'lo' ? 'ລົດໃນສາງ' : lang === 'th' ? 'รถในสต็อก' : 'Cars on hand'}</span>
                 </span>
                 <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
                   BALANCE
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
-                {inventory.reduce((acc, curr) => acc + curr.stockQuantity, 0)} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
+                {onHandCount} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
               <p className="text-[11px] text-zinc-400 mt-1">
                 {sellableCount} {t.unitCars} {t.readyForSale}
+                {notArrivedOrProblemCount > 0 && (
+                  <span className="block text-zinc-500">
+                    {lang === 'lo' ? `+ ${notArrivedOrProblemCount} ຄັນ ກຳລັງມາ / ມີບັນຫາ (ບໍ່ນັບ)` : `+ ${notArrivedOrProblemCount} in transit / problem (not counted)`}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -1213,6 +1296,18 @@ export default function InventoryView({
                   <span>{t.badgeSale}</span>
                   <span className="font-mono">({stockLogs.filter(l => l.type === 'stock_out').length})</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter('reversed')}
+                  aria-pressed={historyFilter === 'reversed'}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${historyFilter === 'reversed'
+                    ? 'bg-white text-black font-bold shadow-sm'
+                    : 'text-zinc-400 hover:text-white'
+                    }`}
+                >
+                  <span>{lang === 'lo' ? 'ຍົກເລີກ / ຮັບຄືນ' : lang === 'th' ? 'ยกเลิก / รับคืน' : 'Voided / returned'}</span>
+                  <span className="font-mono">({reversalLogs.length})</span>
+                </button>
               </div>
             </div>
 
@@ -1250,16 +1345,31 @@ export default function InventoryView({
                             <ArrowDownLeft className="w-3 h-3 text-zinc-300" />
                             <span>{t.historyStockIn}</span>
                           </span>
+                        ) : log.type === 'stock_return' ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1 w-max">
+                            <ArrowDownLeft className="w-3 h-3" />
+                            <span>{lang === 'lo' ? 'ຮັບຄືນເຂົ້າສາງ (ຍົກເລີກບິນຂາຍ)' : lang === 'th' ? 'รับคืน (ยกเลิกบิลขาย)' : 'Returned (sale voided)'}</span>
+                          </span>
+                        ) : log.type === 'import_void' ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-300 border border-red-500/30 flex items-center gap-1 w-max">
+                            <ArrowUpRight className="w-3 h-3" />
+                            <span>{lang === 'lo' ? 'ອອກຈາກສາງ (ຍົກເລີກບິນນຳເຂົ້າ)' : lang === 'th' ? 'ออกจากสต็อก (ยกเลิกนำเข้า)' : 'Removed (import voided)'}</span>
+                          </span>
                         ) : (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1 w-max">
                             <ArrowUpRight className="w-3 h-3 text-zinc-300" />
                             <span>{t.historyStockOut}</span>
                           </span>
                         )}
+                        {log.billVoided && !isReversal(log) && (
+                          <span className="mt-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
+                            {lang === 'lo' ? 'ບິນຖືກຍົກເລີກ (ບໍ່ນັບ)' : 'Bill voided (not counted)'}
+                          </span>
+                        )}
                         <span className="text-zinc-500 text-[10px] block mt-1">{log.id}</span>
                       </td>
                       <td className="py-3 px-4 text-zinc-400 text-[11px] font-sans">
-                        {log.timestamp}
+                        {formatLogTime(log.timestamp)}
                       </td>
                       <td className="py-3 px-4">
                         <strong className="text-white font-sans block text-xs">{log.model}</strong>
@@ -1269,9 +1379,12 @@ export default function InventoryView({
                         )}
                       </td>
                       <td className="py-3 px-4 font-sans text-xs">
-                        {log.type === 'stock_out' ? (
+                        {log.type === 'stock_out' || log.type === 'stock_return' ? (
                           <div>
                             <span className="text-white font-semibold block">{log.customerName || 'Customer'}</span>
+                            {log.type === 'stock_return' && log.notes && (
+                              <span className="text-[10px] text-amber-300/90 block">{log.notes}</span>
+                            )}
                             {log.customerPhone && (
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-zinc-400 font-mono text-[11px] flex items-center gap-1">
@@ -1304,14 +1417,18 @@ export default function InventoryView({
                         )}
                       </td>
                       <td className="py-3 px-4">
-                        <span className="font-bold text-white">
+                        <span className={`font-bold ${log.billVoided ? 'text-zinc-500 line-through' : 'text-white'}`}>
                           ${log.priceUSD.toLocaleString()} USD
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        {log.type === 'stock_in' ? (
+                        {log.type === 'stock_in' || log.type === 'stock_return' ? (
                           <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[11px] font-bold border border-zinc-700">
                             +{log.quantity} {t.unitCars}
+                          </span>
+                        ) : log.type === 'import_void' ? (
+                          <span className="px-2 py-0.5 rounded bg-zinc-900 text-red-300 text-[11px] font-bold border border-red-500/30">
+                            -{log.quantity} {t.unitCars}
                           </span>
                         ) : (
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.remainingStock === 0
@@ -1330,6 +1447,21 @@ export default function InventoryView({
                 </tbody>
               </table>
             </div>
+            {canLoadMoreHistory && (
+              <div className="border-t border-zinc-800 p-4 text-center">
+                <button
+                  type="button"
+                  onClick={() => void handleLoadMoreHistory()}
+                  disabled={isLoadingMoreHistory}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
+                >
+                  <History className="h-4 w-4" />
+                  {isLoadingMoreHistory
+                    ? (lang === 'lo' ? 'ກຳລັງໂຫຼດ...' : 'Loading...')
+                    : (lang === 'lo' ? `ໂຫຼດປະຫວັດເກົ່າເພີ່ມ (${STOCK_HISTORY_PAGE_SIZE} ລາຍການ)` : `Load ${STOCK_HISTORY_PAGE_SIZE} older entries`)}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

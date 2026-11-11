@@ -32,6 +32,7 @@ export default function ImportStockCsvModal({ vehicles, inventory, lang, current
     ready: L('ພ້ອມຂາຍ', 'Ready', 'พร้อมขาย'), reserved: L('ຈອງແລ້ວ', 'Reserved', 'จองแล้ว'), sold: L('ສົ່ງມອບແລ້ວ', 'Delivered', 'ส่งมอบแล้ว'),
     problem: L('ມີບັນຫາ', 'Problem', 'มีปัญหา'), parts_donor: L('ຖອດອາໄຫຼ່', 'Parts donor', 'ถอดอะไหล่'), in_transit: L('ຂາເຂົ້າ', 'In transit', 'กำลังมา'),
     pdi: 'PDI', imported: L('ນຳເຂົ້າ', 'Imported', 'นำเข้า'), event: 'Event', promotion: L('ໂປຣ', 'Promo', 'โปร'),
+    removed: L('ຍົກເລີກນຳເຂົ້າ', 'Import voided', 'ยกเลิกนำเข้า'),
   };
   const problemLabel = (p: string) => ({
     vin_invalid: L('VIN ບໍ່ຄົບ 17 ຕົວ', 'VIN not 17 chars', 'VIN ไม่ครบ 17 ตัว'),

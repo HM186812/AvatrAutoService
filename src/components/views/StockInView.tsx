@@ -1308,7 +1308,7 @@ export default function StockInView({
               </div>
 
               <div className="space-y-1.5 text-zinc-300">
-                <div><span className="text-zinc-500 font-sans">{t.tableModel}:</span> <strong className="text-white">{createdBill.model}</strong> ({createdBill.trim})</div>
+                <div><span className="text-zinc-500 font-sans">{t.tableModel}:</span> <strong className="text-white">{createdBill.model}</strong>{createdBill.trim ? ` (${createdBill.trim})` : ''}</div>
                 <div><span className="text-zinc-500 font-sans">{t.vinNumber}:</span> <span className="text-white">{createdBill.vin}</span></div>
                 <div><span className="text-zinc-500 font-sans">{t.quantityUnits}:</span> <strong className="text-white">{createdBill.quantity} {t.unitCars}</strong></div>
                 <div><span className="text-zinc-500 font-sans">{t.tableColor}/{t.plateNumber}:</span> {createdBill.color || '-'} • {createdBill.plateNumber || '-'}</div>

@@ -905,6 +905,13 @@ export default function POSSalesView({
 
 
 
+        {availableVehicles.length > 0 && blockedOnHandCount > 0 && (
+          <p className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-300">
+            {lang === 'lo'
+              ? `ສະແດງສະເພາະລົດທີ່ຂາຍໄດ້ທັນທີ. ອີກ ${blockedOnHandCount} ຄັນໃນສາງຍັງຂາຍບໍ່ໄດ້ (ກຳລັງ PDI, ຫາກໍນຳເຂົ້າ ຫຼື ຈອງແລ້ວ): ເບິ່ງໃນໜ້າສະຕ໋ອກ.`
+              : `Only cars that can be sold now are listed. ${blockedOnHandCount} more on hand cannot be sold yet (PDI, just imported or reserved).`}
+          </p>
+        )}
         {availableVehicles.length === 0 ? (
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-12 text-center text-zinc-400 space-y-4">
             <AlertCircle className="w-12 h-12 text-zinc-400 mx-auto" />

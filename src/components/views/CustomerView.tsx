@@ -43,6 +43,7 @@ import {
   LayoutGrid,
   List,
   X,
+  Search,
   ShieldCheck,
   Wrench,
   RotateCcw,
@@ -75,6 +76,7 @@ import { getFollowUpState, makeContactEntry, formatDateKey } from '../../utils/f
 import InstallmentDashboardView from './InstallmentDashboardView';
 import { IssuedDocumentRecord } from '../../types';
 import { getIssuedDocumentLogs, fetchDocumentLogsFromCloud, DOCUMENT_LOG_EVENT } from '../../utils/documentLogger';
+import { matchesSearch, localDateKey } from '../../utils/search';
 
 interface CustomerViewProps {
   leads: Lead[];
@@ -156,17 +158,35 @@ export default function CustomerView({
   const [channelFilter, setChannelFilter] = useState<'all' | CustomerCategory>('all');
   // 2. Status Filter (ສະຖານະລູກຄ້າ / ຊ່ອງຈ່າຍແລ້ວ)
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  // Customer search is by date only: year, then month, then day ('' = any)
+  // Customer search: free text (name, phone, VIN, ID card, plate) plus date (year, then month, then day; '' = any)
+  const [crmSearch, setCrmSearch] = useState('');
+  const leadMatchesSearch = (lead: Lead) => matchesSearch(crmSearch, {
+    texts: [lead.customerName, lead.vin, lead.idCardNumber, lead.plateNumber, lead.engineNumber, lead.interestedModel, lead.paymentReceiptNo],
+    phones: [lead.phone],
+  });
+  const billMatchesSearch = (bill: InvoiceBillRecord) => matchesSearch(crmSearch, {
+    texts: [bill.customerName, bill.vin, bill.customerIDCard, bill.plateNumber, bill.billNumber, bill.model],
+    phones: [bill.customerPhone],
+  });
   const [crmYear, setCrmYear] = useState('');
   const [crmMonth, setCrmMonth] = useState('');
   const [crmDay, setCrmDay] = useState('');
   const isDateSearchActive = Boolean(crmYear);
   const clearDateSearch = () => { setCrmYear(''); setCrmMonth(''); setCrmDay(''); };
-  const daysInSelectedMonth = crmYear && crmMonth ? new Date(Number(crmYear), Number(crmMonth), 0).getDate() : 31;
+  const currentDate = new Date();
+  const crmYearIsValid = /^\d{4}$/.test(crmYear) && Number(crmYear) >= 1000;
+  const crmMonthIsValid = !crmMonth || (/^\d{1,2}$/.test(crmMonth) && Number(crmMonth) >= 1 && Number(crmMonth) <= 12);
+  const validationYear = crmYearIsValid ? Number(crmYear) : currentDate.getFullYear();
+  const validationMonth = crmMonthIsValid && crmMonth ? Number(crmMonth) : currentDate.getMonth() + 1;
+  const daysInSelectedMonth = new Date(validationYear, validationMonth, 0).getDate();
+  const crmDayIsValid = !crmDay || (/^\d{1,2}$/.test(crmDay) && Number(crmDay) >= 1 && Number(crmDay) <= daysInSelectedMonth);
+  const crmDateIsValid = crmYearIsValid && crmMonthIsValid && crmDayIsValid;
   // Selected range as YYYY-MM-DD bounds (undefined = no date search)
-  const crmDateFrom = crmYear ? `${crmYear}-${crmMonth || '01'}-${crmDay || '01'}` : '';
-  const crmDateTo = crmYear
-    ? `${crmYear}-${crmMonth || '12'}-${crmDay || String(crmMonth ? daysInSelectedMonth : 31).padStart(2, '0')}`
+  const crmDateFrom = isDateSearchActive && crmDateIsValid
+    ? `${crmYear}-${(crmMonth || '01').padStart(2, '0')}-${(crmDay || '01').padStart(2, '0')}`
+    : '';
+  const crmDateTo = isDateSearchActive && crmDateIsValid
+    ? `${crmYear}-${(crmMonth || '12').padStart(2, '0')}-${(crmDay || String(crmMonth ? daysInSelectedMonth : 31)).padStart(2, '0')}`
     : '';
   const [isLoadingRangeLeads, setIsLoadingRangeLeads] = useState(false);
 
@@ -203,19 +223,12 @@ export default function CustomerView({
     };
   }, [crmDateFrom, crmDateTo]);
 
-  const crmYearOptions = useMemo(() => {
-    const years = new Set<string>([String(new Date().getFullYear())]);
-    const add = (d?: string) => { const y = (d || '').slice(0, 4); if (/^\d{4}$/.test(y)) years.add(y); };
-    leads.forEach(l => { add(l.createdAt); add(l.paymentDate); });
-    bills.forEach(b => add(b.date));
-    return Array.from(years).sort((a, b) => b.localeCompare(a));
-  }, [leads, bills]);
-
   const matchesCrmTime = (dateStr?: string): boolean => {
     if (!crmDateFrom) return true;
-    const raw = (dateStr || '').slice(0, 10);
-    if (!raw) return false;
-    return raw >= crmDateFrom && raw <= crmDateTo;
+    // Local calendar day: stored timestamps are UTC, Laos is UTC+7
+    const day = localDateKey(dateStr);
+    if (!day) return false;
+    return day >= crmDateFrom && day <= crmDateTo;
   };
 
   // Toast notification feedback
@@ -1051,28 +1064,33 @@ export default function CustomerView({
   const filteredExistingCustomers = useMemo(() => {
     return existingCustomers.filter(item => {
       if (!matchesCrmTime(item.purchaseDate)) return false;
+      if (crmSearch.trim() && !matchesSearch(crmSearch, {
+        texts: [item.customerName, item.vin, item.idCardNumber, item.plateNumber, item.engineNumber, item.model],
+        phones: [item.phone],
+      })) return false;
       if (existingModelFilter !== 'all' && item.model !== existingModelFilter) return false;
       if (existingServiceFilter === 'has_service' && (item.services?.length ?? 0) === 0) return false;
       if (existingServiceFilter === 'no_service' && (item.services?.length ?? 0) > 0) return false;
 
       return true;
     });
-  }, [existingCustomers, existingModelFilter, existingServiceFilter, crmDateFrom, crmDateTo]);
+  }, [existingCustomers, existingModelFilter, existingServiceFilter, crmDateFrom, crmDateTo, crmSearch]);
 
   // Dedicated Installment Customers (For Tab 3 - All Installment & Financing Customers)
   const installmentCustomers = useMemo(() => {
-    const matchedLeads = leads.filter(l => isActiveInstallmentLead(l) && matchesCrmTime(l.paymentDate || l.createdAt));
+    const matchedLeads = leads.filter(l => isActiveInstallmentLead(l) && matchesCrmTime(l.paymentDate || l.createdAt) && leadMatchesSearch(l));
 
     // Installment bills with no CRM customer at all (bill-only contracts)
-    const extraBills = bills.filter(b => b.status !== 'voided' && isInstallmentBill(b) && matchesCrmTime(b.date) && !leads.some(l => billBelongsTo(b, l)));
+    const extraBills = bills.filter(b => b.status !== 'voided' && isInstallmentBill(b) && matchesCrmTime(b.date) && billMatchesSearch(b) && !leads.some(l => billBelongsTo(b, l)));
 
     return [...matchedLeads, ...extraBills];
-  }, [leads, bills, crmDateFrom, crmDateTo]);
+  }, [leads, bills, crmDateFrom, crmDateTo, crmSearch]);
 
   // Filtered Leads (For prospective Leads CRM - Strictly customers who have not yet purchased)
   const filteredLeads = useMemo(() => {
     return prospectiveLeads.filter(lead => {
       if (!matchesCrmTime(lead.createdAt || lead.paymentDate)) return false;
+      if (!leadMatchesSearch(lead)) return false;
 
       // 1. Channel Filter (ໝວດຊ່ອງທາງລູກຄ້າ)
       if (channelFilter !== 'all' && lead.category !== channelFilter) return false;
@@ -1087,7 +1105,7 @@ export default function CustomerView({
 
       return true;
     });
-  }, [prospectiveLeads, channelFilter, selectedStatus, followUpFilter, crmDateFrom, crmDateTo]);
+  }, [prospectiveLeads, channelFilter, selectedStatus, followUpFilter, crmDateFrom, crmDateTo, crmSearch]);
 
   // Pagination for high scalability & Surface Pro friendly RAM usage
   const [currentPage, setCurrentPage] = useState(1);
@@ -1096,7 +1114,7 @@ export default function CustomerView({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [channelFilter, selectedStatus, followUpFilter, crmDateFrom, crmDateTo]);
+  }, [channelFilter, selectedStatus, followUpFilter, crmDateFrom, crmDateTo, crmSearch]);
 
   const paginatedLeads = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -1198,83 +1216,130 @@ export default function CustomerView({
     document.body.removeChild(link);
   };
 
-  // Date search (the only customer search): day / month / year. Picking a month or day first
-  // fills in the current year (and month) so every choice works without a fixed order.
+  // Customer search panel: free text + date (day / month / year).
   const renderDateSearch = () => {
     const now = new Date();
     const thisYear = String(now.getFullYear());
     const thisMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const selCls = 'crm-date-select min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white sm:w-auto sm:min-w-32';
-    const monthNames = lang === 'en'
-      ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const inputCls = 'crm-date-input min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-800 transition-colors placeholder:font-normal placeholder:text-slate-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder:text-zinc-500';
+    const dateLabels = lang === 'lo'
+      ? ['ວັນ', 'ເດືອນ', 'ປີ']
       : lang === 'th'
-        ? ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-        : ['ມັງກອນ', 'ກຸມພາ', 'ມີນາ', 'ເມສາ', 'ພຶດສະພາ', 'ມິຖຸນາ', 'ກໍລະກົດ', 'ສິງຫາ', 'ກັນຍາ', 'ຕຸລາ', 'ພະຈິກ', 'ທັນວາ'];
-    const daysIn = (y: string, m: string) => new Date(Number(y), Number(m), 0).getDate();
+        ? ['วัน', 'เดือน', 'ปี']
+        : ['Day', 'Month', 'Year'];
+    const anyLabels = lang === 'lo'
+      ? ['ທຸກວັນ', 'ທຸກເດືອນ', 'ທຸກປີ']
+      : lang === 'th'
+        ? ['ทุกวัน', 'ทุกเดือน', 'ทุกปี']
+        : ['Any day', 'Any month', 'Any year'];
+    const invalidDayMessage = lang === 'lo'
+      ? `ກະລຸນາໃສ່ວັນທີ 1-${daysInSelectedMonth}`
+      : lang === 'th'
+        ? `กรุณากรอกวันที่ 1-${daysInSelectedMonth}`
+        : `Enter a day from 1 to ${daysInSelectedMonth}`;
+    const invalidMonthMessage = lang === 'lo'
+      ? 'ກະລຸນາໃສ່ເດືອນ 1-12'
+      : lang === 'th'
+        ? 'กรุณากรอกเดือน 1-12'
+        : 'Enter a month from 1 to 12';
+    const invalidYearMessage = lang === 'lo'
+      ? 'ກະລຸນາໃສ່ປີ 4 ຕົວເລກ'
+      : lang === 'th'
+        ? 'กรุณากรอกปี 4 หลัก'
+        : 'Enter a 4-digit year';
     return (
-      <div className="crm-date-search" role="search" aria-label={lang === 'lo' ? 'ຄົ້ນຫາລູກຄ້າຕາມວັນທີ' : 'Find customers by date'}>
-        <div className="grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-zinc-400">
-            <Calendar className="h-4 w-4 text-amber-500 dark:text-amber-400" />
-            <span>{lang === 'lo' ? 'ຄົ້ນຫາລູກຄ້າຕາມວັນທີ' : lang === 'th' ? 'ค้นหาลูกค้าตามวันที่' : 'Find customers by date'}</span>
+      <div className="crm-date-search space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-5" role="search" aria-label={lang === 'lo' ? 'ຄົ້ນຫາລູກຄ້າຕາມວັນທີ' : lang === 'th' ? 'ค้นหาลูกค้าตามวันที่' : 'Find customers by date'}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-zinc-200">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
+              <Calendar className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span>{lang === 'lo' ? 'ຄົ້ນຫາລູກຄ້າ' : lang === 'th' ? 'ค้นหาลูกค้า' : 'Find customers'}</span>
           </span>
-          <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
-            <select aria-label={lang === 'lo' ? 'ວັນ' : 'Day'} value={crmDay} className={selCls}
-              onChange={(e) => {
-                const d = e.target.value;
-                setCrmDay(d);
-                if (d && !crmMonth) setCrmMonth(thisMonth);
-                if (d && !crmYear) setCrmYear(thisYear);
-              }}>
-              <option value="">{lang === 'lo' ? 'ທຸກວັນ' : lang === 'th' ? 'ทุกวัน' : 'Any day'}</option>
-              {Array.from({ length: daysInSelectedMonth }, (_, i) => String(i + 1).padStart(2, '0')).map(d => (
-                <option key={d} value={d}>{Number(d)}</option>
-              ))}
-            </select>
-            <select aria-label={lang === 'lo' ? 'ເດືອນ' : 'Month'} value={crmMonth} className={selCls}
-              onChange={(e) => {
-                const m = e.target.value;
-                const y = crmYear || thisYear;
-                setCrmMonth(m);
-                if (m && !crmYear) setCrmYear(thisYear);
-                if (!m) setCrmDay('');
-                else if (crmDay && Number(crmDay) > daysIn(y, m)) setCrmDay('');
-              }}>
-              <option value="">{lang === 'lo' ? 'ທຸກເດືອນ' : lang === 'th' ? 'ทุกเดือน' : 'Any month'}</option>
-              {monthNames.map((name, i) => {
-                const v = String(i + 1).padStart(2, '0');
-                return <option key={v} value={v}>{i + 1} - {name}</option>;
-              })}
-            </select>
-            <select aria-label={lang === 'lo' ? 'ປີ' : 'Year'} value={crmYear} className={selCls}
-              onChange={(e) => {
-                const y = e.target.value;
-                setCrmYear(y);
-                if (!y) { setCrmMonth(''); setCrmDay(''); }
-                else if (crmMonth && crmDay && Number(crmDay) > daysIn(y, crmMonth)) setCrmDay('');
-              }}>
-              <option value="">{lang === 'lo' ? 'ທຸກປີ' : lang === 'th' ? 'ทุกปี' : 'Any year'}</option>
-              {crmYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
           {isDateSearchActive && (
             <button type="button" onClick={clearDateSearch}
-              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white cursor-pointer">
-              <X className="h-3.5 w-3.5" />
+              className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white">
+              <X className="h-4 w-4" aria-hidden="true" />
               <span>{lang === 'lo' ? 'ລ້າງວັນທີ' : lang === 'th' ? 'ล้างวันที่' : 'Clear date'}</span>
             </button>
           )}
-          {isLoadingRangeLeads && (
-            <span role="status" aria-live="polite" className="text-xs font-semibold text-amber-600 dark:text-amber-400">
-              {lang === 'lo' ? 'ກຳລັງໂຫຼດລາຍຊື່...' : lang === 'th' ? 'กำลังโหลดรายการ...' : 'Loading customers...'}
-            </span>
+        </div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <input
+            type="search"
+            value={crmSearch}
+            onChange={(e) => setCrmSearch(e.target.value)}
+            aria-label={lang === 'lo' ? 'ຄົ້ນຫາລູກຄ້າ' : lang === 'th' ? 'ค้นหาลูกค้า' : 'Search customers'}
+            placeholder={lang === 'lo' ? 'ຄົ້ນຫາ: ຊື່, ເບີໂທ, VIN, ເລກບັດ, ປ້າຍທະບຽນ...' : lang === 'th' ? 'ค้นหา: ชื่อ, เบอร์โทร, VIN, เลขบัตร, ทะเบียน...' : 'Search: name, phone, VIN, ID card, plate...'}
+            className={`${inputCls} pl-9 pr-9`}
+          />
+          {crmSearch && (
+            <button type="button" onClick={() => setCrmSearch('')} aria-label={lang === 'lo' ? 'ລ້າງຄຳຄົ້ນຫາ' : 'Clear search'}
+              className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-zinc-800">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
         </div>
+        <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-3">
+          <label className="block min-w-0 space-y-1">
+            <span className="block text-xs font-medium text-slate-600 dark:text-zinc-400">{dateLabels[0]}</span>
+            <input aria-label={dateLabels[0]} inputMode="numeric" autoComplete="off" maxLength={2}
+              placeholder={anyLabels[0]} value={crmDay} className={`${inputCls}${crmDay && !crmDayIsValid ? ' border-rose-500 dark:border-rose-500' : ''}`}
+              aria-invalid={Boolean(crmDay) && !crmDayIsValid}
+              aria-describedby={crmDay && !crmDayIsValid ? 'crm-date-day-error' : undefined}
+              onChange={(e) => {
+                const d = e.target.value.replace(/\D/g, '').slice(0, 2);
+                setCrmDay(d);
+                if (d && !crmMonth) setCrmMonth(thisMonth);
+                if (d && !crmYear) setCrmYear(thisYear);
+              }} />
+            {crmDay && !crmDayIsValid && <span id="crm-date-day-error" className="block text-xs text-rose-700 dark:text-rose-400">{invalidDayMessage}</span>}
+          </label>
+          <label className="block min-w-0 space-y-1">
+            <span className="block text-xs font-medium text-slate-600 dark:text-zinc-400">{dateLabels[1]}</span>
+            <input aria-label={dateLabels[1]} inputMode="numeric" autoComplete="off" maxLength={2}
+              placeholder={anyLabels[1]} value={crmMonth} className={`${inputCls}${crmMonth && !crmMonthIsValid ? ' border-rose-500 dark:border-rose-500' : ''}`}
+              aria-invalid={Boolean(crmMonth) && !crmMonthIsValid}
+              aria-describedby={crmMonth && !crmMonthIsValid ? 'crm-date-month-error' : undefined}
+              onChange={(e) => {
+                const m = e.target.value.replace(/\D/g, '').slice(0, 2);
+                setCrmMonth(m);
+                if (m && !crmYear) setCrmYear(thisYear);
+                if (!m) setCrmDay('');
+              }} />
+            {crmMonth && !crmMonthIsValid && <span id="crm-date-month-error" className="block text-xs text-rose-700 dark:text-rose-400">{invalidMonthMessage}</span>}
+          </label>
+          <label className="block min-w-0 space-y-1">
+            <span className="block text-xs font-medium text-slate-600 dark:text-zinc-400">{dateLabels[2]}</span>
+            <input aria-label={dateLabels[2]} inputMode="numeric" autoComplete="off" maxLength={4}
+              placeholder={anyLabels[2]} value={crmYear} className={`${inputCls}${crmYear && !crmYearIsValid ? ' border-rose-500 dark:border-rose-500' : ''}`}
+              aria-invalid={Boolean(crmYear) && !crmYearIsValid}
+              aria-describedby={crmYear && !crmYearIsValid ? 'crm-date-year-error' : undefined}
+              onChange={(e) => {
+                const y = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setCrmYear(y);
+                if (!y) { setCrmMonth(''); setCrmDay(''); }
+              }} />
+            {crmYear && !crmYearIsValid && <span id="crm-date-year-error" className="block text-xs text-rose-700 dark:text-rose-400">{invalidYearMessage}</span>}
+          </label>
+        </div>
+        {isDateSearchActive && !crmDateIsValid && (
+          <span role="status" className="block text-xs font-medium text-amber-700 dark:text-amber-400">
+            {lang === 'lo' ? 'ຍັງບໍ່ໄດ້ກອງຕາມວັນທີ: ກະລຸນາໃສ່ວັນທີໃຫ້ຖືກຕ້ອງກ່ອນ (ລາຍການຂ້າງລຸ່ມແມ່ນທັງໝົດ)' : 'Date filter not applied yet: complete the date first (showing all)'}
+          </span>
+        )}
+        {isLoadingRangeLeads && (
+          <span role="status" aria-live="polite" className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-400">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" aria-hidden="true" />
+            {lang === 'lo' ? 'ກຳລັງໂຫຼດລາຍຊື່...' : lang === 'th' ? 'กำลังโหลดรายการ...' : 'Loading customers...'}
+          </span>
+        )}
       </div>
     );
   };
 
-  const hasActiveLeadFilters = isDateSearchActive ||
+  const hasActiveLeadFilters = isDateSearchActive || crmSearch.trim() !== '' ||
     channelFilter !== 'all' ||
     followUpFilter !== 'all' ||
     selectedStatus !== 'all';
@@ -1458,17 +1523,6 @@ export default function CustomerView({
               />
             )}
 
-            {customerClassificationTab === 'existing_customers' && (
-              <button
-                type="button"
-                onClick={() => setServiceModalCustomer({ name: '', phone: '', model: vehicles[0]?.name || 'AVATR 12' })}
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 lg:w-auto"
-              >
-                <Wrench className="w-4 h-4" />
-                <span>ນັດໝາຍບໍລິການ</span>
-              </button>
-            )}
-
             {customerClassificationTab === 'installment_customers' && (
               <div className="flex items-center gap-2">
                 {onNavigateMenu && (
@@ -1627,6 +1681,7 @@ export default function CustomerView({
                           setFollowUpFilter('all');
                           setSelectedStatus('all');
                           clearDateSearch();
+                          setCrmSearch('');
                         }}
                         className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
                       >
@@ -1677,6 +1732,7 @@ export default function CustomerView({
                         setFollowUpFilter('all');
                         setSelectedStatus('all');
                         clearDateSearch();
+                        setCrmSearch('');
                       }}
                       className="mt-1 inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                     >
@@ -2234,39 +2290,44 @@ export default function CustomerView({
             </div>
 
             {/* Filter & Action Toolbar for Existing Customers */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:p-5 shadow-sm space-y-3">
-              {renderDateSearch()}
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+              <div className="space-y-4">
+                {renderDateSearch()}
+                <div className="grid gap-3 border-t border-slate-200 pt-4 dark:border-zinc-800 sm:grid-cols-2">
+                  <div className="min-w-0 space-y-1.5">
+                    <label htmlFor="existing-customer-model-filter" className="block text-xs font-semibold text-slate-600 dark:text-zinc-400">
+                      ລຸ້ນລົດ
+                    </label>
+                    <select
+                      id="existing-customer-model-filter"
+                      value={existingModelFilter}
+                      onChange={(e) => setExistingModelFilter(e.target.value)}
+                      className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                    >
+                      <option value="all">ທຸກລຸ້ນ ({existingCustomers.length})</option>
+                      {vehicles.map((v) => (
+                        <option key={v.id || v.name} value={v.name}>
+                          {v.name} ({existingCustomers.filter(c => c.model === v.name).length})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Model Filter */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-zinc-400 font-medium">ລຸ້ນລົດ:</span>
-                  <select
-                    value={existingModelFilter}
-                    onChange={(e) => setExistingModelFilter(e.target.value)}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
-                  >
-                    <option value="all">ທຸກລຸ້ນ ({existingCustomers.length})</option>
-                    {vehicles.map((v) => (
-                      <option key={v.id || v.name} value={v.name}>
-                        {v.name} ({existingCustomers.filter(c => c.model === v.name).length})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Service Filter */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-zinc-400 font-medium">ປະຫວັດສູນ:</span>
-                  <select
-                    value={existingServiceFilter}
-                    onChange={(e) => setExistingServiceFilter(e.target.value as any)}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
-                  >
-                    <option value="all">ທັງໝົດ ({existingCustomers.length})</option>
-                    <option value="has_service">ມີປະຫວັດເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) > 0).length})</option>
-                    <option value="no_service">ຍັງບໍ່ເຄີຍເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) === 0).length})</option>
-                  </select>
+                  <div className="min-w-0 space-y-1.5">
+                    <label htmlFor="existing-customer-service-filter" className="block text-xs font-semibold text-slate-600 dark:text-zinc-400">
+                      ປະຫວັດເຂົ້າສູນ
+                    </label>
+                    <select
+                      id="existing-customer-service-filter"
+                      value={existingServiceFilter}
+                      onChange={(e) => setExistingServiceFilter(e.target.value as any)}
+                      className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                    >
+                      <option value="all">ທັງໝົດ ({existingCustomers.length})</option>
+                      <option value="has_service">ມີປະຫວັດເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) > 0).length})</option>
+                      <option value="no_service">ຍັງບໍ່ເຄີຍເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) === 0).length})</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2691,9 +2752,9 @@ export default function CustomerView({
             {renderDateSearch()}
             <InstallmentDashboardView
               hideTextSearch
-              leads={leads.filter(l => (isActiveInstallmentLead(l) || (isInstallmentCompleted(l) && isLeadInstallment(l))) && matchesCrmTime(l.paymentDate || l.createdAt))}
+              leads={leads.filter(l => (isActiveInstallmentLead(l) || (isInstallmentCompleted(l) && isLeadInstallment(l))) && matchesCrmTime(l.paymentDate || l.createdAt) && leadMatchesSearch(l))}
               setLeads={setLeads}
-              bills={bills.filter(b => matchesCrmTime(b.date))}
+              bills={bills.filter(b => matchesCrmTime(b.date) && billMatchesSearch(b))}
               setBills={setBills}
               vehicles={vehicles}
               currentUser={currentUser}

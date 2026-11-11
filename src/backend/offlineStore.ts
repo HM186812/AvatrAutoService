@@ -229,7 +229,8 @@ export function getOfflineBackendData(): BackendData {
   return {
     users,
     vehicles,
-    inventory,
+    // Cars of voided imports stay stored for history but are not stock
+    inventory: inventory.filter((item) => item.status !== 'removed'),
     leads,
     bills,
     stockLogs,
@@ -461,6 +462,43 @@ export function offlineDeleteBill(id: string): void {
         item.stockQuantity = 1;
         writeStorage('inventory', inventory);
       }
+    }
+    // Voided import: the car leaves stock but stays on record (same as the database)
+    if (target.vin && (target.billType === 'import' || target.type === 'import')) {
+      const inventory = readStorage<InventoryItem[]>('inventory', DEFAULT_OFFLINE_INVENTORY);
+      const item = inventory.find((i) => i.vin === target.vin);
+      if (item && item.status !== 'sold') {
+        item.status = 'removed';
+        writeStorage('inventory', inventory);
+      }
+    }
+    // Stock history: keep the original movement (marked voided) and add the reversing one
+    const billType = target.billType || target.type;
+    if (target.vin && !isMonthlyInstallmentBill(target) && (billType === 'sale' || billType === 'installment' || billType === 'import')) {
+      const logs = readStorage<StockLogRecord[]>('stockLogs', []);
+      const originalType = billType === 'import' ? 'stock_in' : 'stock_out';
+      const marked = logs.map((l) => (l.billId === id || (l.vin === target.vin && l.type === originalType && !l.billVoided))
+        ? { ...l, billVoided: true }
+        : l);
+      marked.unshift({
+        id: 'LOG-VOID-' + id,
+        billId: id,
+        type: billType === 'import' ? 'import_void' : 'stock_return',
+        vin: target.vin,
+        model: target.model || '',
+        plateNumber: target.plateNumber || '',
+        color: target.color || '',
+        quantity: 1,
+        priceUSD: target.unitPriceUSD || target.netTotalUSD || 0,
+        priceLAK: target.unitPriceLAK || target.netTotalLAK || 0,
+        timestamp: new Date().toISOString(),
+        recordedBy: offlineGetActiveUser()?.name || 'Admin',
+        customerName: target.customerName,
+        customerPhone: target.customerPhone,
+        notes: 'ຍົກເລີກບິນ ' + target.billNumber,
+        billVoided: true,
+      });
+      writeStorage('stockLogs', marked);
     }
   } else {
     writeStorage('bills', bills.filter((b) => b.id !== id));

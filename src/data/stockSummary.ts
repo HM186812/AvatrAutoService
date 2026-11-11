@@ -10,6 +10,11 @@ export const SALE_READY_STATUSES: StockStatus[] = ['ready', 'event', 'promotion'
 
 type StockFields = Pick<InventoryItem, 'status' | 'stockQuantity'> & Partial<Pick<InventoryItem, 'pdiStatus' | 'reservedForCustomer'>>;
 
+/** Shown in the stock list: everything not sold yet (includes cars in transit or with a problem). */
+export function isListedInStock(item: StockFields): boolean {
+  return item.status !== 'sold' && item.status !== 'removed' && (item.stockQuantity ?? 1) > 0;
+}
+
 /** Physically in the warehouse and not sold (includes reserved, PDI and just-imported units). */
 export function isOnHand(item: StockFields): boolean {
   return item.status !== 'sold' && !NOT_ON_HAND_STATUSES.includes(item.status) && (item.stockQuantity ?? 1) > 0;

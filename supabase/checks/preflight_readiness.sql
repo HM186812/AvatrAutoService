@@ -226,6 +226,20 @@ results AS (
          'Give these accounts the Admin or Sales role in User Management'
   FROM public.staff_profiles
   WHERE role::text NOT IN ('admin', 'super_admin', 'sales')
+  UNION ALL
+  -- Voiding bills keeps stock and stock history consistent
+  SELECT 10, 'vehicle status', 'vehicle_status has removed',
+         CASE WHEN EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type ty ON ty.oid = e.enumtypid
+                           WHERE ty.typname = 'vehicle_status' AND e.enumlabel = 'removed')
+              THEN 'OK' ELSE 'MISSING' END,
+         '20261111130000_void_bill_stock_consistency'
+  UNION ALL
+  SELECT 11, 'movement types', 'stock_movements allows stock_return / import_void',
+         CASE WHEN EXISTS (SELECT 1 FROM pg_constraint
+                           WHERE conname = 'stock_movements_movement_type_check'
+                             AND pg_get_constraintdef(oid) LIKE '%import_void%')
+              THEN 'OK' ELSE 'MISSING' END,
+         '20261111130000_void_bill_stock_consistency'
 )
 SELECT kind, item, status, fix
 FROM results

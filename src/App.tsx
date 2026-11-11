@@ -13,7 +13,7 @@ import {
   KPITimeframe
 } from './types';
 import { translations } from './data/translations';
-import { getModelStockSummaries } from './data/stockSummary';
+import { getModelStockSummaries, isListedInStock } from './data/stockSummary';
 import { isOfflineDemoEnabled, isSupabaseConfigured, supabase } from './backend/client';
 import {
   clearStaffCache,
@@ -601,8 +601,33 @@ export default function App() {
             setInventory(prev => prev.filter(item => item.vin !== targetBill.vin));
           }
         }
-        if (!isMonthlyInstallmentBill(targetBill)) {
-          setStockLogs(prev => prev.filter(log => !(log.billId === billId || (log.vin === targetBill.vin && log.type === (billType === 'import' ? 'stock_in' : 'stock_out')))));
+        if (!isMonthlyInstallmentBill(targetBill) && (billType === 'sale' || billType === 'installment' || billType === 'import')) {
+          // Same as the database: the original movement stays (marked voided) and a reversing movement is added
+          const originalType = billType === 'import' ? 'stock_in' : 'stock_out';
+          const reversal: StockLogRecord = {
+            id: `LOG-VOID-${billId}`,
+            billId,
+            type: billType === 'import' ? 'import_void' : 'stock_return',
+            vin: targetBill.vin,
+            model: targetBill.model || '',
+            plateNumber: targetBill.plateNumber || '',
+            color: targetBill.color || '',
+            quantity: 1,
+            priceUSD: targetBill.unitPriceUSD || targetBill.netTotalUSD || 0,
+            priceLAK: targetBill.unitPriceLAK || targetBill.netTotalLAK || 0,
+            timestamp: voidInfo.voidedAt,
+            recordedBy: voidInfo.voidedBy || currentUser.name,
+            customerName: targetBill.customerName,
+            customerPhone: targetBill.customerPhone,
+            notes: `ຍົກເລີກບິນ ${targetBill.billNumber}: ${voidInfo.voidReason}`,
+            billVoided: true,
+          };
+          setStockLogs(prev => [
+            reversal,
+            ...prev.map(log => (log.billId === billId || (log.vin === targetBill.vin && log.type === originalType && !log.billVoided))
+              ? { ...log, billVoided: true }
+              : log),
+          ]);
         }
       }
       // A voided sale / down-payment bill means the deal is off: the customer goes back to negotiating.
@@ -788,7 +813,7 @@ export default function App() {
         lang={lang}
         leadCount={leads.length}
         followUpDueCount={followUpDueCount}
-        stockCount={inventory.length}
+        stockCount={inventory.filter(isListedInStock).length}
         lowStockCount={lowStockCount}
         outOfStockCount={outOfStockCount}
         billsCount={bills.length}
@@ -900,7 +925,7 @@ export default function App() {
                   id="header-language-options"
                   role="group"
                   aria-label={lang === 'lo' ? 'ເລືອກພາສາ' : lang === 'th' ? 'เลือกภาษา' : 'Choose language'}
-                  className="absolute right-0 top-full z-[60] mt-2 flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+                  className="absolute right-0 top-full z-60 mt-2 flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
                 >
                   {([
                     { code: 'lo', short: 'LO', label: 'ລາວ' },

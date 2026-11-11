@@ -33,7 +33,9 @@ export interface SystemUser {
 
 export type CustomerCategory = 'walk_in' | 'online' | 'event';
 
-export type StockStatus = 'ready' | 'pdi' | 'imported' | 'reserved' | 'sold' | 'event' | 'promotion' | 'in_transit' | 'problem' | 'parts_donor';
+export type StockStatus = 'ready' | 'pdi' | 'imported' | 'reserved' | 'sold' | 'event' | 'promotion' | 'in_transit' | 'problem' | 'parts_donor'
+  /** Import bill voided: kept in the database for history, never shown in stock */
+  | 'removed';
 
 export type PowertrainType = 'BEV' | 'REEV';
 
@@ -365,7 +367,8 @@ export interface TestDriveBooking {
   status: 'confirmed' | 'pending' | 'completed' | 'cancelled';
 }
 
-export type StockLogType = 'stock_in' | 'stock_out';
+/** stock_return: car back in stock (sale bill voided); import_void: car out of stock (import bill voided) */
+export type StockLogType = 'stock_in' | 'stock_out' | 'stock_return' | 'import_void';
 
 export interface StockLogRecord {
   id: string;
@@ -386,6 +389,8 @@ export interface StockLogRecord {
   paymentMethod?: 'cash' | 'transfer' | 'finance';
   remainingStock?: number;
   notes?: string;
+  /** The bill behind this movement was voided (its sale/import no longer counts) */
+  billVoided?: boolean;
 }
 
 export type SaleLogRecord = StockLogRecord;

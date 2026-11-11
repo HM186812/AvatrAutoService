@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { phoneMatches } from '../../utils/search';
 import { 
   FileCheck, 
   Search, 
@@ -49,7 +50,7 @@ export default function IssuedDocumentsRegistryTab({
         const matchRep = (log.issuedBy || '').toLowerCase().includes(q);
         const matchVin = (log.vin || '').toLowerCase().includes(q);
         const matchModel = (log.model || '').toLowerCase().includes(q);
-        const matchPhone = (log.customerPhone || '').includes(q);
+        const matchPhone = phoneMatches(log.customerPhone, q);
         if (!matchName && !matchNum && !matchTitle && !matchRep && !matchVin && !matchModel && !matchPhone) {
           return false;
         }

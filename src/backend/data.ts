@@ -46,6 +46,7 @@ import { AVATR_VEHICLES } from '../data/mockData';
 import { newRecordId } from './ids';
 import { normalizeRole, ROLE_LABELS, NO_ROLE_MESSAGE } from '../utils/roles';
 import { showToast } from '../components/common/Toast';
+import { localRangeToUtc } from '../utils/search';
 
 const isUuid = (val?: string | null): val is string => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val));
 import {
@@ -600,11 +601,13 @@ export async function fetchLeadsByDateRange(params?: {
       .order('created_at', { ascending: false })
       .range(offset, offset + pageSize - 1);
 
-    if (params?.dateFrom) {
-      query = query.gte('created_at', params.dateFrom);
+    // The dates are calendar days in Laos time; created_at is a UTC timestamp
+    const utcRange = localRangeToUtc(params?.dateFrom, params?.dateTo);
+    if (utcRange.from) {
+      query = query.gte('created_at', utcRange.from);
     }
-    if (params?.dateTo) {
-      query = query.lte('created_at', `${params.dateTo}T23:59:59`);
+    if (utcRange.to) {
+      query = query.lte('created_at', utcRange.to);
     }
 
     const { data, error } = await query;
@@ -639,6 +642,74 @@ async function fetchAllRows(table: 'vehicles' | 'customers'): Promise<{ data: Db
     if (!data || data.length < pageSize) break;
   }
   return { data: rows, error: null };
+}
+
+export const STOCK_HISTORY_PAGE_SIZE = 100;
+
+/**
+ * One page of stock movement history, newest first, with the bill (price, customer, voided or not) and the car.
+ * Bills are looked up separately: the archive keeps no foreign key from stock_movements to bills, and older
+ * bills are not in the app's first 100, which used to show $0 and no customer.
+ */
+export async function fetchStockMovements(
+  offset = 0,
+  limit = STOCK_HISTORY_PAGE_SIZE,
+  ctx?: { staffById?: Map<string, SystemUser>; modelById?: Map<string, VehicleModel> }
+): Promise<StockLogRecord[]> {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    return getOfflineBackendData().stockLogs.slice(offset, offset + limit);
+  }
+  const client = requireSupabase();
+  const { data: movements, error } = await client
+    .from('stock_movements')
+    .select('*, vehicles(model_id, plate_number, color)')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw error;
+  const rows = movements || [];
+
+  const billIds = [...new Set(rows.map((m: DbRow) => m.bill_id).filter(Boolean))] as string[];
+  const billById = new Map<string, DbRow>();
+  for (let i = 0; i < billIds.length; i += 100) {
+    const chunk = billIds.slice(i, i + 100);
+    const { data: bills } = await client
+      .from('v_bills_10_year_audit')
+      .select('id,customer_name,customer_phone,payment_method,status,notes,bill_items')
+      .in('id', chunk);
+    (bills || []).forEach((b: DbRow) => billById.set(b.id, b));
+  }
+
+  const staffById = ctx?.staffById || new Map((cachedStaffUsers || []).map(u => [u.id, u]));
+  const modelById = ctx?.modelById || new Map(((cachedVehicleModels || []).map(mapVehicleModel)).map(m => [m.id, m]));
+
+  return rows.map((movement: DbRow): StockLogRecord => {
+    const bill = billById.get(movement.bill_id);
+    const items = Array.isArray(bill?.bill_items) ? bill!.bill_items : [];
+    const item = items.find((it: DbRow) => it.vehicle_vin === movement.vehicle_vin) || items[0];
+    const vehicle = movement.vehicles as DbRow | null;
+    const model = (vehicle?.model_id && modelById.get(vehicle.model_id)?.name) || item?.model_name;
+    const staff = staffById.get(movement.recorded_by);
+    return {
+      id: movement.id,
+      billId: movement.bill_id || undefined,
+      type: movement.movement_type,
+      vin: movement.vehicle_vin,
+      model: model || '',
+      plateNumber: vehicle?.plate_number || item?.plate_number || '',
+      color: vehicle?.color || item?.color || '',
+      quantity: 1,
+      priceUSD: Number(item?.unit_price_usd) || 0,
+      priceLAK: Number(item?.unit_price_lak) || 0,
+      timestamp: movement.created_at,
+      recordedBy: staff?.name || movement.recorded_by || '',
+      customerName: bill?.customer_name || undefined,
+      customerPhone: bill?.customer_phone || undefined,
+      paymentMethod: bill?.payment_method || undefined,
+      notes: movement.notes || bill?.notes || undefined,
+      billVoided: bill?.status === 'voided' || undefined,
+    };
+  });
 }
 
 let activeLoadBackendPromise: Promise<BackendData> | null = null;
@@ -717,8 +788,10 @@ export async function loadBackendData(
       const dbModels = modelsData.map(mapVehicleModel);
       const models = dbModels.length > 0 ? dbModels : AVATR_VEHICLES;
       const modelById = new Map(models.map((model) => [model.id, model]));
-      const inventory = inventoryData.map((row: DbRow) => mapInventoryItem(row, modelById));
-      const inventoryByVin = new Map(inventoryData.map((row: DbRow) => [row.vin, row]));
+      // Cars whose import bill was voided stay in the database for history but are not stock
+      const inventory = inventoryData
+        .filter((row: DbRow) => row.status !== 'removed')
+        .map((row: DbRow) => mapInventoryItem(row, modelById));
       const leads = customersData.map((row: DbRow) => mapLead(row, modelById, staffById));
 
       // Yield Tier 1 immediately to all listeners
@@ -736,7 +809,9 @@ export async function loadBackendData(
       // Tier 2: Transactional logs, appointments, test drives, and bills (Paginated to 100 most recent records)
       const [billsResult, movementsResult, servicesResult, testDrivesResult] = await Promise.all([
         client.from('bills').select('*, bill_items(*)').order('bill_date', { ascending: false }).range(0, 99),
-        client.from('stock_movements').select('*').order('created_at', { ascending: false }).range(0, 99),
+        fetchStockMovements(0, STOCK_HISTORY_PAGE_SIZE, { staffById, modelById })
+          .then(data => ({ data, error: null as { message: string } | null }))
+          .catch((error: { message?: string }) => ({ data: [] as StockLogRecord[], error: { message: error?.message || 'stock history' } })),
         // Latest 100 (upcoming and recent). Ascending order would keep only the oldest 100 and hide new bookings.
         client.from('service_appointments').select('*').order('scheduled_date', { ascending: false }).range(0, 99),
         client.from('test_drives').select('*').order('drive_date', { ascending: false }).range(0, 99),
@@ -775,31 +850,7 @@ export async function loadBackendData(
         salesRep: row.sales_rep || '',
         status: row.status,
       }));
-      const billById = new Map((billsResult.data || []).map((bill: DbRow) => [bill.id, bill]));
-      const stockLogs = (movementsResult.error ? [] : (movementsResult.data || [])).map((movement: DbRow): StockLogRecord => {
-        const bill = billById.get(movement.bill_id) as DbRow | undefined;
-        const item = Array.isArray(bill?.bill_items) ? bill.bill_items[0] : undefined;
-        const vehicle = inventoryByVin.get(movement.vehicle_vin);
-        const model = vehicle ? modelById.get(vehicle.model_id)?.name : item?.model_name;
-        const staff = staffById.get(movement.recorded_by);
-        return {
-          id: movement.id,
-          type: movement.movement_type,
-          vin: movement.vehicle_vin,
-          model: model || '',
-          plateNumber: vehicle?.plate_number || item?.plate_number || '',
-          color: vehicle?.color || item?.color || '',
-          quantity: 1,
-          priceUSD: Number(item?.unit_price_usd) || 0,
-          priceLAK: Number(item?.unit_price_lak) || 0,
-          timestamp: movement.created_at,
-          recordedBy: staff?.name || movement.recorded_by || '',
-          customerName: bill?.customer_name || undefined,
-          customerPhone: bill?.customer_phone || undefined,
-          paymentMethod: bill?.payment_method || undefined,
-          notes: movement.notes || bill?.notes || undefined,
-        };
-      });
+      const stockLogs: StockLogRecord[] = movementsResult.error ? [] : movementsResult.data;
 
       const schemaWarnings: string[] = [];
       if (!rpcInit.error && (customersData.length === 250 || inventoryData.length === 500)) {
