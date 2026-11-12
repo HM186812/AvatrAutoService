@@ -4,16 +4,11 @@ import {
   ShieldCheck, 
   Car, 
   User, 
-  Phone, 
-  CreditCard, 
-  MapPin, 
   Calendar, 
   Gauge, 
   BatteryCharging, 
-  Sparkles, 
   Clock, 
   CheckCircle2, 
-  AlertTriangle,
   FileText
 } from 'lucide-react';
 import { VehicleModel, Language, Lead, InvoiceBillRecord, ServiceAppointment } from '../../types';
@@ -98,10 +93,10 @@ export default function CustomerAfterSalesModal({
   const [plateNumber, setPlateNumber] = useState(customer.plateNumber || '');
   const [vin, setVin] = useState(customer.vin || '');
   const [engineNumber, setEngineNumber] = useState(customer.engineNumber || '');
-  const [color, setColor] = useState(customer.color || 'Obsidian Black');
+  const [color, setColor] = useState(customer.color || '');
   const [purchaseDate, setPurchaseDate] = useState(customer.purchaseDate || new Date().toISOString().slice(0, 10));
-  const [currentMileageKm, setCurrentMileageKm] = useState<number | ''>(customer.currentMileageKm ?? 5000);
-  const [batteryHealthSOH, setBatteryHealthSOH] = useState<number | ''>(customer.batteryHealthSOH ?? 99.5);
+  const [currentMileageKm, setCurrentMileageKm] = useState<number | ''>(customer.currentMileageKm ?? '');
+  const [batteryHealthSOH, setBatteryHealthSOH] = useState<number | ''>(customer.batteryHealthSOH ?? '');
 
   // Warranty State (Manual & Custom Expiry as requested)
   const defaultStartDate = customer.warrantyStartDate || customer.purchaseDate || new Date().toISOString().slice(0, 10);
@@ -136,11 +131,11 @@ export default function CustomerAfterSalesModal({
       setPlateNumber(customer.plateNumber || '');
       setVin(customer.vin || '');
       setEngineNumber(customer.engineNumber || '');
-      setColor(customer.color || 'Obsidian Black');
+      setColor(customer.color || '');
       const pDate = customer.purchaseDate || new Date().toISOString().slice(0, 10);
       setPurchaseDate(pDate);
-      setCurrentMileageKm(customer.currentMileageKm ?? 5000);
-      setBatteryHealthSOH(customer.batteryHealthSOH ?? 99.5);
+      setCurrentMileageKm(customer.currentMileageKm ?? '');
+      setBatteryHealthSOH(customer.batteryHealthSOH ?? '');
 
       const wStart = customer.warrantyStartDate || pDate;
       setWarrantyStartDate(wStart);
@@ -223,13 +218,13 @@ export default function CustomerAfterSalesModal({
         district: district.trim() || undefined,
         village: village.trim() || undefined,
         model,
-        plateNumber: plateNumber.trim() || 'ກຳແພງນະຄອນ (ລໍຖ້າປ້າຍ)',
-        vin: vin.trim().toUpperCase() || 'AVATR-LA-2026-EV',
+        plateNumber: plateNumber.trim(),
+        vin: vin.trim().toUpperCase(),
         engineNumber: engineNumber.trim() || undefined,
         color: color.trim() || undefined,
         purchaseDate,
-        currentMileageKm: currentMileageKm === '' ? 0 : Number(currentMileageKm),
-        batteryHealthSOH: batteryHealthSOH === '' ? 100 : Number(batteryHealthSOH),
+        currentMileageKm: currentMileageKm === '' ? undefined : Number(currentMileageKm),
+        batteryHealthSOH: batteryHealthSOH === '' ? undefined : Number(batteryHealthSOH),
         warrantyStartDate,
         warrantyExpiryDate,
         warrantyYears: Number(warrantyYears) || 8,
@@ -238,6 +233,8 @@ export default function CustomerAfterSalesModal({
         afterSalesNotes: afterSalesNotes.trim() || undefined,
       });
       onClose();
+    } catch {
+      // Caller already showed an error toast; keep the form open so edits aren't lost.
     } finally {
       setIsSubmitting(false);
     }

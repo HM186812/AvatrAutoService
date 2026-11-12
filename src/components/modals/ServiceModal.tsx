@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
-import { X, Wrench, Calendar, Clock } from 'lucide-react';
+import { X, Wrench, Calendar } from 'lucide-react';
 import { ServiceAppointment, Language } from '../../types';
-import { translations } from '../../data/translations';
+
+const DEFAULT_MODELS = ['AVATR 12', 'AVATR 11', 'AVATR 07'];
+
+/** Today's date as YYYY-MM-DD in the browser's local timezone (toISOString is UTC). */
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 interface ServiceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddService: (service: Omit<ServiceAppointment, 'id'>) => void;
+  onAddService: (service: Omit<ServiceAppointment, 'id'>) => Promise<void> | void;
   lang?: Language;
+  /** Model names to offer; falls back to the built-in AVATR list. */
+  modelOptions?: string[];
   initialCustomerName?: string;
   initialPhone?: string;
   initialPlateNumber?: string;
@@ -21,6 +30,7 @@ export default function ServiceModal({
   onClose,
   onAddService,
   lang = 'lo',
+  modelOptions,
   initialCustomerName = '',
   initialPhone = '',
   initialPlateNumber = '',
@@ -28,16 +38,21 @@ export default function ServiceModal({
   initialMileageKm,
   initialBatteryHealthPercent,
 }: ServiceModalProps) {
-  const t = translations[lang] || translations.lo;
 
   const [customerName, setCustomerName] = useState(initialCustomerName);
   const [phone, setPhone] = useState(initialPhone);
   const [plateNumber, setPlateNumber] = useState(initialPlateNumber);
   const [model, setModel] = useState(initialModel);
   const [serviceType, setServiceType] = useState<ServiceAppointment['serviceType']>('periodic_maintenance');
-  const [scheduledDate, setScheduledDate] = useState(new Date().toISOString().split('T')[0]);
+  const [scheduledDate, setScheduledDate] = useState(localToday);
   const [scheduledTime, setScheduledTime] = useState('10:00');
-  const [status, setStatus] = useState<ServiceAppointment['status']>('completed');
+  const [status, setStatus] = useState<ServiceAppointment['status']>('pending');
+  const [saving, setSaving] = useState(false);
+
+  const models = Array.from(new Set([
+    ...(modelOptions && modelOptions.length > 0 ? modelOptions : DEFAULT_MODELS),
+    ...(initialModel ? [initialModel] : []),
+  ]));
   const [mileageKm, setMileageKm] = useState<number | ''>(initialMileageKm ?? '');
   const [batteryHealthPercent, setBatteryHealthPercent] = useState<number | ''>(initialBatteryHealthPercent ?? '');
   const [technician, setTechnician] = useState('ທີມຊ່າງເຕັກນິກ AVATR Vientiane');
@@ -56,11 +71,13 @@ export default function ServiceModal({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName || !phone) return;
+    if (!customerName.trim() || !phone.trim() || saving) return;
 
-    onAddService({
+    setSaving(true);
+    try {
+      await onAddService({
       customerName,
       phone,
       plateNumber: plateNumber || 'ບໍ່ມີປ້າຍ / None',
@@ -74,9 +91,13 @@ export default function ServiceModal({
       mileageKm: mileageKm === '' ? undefined : Number(mileageKm),
       batteryHealthPercent: batteryHealthPercent === '' ? undefined : Number(batteryHealthPercent),
       notes,
-    });
-
-    onClose();
+      });
+      onClose();
+    } catch {
+      // Error toast is shown by the caller; keep the form open so input isn't lost.
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -163,9 +184,9 @@ export default function ServiceModal({
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-white cursor-pointer"
               >
-                <option value="AVATR 12">AVATR 12</option>
-                <option value="AVATR 11">AVATR 11</option>
-                <option value="AVATR 07">AVATR 07</option>
+                {models.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
               </select>
             </div>
 
@@ -188,11 +209,11 @@ export default function ServiceModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label htmlFor="service-date" className="block text-zinc-400 mb-1 font-medium flex items-center gap-1.5 cursor-pointer">
+              <label htmlFor="service-date" className="text-zinc-400 mb-1 font-medium flex items-center gap-1.5 cursor-pointer">
                 <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                <span>{lang === 'lo' ? 'ວັນເດືອນປີ ນັດໝາຍ *' : lang === 'th' ? 'วัน/เดือน/ปี นัดหมาย *' : 'Scheduled Date (YYYY-MM-DD) *'}</span>
+                <span>{lang === 'lo' ? 'ວັນທີນັດ *' : lang === 'th' ? 'วันที่นัด *' : 'Date *'}</span>
               </label>
               <input
                 id="service-date"
@@ -200,6 +221,19 @@ export default function ServiceModal({
                 required
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="service-time" className="block text-zinc-400 mb-1 font-medium cursor-pointer">
+                {lang === 'lo' ? 'ເວລາ' : lang === 'th' ? 'เวลา' : 'Time'}
+              </label>
+              <input
+                id="service-time"
+                type="time"
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-white"
               />
             </div>
@@ -214,9 +248,10 @@ export default function ServiceModal({
                 onChange={(e) => setStatus(e.target.value as any)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white font-medium cursor-pointer"
               >
-                <option value="completed">ສຳເລັດແລ້ວ (Completed)</option>
-                <option value="in_progress">ກຳລັງກວດເຊັກ (In Progress)</option>
                 <option value="pending">ລໍຖ້າກວດເຊັກ / ນັດໝາຍ (Pending)</option>
+                <option value="in_progress">ກຳລັງກວດເຊັກ (In Progress)</option>
+                <option value="inspection_done">ກວດສອບແລ້ວ (Inspected)</option>
+                <option value="completed">ສຳເລັດແລ້ວ — ບັນທຶກປະຫວັດ (Completed)</option>
               </select>
             </div>
           </div>
@@ -293,9 +328,12 @@ export default function ServiceModal({
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all shadow-md text-xs cursor-pointer active:scale-98"
+              disabled={saving}
+              className="px-6 py-2.5 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-all shadow-md text-xs cursor-pointer active:scale-98 disabled:opacity-60 disabled:cursor-wait"
             >
-              {lang === 'lo' ? 'ຢືນຢັນການນັດໝາຍ' : lang === 'th' ? 'ยืนยันการนัดหมาย' : 'Confirm Service'}
+              {saving
+                ? (lang === 'lo' ? 'ກຳລັງບັນທຶກ...' : lang === 'th' ? 'กำลังบันทึก...' : 'Saving...')
+                : (lang === 'lo' ? 'ຢືນຢັນການນັດໝາຍ' : lang === 'th' ? 'ยืนยันการนัดหมาย' : 'Confirm Service')}
             </button>
           </div>
         </form>

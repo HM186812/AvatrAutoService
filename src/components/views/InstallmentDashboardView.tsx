@@ -1,3 +1,5 @@
+import { withVehicleFromBills } from '../../utils/documentCustomer';
+import { phoneMatches } from '../../utils/search';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Lead,
@@ -9,7 +11,6 @@ import {
   InstallmentPaymentRecord,
   IssuedDocumentRecord
 } from '../../types';
-import { translations } from '../../data/translations';
 import { showToast } from '../common';
 import {
   getIssuedDocumentLogs,
@@ -17,7 +18,6 @@ import {
   DOCUMENT_LOG_EVENT,
 } from '../../utils/documentLogger';
 import {
-  Users,
   CheckCircle2,
   Clock,
   Search,
@@ -25,29 +25,18 @@ import {
   FileText,
   CreditCard,
   Coins,
-  BadgePercent,
   AlertTriangle,
-  Building2,
   Car,
   LayoutGrid,
   List,
   Plus,
-  ArrowUpRight,
-  ShieldCheck,
-  Check,
-  Sparkles,
-  Phone,
   MapPin,
-  FileCheck,
   Lock
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, openWhatsAppWithMessage } from '../../utils/whatsapp';
-import {
-  DEFAULT_EXCHANGE_RATE_LAK,
-  generateInstallmentSchedule,
-  calculateInstallmentSummary
-} from '../../utils/installment';
+import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
+import { buildInstallmentContracts, summarizeInstallmentPortfolio } from '../../utils/installmentPortfolio';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 import CustomerDocumentsModal from '../modals/CustomerDocumentsModal';
 import QuickInstallmentPaymentModal from '../modals/QuickInstallmentPaymentModal';
@@ -65,6 +54,10 @@ interface InstallmentDashboardViewProps {
   currentUser?: SystemUser | null;
   onNavigateMenu?: (menu: ActiveMenu) => void;
   onNavigateTab?: (tab: 'new_leads' | 'existing_customers' | 'installment_customers') => void;
+  /** Opens the customer detail page */
+  onOpenCustomer?: (lead: Lead) => void;
+  /** CRM searches customers by date only; hide the name/phone search box there. */
+  hideTextSearch?: boolean;
 }
 
 export default function InstallmentDashboardView({
@@ -77,8 +70,9 @@ export default function InstallmentDashboardView({
   currentUser,
   onNavigateMenu,
   onNavigateTab,
+  onOpenCustomer,
+  hideTextSearch = false,
 }: InstallmentDashboardViewProps) {
-  const t = translations[lang] || translations.lo;
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'due' | 'completed'>('all');
   const [modelFilter, setModelFilter] = useState<string>('all');
@@ -114,109 +108,48 @@ export default function InstallmentDashboardView({
     }).length;
   };
 
-  const triggerToast = (msg: string) => {
-    showToast(msg, 'success');
-  };
 
-  // 1. Filter installment customers (leads with installment type, down payment, leasing, or from bills)
-  const installmentLeads = useMemo(() => {
-    const matchedLeads = leads.filter(l => {
-      // If customer payment is fully completed & moved, exclude unless viewing 'completed' status
-      if (l.isPaymentCompleted && statusFilter !== 'completed') return false;
-
-      const isInstallment = l.paymentType === 'installment' ||
-        l.paymentType === 'finance' ||
-        Boolean(l.downPaymentPercent) ||
-        Boolean(l.financeCompany) ||
-        Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
-        l.installmentStatus === 'active_repaying' ||
-        l.installmentStatus === 'completed' ||
-        l.installmentStatus === 'approved' ||
-        l.installmentStatus === 'pending_approval';
-      return isInstallment;
-    });
-
-    const seenPhones = new Set(matchedLeads.map(l => (l.phone || '').replace(/\D/g, '')).filter(Boolean));
-    const extraFromBills: Lead[] = [];
-
-    bills.filter(b => (b.paymentMethod === 'finance' || b.billType === 'installment' || Boolean(b.downPaymentPercent))).forEach(bill => {
-      const cleanPhone = (bill.customerPhone || '').replace(/\D/g, '');
-      if (cleanPhone && seenPhones.has(cleanPhone)) return;
-      if (matchedLeads.some(l => l.id === bill.leadId)) return;
-      if (leads.some(l => (l.id === bill.leadId || (cleanPhone && l.phone && l.phone.replace(/\D/g, '') === cleanPhone)) && l.isPaymentCompleted) && statusFilter !== 'completed') return;
-      seenPhones.add(cleanPhone || bill.id);
-
-      extraFromBills.push({
-        id: bill.leadId || `inst-bill-${bill.id}`,
-        customerName: bill.customerName || 'ລູກຄ້າຜ່ອນ',
-        phone: bill.customerPhone || '',
-        idCardNumber: bill.customerIDCard,
-        province: bill.customerProvince || 'ນະຄອນຫຼວງວຽງຈັນ',
-        category: 'walk_in',
-        source: 'POS Installment',
-        interestedModel: bill.model || 'AVATR 11',
-        status: 'delivered',
-        priority: 'high',
-        notes: `ສັນຍາຜ່ອນຈາກບິນ ${bill.billNumber || bill.id}`,
-        paymentType: 'installment',
-        paymentTypeConfirmed: 'down_payment',
-        installmentStatus: 'active_repaying',
-        downPaymentPercent: bill.downPaymentPercent || 30,
-        downPaymentUSD: bill.downPaymentUSD || 0,
-        tenureMonths: bill.tenureMonths || 48,
-        monthlyPaymentLAK: bill.monthlyPaymentLAK || 0,
-        financeCompany: bill.financeCompany || 'AVATR Leasing',
-        paymentReceiptNo: bill.billNumber || bill.id,
-        paymentDate: bill.date,
-        createdAt: bill.date || new Date().toISOString(),
-        assignedTo: bill.salesRep || 'Admin',
-      });
-    });
-
-    return [...matchedLeads, ...extraFromBills];
-  }, [leads, bills]);
-
-  // 2. Computed Summaries per Lead
+  // 1+2. Installment contracts: shared with the Dashboard and the Sidebar badge so every page and account agrees
   const leadsWithSummaries = useMemo(() => {
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
 
-    return installmentLeads.map(lead => {
+    return buildInstallmentContracts(leads, bills, vehicles).map(({ lead, priceUSD, records, summary, isCompleted }) => {
       const matchedVeh = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
-      const basePrice = matchedVeh?.priceStartingUSD || 50000;
-      const records = generateInstallmentSchedule(lead, basePrice);
-      const summary = calculateInstallmentSummary(lead, records, basePrice);
+      const basePrice = priceUSD;
+
 
       // Next due record
-      const nextUnpaid = records.find(r => r.status !== 'paid');
+      const nextUnpaid = records.find(r => r.status !== "paid");
       const isDueSoon = nextUnpaid ? (new Date(nextUnpaid.dueDate).getTime() - today.getTime()) / (1000 * 3600 * 24) <= 7 : false;
       const isOverdue = nextUnpaid ? nextUnpaid.dueDate < todayStr : false;
 
-      const contractNo = lead.paymentReceiptNo || `AVT-FIN-${lead.id.replace(/\D/g, '').slice(-4) || '001'}`;
+      const contractNo = lead.paymentReceiptNo || `AVT-FIN-${lead.id.replace(/D/g, "").slice(-4) || "001"}`;
 
       return {
         lead,
         matchedVeh,
         basePrice,
+        priceUSD,
         records,
         summary,
+        isCompleted,
         nextUnpaid,
         isDueSoon,
         isOverdue,
         contractNo,
       };
     });
-  }, [installmentLeads, vehicles]);
+  }, [leads, bills, vehicles]);
 
   // 3. Filtered Customers
   const filteredCustomers = useMemo(() => {
-    return leadsWithSummaries.filter(({ lead, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
+    return leadsWithSummaries.filter(({ lead, isCompleted, isDueSoon, isOverdue, contractNo }) => {
       // Model Filter
       if (modelFilter !== 'all' && lead.interestedModel !== modelFilter) return false;
 
-      // Status filter
-      if (statusFilter === 'active' && summary.isFullyPaid) return false;
-      if (statusFilter === 'completed' && !summary.isFullyPaid) return false;
+      // Status filter (paid-off contracts are listed only under "completed")
+      if (statusFilter === 'completed' ? !isCompleted : isCompleted) return false;
       if (statusFilter === 'due' && !isDueSoon && !isOverdue) return false;
 
       // Search
@@ -224,7 +157,8 @@ export default function InstallmentDashboardView({
         const q = searchQuery.toLowerCase();
         return (
           lead.customerName.toLowerCase().includes(q) ||
-          lead.phone.toLowerCase().includes(q) ||
+          phoneMatches(lead.phone, q) ||
+          (lead.vin && lead.vin.toLowerCase().includes(q)) ||
           (lead.interestedModel && lead.interestedModel.toLowerCase().includes(q)) ||
           (lead.province && lead.province.toLowerCase().includes(q)) ||
           contractNo.toLowerCase().includes(q)
@@ -236,21 +170,12 @@ export default function InstallmentDashboardView({
 
   // 4. Portfolio Overall KPI Metrics
   const portfolioMetrics = useMemo(() => {
-    let totalPortfolioBalanceUSD = 0;
-    let totalCollectedUSD = 0;
-    let activeContractsCount = 0;
-    let dueOrOverdueCount = 0;
-
-    leadsWithSummaries.forEach(({ summary, isDueSoon, isOverdue }) => {
-      totalPortfolioBalanceUSD += summary.remainingInstallmentsUSD;
-      totalCollectedUSD += summary.totalPaidInstallmentsUSD + summary.downPaymentUSD;
-      if (!summary.isFullyPaid) {
-        activeContractsCount += 1;
-      }
-      if (isDueSoon || isOverdue) {
-        dueOrOverdueCount += 1;
-      }
-    });
+    // Same totals as the Dashboard portfolio cards
+    const shared = summarizeInstallmentPortfolio(leadsWithSummaries);
+    const totalPortfolioBalanceUSD = shared.totalOutstandingUSD;
+    const totalCollectedUSD = shared.totalCollectedUSD;
+    const activeContractsCount = shared.activeContracts;
+    const dueOrOverdueCount = leadsWithSummaries.filter(c => !c.isCompleted && (c.isDueSoon || c.isOverdue)).length;
 
     return {
       totalPortfolioBalanceUSD,
@@ -293,7 +218,7 @@ export default function InstallmentDashboardView({
 
     // Synchronize newly paid installment receipts into bills collection
     if (setBills) {
-      paidRecords.forEach(r => {
+      for (const r of paidRecords) {
         const receiptNo = r.receiptNo || `REC-INS-${targetLead.id.replace(/\D/g, '').slice(-4) || '001'}-${String(r.period).padStart(2, '0')}`;
         const alreadyInBills = bills.some(b => b.billNumber === receiptNo || (b.leadId === targetLead.id && b.installmentPeriod === r.period));
         if (!alreadyInBills) {
@@ -303,6 +228,7 @@ export default function InstallmentDashboardView({
           const newReceiptBill: InvoiceBillRecord = {
             id: newRecordId(),
             billType: 'installment',
+            installmentType: 'monthly_installment',
             billNumber: receiptNo,
             date: r.paidDate || new Date().toISOString().slice(0, 10),
             model: targetLead.interestedModel || matchedVeh?.name || 'AVATR',
@@ -335,10 +261,15 @@ export default function InstallmentDashboardView({
             recordedBy: currentUser?.name || 'Admin',
             notes: r.notes || `ຮັບເງິນງວດທີ ${r.period} ລູກຄ້າ ${targetLead.customerName}`,
           };
-          saveBillRecord(newReceiptBill, currentUser.id).catch(err => console.warn('Sync installment bill:', err));
-          setBills(prev => [newReceiptBill, ...prev]);
+          try {
+            await saveBillRecord(newReceiptBill, currentUser.id);
+            setBills(prev => [newReceiptBill, ...prev]);
+          } catch (err) {
+            // The payment itself is saved on the customer; only the receipt bill failed.
+            showToast(`ບັນທຶກງວດແລ້ວ ແຕ່ອອກໃບຮັບເງິນງວດທີ ${r.period} ບໍ່ສຳເລັດ: ${err instanceof Error ? err.message : 'unknown error'}`, 'error');
+          }
         }
-      });
+      }
     }
 
     showToast('ບັນທຶກຮັບເງິນງວດ ແລະ ອັບເດດຕາຕະລາງຜ່ອນສຳເລັດແລ້ວ!');
@@ -545,7 +476,8 @@ export default function InstallmentDashboardView({
       {/* 3. Search & Filter Toolbar */}
       <div className="theme-adaptive-dark-surface rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
         {/* Search */}
-        <div className="relative flex-1 min-w-[260px]">
+        {!hideTextSearch && (
+        <div className="relative flex-1 min-w-65">
           <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -555,6 +487,7 @@ export default function InstallmentDashboardView({
             className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-white font-medium"
           />
         </div>
+        )}
 
         {/* Model Filter */}
         <div className="flex items-center gap-1.5">
@@ -610,7 +543,11 @@ export default function InstallmentDashboardView({
                   <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-zinc-800/80">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-base text-slate-900 dark:text-white">{lead.customerName}</h3>
+                        <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                          {onOpenCustomer && !lead.id.startsWith('inst-bill-') ? (
+                            <button type="button" onClick={() => onOpenCustomer(lead)} className="text-left hover:underline underline-offset-2 cursor-pointer" title="ເປີດລາຍລະອຽດລູກຄ້າ">{lead.customerName}</button>
+                          ) : lead.customerName}
+                        </h3>
                         <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-300">
                           {contractNo}
                         </span>
@@ -719,7 +656,7 @@ export default function InstallmentDashboardView({
                     </div>
                     <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
                       <div
-                        className={`h-full rounded-full transition-all duration-500 ${summary.isFullyPaid ? 'bg-emerald-500' : 'bg-gradient-to-r from-amber-500 to-amber-300'
+                        className={`h-full rounded-full transition-all duration-500 ${summary.isFullyPaid ? 'bg-emerald-500' : 'bg-linear-to-r from-amber-500 to-amber-300'
                           }`}
                         style={{ width: `${summary.progressPercent}%` }}
                       />
@@ -836,12 +773,16 @@ export default function InstallmentDashboardView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/80 font-mono">
-                {filteredCustomers.map(({ lead, basePrice, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
+                {filteredCustomers.map(({ lead, summary, nextUnpaid, isDueSoon, isOverdue, contractNo }) => {
                   return (
                     <tr key={lead.id} className="hover:bg-zinc-900/50 transition-colors">
                       {/* Customer */}
                       <td className="py-3.5 px-4 font-sans">
-                        <strong className="text-white font-semibold block">{lead.customerName}</strong>
+                        {onOpenCustomer && !lead.id.startsWith('inst-bill-') ? (
+                          <button type="button" onClick={() => onOpenCustomer(lead)} className="text-white font-semibold block text-left hover:underline underline-offset-2 cursor-pointer" title="ເປີດລາຍລະອຽດລູກຄ້າ">{lead.customerName}</button>
+                        ) : (
+                          <strong className="text-white font-semibold block">{lead.customerName}</strong>
+                        )}
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-zinc-400 font-mono text-[11px]">{lead.phone}</span>
                           <a
@@ -1037,7 +978,7 @@ export default function InstallmentDashboardView({
         <CustomerDocumentsModal
           isOpen={Boolean(selectedLeadForDocs)}
           onClose={() => setSelectedLeadForDocs(null)}
-          customer={selectedLeadForDocs}
+          customer={withVehicleFromBills(selectedLeadForDocs, bills)}
           vehicles={vehicles}
           currentUser={currentUser || undefined}
           lang={lang}

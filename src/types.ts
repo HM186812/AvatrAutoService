@@ -2,7 +2,7 @@ export type Language = 'lo' | 'en' | 'th';
 
 export type ActiveMenu = 'dashboard' | 'installment_dashboard' | 'sales_leaderboard' | 'pos_sales' | 'customers' | 'inventory' | 'stock_in' | 'bills' | 'alerts' | 'users' | 'profile';
 
-export type UserRole = 'super_admin' | 'admin' | 'sales' | 'technician' | 'general_user';
+export type UserRole = 'admin' | 'sales';
 
 export type Currency = 'USD' | 'THB' | 'LAK' | 'CNY' | 'EUR' | string;
 
@@ -13,42 +13,19 @@ export interface CustomCurrencyConfig {
   rateToUSD: number; // e.g. 1 USD = 22000 LAK, 1 USD = 35.5 THB
 }
 
-export interface PendingMemberRequest {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  branch: string;
-  appliedRole: UserRole;
-  requestedAt: string;
-  reason?: string;
-  status: 'pending' | 'approved' | 'rejected';
-}
-
-export interface UserPermissions {
-  canManageUsers: boolean;
-  canEditInventory: boolean;
-  canUploadQR?: boolean;
-  canAddModels?: boolean;
-  canDeleteUsers?: boolean;
-  canGrantRoles?: boolean;
-  canDeductPOS?: boolean;
-  canViewFinancials?: boolean;
-  canUpdatePDI?: boolean;
-  canViewVehicles?: boolean;
-}
-
 export interface SystemUser {
   id: string; // Supabase UID or local ID
   name: string;
   email: string;
   phone: string;
+  /** Permissions come from the role only (see utils/roles.ts) */
   role: UserRole;
+  /** Role exactly as stored in the database (e.g. legacy 'super_admin'), so saving never rewrites it by accident */
+  dbRole?: string;
   roleTitleLo: string;
   department: string;
   avatarInitials: string;
   avatarUrl?: string;
-  permissions: UserPermissions;
   status?: 'active' | 'suspended';
   createdAt: string;
   lastLogin?: string;
@@ -56,7 +33,17 @@ export interface SystemUser {
 
 export type CustomerCategory = 'walk_in' | 'online' | 'event';
 
-export type StockStatus = 'ready' | 'pdi' | 'imported' | 'reserved' | 'sold' | 'event' | 'promotion';
+export type StockStatus = 'ready' | 'pdi' | 'imported' | 'reserved' | 'sold' | 'event' | 'promotion' | 'in_transit' | 'problem' | 'parts_donor'
+  /** Import bill voided: kept in the database for history, never shown in stock */
+  | 'removed';
+
+export type PowertrainType = 'BEV' | 'REEV';
+
+/** One gift line on a booking, costed against the per-car gift budget. */
+export interface GiftItem {
+  name: string;
+  costUSD: number;
+}
 
 export type PDIStatus = 'passed' | 'in_progress' | 'pending';
 
@@ -64,7 +51,13 @@ export type KPITimeframe = 'day' | 'week' | 'month' | 'year';
 
 export interface InventoryItem {
   vin: string; // Document ID (17 chars)
-  engineNumber?: string; // ເລກຈັກ / Motor No.
+  engineNumber?: string; // ເລກຈັກ (REEV engine) / legacy single motor no.
+  frontMotorNumber?: string; // ເລກມໍເຕີໜ້າ
+  rearMotorNumber?: string; // ເລກມໍເຕີຫຼັງ
+  powertrainType?: PowertrainType; // BEV / REEV
+  incomingBatch?: string; // ລອດນຳເຂົ້າ ເຊັ່ນ 'ລົດຂາເຂົ້າ 8 ເດືອນ 10'
+  expectedArrivalDate?: string; // YYYY-MM-DD (in_transit)
+  issueNote?: string; // ບັນຫາຂອງລົດ (problem / parts_donor)
   model: string;
   plateNumber?: string; // ทะเบียน / ປ້າຍ
   color: string;
@@ -106,6 +99,7 @@ export interface VehicleColorOption {
 export interface VehicleModel {
   id: string; // Document ID, e.g. "avatr-12"
   name: string;
+  brand?: string; // AVATR, Maxus, Volkswagen…
   subTitle: string;
   category: string;
   priceStartingUSD: number;
@@ -208,6 +202,12 @@ export interface InvoiceBillRecord {
   recordedBy?: string;
   notes?: string;
   status?: 'completed' | 'voided' | string;
+  /** Why the bill was voided, by whom and when (table bill_void_logs) */
+  voidReason?: string;
+  voidedBy?: string;
+  voidedAt?: string;
+  /** Moved to the fiscal-year archive: read-only */
+  isArchived?: boolean;
 }
 
 export interface DealershipConfig {
@@ -308,6 +308,34 @@ export interface Lead {
   warrantyDistanceKm?: number; // ໄລຍະທາງຮັບປະກັນ km ເຊັ່ນ 100,000, 160,000
   warrantyTerms?: string; // ເງື່ອນໄຂ / ຊື່ແພັກເກັດການຮັບປະກັນ
   afterSalesNotes?: string; // ໝາຍເຫດການດູແລຫຼັງການຂາຍ
+
+  // CRM follow-up (columns added by migration 20261109120000_customer_pipeline_fields)
+  nextFollowUpAt?: string; // ວັນນັດຕິດຕາມຄັ້ງຕໍ່ໄປ YYYY-MM-DD
+  contactHistory?: ContactLogEntry[]; // ປະຫວັດການຕິດຕໍ່ (ໃໝ່ສຸດຢູ່ທ້າຍ)
+
+  // Pipeline: booking (deposit) and vehicle delivery stages
+  bookingDepositUSD?: number; // ເງິນມັດຈຳ USD
+  bookingPaymentMethod?: 'cash' | 'transfer';
+  bookingDate?: string; // YYYY-MM-DD
+  bookingNote?: string;
+  listPriceUSD?: number; // ລາຄາເຕັມ
+  discountUSD?: number; // ສ່ວນຫຼຸດ (ສຸດທິ = ເຕັມ − ຫຼຸດ; ຄ້າງ = ສຸດທິ − ມັດຈຳ)
+  deliveryWindow?: string; // ກຳນົດສົ່ງມອບ ເຊັ່ນ 'ພາຍໃນເດືອນ 5-6'
+  giftItems?: GiftItem[]; // ຂອງແຖມ ພ້ອມຕົ້ນທຶນ
+  giftBudgetUSD?: number; // ງົບຂອງແຖມຕໍ່ຄັນ
+  vehicleDeliveredAt?: string; // YYYY-MM-DD
+  vehicleDeliveredBy?: string;
+  deliveryNote?: string;
+}
+
+export type ContactLogType = 'call' | 'whatsapp' | 'visit' | 'other' | 'status' | 'deposit' | 'delivery';
+
+export interface ContactLogEntry {
+  id: string;
+  at: string; // ISO date-time
+  type: ContactLogType;
+  note: string;
+  by?: string; // staff name
 }
 
 export interface ServiceAppointment {
@@ -339,7 +367,8 @@ export interface TestDriveBooking {
   status: 'confirmed' | 'pending' | 'completed' | 'cancelled';
 }
 
-export type StockLogType = 'stock_in' | 'stock_out';
+/** stock_return: car back in stock (sale bill voided); import_void: car out of stock (import bill voided) */
+export type StockLogType = 'stock_in' | 'stock_out' | 'stock_return' | 'import_void';
 
 export interface StockLogRecord {
   id: string;
@@ -360,6 +389,8 @@ export interface StockLogRecord {
   paymentMethod?: 'cash' | 'transfer' | 'finance';
   remainingStock?: number;
   notes?: string;
+  /** The bill behind this movement was voided (its sale/import no longer counts) */
+  billVoided?: boolean;
 }
 
 export type SaleLogRecord = StockLogRecord;

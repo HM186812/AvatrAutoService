@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { withVehicleFromBills } from '../../utils/documentCustomer';
+import { isAdminRole } from '../../utils/roles';
+import { useEffect, useState, useMemo } from 'react';
 import {
   Lead,
   VehicleModel,
   Language,
   LeadStatus,
-  LeadPriority,
   CustomerCategory,
   SystemUser,
   InstallmentPaymentRecord,
@@ -13,20 +14,16 @@ import {
   ActiveMenu
 } from '../../types';
 import { translations } from '../../data/translations';
-import { LAO_PROVINCES } from '../../data/laoProvinces';
 import { showToast } from '../common';
 import {
   Users,
-  Search,
   Plus,
+  Upload,
   Phone,
-  MessageSquare,
   Car,
-  Filter,
   Star,
   Store,
   Globe,
-  CalendarCheck,
   Calendar,
   FileText,
   UserPlus,
@@ -34,31 +31,27 @@ import {
   Sparkles,
   Trash2,
   ChevronDown,
-  ChevronUp,
   ShoppingBag,
   CreditCard,
   Download,
   Printer,
   MapPin,
-  FileCheck,
   User as UserIcon,
   Banknote,
   Clock,
-  AlertCircle,
-  Check,
   Loader2,
   LayoutGrid,
   List,
   X,
+  Search,
   ShieldCheck,
   Wrench,
-  Shield,
-  Award,
   RotateCcw,
   Gauge,
   BatteryCharging,
   AlertTriangle,
-  History
+  Pencil,
+  CalendarClock,
 } from 'lucide-react';
 import {
   ConfirmDeleteModal,
@@ -73,9 +66,17 @@ import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
 import { deleteLead, saveLead, updateLeadStatus, saveBillRecord, fetchLeadsByDateRange, updateServiceAppointment } from '../../backend/data';
 import { newRecordId } from '../../backend/ids';
+import ContactLogModal from '../modals/ContactLogModal';
+import CustomerDetailView from './CustomerDetailView';
+import PipelineActionModal from '../modals/PipelineActionModal';
+import ImportBookingCsvModal from '../modals/ImportBookingCsvModal';
+import type { DocumentType } from '../modals/CustomerDocumentsModal';
+import { PIPELINE_LABELS, PIPELINE_STAGE_KEYS, getPipelineCurrentIndex, getPipelineDone } from '../../utils/pipeline';
+import { getFollowUpState, makeContactEntry, formatDateKey } from '../../utils/followUp';
 import InstallmentDashboardView from './InstallmentDashboardView';
 import { IssuedDocumentRecord } from '../../types';
 import { getIssuedDocumentLogs, fetchDocumentLogsFromCloud, DOCUMENT_LOG_EVENT } from '../../utils/documentLogger';
+import { matchesSearch, localDateKey } from '../../utils/search';
 
 interface CustomerViewProps {
   leads: Lead[];
@@ -94,6 +95,7 @@ interface CustomerViewProps {
   onAddService?: (service: Omit<ServiceAppointment, 'id'>) => Promise<void> | void;
   onUpdateServiceStatus?: (id: string, status: ServiceAppointment['status']) => Promise<void> | void;
   initialClassificationTab?: 'new_leads' | 'existing_customers' | 'installment_customers';
+  onEditLead?: (lead: Lead) => void;
 }
 
 export default function CustomerView({
@@ -113,11 +115,15 @@ export default function CustomerView({
   onAddService,
   onUpdateServiceStatus,
   initialClassificationTab,
+  onEditLead,
 }: CustomerViewProps) {
   const t = translations[lang] || translations.lo;
+  // Deleting customer records is restricted to administrators
+  const isAdminUser = isAdminRole(currentUser);
 
   // View Mode: Cards vs Table
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [showBookingImport, setShowBookingImport] = useState(false);
 
   // Primary Classification Tabs: 'new_leads' (ລູກຄ້າໃໝ່) vs 'existing_customers' (ລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ) vs 'installment_customers' (ລູກຄ້າຜ່ອນຊຳລະ)
   const [customerClassificationTab, setCustomerClassificationTab] = useState<'new_leads' | 'existing_customers' | 'installment_customers'>(initialClassificationTab || 'new_leads');
@@ -130,7 +136,6 @@ export default function CustomerView({
   }, [initialClassificationTab]);
 
   // Existing Customers (Car Owners) Filters
-  const [existingSearchQuery, setExistingSearchQuery] = useState('');
   const [existingModelFilter, setExistingModelFilter] = useState('all');
   const [existingServiceFilter, setExistingServiceFilter] = useState<'all' | 'has_service' | 'no_service'>('all');
 
@@ -153,10 +158,36 @@ export default function CustomerView({
   const [channelFilter, setChannelFilter] = useState<'all' | CustomerCategory>('all');
   // 2. Status Filter (ສະຖານະລູກຄ້າ / ຊ່ອງຈ່າຍແລ້ວ)
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [crmTimePreset, setCrmTimePreset] = useState<'all' | 'today' | '7d' | 'month' | 'year' | 'custom'>('all');
-  const [crmDateFrom, setCrmDateFrom] = useState('');
-  const [crmDateTo, setCrmDateTo] = useState('');
+  // Customer search: free text (name, phone, VIN, ID card, plate) plus date (year, then month, then day; '' = any)
+  const [crmSearch, setCrmSearch] = useState('');
+  const leadMatchesSearch = (lead: Lead) => matchesSearch(crmSearch, {
+    texts: [lead.customerName, lead.vin, lead.idCardNumber, lead.plateNumber, lead.engineNumber, lead.interestedModel, lead.paymentReceiptNo],
+    phones: [lead.phone],
+  });
+  const billMatchesSearch = (bill: InvoiceBillRecord) => matchesSearch(crmSearch, {
+    texts: [bill.customerName, bill.vin, bill.customerIDCard, bill.plateNumber, bill.billNumber, bill.model],
+    phones: [bill.customerPhone],
+  });
+  const [crmYear, setCrmYear] = useState('');
+  const [crmMonth, setCrmMonth] = useState('');
+  const [crmDay, setCrmDay] = useState('');
+  const isDateSearchActive = Boolean(crmYear);
+  const clearDateSearch = () => { setCrmYear(''); setCrmMonth(''); setCrmDay(''); };
+  const currentDate = new Date();
+  const crmYearIsValid = /^\d{4}$/.test(crmYear) && Number(crmYear) >= 1000;
+  const crmMonthIsValid = !crmMonth || (/^\d{1,2}$/.test(crmMonth) && Number(crmMonth) >= 1 && Number(crmMonth) <= 12);
+  const validationYear = crmYearIsValid ? Number(crmYear) : currentDate.getFullYear();
+  const validationMonth = crmMonthIsValid && crmMonth ? Number(crmMonth) : currentDate.getMonth() + 1;
+  const daysInSelectedMonth = new Date(validationYear, validationMonth, 0).getDate();
+  const crmDayIsValid = !crmDay || (/^\d{1,2}$/.test(crmDay) && Number(crmDay) >= 1 && Number(crmDay) <= daysInSelectedMonth);
+  const crmDateIsValid = crmYearIsValid && crmMonthIsValid && crmDayIsValid;
+  // Selected range as YYYY-MM-DD bounds (undefined = no date search)
+  const crmDateFrom = isDateSearchActive && crmDateIsValid
+    ? `${crmYear}-${(crmMonth || '01').padStart(2, '0')}-${(crmDay || '01').padStart(2, '0')}`
+    : '';
+  const crmDateTo = isDateSearchActive && crmDateIsValid
+    ? `${crmYear}-${(crmMonth || '12').padStart(2, '0')}-${(crmDay || String(crmMonth ? daysInSelectedMonth : 31)).padStart(2, '0')}`
+    : '';
   const [isLoadingRangeLeads, setIsLoadingRangeLeads] = useState(false);
 
   const formatLocalYMD = (d: Date): string => {
@@ -167,28 +198,8 @@ export default function CustomerView({
   };
 
   useEffect(() => {
-    const now = new Date();
-    const todayStr = formatLocalYMD(now);
-    let from: string | undefined;
-    let to: string | undefined;
-    if (crmTimePreset === 'today') {
-      from = todayStr;
-      to = todayStr;
-    } else if (crmTimePreset === '7d') {
-      const start = new Date(now);
-      start.setDate(now.getDate() - 6);
-      from = formatLocalYMD(start);
-      to = todayStr;
-    } else if (crmTimePreset === 'month') {
-      from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-      to = todayStr;
-    } else if (crmTimePreset === 'year') {
-      from = `${now.getFullYear()}-01-01`;
-      to = todayStr;
-    } else if (crmTimePreset === 'custom') {
-      from = crmDateFrom || undefined;
-      to = crmDateTo || undefined;
-    }
+    const from = crmDateFrom || undefined;
+    const to = crmDateTo || undefined;
 
     let cancelled = false;
     setIsLoadingRangeLeads(true);
@@ -210,38 +221,17 @@ export default function CustomerView({
     return () => {
       cancelled = true;
     };
-  }, [crmTimePreset, crmDateFrom, crmDateTo]);
+  }, [crmDateFrom, crmDateTo]);
 
   const matchesCrmTime = (dateStr?: string): boolean => {
-    if (crmTimePreset === 'all' && !crmDateFrom && !crmDateTo) return true;
-    const raw = (dateStr || '').slice(0, 10);
-    if (!raw) return false;
-    const now = new Date();
-    const todayStr = formatLocalYMD(now);
-    if (crmTimePreset === 'today') return raw === todayStr;
-    if (crmTimePreset === '7d') {
-      const start = new Date(now);
-      start.setDate(now.getDate() - 6);
-      return raw >= formatLocalYMD(start) && raw <= todayStr;
-    }
-    if (crmTimePreset === 'month') {
-      const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      return raw.startsWith(prefix);
-    }
-    if (crmTimePreset === 'year') {
-      return raw.startsWith(`${now.getFullYear()}-`);
-    }
-    if (crmTimePreset === 'custom') {
-      if (crmDateFrom && raw < crmDateFrom) return false;
-      if (crmDateTo && raw > crmDateTo) return false;
-    }
-    return true;
+    if (!crmDateFrom) return true;
+    // Local calendar day: stored timestamps are UTC, Laos is UTC+7
+    const day = localDateKey(dateStr);
+    if (!day) return false;
+    return day >= crmDateFrom && day <= crmDateTo;
   };
 
   // Toast notification feedback
-  const triggerLocalToast = (msg: string) => {
-    showToast(msg, 'success');
-  };
 
   // Modal states
   const [selectedCustomerForDocs, setSelectedCustomerForDocs] = useState<Lead | null>(null);
@@ -260,7 +250,10 @@ export default function CustomerView({
     };
   }, []);
 
-  const getCustomerIssuedDocsCount = (customerName: string, phone?: string, vin?: string, leadId?: string) => {
+  const getCustomerIssuedDocsCount = (customerName: string, phone?: string, vin?: string, leadId?: string) =>
+    getCustomerIssuedDocs(customerName, phone, vin, leadId).length;
+
+  const getCustomerIssuedDocs = (customerName: string, phone?: string, vin?: string, leadId?: string) => {
     const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
     const cleanName = customerName.trim().toLowerCase();
     const cleanVin = vin ? vin.trim().toLowerCase() : '';
@@ -272,40 +265,64 @@ export default function CustomerView({
       if (cleanPhone.length >= 6 && log.customerPhone && log.customerPhone.replace(/\D/g, '') === cleanPhone) return true;
       if (cleanName && log.customerName && log.customerName.trim().toLowerCase() === cleanName) return true;
       return false;
-    }).length;
+    });
   };
 
-  // Helper to identify if a lead has already completed a purchase (delivered, in bills, or has active installment)
+  // ===== Customer classification (one rule for all three tabs) =====
+  const digitsOf = (v?: string) => (v || '').replace(/\D/g, '');
+  const isInstallmentBill = (b: InvoiceBillRecord) =>
+    b.paymentMethod === 'finance' || b.billType === 'installment' || Boolean(b.downPaymentPercent) || Boolean(b.financeCompany);
+  /** A bill belongs to a customer by phone, or by leadId when the bill's phone does not contradict it. */
+  const billBelongsTo = (b: InvoiceBillRecord, lead: Lead) => {
+    const phone = digitsOf(lead.phone);
+    const billPhone = digitsOf(b.customerPhone);
+    if (phone.length >= 6 && billPhone === phone) return true;
+    return b.leadId === lead.id && (!billPhone || !phone || billPhone === phone);
+  };
+  const billsForLead = (lead: Lead) => bills.filter(b => b.billType !== 'import' && b.status !== 'voided' && billBelongsTo(b, lead)); // voided bills never make a customer a buyer
+  /** Installment contract paid off (belongs to "paid in full"). */
+  const isInstallmentCompleted = (lead: Lead) => lead.installmentStatus === 'completed' || Boolean(lead.isPaymentCompleted);
+
+  // Helper to identify if a lead has already completed a purchase (delivered, sale/installment bill, confirmed payment)
   const isLeadPurchased = (lead: Lead) => {
     if (lead.status === 'delivered') return true;
     if (lead.paymentTypeConfirmed === 'full' || lead.paymentTypeConfirmed === 'down_payment') return true;
     if (lead.installmentStatus === 'active_repaying' || lead.installmentStatus === 'completed') return true;
-    const inBills = bills.some(b =>
-      (b.billType === 'sale' || !b.billType) &&
-      (b.leadId === lead.id ||
-        (b.customerPhone && lead.phone && b.customerPhone.replace(/\D/g, '') === lead.phone.replace(/\D/g, '')))
-    );
-    if (inBills) return true;
-    return false;
+    return billsForLead(lead).length > 0;
+  };
+
+  /** Running installment contract (or an installment application in progress): the installment tab. */
+  const isActiveInstallmentLead = (lead: Lead) => {
+    if (isInstallmentCompleted(lead)) return false;
+    if (lead.installmentRecords && lead.installmentRecords.length > 0) return true;
+    if (lead.installmentStatus === 'active_repaying' || lead.installmentStatus === 'approved' ||
+      lead.installmentStatus === 'pending_approval' || lead.installmentStatus === 'contract_signed') return true;
+    if (lead.paymentTypeConfirmed === 'down_payment' || lead.paymentTypeConfirmed === 'installment') return true;
+    if (billsForLead(lead).some(isInstallmentBill)) return true;
+    const installmentPlan = lead.paymentType === 'installment' || lead.paymentType === 'finance' ||
+      Boolean(lead.financeCompany) || Boolean(lead.downPaymentPercent);
+    return installmentPlan && isLeadPurchased(lead);
+  };
+
+  /** Which tab a customer belongs to. */
+  const getCustomerTab = (lead: Lead): 'new_leads' | 'existing_customers' | 'installment_customers' => {
+    if (isActiveInstallmentLead(lead)) return 'installment_customers';
+    if (isInstallmentCompleted(lead) || isLeadPurchased(lead)) return 'existing_customers';
+    return 'new_leads';
   };
 
   // 1. Prospective leads (Tab 1: ເກັບສະເພາະລູກຄ້າໃໝ່ທີ່ຍັງບໍ່ທັນຕົກລົງຊື້ຂາຍ/ອອກບິນ ຫຼື ຍັງບໍ່ທັນເຂົ້າສູ່ສັນຍາຜ່ອນຊຳລະຕົວຈິງ)
   const prospectiveLeads = useMemo(() => {
-    return leads.filter(lead => {
-      if (isLeadPurchased(lead)) return false;
-      const isConfirmedInstallment =
-        Boolean(lead.installmentRecords && lead.installmentRecords.length > 0) ||
-        lead.installmentStatus === 'active_repaying' ||
-        lead.installmentStatus === 'completed' ||
-        lead.installmentStatus === 'approved' ||
-        lead.installmentStatus === 'pending_approval';
-      if (isConfirmedInstallment) return false;
-      return matchesCrmTime(lead.createdAt || lead.paymentDate);
-    });
-  }, [leads, bills, crmTimePreset, crmDateFrom, crmDateTo]);
+    return leads.filter(lead => getCustomerTab(lead) === 'new_leads' && matchesCrmTime(lead.createdAt || lead.paymentDate));
+  }, [leads, bills, crmDateFrom, crmDateTo]);
 
   // Separated Counts (calculated exclusively for prospective leads):
   // 1. Acquisition Channel counts
+  const followUpCounts = {
+    today: prospectiveLeads.filter(l => getFollowUpState(l) === 'today').length,
+    overdue: prospectiveLeads.filter(l => getFollowUpState(l) === 'overdue').length,
+  };
+
   const channelCounts = {
     all: prospectiveLeads.length,
     walk_in: prospectiveLeads.filter(l => l.category === 'walk_in').length,
@@ -317,7 +334,8 @@ export default function CustomerView({
 
   // 3. Status / Lifecycle counts for active prospective pipeline
   const statusCounts = {
-    all: prospectiveLeads.length,
+    all: prospectiveLeads.filter(l => l.status !== 'lost').length,
+    lost: prospectiveLeads.filter(l => l.status === 'lost').length,
     new: prospectiveLeads.filter(l => l.status === 'new').length,
     contacted: prospectiveLeads.filter(l => l.status === 'contacted').length,
     test_drive: prospectiveLeads.filter(l => l.status === 'test_drive').length,
@@ -328,28 +346,220 @@ export default function CustomerView({
 
   // Modal delete state for modern confirmation popup
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  // Contact log / follow-up
+  const [contactLead, setContactLead] = useState<Lead | null>(null);
+  const [followUpFilter, setFollowUpFilter] = useState<'all' | 'today' | 'overdue'>('all');
+  // Customer detail page (one place for info, next step, documents and timeline)
+  const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
+  const detailLead = detailLeadId ? leads.find(l => l.id === detailLeadId) || null : null;
+  const openCustomerDetail = (lead: Lead) => {
+    setDetailLeadId(lead.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  // Installment customer (running or paid off) — drives the detail page's installment card
+  const isLeadInstallment = (lead: Lead) =>
+    isActiveInstallmentLead(lead) ||
+    (isInstallmentCompleted(lead) && (lead.paymentType === 'installment' || lead.paymentType === 'finance' ||
+      Boolean(lead.installmentRecords && lead.installmentRecords.length > 0) || lead.installmentStatus === 'completed'));
+  const getLeadBills = (lead: Lead) => {
+    const phone = lead.phone ? lead.phone.replace(/\D/g, '') : '';
+    return bills.filter(b =>
+      b.billType !== 'import' &&
+      (b.leadId === lead.id || (phone.length >= 6 && b.customerPhone && b.customerPhone.replace(/\D/g, '') === phone))
+    );
+  };
+
+  // ===== Sales pipeline: one clear "next step" per customer =====
+  const PIPELINE_STAGES = PIPELINE_STAGE_KEYS.map(key => ({
+    key,
+    label: lang === 'en' ? PIPELINE_LABELS[key].en : lang === 'th' ? PIPELINE_LABELS[key].th : PIPELINE_LABELS[key].lo,
+  }));
+
+  // Booking (deposit) and delivery actions, then open the matching document
+  const [pipelineAction, setPipelineAction] = useState<{ mode: 'booking' | 'delivery'; leadId: string } | null>(null);
+  const [docsInitialDoc, setDocsInitialDoc] = useState<DocumentType | undefined>(undefined);
+  const openDocuments = (lead: Lead, initialDoc?: DocumentType) => {
+    setDocsInitialDoc(initialDoc);
+    setSelectedCustomerForDocs(lead);
+  };
+  const handlePipelineSave = async (updated: Lead, message: string) => {
+    const mode = pipelineAction?.mode;
+    await handleSaveContactLog(updated, message); // saves, updates state, toasts; throws on failure
+    setPipelineAction(null);
+    openDocuments(updated, mode === 'booking' ? 'booking' : 'handover');
+  };
+
+  const handleIssueQuote = (lead: Lead) => {
+    const vehicle = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
+    if (!vehicle) {
+      showToast('ບໍ່ພົບຂໍ້ມູນລຸ້ນລົດ ສຳລັບອອກໃບສະເໜີລາຄາ', 'error');
+      return;
+    }
+    onOpenQuote(vehicle, lead.customerName);
+    // Issuing a quotation moves the customer into the negotiation stage
+    if (lead.status === 'new' || lead.status === 'contacted' || lead.status === 'test_drive') {
+      void handleUpdateStatus(lead.id, 'negotiation');
+    }
+  };
+
+  const renderPipelineStepper = (lead: Lead) => {
+    if (lead.status === 'lost') {
+      return (
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className="px-2 py-0.5 rounded-full font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">{t.statusLost}</span>
+          <span className="text-zinc-500">{lang === 'lo' ? 'ເຄສນີ້ປິດແລ້ວ — ເປີດຄືນໄດ້ຖ້າລູກຄ້າກັບມາ' : 'This lead is closed — reopen it if the customer returns'}</span>
+        </div>
+      );
+    }
+    const done = getPipelineDone(lead, isLeadPurchased(lead));
+    const current = getPipelineCurrentIndex(done);
+    return (
+      <ol className="flex items-center gap-1 text-[10px] font-semibold" aria-label={lang === 'lo' ? 'ຂັ້ນຕອນການຂາຍ' : 'Sales stage'}>
+        {PIPELINE_STAGES.map((st, i) => {
+          const isDone = done[i];
+          const active = i === current;
+          return (
+            <li key={st.key} className="flex items-center gap-1 shrink-0" aria-current={active ? 'step' : undefined}>
+              <span className={`whitespace-nowrap px-2 py-0.5 rounded-full border ${active
+                ? 'bg-blue-600 text-white border-blue-600'
+                : isDone
+                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                  : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}>
+                {isDone ? '✓ ' : ''}{st.label}
+              </span>
+              {i < PIPELINE_STAGES.length - 1 && <span className="text-zinc-600" aria-hidden="true">›</span>}
+            </li>
+          );
+        })}
+      </ol>
+    );
+  };
+
+  /** Primary "next step" button (+ one secondary option) for a prospective lead */
+  const renderNextStep = (lead: Lead, size: 'sm' | 'md') => {
+    const primaryCls = size === 'md'
+      ? 'px-4 py-2 rounded-xl text-xs'
+      : 'px-2.5 py-1 rounded-lg text-[10px]';
+    const secondaryCls = size === 'md'
+      ? 'px-3 py-2 rounded-xl text-xs'
+      : 'px-2 py-1 rounded-lg text-[10px]';
+    const iconCls = size === 'md' ? 'w-3.5 h-3.5' : 'w-3 h-3';
+    const primaryBase = `${primaryCls} whitespace-nowrap font-bold text-white flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer`;
+    const secondaryBase = `${secondaryCls} whitespace-nowrap font-semibold text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 flex items-center gap-1 transition-colors cursor-pointer`;
+
+    if (lead.status === 'lost') {
+      return (
+        <button type="button" onClick={() => handleUpdateStatus(lead.id, 'contacted')} className={`${primaryBase} bg-zinc-700 hover:bg-zinc-600`}
+          title={lang === 'lo' ? 'ເປີດເຄສຄືນ ແລະ ກັບໄປຕິດຕາມລູກຄ້າ' : 'Reopen lead'}>
+          <RotateCcw className={iconCls} />
+          <span>{lang === 'lo' ? 'ເປີດເຄສຄືນ' : lang === 'th' ? 'เปิดเคสใหม่' : 'Reopen'}</span>
+        </button>
+      );
+    }
+
+    const sellButton = (primary: boolean) => onSelectCustomerForPOS && (
+      <button type="button" onClick={() => onSelectCustomerForPOS(lead)}
+        className={primary ? `${primaryBase} bg-emerald-600 hover:bg-emerald-500` : secondaryBase}
+        title={lang === 'lo' ? 'ເປີດບິນຂາຍ POS ພ້ອມຂໍ້ມູນລູກຄ້າຄົນນີ້' : 'Open POS with this customer'}>
+        <ShoppingBag className={iconCls} />
+        <span>{primary
+          ? (lang === 'lo' ? 'ອອກບິນຂາຍ (POS)' : lang === 'th' ? 'ออกบิลขาย (POS)' : 'Create Invoice (POS)')
+          : (lang === 'lo' ? 'ຂາຍເລີຍ' : lang === 'th' ? 'ขายเลย' : 'Sell now')}</span>
+      </button>
+    );
+    const quoteButton = (primary: boolean) => (
+      <button type="button" onClick={() => handleIssueQuote(lead)}
+        className={primary ? `${primaryBase} bg-blue-600 hover:bg-blue-500` : secondaryBase}
+        title={lang === 'lo' ? 'ອອກໃບສະເໜີລາຄາໃຫ້ລູກຄ້າຄົນນີ້' : 'Issue a quotation'}>
+        <FileText className={iconCls} />
+        <span>{primary
+          ? (lang === 'lo' ? 'ອອກໃບສະເໜີລາຄາ' : lang === 'th' ? 'ออกใบเสนอราคา' : 'Issue Quotation')
+          : (lang === 'lo' ? 'ສະເໜີລາຄາໃໝ່' : lang === 'th' ? 'เสนอราคาใหม่' : 'New quote')}</span>
+      </button>
+    );
+
+    const depositButton = (
+      <button type="button" onClick={() => setPipelineAction({ mode: 'booking', leadId: lead.id })}
+        className={`${primaryBase} bg-blue-600 hover:bg-blue-500`}
+        title={lang === 'lo' ? 'ຮັບເງິນມັດຈຳ ແລະ ອອກໃບສັນຍາສັ່ງຈອງ' : 'Take a deposit and issue the booking contract'}>
+        <CreditCard className={iconCls} />
+        <span>{lang === 'lo' ? 'ຮັບມັດຈຳ' : lang === 'th' ? 'รับมัดจำ' : 'Take Deposit'}</span>
+      </button>
+    );
+    const bookingDocButton = (
+      <button type="button" onClick={() => openDocuments(lead, 'booking')} className={secondaryBase}
+        title={lang === 'lo' ? 'ເປີດໃບສັນຍາສັ່ງຈອງ' : 'Open booking contract'}>
+        <FileText className={iconCls} />
+        <span>{lang === 'lo' ? 'ໃບຈອງ' : lang === 'th' ? 'ใบจอง' : 'Booking'}</span>
+      </button>
+    );
+
+    // booked -> invoice in POS; negotiation -> take deposit; earlier -> quotation
+    if (lead.bookingDate) return <>{bookingDocButton}{sellButton(true)}</>;
+    if (lead.status === 'negotiation') return <>{sellButton(false)}{depositButton}</>;
+    return <>{sellButton(false)}{quoteButton(true)}</>;
+  };
+
+  const handleSaveContactLog = async (updated: Lead, message: string, removedContactIds?: string[]) => {
+    try {
+      if (!currentUser?.id) throw new Error('Sign in again before saving the contact log.');
+      // The saved copy also carries entries other accounts added meanwhile
+      const saved = await saveLead(updated, currentUser.id, undefined, { removedContactIds });
+      setLeads(prev => prev.map(l => (l.id === updated.id ? saved : l)));
+      if (contactLead?.id === updated.id) setContactLead(saved);
+      showToast(message, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Contact log could not be saved.', 'error');
+      throw error;
+    }
+  };
 
   const handleConfirmDeleteCustomer = async () => {
     if (!leadToDelete) return;
+    if (!isAdminUser) {
+      showToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ລົບຂໍ້ມູນລູກຄ້າໄດ້!', 'error');
+      setLeadToDelete(null);
+      return;
+    }
     try {
       await deleteLead(leadToDelete.id);
       setLeads(prev => prev.filter(l => l.id !== leadToDelete.id));
+      showToast(`ລົບຂໍ້ມູນລູກຄ້າ ${leadToDelete.customerName} ສຳເລັດ`, 'success');
       setLeadToDelete(null);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Customer could not be deleted.');
+      showToast(error instanceof Error ? error.message : 'Customer could not be deleted.', 'error');
     }
   };
 
   const handleUpdateStatus = async (leadId: string, newStatus: LeadStatus) => {
     try {
       await updateLeadStatus(leadId, newStatus);
-      setLeads(prev => prev.map(l => l.id === leadId ? {
-        ...l,
-        status: newStatus,
-        lastFollowUp: new Date().toISOString()
-      } : l));
+      const statusText: Record<string, string> = {
+        new: t.statusNew, contacted: t.statusContacted, test_drive: t.statusTestDrive,
+        negotiation: t.statusNegotiation, delivered: t.statusDelivered || 'ຈ່າຍແລ້ວ', lost: t.statusLost,
+      };
+      const target = leads.find(l => l.id === leadId);
+      const name = target?.customerName || '';
+      if (target) {
+        // Automatic contact-history entry for every status change
+        const updatedLead: Lead = {
+          ...target,
+          status: newStatus,
+          lastFollowUp: new Date().toISOString(),
+          contactHistory: [
+            ...(target.contactHistory || []),
+            makeContactEntry('status', `${statusText[target.status] || target.status} → ${statusText[newStatus] || newStatus}`, currentUser?.name),
+          ],
+        };
+        setLeads(prev => prev.map(l => (l.id === leadId ? updatedLead : l)));
+        // Persist the history entry (falls back to the older payload when the pipeline migration is missing)
+        if (currentUser?.id) {
+          await saveLead(updatedLead, currentUser.id).catch(() => undefined);
+        }
+      }
+      showToast(`ອັບເດດສະຖານະ ${name}: ${statusText[newStatus] || newStatus}`, 'success');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Customer status could not be updated.');
+      showToast(error instanceof Error ? error.message : 'Customer status could not be updated.', 'error');
     }
   };
 
@@ -359,6 +569,7 @@ export default function CustomerView({
     setUpdatingServiceId(serviceId);
     try {
       if (onUpdateServiceStatus) {
+        // Parent handler shows its own success/error toast.
         await onUpdateServiceStatus(serviceId, newStatus);
       } else {
         const target = services.find(s => s.id === serviceId);
@@ -369,33 +580,17 @@ export default function CustomerView({
             setServices(prev => prev.map(s => s.id === serviceId ? updated : s));
           }
         }
+        showToast(lang === 'lo' ? 'ອັບເດດສະຖານະການບໍລິການສຳເລັດ!' : 'Service status updated successfully!');
       }
-      showToast(lang === 'lo' ? 'ອັບເດດສະຖານະການບໍລິການສຳເລັດ!' : 'Service status updated successfully!');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not update service status.');
+      if (!onUpdateServiceStatus) {
+        showToast(error instanceof Error ? error.message : 'Could not update service status.', 'error');
+      }
     } finally {
       setUpdatingServiceId(null);
     }
   };
 
-  const handleUpdateInstallmentStatus = async (leadId: string, newStatus: any) => {
-    const targetLead = leads.find(l => l.id === leadId);
-    if (!targetLead) throw new Error('Customer record not found.');
-    const updatedLead: Lead = {
-      ...targetLead,
-      installmentStatus: newStatus,
-      lastFollowUp: new Date().toISOString(),
-    };
-    try {
-      if (!currentUser?.id) throw new Error('Sign in again before updating installment status.');
-      await saveLead(updatedLead, currentUser.id);
-      setLeads(prev => prev.map(l => l.id === leadId ? updatedLead : l));
-      showToast('ອັບເດດສະຖານະການຜ່ອນຊຳລະສຳເລັດແລ້ວ');
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Installment status could not be updated.');
-      throw error;
-    }
-  };
 
   const handleUpdateCustomerRecords = async (customerId: string, newRecords: InstallmentPaymentRecord[]) => {
     const targetLead = leads.find(l => l.id === customerId);
@@ -414,7 +609,7 @@ export default function CustomerView({
       }
       showToast('ບັນທຶກ ແລະ ອັບເດດຕາຕະລາງເກັບເງິນງວດຮຽບຮ້ອຍແລ້ວ');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Installment ledger could not be saved.');
+      showToast(error instanceof Error ? error.message : 'Installment ledger could not be saved.', 'error');
       throw error;
     }
   };
@@ -433,11 +628,11 @@ export default function CustomerView({
       const isInst = updatedLead.paymentType === 'installment' || updatedLead.paymentType === 'finance';
       showToast(
         isInst
-          ? `ຢືນຢັນການຊຳລະເງິນດາວ "${updatedLead.customerName}" ສຳເລັດແລ້ວ! ຍ້າຍໄປໜ້າ "ລູກຄ້າຜ່ອນ & ດາວ" ຮຽບຮ້ອຍ.`
-          : `ຢືນຢັນການຊຳລະເງິນ "${updatedLead.customerName}" ສຳເລັດແລ້ວ! ຍ້າຍໄປໜ້າ "ລູກຄ້າເກົ່າ (100%)" ຮຽບຮ້ອຍ.`
+          ? `ຢືນຢັນການຊຳລະເງິນດາວ "${updatedLead.customerName}" ສຳເລັດແລ້ວ! ຍ້າຍໄປແທັບ "ລູກຄ້າຜ່ອນຊຳລະ" ແລ້ວ.`
+          : `ຢືນຢັນການຊຳລະເງິນ "${updatedLead.customerName}" ສຳເລັດແລ້ວ! ຍ້າຍໄປແທັບ "ລູກຄ້າຊຳລະຄົບແລ້ວ" ແລ້ວ.`
       );
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Payment confirmation could not be saved.');
+      showToast(error instanceof Error ? error.message : 'Payment confirmation could not be saved.', 'error');
       throw error;
     }
   };
@@ -467,6 +662,7 @@ export default function CustomerView({
   }) => {
     try {
       if (!selectedOwnerForAfterSales) return;
+      if (!currentUser?.id) throw new Error('Sign in again before saving after-sales data.');
 
       // 1. If customer has a leadRecord, update and save lead
       if (selectedOwnerForAfterSales.leadRecord) {
@@ -494,9 +690,7 @@ export default function CustomerView({
           afterSalesNotes: updatedData.afterSalesNotes,
         };
 
-        if (currentUser?.id) {
-          await saveLead(updatedLead, currentUser.id);
-        }
+        await saveLead(updatedLead, currentUser.id);
         setLeads(prev => prev.map(l => l.id === updatedLead.id ? updatedLead : l));
       }
 
@@ -525,9 +719,7 @@ export default function CustomerView({
           notes: updatedData.afterSalesNotes || targetBill.notes,
         };
 
-        if (currentUser?.id) {
-          await saveBillRecord(updatedBill, currentUser.id);
-        }
+        await saveBillRecord(updatedBill, currentUser.id);
         if (setBills) {
           setBills(prev => prev.map(b => b.id === updatedBill.id ? updatedBill : b));
         }
@@ -567,15 +759,14 @@ export default function CustomerView({
           warrantyTerms: updatedData.warrantyTerms,
           afterSalesNotes: updatedData.afterSalesNotes,
         };
-        if (currentUser?.id) {
-          await saveLead(syntheticLead, currentUser.id);
-        }
+        await saveLead(syntheticLead, currentUser.id);
         setLeads(prev => [syntheticLead, ...prev.filter(l => l.id !== syntheticLead.id)]);
       }
 
       showToast(`ບັນທຶກຂໍ້ມູນຫຼັງການຂາຍ ແລະ ໄລຍະຮັບປະກັນຂອງ "${updatedData.customerName}" ສຳເລັດແລ້ວ!`);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not save after-sales data.');
+      showToast(error instanceof Error ? error.message : 'Could not save after-sales data.', 'error');
+      throw error;
     }
   };
 
@@ -650,29 +841,11 @@ export default function CustomerView({
 
     const seenKeys = new Set<string>();
 
-    const isInstallmentBill = (b: InvoiceBillRecord) => {
-      return b.paymentMethod === 'finance' ||
-        b.billType === 'installment' ||
-        Boolean(b.downPaymentPercent) ||
-        Boolean(b.financeCompany);
-    };
-
-    const isUncompletedInstallmentLead = (l: Lead) => {
-      // Completed / Payoff confirmed installment leads belong in Tab 2 (Completed Customers)
-      if (l.installmentStatus === 'completed' || l.isPaymentCompleted) {
-        return false;
-      }
-      return l.paymentType === 'installment' ||
-        l.paymentType === 'finance' ||
-        Boolean(l.downPaymentPercent) ||
-        Boolean(l.financeCompany) ||
-        Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
-        l.installmentStatus === 'active_repaying' ||
-        l.installmentStatus === 'approved' ||
-        l.installmentStatus === 'pending_approval';
-    };
+    const ownerKey = (phone?: string, name?: string, fallback?: string) =>
+      digitsOf(phone) || (name || '').trim().toLowerCase() || (fallback || '').toLowerCase();
 
     // Build O(1) indexed lookup maps for leads and services to eliminate O(N^2) bottlenecks
+    const leadsById = new Map<string, Lead>(leads.map(l => [l.id, l]));
     const leadsByCleanPhone = new Map<string, Lead>();
     const leadsByLowerName = new Map<string, Lead>();
     leads.forEach(l => {
@@ -718,19 +891,23 @@ export default function CustomerView({
     };
 
     // 1. From completed Sales Bills (STRICTLY full cash / transfer only)
-    const saleBills = bills.filter(b => (b.billType === 'sale' || (!b.billType && b.customerName)) && !isInstallmentBill(b));
+    const saleBills = bills.filter(b => b.status !== 'voided' && (b.billType === 'sale' || (!b.billType && b.customerName)) && !isInstallmentBill(b));
     saleBills.forEach(bill => {
-      const key = (bill.customerPhone || bill.customerName || bill.vin || bill.id).toLowerCase();
-      seenKeys.add(key);
-
-      const cleanPhone = (bill.customerPhone || '').replace(/\D/g, '');
+      const cleanPhone = digitsOf(bill.customerPhone);
       const cleanName = (bill.customerName || '').trim().toLowerCase();
-      const matchedLead = (cleanPhone ? leadsByCleanPhone.get(cleanPhone) : undefined) ||
-        (cleanName ? leadsByLowerName.get(cleanName) : undefined);
+      const byId = bill.leadId ? leadsById.get(bill.leadId) : undefined;
+      // Strong match = same lead id or same phone. A name-only match is just a hint for
+      // filling profile fields; it must never hide a paid bill (two people can share a name).
+      const strongLead = (byId && billBelongsTo(bill, byId) ? byId : undefined) ||
+        (cleanPhone.length >= 6 ? leadsByCleanPhone.get(cleanPhone) : undefined);
+      const nameLead = !strongLead && cleanName ? leadsByLowerName.get(cleanName) : undefined;
+      const matchedLead = strongLead ||
+        (nameLead && getCustomerTab(nameLead) === 'existing_customers' ? nameLead : undefined);
 
-      if (matchedLead && isUncompletedInstallmentLead(matchedLead)) {
-        return; // Exclude active installments
+      if (strongLead && getCustomerTab(strongLead) !== 'existing_customers') {
+        return; // Running installment: shown in its own tab
       }
+      seenKeys.add(ownerKey(bill.customerPhone, bill.customerName, bill.vin || bill.id));
 
       const matchedServices = getMatchedServices(bill.customerPhone, bill.customerName, bill.plateNumber);
 
@@ -739,8 +916,8 @@ export default function CustomerView({
       const rawExpiry = matchedLead?.warrantyExpiryDate || bill.warrantyExpiryDate;
       const rawYears = matchedLead?.warrantyYears || bill.warrantyYears || 8;
       const rawDistance = matchedLead?.warrantyDistanceKm || bill.warrantyDistanceKm || 160000;
-      const currentMileageKm = matchedLead?.currentMileageKm ?? bill.currentMileageKm ?? (5000 + (matchedServices.length * 3500));
-      const batteryHealthSOH = matchedLead?.batteryHealthSOH ?? bill.batteryHealthSOH ?? (99.8 - (matchedServices.length * 0.2));
+      const currentMileageKm = matchedLead?.currentMileageKm ?? bill.currentMileageKm;
+      const batteryHealthSOH = matchedLead?.batteryHealthSOH ?? bill.batteryHealthSOH;
 
       const warrantyMetrics = computeWarrantyMetrics(rawStart, rawExpiry, rawYears, rawDistance, currentMileageKm);
 
@@ -753,14 +930,14 @@ export default function CustomerView({
         district: matchedLead?.district,
         village: matchedLead?.village,
         model: bill.model || matchedLead?.interestedModel || 'AVATR 12',
-        plateNumber: matchedLead?.plateNumber || bill.plateNumber || 'ກຳແພງນະຄອນ (ລໍຖ້າປ້າຍ)',
-        vin: matchedLead?.vin || bill.vin || 'AVATR-LA-2026-EV',
+        plateNumber: matchedLead?.plateNumber || bill.plateNumber || '',
+        vin: matchedLead?.vin || bill.vin || '',
         engineNumber: matchedLead?.engineNumber || bill.engineNumber,
-        color: matchedLead?.color || bill.color || 'White / Black',
+        color: matchedLead?.color || bill.color,
         purchaseDate,
         paymentType: bill.paymentMethod || matchedLead?.paymentType || 'cash',
         currentMileageKm,
-        batteryHealthSOH: Math.round(batteryHealthSOH * 10) / 10,
+        batteryHealthSOH: batteryHealthSOH != null ? Math.round(batteryHealthSOH * 10) / 10 : undefined,
         warrantyStartDate: warrantyMetrics.warrantyStartDate,
         warrantyExpiryDate: warrantyMetrics.warrantyExpiryDate,
         warrantyYears: warrantyMetrics.warrantyYears,
@@ -778,25 +955,25 @@ export default function CustomerView({
       });
     });
 
-    // 2. From Leads with delivered status that were not in bills (cash/transfer only)
-    leads.filter(l => l.status === 'delivered' && !isUncompletedInstallmentLead(l)).forEach(lead => {
-      const key = (lead.phone || lead.customerName || lead.id).toLowerCase();
+    // 2. Completed installment customers (paid off and contract closed)
+    leads.filter(l => isInstallmentCompleted(l)).forEach(lead => {
+      const key = ownerKey(lead.phone, lead.customerName, lead.id);
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
         const matchedServices = getMatchedServices(lead.phone, lead.customerName, lead.plateNumber);
 
-        const purchaseDate = lead.paymentDate || lead.createdAt?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+        const purchaseDate = lead.paidDate || lead.paymentDate || lead.createdAt?.slice(0, 10) || new Date().toISOString().slice(0, 10);
         const rawStart = lead.warrantyStartDate || purchaseDate;
         const rawExpiry = lead.warrantyExpiryDate;
         const rawYears = lead.warrantyYears || 8;
         const rawDistance = lead.warrantyDistanceKm || 160000;
-        const currentMileageKm = lead.currentMileageKm ?? (5000 + (matchedServices.length * 3500));
-        const batteryHealthSOH = lead.batteryHealthSOH ?? (99.8 - (matchedServices.length * 0.2));
+        const currentMileageKm = lead.currentMileageKm;
+        const batteryHealthSOH = lead.batteryHealthSOH;
 
         const warrantyMetrics = computeWarrantyMetrics(rawStart, rawExpiry, rawYears, rawDistance, currentMileageKm);
 
         list.push({
-          id: `owner-lead-${lead.id}`,
+          id: `owner-inst-completed-${lead.id}`,
           customerName: lead.customerName,
           phone: lead.phone,
           idCardNumber: lead.idCardNumber,
@@ -804,14 +981,14 @@ export default function CustomerView({
           district: lead.district,
           village: lead.village,
           model: lead.interestedModel || 'AVATR 11',
-          plateNumber: lead.plateNumber || (lead.paymentReceiptNo ? `ກມ-${lead.paymentReceiptNo.slice(-4)}` : 'ກຳແພງນະຄອນ (ລໍຖ້າປ້າຍ)'),
-          vin: lead.vin || `AVATR-VIN-${lead.id.slice(0, 8).toUpperCase()}`,
+          plateNumber: lead.plateNumber || '',
+          vin: lead.vin || '',
           engineNumber: lead.engineNumber,
-          color: lead.color || 'Mystic Grey / Obsidian',
+          color: lead.color,
           purchaseDate,
-          paymentType: lead.paymentType || 'cash',
+          paymentType: 'installment_completed',
           currentMileageKm,
-          batteryHealthSOH: Math.round(batteryHealthSOH * 10) / 10,
+          batteryHealthSOH: batteryHealthSOH != null ? Math.round(batteryHealthSOH * 10) / 10 : undefined,
           warrantyStartDate: warrantyMetrics.warrantyStartDate,
           warrantyExpiryDate: warrantyMetrics.warrantyExpiryDate,
           warrantyYears: warrantyMetrics.warrantyYears,
@@ -829,25 +1006,25 @@ export default function CustomerView({
       }
     });
 
-    // 3. From Completed Installment Leads (ລູກຄ້າຜ່ອນທີ່ຊຳລະຄົບ 100% ແລະ ຢືນຢັນປິດສັນຍາແລ້ວ)
-    leads.filter(l => (l.installmentStatus === 'completed' || l.isPaymentCompleted)).forEach(lead => {
-      const key = (lead.phone || lead.customerName || lead.id).toLowerCase();
+    // 3. Every other purchased customer not listed from a bill (cash / transfer / confirmed payment)
+    leads.filter(l => getCustomerTab(l) === 'existing_customers' && !isInstallmentCompleted(l)).forEach(lead => {
+      const key = ownerKey(lead.phone, lead.customerName, lead.id);
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
         const matchedServices = getMatchedServices(lead.phone, lead.customerName, lead.plateNumber);
 
-        const purchaseDate = lead.paidDate || lead.paymentDate || lead.createdAt?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+        const purchaseDate = lead.paymentDate || lead.createdAt?.slice(0, 10) || new Date().toISOString().slice(0, 10);
         const rawStart = lead.warrantyStartDate || purchaseDate;
         const rawExpiry = lead.warrantyExpiryDate;
         const rawYears = lead.warrantyYears || 8;
         const rawDistance = lead.warrantyDistanceKm || 160000;
-        const currentMileageKm = lead.currentMileageKm ?? (8500 + (matchedServices.length * 4000));
-        const batteryHealthSOH = lead.batteryHealthSOH ?? (99.2 - (matchedServices.length * 0.3));
+        const currentMileageKm = lead.currentMileageKm;
+        const batteryHealthSOH = lead.batteryHealthSOH;
 
         const warrantyMetrics = computeWarrantyMetrics(rawStart, rawExpiry, rawYears, rawDistance, currentMileageKm);
 
         list.push({
-          id: `owner-inst-completed-${lead.id}`,
+          id: `owner-lead-${lead.id}`,
           customerName: lead.customerName,
           phone: lead.phone,
           idCardNumber: lead.idCardNumber,
@@ -855,14 +1032,14 @@ export default function CustomerView({
           district: lead.district,
           village: lead.village,
           model: lead.interestedModel || 'AVATR 11',
-          plateNumber: lead.plateNumber || (lead.paymentReceiptNo ? `ກມ-${lead.paymentReceiptNo.slice(-4)}` : 'ກຳແພງນະຄອນ (ລໍຖ້າປ້າຍ)'),
-          vin: lead.vin || `AVATR-VIN-${lead.id.slice(0, 8).toUpperCase()}`,
+          plateNumber: lead.plateNumber || '',
+          vin: lead.vin || '',
           engineNumber: lead.engineNumber,
-          color: lead.color || 'Mystic Grey / Obsidian',
+          color: lead.color,
           purchaseDate,
-          paymentType: 'installment_completed',
+          paymentType: lead.paymentType || 'cash',
           currentMileageKm,
-          batteryHealthSOH: Math.round(batteryHealthSOH * 10) / 10,
+          batteryHealthSOH: batteryHealthSOH != null ? Math.round(batteryHealthSOH * 10) / 10 : undefined,
           warrantyStartDate: warrantyMetrics.warrantyStartDate,
           warrantyExpiryDate: warrantyMetrics.warrantyExpiryDate,
           warrantyYears: warrantyMetrics.warrantyYears,
@@ -881,90 +1058,54 @@ export default function CustomerView({
     });
 
     return list.filter(item => matchesCrmTime(item.purchaseDate));
-  }, [bills, leads, services, crmTimePreset, crmDateFrom, crmDateTo]);
+  }, [bills, leads, services, crmDateFrom, crmDateTo]);
 
   // Filtered Existing Customers (Car Owners for After-Sales: Strictly 100% Cash/Transfer)
   const filteredExistingCustomers = useMemo(() => {
     return existingCustomers.filter(item => {
       if (!matchesCrmTime(item.purchaseDate)) return false;
+      if (crmSearch.trim() && !matchesSearch(crmSearch, {
+        texts: [item.customerName, item.vin, item.idCardNumber, item.plateNumber, item.engineNumber, item.model],
+        phones: [item.phone],
+      })) return false;
       if (existingModelFilter !== 'all' && item.model !== existingModelFilter) return false;
       if (existingServiceFilter === 'has_service' && (item.services?.length ?? 0) === 0) return false;
       if (existingServiceFilter === 'no_service' && (item.services?.length ?? 0) > 0) return false;
 
-      if (existingSearchQuery.trim()) {
-        const q = existingSearchQuery.toLowerCase();
-        return (
-          item.customerName.toLowerCase().includes(q) ||
-          item.phone.includes(q) ||
-          (item.plateNumber && item.plateNumber.toLowerCase().includes(q)) ||
-          (item.vin && item.vin.toLowerCase().includes(q)) ||
-          (item.idCardNumber && item.idCardNumber.toLowerCase().includes(q)) ||
-          item.model.toLowerCase().includes(q) ||
-          (item.province && item.province.toLowerCase().includes(q))
-        );
-      }
       return true;
     });
-  }, [existingCustomers, existingModelFilter, existingServiceFilter, existingSearchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
+  }, [existingCustomers, existingModelFilter, existingServiceFilter, crmDateFrom, crmDateTo, crmSearch]);
 
   // Dedicated Installment Customers (For Tab 3 - All Installment & Financing Customers)
   const installmentCustomers = useMemo(() => {
-    const matchedLeads = leads.filter(l => {
-      const isInstallment = l.paymentType === 'installment' ||
-        l.paymentType === 'finance' ||
-        Boolean(l.downPaymentPercent) ||
-        Boolean(l.financeCompany) ||
-        Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
-        l.installmentStatus === 'active_repaying' ||
-        l.installmentStatus === 'completed' ||
-        l.installmentStatus === 'approved' ||
-        l.installmentStatus === 'pending_approval';
-      return isInstallment && matchesCrmTime(l.paymentDate || l.createdAt);
-    });
+    const matchedLeads = leads.filter(l => isActiveInstallmentLead(l) && matchesCrmTime(l.paymentDate || l.createdAt) && leadMatchesSearch(l));
 
-    const seenPhones = new Set(matchedLeads.map(l => (l.phone || '').replace(/\D/g, '')).filter(Boolean));
-    const extraBills = bills.filter(b => {
-      const isInstBill = b.paymentMethod === 'finance' ||
-        b.billType === 'installment' ||
-        Boolean(b.downPaymentPercent);
-      if (!isInstBill || !matchesCrmTime(b.date)) return false;
-      const cleanPhone = (b.customerPhone || '').replace(/\D/g, '');
-      if (cleanPhone && seenPhones.has(cleanPhone)) return false;
-      if (matchedLeads.some(l => l.id === b.leadId)) return false;
-      return true;
-    });
+    // Installment bills with no CRM customer at all (bill-only contracts)
+    const extraBills = bills.filter(b => b.status !== 'voided' && isInstallmentBill(b) && matchesCrmTime(b.date) && billMatchesSearch(b) && !leads.some(l => billBelongsTo(b, l)));
 
     return [...matchedLeads, ...extraBills];
-  }, [leads, bills, crmTimePreset, crmDateFrom, crmDateTo]);
+  }, [leads, bills, crmDateFrom, crmDateTo, crmSearch]);
 
   // Filtered Leads (For prospective Leads CRM - Strictly customers who have not yet purchased)
   const filteredLeads = useMemo(() => {
     return prospectiveLeads.filter(lead => {
       if (!matchesCrmTime(lead.createdAt || lead.paymentDate)) return false;
+      if (!leadMatchesSearch(lead)) return false;
 
       // 1. Channel Filter (ໝວດຊ່ອງທາງລູກຄ້າ)
       if (channelFilter !== 'all' && lead.category !== channelFilter) return false;
 
       // 2. Status Filter (ສະຖານະລູກຄ້າ)
       if (selectedStatus !== 'all' && lead.status !== selectedStatus) return false;
+      // Lost / cancelled leads are hidden unless explicitly filtered
+      if (selectedStatus === 'all' && lead.status === 'lost') return false;
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        return (
-          lead.customerName.toLowerCase().includes(q) ||
-          lead.phone.includes(q) ||
-          (lead.idCardNumber && lead.idCardNumber.toLowerCase().includes(q)) ||
-          (lead.province && lead.province.toLowerCase().includes(q)) ||
-          (lead.district && lead.district.toLowerCase().includes(q)) ||
-          (lead.village && lead.village.toLowerCase().includes(q)) ||
-          (lead.assignedTo && lead.assignedTo.toLowerCase().includes(q)) ||
-          (lead.paymentReceiptNo && lead.paymentReceiptNo.toLowerCase().includes(q)) ||
-          lead.notes.toLowerCase().includes(q)
-        );
-      }
+      // 3. Follow-up reminder filter
+      if (followUpFilter !== 'all' && getFollowUpState(lead) !== followUpFilter) return false;
+
       return true;
     });
-  }, [prospectiveLeads, channelFilter, selectedStatus, searchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
+  }, [prospectiveLeads, channelFilter, selectedStatus, followUpFilter, crmDateFrom, crmDateTo, crmSearch]);
 
   // Pagination for high scalability & Surface Pro friendly RAM usage
   const [currentPage, setCurrentPage] = useState(1);
@@ -973,7 +1114,7 @@ export default function CustomerView({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [channelFilter, selectedStatus, searchQuery, crmTimePreset, crmDateFrom, crmDateTo]);
+  }, [channelFilter, selectedStatus, followUpFilter, crmDateFrom, crmDateTo, crmSearch]);
 
   const paginatedLeads = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -1075,23 +1216,170 @@ export default function CustomerView({
     document.body.removeChild(link);
   };
 
-  return (
-    <div className="mx-auto max-w-screen-2xl space-y-6 pb-12">
-      {/* WRAPPER FOR CRM VIEWS - SUPPRESSED DURING PRINT WHEN A CUSTOMER DOCUMENT IS OPEN */}
-      <div className={selectedCustomerForDocs ? "print:hidden hide-on-print-doc space-y-6" : "space-y-6"}>
-        {/* Top Header */}
-        <div className="theme-adaptive-dark-surface relative overflow-hidden rounded-3xl border border-zinc-800 bg-linear-to-br from-zinc-900 via-zinc-950 to-black p-5 shadow-xl sm:p-7">
-          <div className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full bg-white/4 blur-3xl" />
-          <div className="relative flex flex-wrap items-center justify-between gap-5">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-                {t.customerViewTitle}
-              </h1>
-            </div>
+  // Customer search panel: free text + date (day / month / year).
+  const renderDateSearch = () => {
+    const now = new Date();
+    const thisYear = String(now.getFullYear());
+    const thisMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const inputCls = 'crm-date-input min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-800 transition-colors placeholder:font-normal placeholder:text-slate-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder:text-zinc-500';
+    const dateLabels = lang === 'lo'
+      ? ['ວັນ', 'ເດືອນ', 'ປີ']
+      : lang === 'th'
+        ? ['วัน', 'เดือน', 'ปี']
+        : ['Day', 'Month', 'Year'];
+    const anyLabels = lang === 'lo'
+      ? ['ທຸກວັນ', 'ທຸກເດືອນ', 'ທຸກປີ']
+      : lang === 'th'
+        ? ['ทุกวัน', 'ทุกเดือน', 'ทุกปี']
+        : ['Any day', 'Any month', 'Any year'];
+    const invalidDayMessage = lang === 'lo'
+      ? `ກະລຸນາໃສ່ວັນທີ 1-${daysInSelectedMonth}`
+      : lang === 'th'
+        ? `กรุณากรอกวันที่ 1-${daysInSelectedMonth}`
+        : `Enter a day from 1 to ${daysInSelectedMonth}`;
+    const invalidMonthMessage = lang === 'lo'
+      ? 'ກະລຸນາໃສ່ເດືອນ 1-12'
+      : lang === 'th'
+        ? 'กรุณากรอกเดือน 1-12'
+        : 'Enter a month from 1 to 12';
+    const invalidYearMessage = lang === 'lo'
+      ? 'ກະລຸນາໃສ່ປີ 4 ຕົວເລກ'
+      : lang === 'th'
+        ? 'กรุณากรอกปี 4 หลัก'
+        : 'Enter a 4-digit year';
+    return (
+      <div className="crm-date-search space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-5" role="search" aria-label={lang === 'lo' ? 'ຄົ້ນຫາລູກຄ້າຕາມວັນທີ' : lang === 'th' ? 'ค้นหาลูกค้าตามวันที่' : 'Find customers by date'}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-zinc-200">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
+              <Calendar className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span>{lang === 'lo' ? 'ຄົ້ນຫາລູກຄ້າ' : lang === 'th' ? 'ค้นหาลูกค้า' : 'Find customers'}</span>
+          </span>
+          {isDateSearchActive && (
+            <button type="button" onClick={clearDateSearch}
+              className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white">
+              <X className="h-4 w-4" aria-hidden="true" />
+              <span>{lang === 'lo' ? 'ລ້າງວັນທີ' : lang === 'th' ? 'ล้างวันที่' : 'Clear date'}</span>
+            </button>
+          )}
+        </div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <input
+            type="search"
+            value={crmSearch}
+            onChange={(e) => setCrmSearch(e.target.value)}
+            aria-label={lang === 'lo' ? 'ຄົ້ນຫາລູກຄ້າ' : lang === 'th' ? 'ค้นหาลูกค้า' : 'Search customers'}
+            placeholder={lang === 'lo' ? 'ຄົ້ນຫາ: ຊື່, ເບີໂທ, VIN, ເລກບັດ, ປ້າຍທະບຽນ...' : lang === 'th' ? 'ค้นหา: ชื่อ, เบอร์โทร, VIN, เลขบัตร, ทะเบียน...' : 'Search: name, phone, VIN, ID card, plate...'}
+            className={`${inputCls} pl-9 pr-9`}
+          />
+          {crmSearch && (
+            <button type="button" onClick={() => setCrmSearch('')} aria-label={lang === 'lo' ? 'ລ້າງຄຳຄົ້ນຫາ' : 'Clear search'}
+              className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-zinc-800">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-3">
+          <label className="block min-w-0 space-y-1">
+            <span className="block text-xs font-medium text-slate-600 dark:text-zinc-400">{dateLabels[0]}</span>
+            <input aria-label={dateLabels[0]} inputMode="numeric" autoComplete="off" maxLength={2}
+              placeholder={anyLabels[0]} value={crmDay} className={`${inputCls}${crmDay && !crmDayIsValid ? ' border-rose-500 dark:border-rose-500' : ''}`}
+              aria-invalid={Boolean(crmDay) && !crmDayIsValid}
+              aria-describedby={crmDay && !crmDayIsValid ? 'crm-date-day-error' : undefined}
+              onChange={(e) => {
+                const d = e.target.value.replace(/\D/g, '').slice(0, 2);
+                setCrmDay(d);
+                if (d && !crmMonth) setCrmMonth(thisMonth);
+                if (d && !crmYear) setCrmYear(thisYear);
+              }} />
+            {crmDay && !crmDayIsValid && <span id="crm-date-day-error" className="block text-xs text-rose-700 dark:text-rose-400">{invalidDayMessage}</span>}
+          </label>
+          <label className="block min-w-0 space-y-1">
+            <span className="block text-xs font-medium text-slate-600 dark:text-zinc-400">{dateLabels[1]}</span>
+            <input aria-label={dateLabels[1]} inputMode="numeric" autoComplete="off" maxLength={2}
+              placeholder={anyLabels[1]} value={crmMonth} className={`${inputCls}${crmMonth && !crmMonthIsValid ? ' border-rose-500 dark:border-rose-500' : ''}`}
+              aria-invalid={Boolean(crmMonth) && !crmMonthIsValid}
+              aria-describedby={crmMonth && !crmMonthIsValid ? 'crm-date-month-error' : undefined}
+              onChange={(e) => {
+                const m = e.target.value.replace(/\D/g, '').slice(0, 2);
+                setCrmMonth(m);
+                if (m && !crmYear) setCrmYear(thisYear);
+                if (!m) setCrmDay('');
+              }} />
+            {crmMonth && !crmMonthIsValid && <span id="crm-date-month-error" className="block text-xs text-rose-700 dark:text-rose-400">{invalidMonthMessage}</span>}
+          </label>
+          <label className="block min-w-0 space-y-1">
+            <span className="block text-xs font-medium text-slate-600 dark:text-zinc-400">{dateLabels[2]}</span>
+            <input aria-label={dateLabels[2]} inputMode="numeric" autoComplete="off" maxLength={4}
+              placeholder={anyLabels[2]} value={crmYear} className={`${inputCls}${crmYear && !crmYearIsValid ? ' border-rose-500 dark:border-rose-500' : ''}`}
+              aria-invalid={Boolean(crmYear) && !crmYearIsValid}
+              aria-describedby={crmYear && !crmYearIsValid ? 'crm-date-year-error' : undefined}
+              onChange={(e) => {
+                const y = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setCrmYear(y);
+                if (!y) { setCrmMonth(''); setCrmDay(''); }
+              }} />
+            {crmYear && !crmYearIsValid && <span id="crm-date-year-error" className="block text-xs text-rose-700 dark:text-rose-400">{invalidYearMessage}</span>}
+          </label>
+        </div>
+        {isDateSearchActive && !crmDateIsValid && (
+          <span role="status" className="block text-xs font-medium text-amber-700 dark:text-amber-400">
+            {lang === 'lo' ? 'ຍັງບໍ່ໄດ້ກອງຕາມວັນທີ: ກະລຸນາໃສ່ວັນທີໃຫ້ຖືກຕ້ອງກ່ອນ (ລາຍການຂ້າງລຸ່ມແມ່ນທັງໝົດ)' : 'Date filter not applied yet: complete the date first (showing all)'}
+          </span>
+        )}
+        {isLoadingRangeLeads && (
+          <span role="status" aria-live="polite" className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-400">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" aria-hidden="true" />
+            {lang === 'lo' ? 'ກຳລັງໂຫຼດລາຍຊື່...' : lang === 'th' ? 'กำลังโหลดรายการ...' : 'Loading customers...'}
+          </span>
+        )}
+      </div>
+    );
+  };
 
-            <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
-              {/* Officer in charge indicator according to active logged-in user */}
-              <div className="officer-indicator flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs sm:flex-none">
+  const hasActiveLeadFilters = isDateSearchActive || crmSearch.trim() !== '' ||
+    channelFilter !== 'all' ||
+    followUpFilter !== 'all' ||
+    selectedStatus !== 'all';
+
+  return (
+    <div className="mx-auto max-w-screen-2xl space-y-5 pb-12">
+      {/* WRAPPER FOR CRM VIEWS - SUPPRESSED DURING PRINT WHEN A CUSTOMER DOCUMENT IS OPEN */}
+      {detailLead && (
+        <div className={selectedCustomerForDocs ? 'print:hidden hide-on-print-doc' : ''}>
+          <CustomerDetailView
+            lead={detailLead}
+            lang={lang}
+            vehicles={vehicles}
+            bills={getLeadBills(detailLead)}
+            issuedDocs={getCustomerIssuedDocs(detailLead.customerName, detailLead.phone, detailLead.vin, detailLead.id)}
+            isPurchased={isLeadPurchased(detailLead) || isLeadInstallment(detailLead)}
+            isInstallment={isLeadInstallment(detailLead)}
+            staffName={currentUser?.name}
+            onBack={() => setDetailLeadId(null)}
+            onEdit={onEditLead ? () => onEditLead(detailLead) : undefined}
+            onIssueQuote={() => handleIssueQuote(detailLead)}
+            onSell={onSelectCustomerForPOS ? () => onSelectCustomerForPOS(detailLead) : undefined}
+            onReopen={() => handleUpdateStatus(detailLead.id, 'contacted')}
+            onOpenDocuments={(doc) => openDocuments(detailLead, doc)}
+            onOpenInstallments={() => setSelectedCustomerForInstallments(detailLead)}
+            onRecordBooking={() => setPipelineAction({ mode: 'booking', leadId: detailLead.id })}
+            onRecordDelivery={() => setPipelineAction({ mode: 'delivery', leadId: detailLead.id })}
+            onSaveContact={handleSaveContactLog}
+          />
+        </div>
+      )}
+      <div className={`${selectedCustomerForDocs ? "print:hidden hide-on-print-doc space-y-6" : "space-y-6"}${detailLead ? ' hidden' : ''}`}>
+        <header className="theme-adaptive-dark-surface rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-2xl">
+              {t.customerViewTitle}
+            </h1>
+
+            <div className="grid w-full grid-cols-2 gap-2 xl:w-auto xl:flex xl:items-center">
+              <div className="officer-indicator col-span-2 flex min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs xl:col-span-1">
                 <span className="officer-indicator-avatar grid h-8 w-8 shrink-0 place-items-center rounded-lg border">
                   <UserIcon className="h-4 w-4" />
                 </span>
@@ -1099,120 +1387,60 @@ export default function CustomerView({
                   <span className="officer-indicator-label block text-[10px]">{t.assignedOfficer || 'ຜູ້ຮັບຜິດຊອບ'}</span>
                   <span className="officer-indicator-name block truncate font-semibold">
                     {currentUser?.name || t.roleAdmin || 'Admin'}
-                    <span className="officer-indicator-role ml-1 font-mono text-[10px]">({currentUser?.roleTitleLo?.split(' ')[0] || 'Staff'})</span>
                   </span>
                 </span>
               </div>
 
-              {/* Quick POS Sales Button */}
               {onSelectCustomerForPOS && (
                 <button
                   type="button"
                   onClick={() => onSelectCustomerForPOS()}
-                  className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-600/40 bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all sm:flex-none cursor-pointer active:scale-95"
+                  className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-emerald-600/40 bg-emerald-600 px-3 text-xs font-bold text-white transition-colors hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                   title="ເປີດໜ້າຈໍ POS ຂາຍລົດຍົນ"
                 >
-                  <ShoppingBag className="w-3.5 h-3.5 text-white" />
+                  <ShoppingBag className="h-4 w-4" />
                   <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'POS Sales'}</span>
                 </button>
               )}
 
-              {/* Export CSV Button (ນຳອອກ) */}
               <button
                 type="button"
                 onClick={handleExportCSV}
-                className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:border-zinc-500 hover:bg-zinc-800 sm:flex-none"
-                title="ດາວໂຫລດຖານຂໍ້ມູນລູກຄ້າ CRM ເປັນຟາຍ CSV/Excel"
+                className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                title="ສົ່ງອອກຂໍ້ມູນເປັນ CSV"
               >
-                <Download className="w-3.5 h-3.5 text-zinc-300" />
-                <span>ນຳອອກ (Export CSV)</span>
+                <Download className="h-4 w-4" />
+                <span>{lang === 'lo' ? 'ສົ່ງອອກ CSV' : lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'}</span>
               </button>
 
-              {/* Print Summary Report */}
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:border-zinc-500 hover:bg-zinc-800 sm:flex-none"
-                title="ພິມລາຍງານລູກຄ້າ CRM"
+                className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                title="ພິມລາຍງານລູກຄ້າ"
               >
-                <Printer className="w-3.5 h-3.5 text-zinc-300" />
-                <span>ພິມລາຍງານ</span>
+                <Printer className="h-4 w-4" />
+                <span>{lang === 'lo' ? 'ພິມ' : lang === 'th' ? 'พิมพ์' : 'Print'}</span>
               </button>
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* Primary Classification Tabs: 3 Separated Customer Categories */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-xs">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex items-center gap-1.5 pr-1 font-semibold text-zinc-400">
-              <Calendar className="h-3.5 w-3.5 text-amber-400" />
-              <span>{lang === 'lo' ? 'ຊ່ວງວັນທີ:' : 'Date Range:'}</span>
-            </span>
-            {([
-              { id: 'all', label: lang === 'lo' ? 'ທັງໝົດ' : 'All' },
-              { id: 'today', label: lang === 'lo' ? 'ມື້ນີ້' : 'Today' },
-              { id: '7d', label: lang === 'lo' ? '7 ວັນ' : '7 Days' },
-              { id: 'month', label: lang === 'lo' ? 'ເດືອນນີ້' : 'This Month' },
-              { id: 'year', label: lang === 'lo' ? 'ປີນີ້' : 'This Year' },
-              { id: 'custom', label: lang === 'lo' ? 'ກຳນົດວັນທີ' : 'Custom' },
-            ] as const).map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => {
-                  setCrmTimePreset(preset.id);
-                  if (preset.id === 'all') {
-                    setCrmDateFrom('');
-                    setCrmDateTo('');
-                  }
-                }}
-                className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${crmTimePreset === preset.id
-                  ? 'bg-amber-400 text-black'
-                  : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                  }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-            {crmTimePreset === 'custom' && (
-              <div className="flex flex-wrap items-center gap-1.5 pl-1">
-                <input
-                  type="date"
-                  aria-label="Date from"
-                  value={crmDateFrom}
-                  onChange={(e) => setCrmDateFrom(e.target.value)}
-                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-mono text-white"
-                />
-                <span className="text-zinc-500">-</span>
-                <input
-                  type="date"
-                  aria-label="Date to"
-                  value={crmDateTo}
-                  onChange={(e) => setCrmDateTo(e.target.value)}
-                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-mono text-white"
-                />
-              </div>
-            )}
-          </div>
-          {isLoadingRangeLeads && (
-            <span className="text-[11px] text-amber-400 font-semibold">ກຳລັງດຶງຂໍ້ມູນຕາມຊ່ວງເວລາ...</span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
-          <div className="flex flex-wrap items-center gap-2">
+        <section className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div role="group" aria-label={lang === 'lo' ? 'ປະເພດລູກຄ້າ' : 'Customer categories'} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {/* Tab 1: ລູກຄ້າໃໝ່ (Leads) */}
             <button
               type="button"
+              aria-pressed={customerClassificationTab === 'new_leads'}
               onClick={() => setCustomerClassificationTab('new_leads')}
-              className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${customerClassificationTab === 'new_leads'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-black shadow-md border border-slate-900 dark:border-white'
-                : 'bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800'
+              className={`flex min-h-12 items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:text-sm ${customerClassificationTab === 'new_leads'
+                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-950'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900'
                 }`}
             >
-              <UserPlus className={`w-4 h-4 ${customerClassificationTab === 'new_leads' ? 'text-white dark:text-black' : 'text-slate-500 dark:text-zinc-400'}`} />
-              <span>ລູກຄ້າໃໝ່ (Leads)</span>
-              <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${customerClassificationTab === 'new_leads' ? 'bg-white/20 dark:bg-black/15 text-white dark:text-black' : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-300/60 dark:border-zinc-700/60'
+              <UserPlus className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1">ລູກຄ້າໃໝ່</span>
+              <span className={`min-w-7 rounded-full px-2 py-0.5 text-center text-[11px] font-bold tabular-nums ${customerClassificationTab === 'new_leads' ? 'bg-white/15 text-white dark:bg-black/10 dark:text-zinc-950' : 'bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300'
                 }`}>
                 {prospectiveLeads.length}
               </span>
@@ -1221,15 +1449,16 @@ export default function CustomerView({
             {/* Tab 2: ລູກຄ້າຊື້ສົດ/ໂອນ 100% */}
             <button
               type="button"
+              aria-pressed={customerClassificationTab === 'existing_customers'}
               onClick={() => setCustomerClassificationTab('existing_customers')}
-              className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${customerClassificationTab === 'existing_customers'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-black shadow-md border border-slate-900 dark:border-white'
-                : 'bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800'
+              className={`flex min-h-12 items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:text-sm ${customerClassificationTab === 'existing_customers'
+                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-950'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900'
                 }`}
             >
-              <CheckCircle2 className={`w-4 h-4 ${customerClassificationTab === 'existing_customers' ? 'text-white dark:text-black' : 'text-slate-500 dark:text-zinc-400'}`} />
-              <span>ລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ</span>
-              <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${customerClassificationTab === 'existing_customers' ? 'bg-white/20 dark:bg-black/15 text-white dark:text-black' : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-300/60 dark:border-zinc-700/60'
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1">ລູກຄ້າຊຳລະຄົບແລ້ວ</span>
+              <span className={`min-w-7 rounded-full px-2 py-0.5 text-center text-[11px] font-bold tabular-nums ${customerClassificationTab === 'existing_customers' ? 'bg-white/15 text-white dark:bg-black/10 dark:text-zinc-950' : 'bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300'
                 }`}>
                 {existingCustomers.length}
               </span>
@@ -1238,15 +1467,16 @@ export default function CustomerView({
             {/* Tab 3: ລູກຄ້າຜ່ອນຊຳລະ */}
             <button
               type="button"
+              aria-pressed={customerClassificationTab === 'installment_customers'}
               onClick={() => setCustomerClassificationTab('installment_customers')}
-              className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${customerClassificationTab === 'installment_customers'
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-black shadow-md border border-slate-900 dark:border-white'
-                : 'bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800'
+              className={`flex min-h-12 items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:text-sm ${customerClassificationTab === 'installment_customers'
+                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-950'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900'
                 }`}
             >
-              <CreditCard className={`w-4 h-4 ${customerClassificationTab === 'installment_customers' ? 'text-white dark:text-black' : 'text-slate-500 dark:text-zinc-400'}`} />
-              <span>ລູກຄ້າຜ່ອນຊຳລະ</span>
-              <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${customerClassificationTab === 'installment_customers' ? 'bg-white/20 dark:bg-black/15 text-white dark:text-black' : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border border-slate-300/60 dark:border-zinc-700/60'
+              <CreditCard className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1">ລູກຄ້າຜ່ອນຊຳລະ</span>
+              <span className={`min-w-7 rounded-full px-2 py-0.5 text-center text-[11px] font-bold tabular-nums ${customerClassificationTab === 'installment_customers' ? 'bg-white/15 text-white dark:bg-black/10 dark:text-zinc-950' : 'bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300'
                 }`}>
                 {installmentCustomers.length}
               </span>
@@ -1254,27 +1484,43 @@ export default function CustomerView({
           </div>
 
           {/* Tab-Specific Primary Action Button */}
-          <div>
+          <div className="w-full lg:w-auto">
             {customerClassificationTab === 'new_leads' && (
-              <button
-                type="button"
-                onClick={onOpenNewLead}
-                className="flex items-center gap-2 px-4 py-2.5 azure-gradient-btn rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
-              >
-                <Plus className="w-4 h-4" />
-                <span>ເພີ່ມລູກຄ້າໃໝ່</span>
-              </button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {currentUser && (
+                  <button
+                    type="button"
+                    onClick={() => setShowBookingImport(true)}
+                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm font-bold text-slate-800 dark:text-zinc-100 transition-colors hover:bg-slate-100 dark:hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 lg:w-auto"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>{lang === 'en' ? 'Import CSV' : lang === 'th' ? 'นำเข้า CSV' : 'ນຳເຂົ້າ CSV'}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onOpenNewLead}
+                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 lg:w-auto"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>ເພີ່ມລູກຄ້າ</span>
+                </button>
+              </div>
             )}
-
-            {customerClassificationTab === 'existing_customers' && (
-              <button
-                type="button"
-                onClick={() => setServiceModalCustomer({ name: '', phone: '', model: vehicles[0]?.name || 'AVATR 12' })}
-                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
-              >
-                <Wrench className="w-4 h-4" />
-                <span>ນັດໝາຍເຂົ້າສູນບໍລິການ</span>
-              </button>
+            {showBookingImport && currentUser && (
+              <ImportBookingCsvModal
+                vehicles={vehicles}
+                leads={leads}
+                bills={bills}
+                currentUserId={currentUser.id}
+                lang={lang}
+                onClose={() => setShowBookingImport(false)}
+                onImported={(imported) => {
+                  const ids = new Set(imported.map(l => l.id));
+                  setLeads(prev => [...imported, ...prev.filter(p => !ids.has(p.id))]);
+                  showToast(lang === 'en' ? `Imported ${imported.length} customers` : `ນຳເຂົ້າລູກຄ້າ ${imported.length} ລາຍ ສຳເລັດ`, 'success');
+                }}
+              />
             )}
 
             {customerClassificationTab === 'installment_customers' && (
@@ -1283,197 +1529,166 @@ export default function CustomerView({
                   <button
                     type="button"
                     onClick={() => onNavigateMenu('installment_dashboard')}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
+                    className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 lg:w-auto"
                     title="ເປີດໜ້າຈໍ Dashboard ຜ່ອນຊຳລະ"
                   >
                     <CreditCard className="w-4 h-4" />
                     <span>Dashboard ຜ່ອນຊຳລະ</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined}
-                  className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-black rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer active:scale-95"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span> ສັນຍາຜ່ອນໃໝ່ (POS)</span>
-                </button>
               </div>
             )}
           </div>
-        </div>
+        </section>
 
         {customerClassificationTab === 'new_leads' ? (
           <>
-            {/* 4 Focused KPI Metrics for New Leads Pipeline (Channels + Acquisition) */}
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-              {[
-                {
-                  label: 'ລູກຄ້າໃໝ່ທັງໝົດ',
-                  value: statusCounts.all,
-                  icon: Users,
-                  tone: 'text-zinc-200',
-                },
-                {
-                  label: 'Walk-in (ໜ້າໂຊຣູມ)',
-                  value: channelCounts.walk_in,
-                  icon: Store,
-                  tone: 'text-emerald-400',
-                },
-                {
-                  label: 'Online (ສື່ສັງຄົມ)',
-                  value: channelCounts.online,
-                  icon: Globe,
-                  tone: 'text-blue-400',
-                },
-                {
-                  label: 'Event (ງານວາງສະແດງ)',
-                  value: channelCounts.event,
-                  icon: Sparkles,
-                  tone: 'text-amber-400',
-                },
-              ].map((metric) => {
-                const Icon = metric.icon;
-                return (
-                  <div key={metric.label} className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-sm sm:p-5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-[11px] font-medium text-slate-500 dark:text-zinc-400">{metric.label}</p>
-                        <p className="mt-1 text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-slate-900 dark:text-white">{metric.value.toLocaleString()}</p>
-                      </div>
-                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 dark:bg-zinc-900 ${metric.tone}`}>
-                        <Icon className="h-4 w-4" />
-                      </span>
-                    </div>
-                    {'caption' in metric && Boolean((metric as { caption?: string }).caption) && (
-                      <p className="mt-2 text-[10px] text-slate-500 dark:text-zinc-500">{(metric as { caption?: string }).caption}</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
             {/* Main Full-Width Leads Workspace */}
             <div className="w-full space-y-4">
 
               {/* UNIFIED FILTER, SEARCH & VIEW MODE CONTROL PANEL */}
-              <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl space-y-3.5 shadow-sm">
-                {/* Row 1: Search Bar, Status Filter, Quick Shortcut & View Switcher */}
-                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-                  {/* Search Bar */}
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="ຄົ້ນຫາຊື່, ເບີໂທ, ເລກບັດ, ທີ່ຢູ່, ລຸ້ນລົດ, ເລກບິນ..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/10"
-                    />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-white"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+              <div className="theme-adaptive-dark-surface rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-4">
+                <div className="space-y-3">
+                  <div className="border-b border-slate-200 pb-3 dark:border-zinc-800">
+                    {renderDateSearch()}
                   </div>
 
-                  {/* Status & Action Controls */}
-                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-                    {/* Status Dropdown Filter (Prospective stages) */}
-                    <select
-                      value={selectedStatus}
-                      onChange={(e) => setSelectedStatus(e.target.value)}
-                      aria-label={lang === 'lo' ? 'ກັ່ນຕອງຕາມສະຖານະ' : 'Filter by status'}
-                      className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
-                    >
-                      <option value="all">{t.statusAll} ({statusCounts.all})</option>
-                      <option value="new">{t.statusNew} ({statusCounts.new})</option>
-                      <option value="contacted">{t.statusContacted} ({statusCounts.contacted})</option>
-                      <option value="test_drive">{t.statusTestDrive} ({statusCounts.test_drive})</option>
-                      <option value="negotiation">{t.statusNegotiation} ({statusCounts.negotiation})</option>
-                    </select>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(13rem,1.1fr)_auto_minmax(18rem,1.7fr)_minmax(17rem,1.5fr)] xl:items-end">
+                    <div className="min-w-0 space-y-1.5">
+                      <label htmlFor="lead-status-filter" className="block text-[11px] font-semibold text-slate-500 dark:text-zinc-400">
+                        {lang === 'lo' ? 'ສະຖານະ' : lang === 'th' ? 'สถานะ' : 'Status'}
+                      </label>
+                      <select
+                        id="lead-status-filter"
+                        value={selectedStatus}
+                        onChange={(e) => setSelectedStatus(e.target.value)}
+                        aria-label={lang === 'lo' ? 'ກັ່ນຕອງຕາມສະຖານະ' : 'Filter by status'}
+                        className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-medium text-slate-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                      >
+                        <option value="all">{t.statusAll} ({statusCounts.all})</option>
+                        <option value="new">{t.statusNew} ({statusCounts.new})</option>
+                        <option value="contacted">{t.statusContacted} ({statusCounts.contacted})</option>
+                        <option value="test_drive">{t.statusTestDrive} ({statusCounts.test_drive})</option>
+                        <option value="negotiation">{t.statusNegotiation} ({statusCounts.negotiation})</option>
+                        <option value="lost">{t.statusLost} ({statusCounts.lost})</option>
+                      </select>
+                    </div>
 
-                    {/* View Mode Toggle: Cards vs Table */}
-                    <div className="flex items-center bg-zinc-900 p-1 rounded-xl border border-zinc-800 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setViewMode('cards')}
-                        className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer ${viewMode === 'cards'
-                          ? 'bg-white text-black font-bold shadow-sm'
-                          : 'text-zinc-400 hover:text-white'
-                          }`}
-                        title="ມຸມມອງບັດຂໍ້ມູນ (Card View)"
-                      >
-                        <LayoutGrid className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline text-[11px]">ບັດ</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setViewMode('table')}
-                        className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer ${viewMode === 'table'
-                          ? 'bg-white text-black font-bold shadow-sm'
-                          : 'text-zinc-400 hover:text-white'
-                          }`}
-                        title="ມຸມມອງຕາຕະລາງ (Table View)"
-                      >
-                        <List className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline text-[11px]">ຕາຕະລາງ</span>
-                      </button>
+                    <div className="space-y-1.5">
+                      <span className="block text-[11px] font-semibold text-slate-500 dark:text-zinc-400">
+                        {lang === 'lo' ? 'ມຸມມອງ' : lang === 'th' ? 'มุมมอง' : 'View'}
+                      </span>
+                      <div role="group" aria-label={lang === 'lo' ? 'ຮູບແບບລາຍການ' : 'List view'} className="flex h-11 w-fit items-center rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-zinc-700 dark:bg-zinc-900">
+                        <button
+                          type="button"
+                          aria-pressed={viewMode === 'cards'}
+                          onClick={() => setViewMode('cards')}
+                          className={`flex min-h-9 items-center justify-center gap-1 rounded-lg px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${viewMode === 'cards'
+                            ? 'bg-white font-bold text-black shadow-sm dark:bg-zinc-700 dark:text-white'
+                            : 'text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white'
+                            }`}
+                          title="ມຸມມອງບັດ"
+                        >
+                          <LayoutGrid className="h-3.5 w-3.5" />
+                          <span className="text-xs">ບັດ</span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={viewMode === 'table'}
+                          onClick={() => setViewMode('table')}
+                          className={`flex min-h-9 items-center justify-center gap-1 rounded-lg px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${viewMode === 'table'
+                            ? 'bg-white font-bold text-black shadow-sm dark:bg-zinc-700 dark:text-white'
+                            : 'text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white'
+                            }`}
+                          title="ມຸມມອງຕາຕະລາງ"
+                        >
+                          <List className="h-3.5 w-3.5" />
+                          <span className="text-xs">ຕາຕະລາງ</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="min-w-0 space-y-1.5">
+                      <span className="block text-[11px] font-semibold text-slate-500 dark:text-zinc-400">ຊ່ອງທາງ</span>
+                      <div role="group" aria-label={lang === 'lo' ? 'ກັ່ນຕອງຊ່ອງທາງ' : 'Filter by channel'} className="flex min-h-11 flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-zinc-800 dark:bg-zinc-900">
+                        {[
+                          { key: 'all' as const, label: 'ທັງໝົດ', count: channelCounts.all },
+                          { key: 'walk_in' as const, label: 'Walk-in', count: channelCounts.walk_in },
+                          { key: 'online' as const, label: 'Online', count: channelCounts.online },
+                          { key: 'event' as const, label: 'Event', count: channelCounts.event },
+                        ].map((tab) => {
+                          const isSelected = channelFilter === tab.key;
+                          return (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              aria-pressed={isSelected}
+                              onClick={() => setChannelFilter(tab.key)}
+                              className={`flex min-h-9 items-center justify-center gap-1 rounded-lg px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${isSelected
+                                ? 'bg-zinc-800 font-semibold text-white dark:bg-zinc-700'
+                                : 'text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white'
+                                }`}
+                            >
+                              <span>{tab.label}</span>
+                              <span className={`min-w-5 rounded-full px-1 text-center text-[10px] tabular-nums ${isSelected ? 'bg-white/15 text-white' : 'text-slate-500 dark:text-zinc-500'}`}>
+                                {tab.count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="min-w-0 space-y-1.5">
+                      <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-zinc-400">
+                        <CalendarClock className="h-3.5 w-3.5" />
+                        {lang === 'lo' ? 'ການຕິດຕາມ' : lang === 'th' ? 'ติดตาม' : 'Follow-up'}
+                      </span>
+                      <div role="group" aria-label={lang === 'lo' ? 'ກັ່ນຕອງການຕິດຕາມ' : 'Filter by follow-up'} className="flex min-h-11 flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-zinc-800 dark:bg-zinc-900">
+                        {([
+                          { key: 'today' as const, label: 'ຕ້ອງຕິດຕາມມື້ນີ້', count: followUpCounts.today, tone: 'bg-amber-400 text-black' },
+                          { key: 'overdue' as const, label: 'ເລີຍກຳນົດ', count: followUpCounts.overdue, tone: 'bg-rose-600 text-white' },
+                        ]).map((tab) => {
+                          const isSelected = followUpFilter === tab.key;
+                          return (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              aria-pressed={isSelected}
+                              onClick={() => setFollowUpFilter(isSelected ? 'all' : tab.key)}
+                              className={`flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${isSelected
+                                ? 'bg-zinc-800 font-semibold text-white dark:bg-zinc-700'
+                                : 'text-slate-500 hover:bg-slate-200 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white'
+                                }`}
+                            >
+                              <span>{tab.label}</span>
+                              <span className={`rounded-full px-1.5 text-[10px] font-semibold tabular-nums ${tab.count > 0 ? tab.tone : (isSelected ? 'bg-zinc-300 text-black' : 'text-zinc-500')}`}>
+                                {tab.count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Row 2: Customer Acquisition Channel Filter Pills */}
-                <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2.5 text-xs">
-                  <div className="flex flex-wrap items-center gap-3">
-                    {/* Customer Channel Pills */}
-                    <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800/80">
-                      <span className="text-[10px] text-zinc-400 font-bold px-1.5 uppercase">ຊ່ອງທາງ:</span>
-                      {[
-                        { key: 'all' as const, label: 'all', count: channelCounts.all },
-                        { key: 'walk_in' as const, label: 'Walk-in', count: channelCounts.walk_in },
-                        { key: 'online' as const, label: 'Online', count: channelCounts.online },
-                        { key: 'event' as const, label: 'Event', count: channelCounts.event },
-                      ].map((tab) => {
-                        const isSelected = channelFilter === tab.key;
-                        return (
-                          <button
-                            key={tab.key}
-                            type="button"
-                            onClick={() => setChannelFilter(tab.key)}
-                            className={`px-2 py-1 rounded-lg text-[11px] transition-all flex items-center gap-1 cursor-pointer ${isSelected
-                              ? 'bg-zinc-200 text-black font-bold shadow-sm'
-                              : 'text-zinc-400 hover:text-white'
-                              }`}
-                          >
-                            <span>{tab.label}</span>
-                            <span className={`text-[10px] font-mono px-1 rounded-full ${isSelected ? 'bg-zinc-300 text-black' : 'text-zinc-500'}`}>
-                              {tab.count}
-                            </span>
-                          </button>
-                        );
-                      })}
+                  {hasActiveLeadFilters && (
+                    <div className="flex justify-end border-t border-slate-200 pt-2 dark:border-zinc-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChannelFilter('all');
+                          setFollowUpFilter('all');
+                          setSelectedStatus('all');
+                          clearDateSearch();
+                          setCrmSearch('');
+                        }}
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        <span>{lang === 'lo' ? 'ລ້າງຕົວກອງ' : 'Clear filters'}</span>
+                      </button>
                     </div>
-                  </div>
-
-                  {/* Clear Filters Button */}
-                  {(channelFilter !== 'all' || selectedStatus !== 'all' || searchQuery.trim() !== '') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setChannelFilter('all');
-                        setSelectedStatus('all');
-                        setSearchQuery('');
-                      }}
-                      className="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                    >
-                      <RotateCcw className="w-3 h-3 text-zinc-400" />
-                      <span>{lang === 'lo' ? 'ລ້າງຕົວກອງ' : 'Clear filters'}</span>
-                    </button>
                   )}
                 </div>
               </div>
@@ -1489,37 +1704,39 @@ export default function CustomerView({
 
               {/* CUSTOMER LIST: EMPTY STATE */}
               {filteredLeads.length === 0 ? (
-                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-12 text-center text-zinc-500 space-y-3">
-                  <div className="w-12 h-12 mx-auto rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 shadow-inner">
-                    <Users className="w-6 h-6 text-zinc-500" />
+                <div className="theme-adaptive-dark-surface space-y-3 rounded-2xl border border-slate-200 bg-white p-7 text-center text-slate-500 dark:border-zinc-800 dark:bg-zinc-950 sm:p-10">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                    <Users className="h-6 w-6" />
                   </div>
-                  <p className="text-sm font-semibold text-zinc-200">{t.noCustomersFound}</p>
-                  <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-                    {searchQuery || channelFilter !== 'all' || selectedStatus !== 'all'
-                      ? 'ບໍ່ພົບຂໍ້ມູນລູກຄ້າທີ່ກົງກັບເງື່ອນໄຂການຄົ້ນຫາ ຫຼື ຕົວກອງຂອງທ່ານ'
-                      : 'ຍັງບໍ່ມີຂໍ້ມູນລູກຄ້າໃນລະບົບ ທ່ານສາມາດກົດປຸ່ມ "ເພີ່ມລູກຄ້າໃໝ່" ເພື່ອເລີ່ມຕົ້ນບັນທຶກ'}
+                  <p className="text-sm font-semibold text-slate-900 dark:text-zinc-100">{t.noCustomersFound}</p>
+                  <p className="mx-auto max-w-sm text-xs text-slate-500 dark:text-zinc-400">
+                    {hasActiveLeadFilters
+                      ? 'ລອງປ່ຽນວັນທີ ຫຼື ລ້າງຕົວກອງ'
+                      : 'ເພີ່ມລູກຄ້າເພື່ອເລີ່ມຕິດຕາມ'}
                   </p>
-                  {filteredLeads.length === 0 && !searchQuery && channelFilter === 'all' && selectedStatus === 'all' && (
+                  {!hasActiveLeadFilters && (
                     <button
                       type="button"
                       onClick={onOpenNewLead}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-zinc-200 text-black shadow-lg transition-all cursor-pointer active:scale-95 mt-2"
+                      className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
                     >
-                      <Plus className="w-4 h-4 text-black" />
-                      <span>{lang === 'lo' ? 'ເພີ່ມລູກຄ້າໃໝ່' : 'Add New Customer'}</span>
+                      <Plus className="h-4 w-4" />
+                      <span>{lang === 'lo' ? 'ເພີ່ມລູກຄ້າ' : 'Add customer'}</span>
                     </button>
                   )}
-                  {(channelFilter !== 'all' || selectedStatus !== 'all' || searchQuery.trim() !== '') && (
+                  {hasActiveLeadFilters && (
                     <button
                       type="button"
                       onClick={() => {
                         setChannelFilter('all');
+                        setFollowUpFilter('all');
                         setSelectedStatus('all');
-                        setSearchQuery('');
+                        clearDateSearch();
+                        setCrmSearch('');
                       }}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 transition-all cursor-pointer active:scale-95 shadow-sm mt-1"
+                      className="mt-1 inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                     >
-                      <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+                      <RotateCcw className="h-3.5 w-3.5 text-slate-500 dark:text-zinc-400" />
                       <span>{lang === 'lo' ? 'ລ້າງຕົວກອງທັງໝົດ' : lang === 'th' ? 'ล้างตัวกรองทั้งหมด' : 'Reset all filters'}</span>
                     </button>
                   )}
@@ -1548,12 +1765,12 @@ export default function CustomerView({
                           >
                             {/* Customer & Identity */}
                             <td className="py-3 px-3.5 align-top">
-                              <div className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800/80 bg-slate-50/80 dark:bg-zinc-900/50 hover:border-slate-300 dark:hover:border-zinc-700/80 transition-all shadow-xs min-w-[170px] max-w-[220px]">
+                              <div className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800/80 bg-slate-50/80 dark:bg-zinc-900/50 hover:border-slate-300 dark:hover:border-zinc-700/80 transition-all shadow-xs min-w-42.5 max-w-55">
                                 {/* Customer Name & VIP Badge */}
                                 <div className="flex items-center justify-between gap-1.5">
-                                  <strong className="text-xs font-bold text-slate-900 dark:text-white truncate block" title={lead.customerName}>
+                                  <button type="button" onClick={() => openCustomerDetail(lead)} className="text-xs font-bold text-slate-900 dark:text-white truncate block text-left hover:underline cursor-pointer" title={lead.customerName}>
                                     {lead.customerName}
-                                  </strong>
+                                  </button>
                                   {lead.priority === 'vip' && (
                                     <span className="text-[9px] font-mono px-1.5 py-0.5 bg-amber-400 text-black rounded-md font-extrabold shrink-0 shadow-xs">
                                       VIP
@@ -1594,11 +1811,11 @@ export default function CustomerView({
                                   <span>{lead.phone}</span>
                                   <WhatsAppIcon className="w-3 h-3 text-emerald-400" />
                                 </button>
-                                <span className="text-[10px] text-zinc-300 font-sans block leading-tight max-w-[200px]" title={[lead.village, lead.district, lead.province].filter(Boolean).join(', ')}>
+                                <span className="text-[10px] text-zinc-300 font-sans block leading-tight max-w-50" title={[lead.village, lead.district, lead.province].filter(Boolean).join(', ')}>
                                   {[lead.village, lead.district, lead.province].filter(Boolean).join(', ') || '-'}
                                 </span>
                                 {lead.notes && (
-                                  <span className="text-[10px] text-amber-800 dark:text-amber-300 font-sans block italic truncate max-w-[200px]" title={lead.notes}>
+                                  <span className="text-[10px] text-amber-800 dark:text-amber-300 font-sans block italic truncate max-w-50" title={lead.notes}>
                                     "{lead.notes}"
                                   </span>
                                 )}
@@ -1638,7 +1855,7 @@ export default function CustomerView({
                                 <option value="contacted">{t.statusContacted}</option>
                                 <option value="test_drive">{t.statusTestDrive}</option>
                                 <option value="negotiation">{t.statusNegotiation}</option>
-                                <option value="delivered">{t.statusDelivered || 'ຈ່າຍແລ້ວ'}</option>
+                                <option value="lost">{t.statusLost}</option>
                               </select>
                             </td>
 
@@ -1652,18 +1869,8 @@ export default function CustomerView({
                             {/* Table Actions */}
                             <td className="py-3 px-3.5 align-top text-right">
                               <div className="flex items-center justify-end gap-1.5">
-                                {/* POS Sale Button */}
-                                {onSelectCustomerForPOS && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onSelectCustomerForPOS(lead)}
-                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] flex items-center gap-1 transition-colors cursor-pointer shadow-sm active:scale-95"
-                                    title="ເປີດບິນຂາຍ POS ສຳລັບລູກຄ້ານີ້"
-                                  >
-                                    <ShoppingBag className="w-3 h-3" />
-                                    <span>{lang === 'lo' ? 'ຂາຍ POS' : lang === 'th' ? 'ขาย POS' : 'POS'}</span>
-                                  </button>
-                                )}
+                                {/* Next step (pipeline) */}
+                                {renderNextStep(lead, 'sm')}
 
 
                                 {/* Customer Documents Suite & Audit History Button */}
@@ -1696,15 +1903,52 @@ export default function CustomerView({
                                   <WhatsAppIcon className="w-3 h-3" />
                                 </a>
 
-                                {/* Delete Button */}
+                                {/* Contact log / follow-up */}
+                                {(() => {
+                              const fu = getFollowUpState(lead);
+                              const tone = fu === 'overdue'
+                                ? 'bg-rose-950/50 border-rose-800 text-rose-300 hover:bg-rose-900/60'
+                                : fu === 'today'
+                                  ? 'bg-amber-950/40 border-amber-700 text-amber-300 hover:bg-amber-900/50'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600';
+                              return (
                                 <button
                                   type="button"
-                                  onClick={() => setLeadToDelete(lead)}
-                                  className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
-                                  title="ລົບລູກຄ້າ"
+                                  onClick={() => setContactLead(lead)}
+                                  className={`p-1 rounded-xl border transition-colors cursor-pointer flex items-center gap-1 font-semibold ${tone}`}
+                                  title={lead.nextFollowUpAt ? `ນັດຕິດຕາມ: ${formatDateKey(lead.nextFollowUpAt)}` : 'ບັນທຶກການຕິດຕໍ່ / ນັດຕິດຕາມ'}
+                                  aria-label="Contact Log"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <CalendarClock className="w-3.5 h-3.5" />
+                                  {lead.nextFollowUpAt && <span className="text-[10px] font-mono">{formatDateKey(lead.nextFollowUpAt).slice(0, 5)}</span>}
                                 </button>
+                              );
+                            })()}
+
+                                {/* Edit Button */}
+                                {onEditLead && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onEditLead(lead)}
+                                    className="p-1 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                                    title="ແກ້ໄຂຂໍ້ມູນລູກຄ້າ"
+                                    aria-label="Edit Lead"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                )}
+
+                                {/* Delete Button (admin only) */}
+                                {isAdminUser && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setLeadToDelete(lead)}
+                                    className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                                    title="ລົບລູກຄ້າ"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1733,7 +1977,9 @@ export default function CustomerView({
                             <div className="min-w-0 space-y-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                                  {lead.customerName}
+                                  <button type="button" onClick={() => openCustomerDetail(lead)} className="text-left hover:underline underline-offset-2 cursor-pointer" title="ເປີດລາຍລະອຽດລູກຄ້າ">
+                                    {lead.customerName}
+                                  </button>
                                 </h3>
 
                                 {/* VIP Priority Badge */}
@@ -1803,9 +2049,43 @@ export default function CustomerView({
                               <option value="contacted">{t.statusContacted}</option>
                               <option value="test_drive">{t.statusTestDrive}</option>
                               <option value="negotiation">{t.statusNegotiation}</option>
+                              <option value="lost">{t.statusLost}</option>
                             </select>
 
-                            <button
+                            {(() => {
+                              const fu = getFollowUpState(lead);
+                              const tone = fu === 'overdue'
+                                ? 'bg-rose-950/50 border-rose-800 text-rose-300 hover:bg-rose-900/60'
+                                : fu === 'today'
+                                  ? 'bg-amber-950/40 border-amber-700 text-amber-300 hover:bg-amber-900/50'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600';
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setContactLead(lead)}
+                                  className={`p-2 rounded-xl border transition-colors cursor-pointer flex items-center gap-1 font-semibold ${tone}`}
+                                  title={lead.nextFollowUpAt ? `ນັດຕິດຕາມ: ${formatDateKey(lead.nextFollowUpAt)}` : 'ບັນທຶກການຕິດຕໍ່ / ນັດຕິດຕາມ'}
+                                  aria-label="Contact Log"
+                                >
+                                  <CalendarClock className="w-3.5 h-3.5" />
+                                  {lead.nextFollowUpAt && <span className="text-[10px] font-mono">{formatDateKey(lead.nextFollowUpAt).slice(0, 5)}</span>}
+                                </button>
+                              );
+                            })()}
+
+                            {onEditLead && (
+                              <button
+                                type="button"
+                                onClick={() => onEditLead(lead)}
+                                className="p-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl border border-zinc-800 hover:border-zinc-600 transition-colors cursor-pointer"
+                                title="ແກ້ໄຂຂໍ້ມູນລູກຄ້າ"
+                                aria-label="Edit Lead"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {isAdminUser && <button
                               type="button"
                               onClick={() => setLeadToDelete(lead)}
                               className="p-2 bg-zinc-900 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 rounded-xl border border-zinc-800 hover:border-red-800 transition-colors cursor-pointer shrink-0 active:scale-95"
@@ -1813,7 +2093,7 @@ export default function CustomerView({
                               aria-label="Delete Lead"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            </button>}
                           </div>
                         </div>
 
@@ -1821,7 +2101,7 @@ export default function CustomerView({
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
                           {/* Section A: Interested Vehicle & Dealership Source (4 cols) */}
                           <div className="md:col-span-4 space-y-1.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                               <Car className="w-3.5 h-3.5 text-emerald-400" />
                               <span>ລຸ້ນລົດທີ່ສົນໃຈ</span>
                             </span>
@@ -1838,7 +2118,7 @@ export default function CustomerView({
 
                           {/* Section B: Complete Customer Address & Staff (4 cols) */}
                           <div className="md:col-span-4 space-y-1.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                               <MapPin className="w-3.5 h-3.5 text-blue-400" />
                               <span>ທີ່ຢູ່ລູກຄ້າ (ເຫັນຄົບຖ້ວນ)</span>
                             </span>
@@ -1857,11 +2137,11 @@ export default function CustomerView({
 
                           {/* Section C: Complete Customer Notes (4 cols) */}
                           <div className="md:col-span-4 space-y-1.5">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                               <FileText className="w-3.5 h-3.5 text-amber-400" />
                               <span>ໝາຍເຫດ & ຄວາມຕ້ອງການ</span>
                             </span>
-                            <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 min-h-[64px] flex items-center">
+                            <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 min-h-16 flex items-center">
                               {lead.notes ? (
                                 <p className="text-zinc-200 italic leading-relaxed text-[11px]">
                                   "{lead.notes}"
@@ -1872,6 +2152,9 @@ export default function CustomerView({
                             </div>
                           </div>
                         </div>
+
+                        {/* Sales pipeline stage */}
+                        <div className="overflow-x-auto pt-1">{renderPipelineStepper(lead)}</div>
 
                         {/* 3. Card Bottom Actions Toolbar */}
                         <div className="pt-2.5 border-t border-zinc-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
@@ -1898,7 +2181,7 @@ export default function CustomerView({
                           </div>
 
                           {/* Right: Actions */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
                             {/* Customer Documents Suite & Audit History Button */}
                             <button
                               type="button"
@@ -1918,17 +2201,7 @@ export default function CustomerView({
                               })()}
                             </button>
 
-                            {onSelectCustomerForPOS && (
-                              <button
-                                type="button"
-                                onClick={() => onSelectCustomerForPOS(lead)}
-                                className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 text-xs"
-                                title="ເປີດບິນຂາຍລົດ (POS) ແລະ ຕັດສະຕ໋ອກສຳລັບລູກຄ້ານີ້"
-                              >
-                                <ShoppingBag className="w-3.5 h-3.5" />
-                                <span>{lang === 'lo' ? 'ເປີດບິນຂາຍ POS' : lang === 'th' ? 'เปิดบิลขาย POS' : 'Sell POS'}</span>
-                              </button>
-                            )}
+                            {renderNextStep(lead, 'md')}
                           </div>
                         </div>
                       </div>
@@ -2017,69 +2290,45 @@ export default function CustomerView({
             </div>
 
             {/* Filter & Action Toolbar for Existing Customers */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:p-5 shadow-sm space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                {/* Search Bar */}
-                <div className="relative flex-1 min-w-[260px]">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                  <input
-                    type="text"
-                    value={existingSearchQuery}
-                    onChange={(e) => setExistingSearchQuery(e.target.value)}
-                    placeholder="ຄົ້ນຫາຊື່ລູກຄ້າ, ເບີໂທ, ທະບຽນລົດ, ເລກ VIN, ແຂວງ..."
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-all"
-                  />
-                  {existingSearchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setExistingSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+              <div className="space-y-4">
+                {renderDateSearch()}
+                <div className="grid gap-3 border-t border-slate-200 pt-4 dark:border-zinc-800 sm:grid-cols-2">
+                  <div className="min-w-0 space-y-1.5">
+                    <label htmlFor="existing-customer-model-filter" className="block text-xs font-semibold text-slate-600 dark:text-zinc-400">
+                      ລຸ້ນລົດ
+                    </label>
+                    <select
+                      id="existing-customer-model-filter"
+                      value={existingModelFilter}
+                      onChange={(e) => setExistingModelFilter(e.target.value)}
+                      className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
                     >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+                      <option value="all">ທຸກລຸ້ນ ({existingCustomers.length})</option>
+                      {vehicles.map((v) => (
+                        <option key={v.id || v.name} value={v.name}>
+                          {v.name} ({existingCustomers.filter(c => c.model === v.name).length})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Model Filter */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-zinc-400 font-medium">ລຸ້ນລົດ:</span>
-                  <select
-                    value={existingModelFilter}
-                    onChange={(e) => setExistingModelFilter(e.target.value)}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
-                  >
-                    <option value="all">ທຸກລຸ້ນ ({existingCustomers.length})</option>
-                    {vehicles.map((v) => (
-                      <option key={v.id || v.name} value={v.name}>
-                        {v.name} ({existingCustomers.filter(c => c.model === v.name).length})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="min-w-0 space-y-1.5">
+                    <label htmlFor="existing-customer-service-filter" className="block text-xs font-semibold text-slate-600 dark:text-zinc-400">
+                      ປະຫວັດເຂົ້າສູນ
+                    </label>
+                    <select
+                      id="existing-customer-service-filter"
+                      value={existingServiceFilter}
+                      onChange={(e) => setExistingServiceFilter(e.target.value as any)}
+                      className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                    >
+                      <option value="all">ທັງໝົດ ({existingCustomers.length})</option>
+                      <option value="has_service">ມີປະຫວັດເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) > 0).length})</option>
+                      <option value="no_service">ຍັງບໍ່ເຄີຍເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) === 0).length})</option>
+                    </select>
+                  </div>
                 </div>
-
-                {/* Service Filter */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-zinc-400 font-medium">ປະຫວັດສູນ:</span>
-                  <select
-                    value={existingServiceFilter}
-                    onChange={(e) => setExistingServiceFilter(e.target.value as any)}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-white font-medium"
-                  >
-                    <option value="all">ທັງໝົດ ({existingCustomers.length})</option>
-                    <option value="has_service">ມີປະຫວັດເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) > 0).length})</option>
-                    <option value="no_service">ຍັງບໍ່ເຄີຍເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) === 0).length})</option>
-                  </select>
-                </div>
-
-                {/* Quick Book Service Button */}
-                <button
-                  type="button"
-                  onClick={() => setServiceModalCustomer({ name: '', phone: '', model: vehicles[0]?.name || 'AVATR 12' })}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95 ml-auto"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>ນັດໝາຍເຂົ້າສູນໃໝ່</span>
-                </button>
               </div>
             </div>
 
@@ -2094,7 +2343,6 @@ export default function CustomerView({
               <div className="grid grid-cols-1 gap-5">
                 {filteredExistingCustomers.map((owner) => {
                   const recentServices = owner.services || [];
-                  const leadData = owner.leadRecord;
 
                   return (
                     <div
@@ -2111,7 +2359,7 @@ export default function CustomerView({
                             <div className="flex flex-wrap items-center gap-2">
                               <h3 className="text-lg font-bold text-white tracking-tight">{owner.model}</h3>
                               <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-zinc-900 border border-zinc-700 text-zinc-200">
-                                {owner.plateNumber || 'ກຳແພງນະຄອນ (ລໍຖ້າປ້າຍ)'}
+                                {owner.plateNumber || (lang === 'lo' ? 'ລໍຖ້າປ້າຍທະບຽນ' : lang === 'th' ? 'รอป้ายทะเบียน' : 'Plate pending')}
                               </span>
                               {owner.color && (
                                 <span className="px-2 py-0.5 rounded-lg text-[10px] font-medium bg-zinc-900/60 border border-zinc-800 text-zinc-400">
@@ -2120,7 +2368,7 @@ export default function CustomerView({
                               )}
                             </div>
                             <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-zinc-400 mt-1">
-                              <span>VIN: <strong className="text-zinc-300 font-semibold">{owner.vin}</strong></span>
+                              <span>VIN: <strong className="text-zinc-300 font-semibold">{owner.vin || (lang === 'lo' ? 'ຍັງບໍ່ໄດ້ບັນທຶກ' : lang === 'th' ? 'ยังไม่ได้บันทึก' : 'Not recorded')}</strong></span>
                               {owner.engineNumber && (
                                 <span>• Motor: <strong className="text-zinc-300 font-semibold">{owner.engineNumber}</strong></span>
                               )}
@@ -2130,10 +2378,10 @@ export default function CustomerView({
                         </div>
 
                         {/* Live Dynamic Warranty Status & Countdown Card */}
-                        <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800/80 min-w-[280px] sm:min-w-[320px] shadow-sm space-y-1.5">
+                        <div className="p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800/80 w-full min-w-0 sm:w-auto sm:min-w-[320px] shadow-sm space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="flex items-center gap-1.5 text-xs font-bold text-zinc-200">
-                              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                            <span className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-zinc-200">
+                              <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
                               <span className="truncate">{owner.warrantyTerms || 'ການຮັບປະກັນ EV CATL'}</span>
                             </span>
 
@@ -2173,8 +2421,8 @@ export default function CustomerView({
                           <div className="space-y-1 pt-0.5">
                             <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
                               <div
-                                className={`h-1.5 rounded-full transition-all duration-500 ${owner.warrantyStatus === 'active' ? 'bg-gradient-to-r from-emerald-500 to-teal-400' :
-                                  owner.warrantyStatus === 'expiring' ? 'bg-gradient-to-r from-amber-500 to-yellow-400' :
+                                className={`h-1.5 rounded-full transition-all duration-500 ${owner.warrantyStatus === 'active' ? 'bg-linear-to-r from-emerald-500 to-teal-400' :
+                                  owner.warrantyStatus === 'expiring' ? 'bg-linear-to-r from-amber-500 to-yellow-400' :
                                     'bg-rose-500'
                                   }`}
                                 style={{ width: `${owner.remainingPct}%` }}
@@ -2217,7 +2465,11 @@ export default function CustomerView({
                           </div>
 
                           <div>
-                            <p className="text-base font-extrabold text-white">{owner.customerName}</p>
+                            {owner.leadRecord ? (
+                              <button type="button" onClick={() => owner.leadRecord && openCustomerDetail(owner.leadRecord)} className="text-base font-extrabold text-white text-left hover:underline underline-offset-2 cursor-pointer" title="ເປີດລາຍລະອຽດລູກຄ້າ">{owner.customerName}</button>
+                            ) : (
+                              <p className="text-base font-extrabold text-white">{owner.customerName}</p>
+                            )}
                             <div className="flex items-center gap-2 mt-1">
                               <Phone className="w-3.5 h-3.5 text-zinc-400" />
                               <a
@@ -2265,7 +2517,7 @@ export default function CustomerView({
                                   <span>ເລກໄມປັດຈຸບັນ</span>
                                 </span>
                                 <span className="font-mono font-bold text-white text-sm block">
-                                  {owner.currentMileageKm?.toLocaleString() || '5,000'} km
+                                  {owner.currentMileageKm != null ? `${owner.currentMileageKm.toLocaleString()} km` : (lang === 'lo' ? 'ຍັງບໍ່ໄດ້ບັນທຶກ' : lang === 'th' ? 'ยังไม่ได้บันทึก' : 'Not recorded')}
                                 </span>
                               </div>
                               <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-zinc-800/90 space-y-0.5">
@@ -2274,7 +2526,7 @@ export default function CustomerView({
                                   <span>ສຸຂະພາບແບັດ (SOH)</span>
                                 </span>
                                 <span className="font-mono font-bold text-emerald-400 text-sm block">
-                                  {owner.batteryHealthSOH || 99.5}%
+                                  {owner.batteryHealthSOH != null ? `${owner.batteryHealthSOH}%` : (lang === 'lo' ? 'ຍັງບໍ່ໄດ້ບັນທຶກ' : lang === 'th' ? 'ยังไม่ได้บันทึก' : 'Not recorded')}
                                 </span>
                               </div>
                             </div>
@@ -2298,30 +2550,10 @@ export default function CustomerView({
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-2">
-                              {/* Live Service Visit Count Badge */}
-                              <span className="px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                                ເຂົ້າສູນແລ້ວ {recentServices.length} ຄັ້ງ
-                              </span>
-
-                              {/* Quick Add Service Button prefilled */}
-                              <button
-                                type="button"
-                                onClick={() => setServiceModalCustomer({
-                                  name: owner.customerName,
-                                  phone: owner.phone,
-                                  model: owner.model,
-                                  plateNumber: owner.plateNumber,
-                                  mileageKm: owner.currentMileageKm,
-                                  batteryHealthPercent: owner.batteryHealthSOH
-                                })}
-                                className="px-2.5 py-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-[11px] font-bold text-zinc-200 border border-zinc-700 flex items-center gap-1 cursor-pointer transition-all"
-                                title="ບັນທຶກປະຫວັດການເຂົ້າສູນໃໝ່ໃຫ້ລູກຄ້ານີ້"
-                              >
-                                <Plus className="w-3 h-3 text-emerald-400" />
-                                <span>ເພີ່ມປະຫວັດ</span>
-                              </button>
-                            </div>
+                            {/* Live Service Visit Count Badge */}
+                            <span className="px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                              ເຂົ້າສູນແລ້ວ {recentServices.length} ຄັ້ງ
+                            </span>
                           </div>
 
                           {recentServices.length > 0 ? (
@@ -2441,10 +2673,10 @@ export default function CustomerView({
                               batteryHealthPercent: owner.batteryHealthSOH
                             })}
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-                            title="ເປີດຟອມນັດໝາຍເຂົ້າສູນບໍລິການ AVATR"
+                            title="ນັດໝາຍເຂົ້າສູນ ຫຼື ບັນທຶກປະຫວັດການເຂົ້າສູນໃຫ້ລູກຄ້ານີ້"
                           >
                             <Wrench className="w-3.5 h-3.5" />
-                            <span>ນັດໝາຍເຂົ້າສູນ (Book Service)</span>
+                            <span>ນັດໝາຍເຂົ້າສູນ</span>
                           </button>
 
                           {/* 3. Customer Documents & Delivery Handover */}
@@ -2498,7 +2730,7 @@ export default function CustomerView({
                         <button
                           type="button"
                           onClick={() => {
-                            const message = `ສະບາຍດີ ທ່ານ ${owner.customerName}, ຈາກສູນບໍລິການຫຼັງການຂາຍ AVATR Laos.\nພວກເຮົາຂໍຕິດຕາມການໃຊ້ງານລົດ ${owner.model} (ປ້າຍທະບຽນ: ${owner.plateNumber || 'ກຳແພງນະຄອນ'}). ທ່ານຕ້ອງການນັດໝາຍກວດເຊັກສະພາບລົດ ຫຼື ມີຂໍ້ສອບຖາມເພີ່ມເຕີມບໍ່?`;
+                            const message = `ສະບາຍດີ ທ່ານ ${owner.customerName}, ຈາກສູນບໍລິການຫຼັງການຂາຍ AVATR Laos.\nພວກເຮົາຂໍຕິດຕາມການໃຊ້ງານລົດ ${owner.model} ${owner.plateNumber ? ` (ປ້າຍທະບຽນ: ${owner.plateNumber})` : ''}. ທ່ານຕ້ອງການນັດໝາຍກວດເຊັກສະພາບລົດ ຫຼື ມີຂໍ້ສອບຖາມເພີ່ມເຕີມບໍ່?`;
                             openWhatsApp(owner.phone, message);
                           }}
                           className="px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
@@ -2517,16 +2749,19 @@ export default function CustomerView({
         ) : (
           /* DEDICATED TAB 3: INSTALLMENT & FINANCE CUSTOMERS VIEW */
           <div className="space-y-6">
+            {renderDateSearch()}
             <InstallmentDashboardView
-              leads={leads.filter(l => matchesCrmTime(l.paymentDate || l.createdAt))}
+              hideTextSearch
+              leads={leads.filter(l => (isActiveInstallmentLead(l) || (isInstallmentCompleted(l) && isLeadInstallment(l))) && matchesCrmTime(l.paymentDate || l.createdAt) && leadMatchesSearch(l))}
               setLeads={setLeads}
-              bills={bills.filter(b => matchesCrmTime(b.date))}
+              bills={bills.filter(b => matchesCrmTime(b.date) && billMatchesSearch(b))}
               setBills={setBills}
               vehicles={vehicles}
               currentUser={currentUser}
               lang={lang}
-              onNavigateMenu={onNavigateMenu || ((menu) => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined)}
+              onNavigateMenu={onNavigateMenu || (() => onSelectCustomerForPOS ? onSelectCustomerForPOS() : undefined)}
               onNavigateTab={(tab) => setCustomerClassificationTab(tab)}
+              onOpenCustomer={openCustomerDetail}
             />
           </div>
         )}
@@ -2536,8 +2771,9 @@ export default function CustomerView({
       {selectedCustomerForDocs && (
         <CustomerDocumentsModal
           isOpen={!!selectedCustomerForDocs}
-          onClose={() => setSelectedCustomerForDocs(null)}
-          customer={selectedCustomerForDocs}
+          onClose={() => { setSelectedCustomerForDocs(null); setDocsInitialDoc(undefined); }}
+          customer={withVehicleFromBills(selectedCustomerForDocs, bills)}
+          initialDoc={docsInitialDoc}
           vehicles={vehicles}
           currentUser={currentUser}
           lang={lang}
@@ -2569,6 +2805,34 @@ export default function CustomerView({
           currentUser={currentUser}
           lang={lang}
           onConfirmPayment={handleConfirmCustomerPayment}
+        />
+      )}
+
+      {/* Booking deposit / vehicle delivery */}
+      {pipelineAction && (() => {
+        const target = leads.find(l => l.id === pipelineAction.leadId);
+        return target ? (
+          <PipelineActionModal
+            mode={pipelineAction.mode}
+            lead={target}
+            staffName={currentUser?.name}
+            staffOptions={Array.from(new Set(leads.map(l => l.assignedTo).filter((n): n is string => Boolean(n))))}
+            lang={lang}
+            onClose={() => setPipelineAction(null)}
+            onSave={handlePipelineSave}
+          />
+        ) : null;
+      })()}
+
+      {/* Contact Log & Follow-up Modal */}
+      {contactLead && (
+        <ContactLogModal
+          lead={leads.find(l => l.id === contactLead.id) || contactLead}
+          staffName={currentUser?.name}
+          isAdmin={isAdminUser}
+          lang={lang}
+          onClose={() => setContactLead(null)}
+          onSave={handleSaveContactLog}
         />
       )}
 
@@ -2610,13 +2874,12 @@ export default function CustomerView({
           isOpen={!!serviceModalCustomer}
           onClose={() => setServiceModalCustomer(null)}
           onAddService={async (newService) => {
-            if (onAddService) {
-              await onAddService(newService);
-            }
-            setServiceModalCustomer(null);
-            showToast(`ບັນທຶກນັດໝາຍເຂົ້າສູນສຳເລັດສຳລັບ ${newService.customerName}`);
+            // Parent handler saves, toasts success/error, and throws on failure
+            // so the modal stays open with the user's input.
+            if (onAddService) await onAddService(newService);
           }}
           lang={lang}
+          modelOptions={vehicles.map(v => v.name)}
           initialCustomerName={serviceModalCustomer.name}
           initialPhone={serviceModalCustomer.phone}
           initialPlateNumber={serviceModalCustomer.plateNumber}

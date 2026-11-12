@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { SystemUser, Language } from '../../types';
+import { isAdminRole } from '../../utils/roles';
+import { SystemUser, Language, Lead } from '../../types';
 import { translations } from '../../data/translations';
 import UserManagementView from './UserManagementView';
 import { 
@@ -7,23 +8,17 @@ import {
   Mail, 
   Phone, 
   Building2, 
+  Hash,
   ShieldCheck, 
   Key, 
-  Lock, 
   Check, 
   LogOut, 
   Save, 
   X,
   Eye,
   EyeOff,
-  Users,
   AlertTriangle,
-  ArrowRight,
-  Crown,
-  Wrench,
-  TrendingUp,
   UserCheck,
-  Camera,
 } from 'lucide-react';
 import { saveUserToSupabase } from '../../supabase';
 import { supabase } from '../../backend/client';
@@ -36,6 +31,8 @@ interface ProfileViewProps {
   onClose?: () => void;
   users?: SystemUser[];
   setUsers?: React.Dispatch<React.SetStateAction<SystemUser[]>>;
+  leads?: Lead[];
+  setLeads?: React.Dispatch<React.SetStateAction<Lead[]>>;
 }
 
 export default function ProfileView({
@@ -46,6 +43,8 @@ export default function ProfileView({
   onClose,
   users = [],
   setUsers,
+  leads,
+  setLeads,
 }: ProfileViewProps) {
   const t = translations[lang] || translations.lo;
   const [activeTab, setActiveTab] = useState<'profile' | 'users'>('profile');
@@ -55,11 +54,8 @@ export default function ProfileView({
   const [phone, setPhone] = useState(currentUser.phone);
   const [email, setEmail] = useState(currentUser.email);
   const [department, setDepartment] = useState(currentUser.department);
-  const [avatarUrl, setAvatarUrl] = useState(currentUser.avatarUrl || '');
-  const [avatarError, setAvatarError] = useState<string | null>(null);
-  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const profileUserIdRef = useRef(currentUser.id);
-  const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
     if (profileUserIdRef.current === currentUser.id) return;
@@ -68,9 +64,7 @@ export default function ProfileView({
     setPhone(currentUser.phone);
     setEmail(currentUser.email);
     setDepartment(currentUser.department);
-    setAvatarUrl(currentUser.avatarUrl || '');
-    setAvatarError(null);
-    setSavedSuccess(false);
+    setProfileError(null);
     setIsPasswordModalOpen(false);
     setCurrentPassword('');
     setNewPassword('');
@@ -88,81 +82,46 @@ export default function ProfileView({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
-  const isSuperAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
-  const canManageUsers = isSuperAdmin || Boolean(currentUser.permissions?.canManageUsers);
+  const isSuperAdmin = isAdminRole(currentUser);
+  const canManageUsers = isSuperAdmin;
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    const initials = name
-      .trim()
-      .split(' ')
+    const cleanName = name.trim();
+    const cleanPhone = phone.trim();
+    if (!cleanName) {
+      setProfileError(lang === 'en' ? 'Please enter your full name.' : lang === 'th' ? 'กรุณากรอกชื่อ-นามสกุล' : 'ກະລຸນາປ້ອນຊື່ ແລະ ນາມສະກຸນ');
+      return;
+    }
+    if (!cleanPhone) {
+      setProfileError(lang === 'en' ? 'Please enter your phone number.' : lang === 'th' ? 'กรุณากรอกเบอร์โทรศัพท์' : 'ກະລຸນາປ້ອນເບີໂທລະສັບ');
+      return;
+    }
+    const initials = cleanName
+      .split(/\s+/)
       .map(part => part[0])
       .join('')
       .slice(0, 2)
       .toUpperCase() || currentUser.avatarInitials;
 
+    // Email is the login identity and is read-only here (changed only by an administrator).
     const updatedUser: SystemUser = {
       ...currentUser,
-      name,
-      phone,
-      email,
-      department,
+      name: cleanName,
+      phone: cleanPhone,
+      department: department.trim(),
       avatarInitials: initials,
-      avatarUrl,
     };
 
+    setProfileError(null);
     try {
       await saveUserToSupabase(updatedUser);
       onUpdateProfile(updatedUser);
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
+      setName(cleanName);
+      setPhone(cleanPhone);
     } catch (error) {
-      setAvatarError(error instanceof Error ? error.message : 'Profile could not be saved.');
+      setProfileError(error instanceof Error ? error.message : 'Profile could not be saved.');
     }
-  };
-
-  const handleAvatarChange = (file?: File) => {
-    setAvatarError(null);
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setAvatarError(lang === 'en' ? 'Choose an image file.' : lang === 'th' ? 'กรุณาเลือกไฟล์รูปภาพ' : 'ກະລຸນາເລືອກໄຟລ໌ຮູບພາບ');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setAvatarError(lang === 'en' ? 'Image must be 5 MB or smaller.' : lang === 'th' ? 'รูปภาพต้องมีขนาดไม่เกิน 5 MB' : 'ຮູບພາບຕ້ອງມີຂະໜາດບໍ່ເກີນ 5 MB');
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = () => {
-      const size = Math.min(image.naturalWidth, image.naturalHeight, 512);
-      const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      const context = canvas.getContext('2d');
-      if (!context) {
-        URL.revokeObjectURL(objectUrl);
-        setAvatarError(lang === 'en' ? 'Could not process this image. Try another file.' : lang === 'th' ? 'ไม่สามารถประมวลผลรูปภาพนี้ได้ กรุณาลองไฟล์อื่น' : 'ບໍ່ສາມາດປະມວນຜົນຮູບນີ້ໄດ້ ກະລຸນາລອງໄຟລ໌ອື່ນ');
-        return;
-      }
-      try {
-        const cropSize = Math.min(image.naturalWidth, image.naturalHeight);
-        const sourceX = (image.naturalWidth - cropSize) / 2;
-        const sourceY = (image.naturalHeight - cropSize) / 2;
-        context.drawImage(image, sourceX, sourceY, cropSize, cropSize, 0, 0, size, size);
-        setAvatarUrl(canvas.toDataURL('image/jpeg', 0.82));
-      } catch {
-        setAvatarError(lang === 'en' ? 'Could not process this image. Try another file.' : lang === 'th' ? 'ไม่สามารถประมวลผลรูปภาพนี้ได้ กรุณาลองไฟล์อื่น' : 'ບໍ່ສາມາດປະມວນຜົນຮູບນີ້ໄດ້ ກະລຸນາລອງໄຟລ໌ອື່ນ');
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      setAvatarError(lang === 'en' ? 'Could not read this image. Try another file.' : lang === 'th' ? 'ไม่สามารถเปิดรูปภาพนี้ได้ กรุณาลองไฟล์อื่น' : 'ບໍ່ສາມາດເປີດຮູບນີ້ໄດ້ ກະລຸນາລອງໄຟລ໌ອື່ນ');
-    };
-    image.src = objectUrl;
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -221,44 +180,21 @@ export default function ProfileView({
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-12">
-      <header className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-7">
-        <div className="pointer-events-none absolute -right-12 -top-16 h-56 w-56 rounded-full bg-amber-400/5 blur-3xl" />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-          <div className={`relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-xl font-bold shadow-sm ${
+    <div className="mx-auto max-w-6xl space-y-5 pb-12">
+      <header className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-gradient-to-br dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900 sm:p-6">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-amber-400/[0.04] blur-3xl" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-lg font-bold shadow-sm sm:h-16 sm:w-16 sm:text-xl ${
             isSuperAdmin
               ? 'border border-amber-400/30 bg-amber-400/10 text-amber-500'
               : 'border border-sky-400/30 bg-sky-400/10 text-sky-600 dark:text-sky-400'
           }`}>
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={`${currentUser.name} profile`} className="h-full w-full object-cover" />
-            ) : (
-              <span>{currentUser.avatarInitials || currentUser.name.slice(0, 2)}</span>
-            )}
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(event) => {
-                handleAvatarChange(event.target.files?.[0]);
-                event.target.value = '';
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => avatarInputRef.current?.click()}
-              aria-label={lang === 'en' ? 'Change profile photo' : lang === 'th' ? 'เปลี่ยนรูปโปรไฟล์' : 'ປ່ຽນຮູບໂປຣໄຟລ໌'}
-              title={lang === 'en' ? 'Change profile photo' : lang === 'th' ? 'เปลี่ยนรูปโปรไฟล์' : 'ປ່ຽນຮູບໂປຣໄຟລ໌'}
-              className="absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none always-white-text"
-            >
-              <Camera className="h-5 w-5 always-white-icon text-white" />
-            </button>
+            <span>{currentUser.avatarInitials || currentUser.name.slice(0, 2)}</span>
           </div>
           <div className="min-w-0">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">{currentUser.name}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white sm:text-2xl">{currentUser.name}</h1>
               {isSuperAdmin ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
                   <ShieldCheck className="h-3.5 w-3.5" /> Admin
@@ -280,14 +216,18 @@ export default function ProfileView({
                   : (lang === 'lo' ? 'ຖືກລະງັບ' : lang === 'th' ? 'ถูกระงับ' : 'Suspended')}</span>
               </span>
             </div>
-            <p className="text-sm leading-6 text-zinc-400">
-              {t.profileSubtitle}
-            </p>
-            <p className="mt-1 truncate text-xs text-zinc-500">
-              <span className="font-mono">ID: {currentUser.id}</span>
-              <span className="mx-2 text-zinc-600">•</span>
-              {t.memberDepartment}: {currentUser.department || '—'}
-            </p>
+            <dl className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-zinc-600 dark:text-zinc-400">
+              <div className="inline-flex min-w-0 items-center gap-1.5">
+                <Building2 aria-hidden="true" className="h-4 w-4 shrink-0" />
+                <dt className="shrink-0">{t.memberDepartment}:</dt>
+                <dd className="min-w-0 truncate font-semibold">{currentUser.department || '—'}</dd>
+              </div>
+              <div className="inline-flex min-w-0 items-center gap-1.5">
+                <Hash aria-hidden="true" className="h-4 w-4 shrink-0" />
+                <dt className="shrink-0">ID:</dt>
+                <dd className="truncate font-mono">{currentUser.id}</dd>
+              </div>
+            </dl>
           </div>
         </div>
 
@@ -318,13 +258,13 @@ export default function ProfileView({
 
       {/* Profile & User Governance Tabs (For Admin/Authorized) */}
       {canManageUsers && setUsers && (
-        <div role="tablist" aria-label={lang === 'lo' ? 'ເມນູໂປຣໄຟລ໌' : lang === 'th' ? 'เมนูโปรไฟล์' : 'Profile navigation'} className="flex items-center gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-950 p-1.5">
+        <div role="tablist" aria-label={lang === 'lo' ? 'ເມນູໂປຣໄຟລ໌' : lang === 'th' ? 'เมนูโปรไฟล์' : 'Profile navigation'} className="flex items-center gap-1 rounded-2xl border border-zinc-800 bg-zinc-950 p-1 sm:gap-1.5 sm:p-1.5">
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === 'profile'}
             onClick={() => setActiveTab('profile')}
-            className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:px-4 sm:text-sm ${
               activeTab === 'profile'
                 ? 'bg-zinc-800 text-white shadow-sm'
                 : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
@@ -339,7 +279,7 @@ export default function ProfileView({
             role="tab"
             aria-selected={activeTab === 'users'}
             onClick={() => setActiveTab('users')}
-            className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:px-4 sm:text-sm ${
               activeTab === 'users'
                 ? 'bg-zinc-800 text-white shadow-sm'
                 : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
@@ -365,58 +305,17 @@ export default function ProfileView({
             currentUser={currentUser}
             users={users}
             setUsers={setUsers}
+            leads={leads}
+            setLeads={setLeads}
             lang={lang}
           />
         </div>
       ) : (
         <div className="space-y-6 animate-fadeIn">
-          {savedSuccess && (
-            <div role="status" className="flex items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-700 animate-fadeIn">
-              <Check className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <span>{t.success}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
-            {/* Left Column: Edit Profile Form (2 cols) */}
-            <section className="space-y-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-7 lg:col-span-2">
-              <div className="flex items-start gap-3 border-b border-zinc-800 pb-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-600 dark:text-amber-400">
-                  <User className="h-5 w-5" />
-                </span>
-                <div>
-                  <h2 className="text-base font-semibold text-white">{t.profileTitle}</h2>
-                </div>
-              </div>
-
+          <div className="grid grid-cols-1 items-start gap-4">
+            <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm sm:p-6">
               <form onSubmit={handleSaveProfile} className="space-y-5">
-                <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-3">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-700 bg-zinc-800 text-base font-bold text-white">
-                    {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : (currentUser.avatarInitials || currentUser.name.slice(0, 2))}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-white">{lang === 'en' ? 'Profile photo' : lang === 'th' ? 'รูปโปรไฟล์' : 'ຮູບໂປຣໄຟລ໌'}</p>
-                    <p className="mt-0.5 text-xs text-zinc-400">{lang === 'en' ? 'Square crop · up to 5 MB' : lang === 'th' ? 'ครอบตัดเป็นสี่เหลี่ยม · ไม่เกิน 5 MB' : 'ຕັດຮູບເປັນສີ່ຫຼ່ຽມ · ບໍ່ເກີນ 5 MB'}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => avatarInputRef.current?.click()}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:border-zinc-500 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-                  >
-                    <Camera className="h-4 w-4" />
-                    <span>{lang === 'en' ? 'Choose photo' : lang === 'th' ? 'เลือกรูป' : 'ເລືອກຮູບ'}</span>
-                  </button>
-                  {avatarUrl && (
-                    <button
-                      type="button"
-                      onClick={() => { setAvatarUrl(''); setAvatarError(null); }}
-                      className="inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-xs font-semibold text-rose-500 transition hover:bg-rose-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
-                    >
-                      {lang === 'en' ? 'Remove' : lang === 'th' ? 'ลบรูป' : 'ລຶບຮູບ'}
-                    </button>
-                  )}
-                  {avatarError && <p role="alert" className="w-full text-xs text-rose-500">{avatarError}</p>}
-                </div>
+                {profileError && <p role="alert" className="text-xs text-rose-500">{profileError}</p>}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label htmlFor="profile-name" className="mb-2 block text-sm font-medium text-zinc-300">{t.authFullName}</label>
@@ -453,17 +352,16 @@ export default function ProfileView({
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="profile-email" className="mb-2 block text-sm font-medium text-zinc-300">Email <span className="text-rose-500">*</span></label>
+                    <label htmlFor="profile-email" className="mb-2 block text-sm font-medium text-zinc-300">Email</label>
                     <div className="relative">
                       <Mail aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                       <input
                         id="profile-email"
                         type="email"
-                        required
+                        readOnly
                         autoComplete="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 pl-10 pr-3 text-sm text-white outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                        className="min-h-11 w-full cursor-not-allowed rounded-xl border border-zinc-700 bg-zinc-900 pl-10 pr-3 text-sm text-zinc-400 outline-none"
                       />
                     </div>
                   </div>
@@ -508,84 +406,7 @@ export default function ProfileView({
               </form>
             </section>
 
-            {/* Right Column: Roles & Privileges Card (1 col) */}
-            <aside className="space-y-5">
-              <div className="h-full space-y-4 rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-6">
-                <div className="flex items-start gap-3 border-b border-zinc-800 pb-4">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-400/10 text-sky-600 dark:text-sky-400">
-                    <ShieldCheck className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <h2 className="text-base font-semibold text-white">{lang === 'lo' ? 'ສິດທິການໃຊ້ງານ' : lang === 'th' ? 'สิทธิ์การใช้งาน' : 'Permissions'}</h2>
-                    <p className="mt-1 text-sm text-zinc-400">{lang === 'lo' ? 'ສະຫຼຸບສິດທິຂອງບັນຊີ' : lang === 'th' ? 'สรุปสิทธิ์ของบัญชี' : 'Account access summary'}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
-                    <span className="text-sm leading-5 text-zinc-300">{lang === 'lo' ? 'ຈັດການຜູ້ໃຊ້ & ມອບສິດ' : lang === 'th' ? 'จัดการผู้ใช้ & มอบสิทธิ์' : 'User Governance'}</span>
-                    {currentUser.permissions?.canManageUsers ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        <Check className="h-3.5 w-3.5" /> {lang === 'lo' ? 'ອະນຸຍາດ' : lang === 'th' ? 'อนุญาต' : 'Granted'}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 text-xs text-zinc-500">{lang === 'lo' ? 'ບໍ່ມີສິດ' : lang === 'th' ? 'ไม่มีสิทธิ์' : 'Restricted'}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
-                    <span className="text-sm leading-5 text-zinc-300">{lang === 'lo' ? 'ແກ້ໄຂສະຕ໋ອກລົດຍົນ' : lang === 'th' ? 'แก้ไขสต็อกรถยนต์' : 'Edit Inventory'}</span>
-                    {currentUser.permissions?.canEditInventory ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        <Check className="h-3.5 w-3.5" /> {lang === 'lo' ? 'ອະນຸຍາດ' : lang === 'th' ? 'อนุญาต' : 'Granted'}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 text-xs text-zinc-500">{lang === 'lo' ? 'ບໍ່ມີສິດ' : lang === 'th' ? 'ไม่มีสิทธิ์' : 'Restricted'}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
-                    <span className="text-sm leading-5 text-zinc-300">{lang === 'lo' ? 'ຂາຍລົດ POS & ຕັດສະຕ໋ອກ' : lang === 'th' ? 'ขายรถ POS & ตัดสต็อก' : 'POS Sales'}</span>
-                    {currentUser.permissions?.canDeductPOS ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        <Check className="h-3.5 w-3.5" /> {lang === 'lo' ? 'ອະນຸຍາດ' : lang === 'th' ? 'อนุญาต' : 'Granted'}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 text-xs text-zinc-500">{lang === 'lo' ? 'ບໍ່ມີສິດ' : lang === 'th' ? 'ไม่มีสิทธิ์' : 'Restricted'}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
-                    <span className="text-sm leading-5 text-zinc-300">{lang === 'lo' ? 'ລົບຜູ້ໃຊ້ອອກຈາກລະບົບ' : lang === 'th' ? 'ลบผู้ใช้ออกจากระบบ' : 'Delete Users'}</span>
-                    {currentUser.permissions?.canDeleteUsers ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        <Check className="h-3.5 w-3.5" /> {lang === 'lo' ? 'ອະນຸຍາດ' : lang === 'th' ? 'อนุญาต' : 'Granted'}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 text-xs text-zinc-500">{lang === 'lo' ? 'ບໍ່ມີສິດ' : lang === 'th' ? 'ไม่มีสิทธิ์' : 'Restricted'}</span>
-                    )}
-                  </div>
-                </div>
-
-                {canManageUsers && (
-                  <div className="pt-3 border-t border-zinc-800">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('users')}
-                      className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
-                    >
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{t.manageUsersFromProfileBtn || 'ເຂົ້າສູ່ລະບົບຈັດການຜູ້ໃຊ້'}</span>
-                    </button>
-                  </div>
-                )}
-
-                <div className="border-t border-zinc-800 pt-4 text-xs text-zinc-500">
-                  {lang === 'lo' ? 'ເຂົ້າສູ່ລະບົບຫຼ້າສຸດ:' : lang === 'th' ? 'เข้าสู่ระบบล่าสุด:' : 'Last Login:'} {currentUser.lastLogin || new Date().toISOString().slice(0, 10)}
-                </div>
-              </div>
-            </aside>
-            </div>
+          </div>
           </div>
       )}
 

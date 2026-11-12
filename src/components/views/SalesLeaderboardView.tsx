@@ -1,27 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Trophy,
-  Medal,
-  TrendingUp,
-  Car,
-  Calendar,
-  Users,
-  ChevronRight,
-  ArrowUpRight,
-  DollarSign,
-  ShieldCheck,
-  Search,
-  Sparkles,
-  FileText,
-  CreditCard,
-  CheckCircle2,
-  X,
-  Award,
-  Filter,
-  Download
-} from 'lucide-react';
-import { InvoiceBillRecord, Lead, VehicleModel, SystemUser, Language, ActiveMenu } from '../../types';
-import { translations } from '../../data/translations';
+import { ChevronRight, Download, FileText, Search, X } from 'lucide-react';
+import type { InvoiceBillRecord, Lead, VehicleModel, SystemUser, Language, ActiveMenu } from '../../types';
+import MonthlyBrandReport from './MonthlyBrandReport';
+import { usePeriodBills } from '../../utils/usePeriodBills';
 import {
   computeLeaderboard,
   assignRanks,
@@ -47,49 +28,45 @@ export default function SalesLeaderboardView({
   bills,
   leads,
   vehicles,
-  currentUser,
   lang,
   initialPeriod,
   onPeriodChange,
   onNavigateMenu,
 }: SalesLeaderboardViewProps) {
-  const t = translations[lang];
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod || 'month');
-
-  useEffect(() => {
-    if (initialPeriod) {
-      setPeriod(initialPeriod);
-    }
-  }, [initialPeriod]);
-
-  const handleSelectPeriod = (p: LeaderboardPeriod) => {
-    setPeriod(p);
-    onPeriodChange?.(p);
-  };
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRep, setSelectedRep] = useState<RepPerformanceRecord | null>(null);
 
-  // Compute stats across reps (shared logic with dashboard widget)
+  useEffect(() => {
+    if (initialPeriod) setPeriod(initialPeriod);
+  }, [initialPeriod]);
+
+  useEffect(() => {
+    if (!selectedRep) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedRep(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedRep]);
+
+  const handleSelectPeriod = (nextPeriod: LeaderboardPeriod) => {
+    setPeriod(nextPeriod);
+    onPeriodChange?.(nextPeriod);
+  };
+
+  const { bills: periodBills, loading: loadingPeriodBills, limitHit } = usePeriodBills(bills, period);
   const leaderboardStats = useMemo(
-    () => computeLeaderboard(bills, leads, period),
-    [bills, leads, period],
+    () => computeLeaderboard(periodBills, leads, period),
+    [periodBills, leads, period],
   );
-
-  // Overall summary metrics
-  const totalPeriodUnits = useMemo(() => leaderboardStats.reduce((sum, r) => sum + r.totalUnits, 0), [leaderboardStats]);
-  const totalPeriodRevenueUSD = useMemo(() => leaderboardStats.reduce((sum, r) => sum + r.totalRevenueUSD, 0), [leaderboardStats]);
-  const totalPeriodRevenueLAK = useMemo(() => leaderboardStats.reduce((sum, r) => sum + r.totalRevenueLAK, 0), [leaderboardStats]);
-
-  // Search filter
   const filteredLeaderboard = useMemo(() => {
-    if (!searchQuery.trim()) return leaderboardStats;
-    const q = searchQuery.toLowerCase();
-    return leaderboardStats.filter(r => r.repName.toLowerCase().includes(q));
+    const query = searchQuery.trim().toLocaleLowerCase();
+    if (!query) return leaderboardStats;
+    return leaderboardStats.filter(rep => rep.repName.toLocaleLowerCase().includes(query));
   }, [leaderboardStats, searchQuery]);
-
-  const top1 = leaderboardStats[0];
-  const top2 = leaderboardStats[1];
-  const top3 = leaderboardStats[2];
 
   const periodLabels = {
     day: getPeriodLabel('day', lang),
@@ -100,20 +77,20 @@ export default function SalesLeaderboardView({
 
   const rankByRep = useMemo(() => {
     const ranks = assignRanks(leaderboardStats);
-    return new Map(leaderboardStats.map((r, i) => [r.repName, ranks[i]] as const));
+    return new Map(leaderboardStats.map((rep, index) => [rep.repName, ranks[index]] as const));
   }, [leaderboardStats]);
 
   const handleExportCsv = () => {
     if (leaderboardStats.length === 0) return;
     const headers = ['ອັນດັບ', 'ຊື່ທີ່ປຶກສາການຂາຍ', 'ຈຳນວນລົດທີ່ຂາຍ (ຄັນ)', 'ຍອດຂາຍລວມ (USD)', 'ຍອດຂາຍລວມ (LAK)', 'ລາຄາສະເລ່ຍ/ຄັນ (USD)', 'ອັດຕາປິດການຂາຍ %'];
-    const rows = leaderboardStats.map((r) => [
-      rankByRep.get(r.repName) || 1,
-      `"${r.repName.replace(/"/g, '""')}"`,
-      r.totalUnits,
-      r.totalRevenueUSD,
-      r.totalRevenueLAK,
-      r.avgDealSizeUSD,
-      `${r.conversionRate}%`
+    const rows = leaderboardStats.map(rep => [
+      rankByRep.get(rep.repName) || 1,
+      `"${rep.repName.replace(/"/g, '""')}"`,
+      rep.totalUnits,
+      rep.totalRevenueUSD,
+      rep.totalRevenueLAK,
+      rep.avgDealSizeUSD,
+      rep.conversionRate == null ? '-' : `${rep.conversionRate}%`,
     ]);
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -128,564 +105,291 @@ export default function SalesLeaderboardView({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner & Timeframe Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 shadow-xs">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
-            <span>ຈັດອັນດັບພະນັກງານຂາຍ Top Sales</span>
-          </h1>
-        </div>
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-zinc-800 dark:bg-zinc-950 sm:p-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">
+              ຈັດອັນດັບພະນັກງານຂາຍ Top Sales
+            </h1>
+            <p className="mt-1 text-sm text-slate-600 dark:text-zinc-400" role="status">
+              {loadingPeriodBills
+                ? (lang === 'lo' ? 'ກຳລັງໂຫຼດບິນຂອງຊ່ວງເວລານີ້...' : 'Loading bills for this period...')
+                : periodLabels[period]}
+            </p>
+            {limitHit && (
+              <p role="alert" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                {lang === 'lo'
+                  ? 'ຊ່ວງເວລານີ້ມີບິນເກີນ 1,000 ໃບ: ອັນດັບອາດບໍ່ຄົບ. ເລືອກ "ເດືອນນີ້" ເພື່ອໃຫ້ຖືກຕ້ອງ.'
+                  : 'This period has over 1,000 bills, so the ranking may be incomplete. Choose "This month" for exact figures.'}
+              </p>
+            )}
+          </div>
 
-        {/* Controls: Period Switcher & CSV Export */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex p-1 bg-slate-100 dark:bg-zinc-900 rounded-2xl border border-slate-200/80 dark:border-zinc-800">
-            {(['day', 'week', 'month', 'year'] as LeaderboardPeriod[]).map(p => (
-              <button
-                key={p}
-                onClick={() => handleSelectPeriod(p)}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${period === p
-                  ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs font-bold'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-zinc-800 dark:bg-zinc-900 sm:flex">
+              {(['day', 'week', 'month', 'year'] as LeaderboardPeriod[]).map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => handleSelectPeriod(option)}
+                  aria-pressed={period === option}
+                  className={`min-h-11 cursor-pointer rounded-lg px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    period === option
+                      ? 'bg-white text-slate-900 shadow-xs dark:bg-zinc-800 dark:text-white'
+                      : 'text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white'
                   }`}
-              >
-                {p === 'day' ? 'ວັນນີ້' : p === 'week' ? 'ອາທິດນີ້' : p === 'month' ? 'ເດືອນນີ້' : 'ປີນີ້'}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={handleExportCsv}
-            disabled={leaderboardStats.length === 0}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 transition-colors cursor-pointer disabled:opacity-50"
-            title="Export CSV"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>{lang === 'lo' ? 'ສົ່ງອອກ CSV' : lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Stat Cards (Bento Strip) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1: Total Units Sold */}
-        <div className="bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 text-xs mb-3">
-            <span className="font-medium">ຈຳນວນລົດຂາຍລວມ ({periodLabels[period]})</span>
-            <span className="p-2.5 bg-blue-50 dark:bg-zinc-900 text-blue-600 dark:text-white rounded-2xl">
-              <Car className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-slate-900 dark:text-white">{totalPeriodUnits}</span>
-            <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">ຄັນ</span>
-          </div>
-          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 text-[11px] text-slate-500 dark:text-zinc-400 font-mono">
-            {leaderboardStats.length} ທີ່ປຶກສາການຂາຍທີ່ມີຍອດ
-          </div>
-        </div>
-
-        {/* Metric 2: Total Revenue USD */}
-        <div className="bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 text-xs mb-3">
-            <span className="font-medium">ຍອດຂາຍລວມ USD</span>
-            <span className="p-2.5 bg-emerald-50 dark:bg-zinc-900 text-emerald-600 dark:text-white rounded-2xl">
-              <DollarSign className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
-              ${totalPeriodRevenueUSD.toLocaleString()}
-            </span>
-            <span className="text-xs font-mono font-bold text-emerald-600">USD</span>
-          </div>
-        </div>
-
-        {/* Metric 3: Top Sales Champion */}
-        <div className="bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 text-xs mb-3">
-            <span className="font-medium flex items-center gap-1.5">
-              <span>ແຊັມຍອດຂາຍອັນດັບ 1</span>
-            </span>
-            <span className="p-2.5 bg-amber-50 dark:bg-zinc-900 text-amber-600 dark:text-white rounded-2xl">
-              <Trophy className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2 min-h-[2.25rem] sm:min-h-[2.5rem] items-center">
-            <span className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate" title={top1?.repName}>
-              {top1 ? top1.repName : 'ຍັງບໍ່ມີ'}
-            </span>
-          </div>
-          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 text-[11px] font-mono text-slate-500 dark:text-zinc-400 flex justify-between">
-            <span>{top1 ? `${top1.totalUnits} ຄັນ` : '-'}</span>
-            <span className="font-bold text-slate-900 dark:text-white">{top1 ? `$${top1.totalRevenueUSD.toLocaleString()}` : '-'}</span>
-          </div>
-        </div>
-
-        {/* Metric 4: Average Deal Size */}
-        <div className="bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 text-xs mb-3">
-            <span className="font-medium">ລາຄາສະເລ່ຍຕໍ່ຄັນ</span>
-            <span className="p-2.5 bg-purple-50 dark:bg-zinc-900 text-purple-600 dark:text-white rounded-2xl">
-              <TrendingUp className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
-              ${totalPeriodUnits > 0 ? Math.round(totalPeriodRevenueUSD / totalPeriodUnits).toLocaleString() : '0'}
-            </span>
-            <span className="text-xs font-mono text-slate-500">USD/ຄັນ</span>
-          </div>
-          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 text-[11px] text-slate-500 dark:text-zinc-400 font-mono">
-            AVATR 11, AVATR 12, AVATR 07
-          </div>
-        </div>
-      </div>
-
-      {/* TOP 3 PODIUM DISPLAY */}
-      {leaderboardStats.length > 0 && (
-        <div className="dashboard-panel bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 shadow-sm">
-          <div className="text-center max-w-md mx-auto mb-6">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 mb-2">
-              <Award className="w-3.5 h-3.5 text-amber-500" />
-              <span>THE AVATR SALES PODIUM</span>
+                >
+                  {option === 'day' ? 'ວັນນີ້' : option === 'week' ? 'ອາທິດນີ້' : option === 'month' ? 'ເດືອນນີ້' : 'ປີນີ້'}
+                </button>
+              ))}
             </div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
-              ແທ່ນກຽດຕິຍົດ 3 ອັນດັບສູງສຸດ ({periodLabels[period]})
-            </h2>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end max-w-5xl mx-auto pt-4">
-            {/* 2nd Place Podium */}
-            {top2 ? (
-              <div
-                onClick={() => setSelectedRep(top2)}
-                className="order-2 md:order-1 relative rounded-2xl p-6 bg-gradient-to-b from-slate-100/90 via-slate-50 to-white dark:from-zinc-900 dark:via-zinc-925 dark:to-zinc-950 border-2 border-slate-300 dark:border-zinc-700 hover:border-slate-400 dark:hover:border-zinc-500 transition-all cursor-pointer group shadow-sm hover:shadow-md"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <span className="px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-slate-200 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300 border border-slate-300 dark:border-zinc-600">
-                    ອັນດັບ 2 • ເງິນ (Silver)
-                  </span>
-                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 flex items-center justify-center font-black font-mono text-sm border border-slate-300 dark:border-zinc-600 shadow-xs">
-                    2
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="w-13 h-13 rounded-2xl bg-slate-200 dark:bg-zinc-700 border-2 border-slate-400 dark:border-zinc-500 flex items-center justify-center font-black text-slate-900 dark:text-white text-base font-mono shrink-0 shadow-xs">
-                    {top2.avatarInitials}
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-base text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                      {top2.repName}
-                    </h3>
-                    <span className="text-xs text-slate-500 dark:text-zinc-400">ທີ່ປຶກສາການຂາຍ</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-200/80 dark:border-zinc-800/80 font-mono">
-                  <div>
-                    <span className="text-[10px] text-slate-500 dark:text-zinc-500 block uppercase">ຈຳນວນລົດ</span>
-                    <span className="text-xl font-black text-slate-900 dark:text-white">{top2.totalUnits} ຄັນ</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 dark:text-zinc-500 block uppercase">ຍອດເງິນຂາຍ</span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white block">${top2.totalRevenueUSD.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 text-center">
-                  <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold inline-flex items-center gap-1 group-hover:underline">
-                    <span>ກົດເບິ່ງລາຍການຂາຍ</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="order-2 md:order-1 h-44 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800 flex items-center justify-center text-xs text-slate-400 dark:text-zinc-600">
-                ວ່າງ
-              </div>
-            )}
-
-            {/* 1st Place Podium (Gold - Center) */}
-            {top1 && (
-              <div
-                onClick={() => setSelectedRep(top1)}
-                className="order-1 md:order-2 relative rounded-3xl p-7 bg-gradient-to-b from-amber-500/15 via-amber-500/5 to-white dark:to-zinc-950 border-2 border-amber-500/70 hover:border-amber-500 dark:hover:border-amber-400 transition-all cursor-pointer group shadow-lg hover:shadow-xl scale-100 md:-translate-y-3"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-mono font-black bg-amber-500 text-white shadow-sm">
-                    <Trophy className="w-4 h-4 text-white" />
-                    <span>ອັນດັບ 1 • TOP SALES CHAMPION</span>
-                  </span>
-                  <div className="w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center font-black font-mono text-base shadow-sm ring-2 ring-amber-300 dark:ring-amber-400/50">
-                    1
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 mb-5">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center font-black text-xl font-mono shadow-md shrink-0 ring-4 ring-amber-200 dark:ring-amber-500/40">
-                    {top1.avatarInitials}
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-black text-lg text-slate-900 dark:text-white truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                      {top1.repName}
-                    </h3>
-                    <span className="text-xs text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1.5 mt-0.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                      <span>ຍອດຂາຍສູງສຸດປະຈຳ{periodLabels[period]}</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-amber-200/80 dark:border-zinc-800/80 font-mono">
-                  <div>
-                    <span className="text-[10px] text-slate-500 dark:text-zinc-400 block uppercase font-bold">ຈຳນວນລົດທີ່ຂາຍ</span>
-                    <span className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400">{top1.totalUnits} ຄັນ</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 dark:text-zinc-400 block uppercase font-bold">ຍອດເງິນຂາຍ</span>
-                    <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white block">${top1.totalRevenueUSD.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="mt-5 pt-3.5 border-t border-amber-100 dark:border-zinc-800 text-center">
-                  <span className="text-xs text-amber-700 dark:text-amber-400 font-bold inline-flex items-center gap-1 group-hover:underline">
-                    <span>ກົດເບິ່ງ Drill-down ລາຍການຂາຍທັງໝົດ</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* 3rd Place Podium */}
-            {top3 ? (
-              <div
-                onClick={() => setSelectedRep(top3)}
-                className="order-3 relative rounded-2xl p-6 bg-gradient-to-b from-amber-900/10 via-amber-950/5 to-white dark:from-zinc-900 dark:via-zinc-925 dark:to-zinc-950 border-2 border-amber-800/30 dark:border-amber-800/40 hover:border-amber-700/60 transition-all cursor-pointer group shadow-sm hover:shadow-md"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <span className="px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                    ອັນດັບ 3 • ທອງແດງ (Bronze)
-                  </span>
-                  <div className="w-8 h-8 rounded-full bg-amber-800/20 text-amber-900 dark:text-amber-300 flex items-center justify-center font-black font-mono text-sm border border-amber-700/30 shadow-xs">
-                    3
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className="w-13 h-13 rounded-2xl bg-amber-100 dark:bg-amber-950/80 text-amber-950 dark:text-amber-100 border-2 border-amber-300 dark:border-amber-700 flex items-center justify-center font-black text-base font-mono shrink-0 shadow-xs">
-                    {top3.avatarInitials}
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-base text-slate-900 dark:text-white truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                      {top3.repName}
-                    </h3>
-                    <span className="text-xs text-slate-500 dark:text-zinc-400">ທີ່ປຶກສາການຂາຍ</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-200/80 dark:border-zinc-800/80 font-mono">
-                  <div>
-                    <span className="text-[10px] text-slate-500 dark:text-zinc-500 block uppercase">ຈຳນວນລົດ</span>
-                    <span className="text-xl font-black text-slate-900 dark:text-white">{top3.totalUnits} ຄັນ</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 dark:text-zinc-500 block uppercase">ຍອດເງິນຂາຍ</span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white block">${top3.totalRevenueUSD.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 text-center">
-                  <span className="text-xs text-amber-700 dark:text-amber-400 font-semibold inline-flex items-center gap-1 group-hover:underline">
-                    <span>ກົດເບິ່ງລາຍການຂາຍ</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="order-3 h-44 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800 flex items-center justify-center text-xs text-slate-400 dark:text-zinc-600">
-                ວ່າງ
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={leaderboardStats.length === 0}
+              className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              <span>{lang === 'lo' ? 'ສົ່ງອອກ CSV' : lang === 'th' ? 'ส่งออก CSV' : 'Export CSV'}</span>
+            </button>
           </div>
         </div>
-      )}
+      </section>
 
-      {/* DETAILED LEADERBOARD TABLE */}
-      <div className="dashboard-panel bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-zinc-800">
-          <div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
-              ຕາຕະລາງລາຍລະອຽດການຈັດອັນດັບ ({filteredLeaderboard.length} ທ່ານ)
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-950" aria-labelledby="leaderboard-table-title">
+        <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
+            <h2 id="leaderboard-table-title" className="text-lg font-bold text-slate-900 dark:text-white">
+              ຕາຕະລາງຈັດອັນດັບ
             </h2>
-            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-              ກົດໃສ່ແຖວຂອງພະນັກງານເພື່ອເບິ່ງລາຍການບິນ ແລະ ລົດທີ່ປິດການຂາຍໄດ້
+            <p className="mt-0.5 text-sm text-slate-600 dark:text-zinc-400">
+              {filteredLeaderboard.length} ທ່ານ
             </p>
           </div>
 
-          {/* Search Box */}
           <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-zinc-400" aria-hidden="true" />
+            <label className="sr-only" htmlFor="leaderboard-search">ຄົ້ນຫາຊື່ພະນັກງານຂາຍ</label>
             <input
-              type="text"
+              id="leaderboard-search"
+              type="search"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={event => setSearchQuery(event.target.value)}
               placeholder="ຄົ້ນຫາຊື່ພະນັກງານຂາຍ..."
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              autoComplete="off"
+              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-500 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder:text-zinc-400"
             />
           </div>
         </div>
 
         {filteredLeaderboard.length === 0 ? (
-          <div className="p-8 text-center text-slate-500 dark:text-zinc-400 text-xs">
-            ບໍ່ພົບຂໍ້ມູນທີ່ກົງກັບການຄົ້ນຫາ
+          <div role="status" className="px-6 py-14 text-center text-sm text-slate-600 dark:text-zinc-400">
+            {searchQuery.trim()
+              ? 'ບໍ່ພົບຊື່ພະນັກງານທີ່ກົງກັບການຄົ້ນຫາ'
+              : 'ຍັງບໍ່ມີຂໍ້ມູນການຂາຍໃນຊ່ວງເວລານີ້'}
           </div>
         ) : (
-          <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-400 font-mono uppercase text-[11px] font-bold">
-                  <tr>
-                    <th className="py-3 px-4 w-16 text-center">ອັນດັບ</th>
-                    <th className="py-3 px-4">ທີ່ປຶກສາການຂາຍ</th>
-                    <th className="py-3 px-4 text-center">ຈຳນວນລົດ (ຄັນ)</th>
-                    <th className="py-3 px-4">ຍອດຂາຍລວມ (USD / LAK)</th>
-                    <th className="py-3 px-4">ສະເລ່ຍ/ຄັນ</th>
-                    <th className="py-3 px-4 text-center">ອັດຕາປິດການຂາຍ</th>
-                    <th className="py-3 px-4 text-center">ລາຍການບິນ</th>
-                    <th className="py-3 px-4 text-right">ລາຍລະອຽດ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200/80 dark:divide-zinc-800/80 text-slate-800 dark:text-zinc-300">
-                  {filteredLeaderboard.map((r) => {
-                    const rank = rankByRep.get(r.repName) || 1;
-                    return (
-                      <tr
-                        key={r.repName}
-                        onClick={() => setSelectedRep(r)}
-                        className="hover:bg-slate-100/70 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-245 border-collapse text-sm">
+            <caption className="sr-only">ອັນດັບ ແລະ ຜົນງານຂອງທີ່ປຶກສາການຂາຍ</caption>
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-600 dark:bg-zinc-900/80 dark:text-zinc-300">
+              <tr className="border-b border-slate-200 dark:border-zinc-800">
+                <th scope="col" className="w-20 px-4 py-3 text-center">ອັນດັບ</th>
+                <th scope="col" className="min-w-56 px-4 py-3 text-left">ທີ່ປຶກສາການຂາຍ</th>
+                <th scope="col" className="px-4 py-3 text-right">ຈຳນວນລົດ</th>
+                <th scope="col" className="min-w-48 px-4 py-3 text-right">ຍອດຂາຍລວມ</th>
+                <th scope="col" className="px-4 py-3 text-right">ສະເລ່ຍ/ຄັນ (USD)</th>
+                <th scope="col" className="px-4 py-3 text-center">ອັດຕາປິດການຂາຍ</th>
+                <th scope="col" className="px-4 py-3 text-right">ລາຍການບິນ</th>
+                <th scope="col" className="w-36 px-4 py-3 text-right">ລາຍລະອຽດ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-slate-700 dark:divide-zinc-800 dark:text-zinc-300">
+              {filteredLeaderboard.map(rep => {
+                const rank = rankByRep.get(rep.repName) || 1;
+                return (
+                  <tr key={rep.repName} className="transition-colors hover:bg-slate-50 dark:hover:bg-zinc-900/70">
+                    <td className="px-4 py-4 text-center">
+                      <span
+                        aria-label={`ອັນດັບ ${rank}`}
+                        className={`inline-flex h-8 min-w-8 items-center justify-center rounded-full px-2 font-semibold tabular-nums ${
+                          rank === 1
+                            ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200'
+                            : rank === 2
+                              ? 'bg-slate-200 text-slate-800 dark:bg-zinc-800 dark:text-zinc-200'
+                              : rank === 3
+                                ? 'bg-orange-100 text-orange-900 dark:bg-orange-950/60 dark:text-orange-200'
+                                : 'text-slate-600 dark:text-zinc-400'
+                        }`}
                       >
-                        <td className="py-3.5 px-4 text-center">
-                          {rank === 1 ? (
-                            <span className="w-7 h-7 rounded-full bg-amber-500 text-white font-black font-mono text-xs inline-flex items-center justify-center shadow-xs">
-                              1
-                            </span>
-                          ) : rank === 2 ? (
-                            <span className="w-7 h-7 rounded-full bg-slate-200 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 font-black font-mono text-xs inline-flex items-center justify-center border border-slate-300 dark:border-zinc-600">
-                              2
-                            </span>
-                          ) : rank === 3 ? (
-                            <span className="w-7 h-7 rounded-full bg-amber-900/20 text-amber-900 dark:text-amber-300 font-black font-mono text-xs inline-flex items-center justify-center border border-amber-700/30">
-                              3
-                            </span>
-                          ) : (
-                            <span className="font-mono font-bold text-slate-500 dark:text-zinc-500">
-                              #{rank}
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-slate-200 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 font-mono font-bold text-xs flex items-center justify-center shrink-0 border border-slate-300 dark:border-zinc-700">
-                              {r.avatarInitials}
-                            </div>
-                            <div className="min-w-0">
-                              <span className="font-bold text-slate-900 dark:text-white block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                {r.repName}
-                              </span>
-                              <span className="text-[11px] text-slate-500 dark:text-zinc-400">ທີ່ປຶກສາການຂາຍ</span>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center font-mono">
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                            {r.totalUnits} ຄັນ
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4 font-mono">
-                          <span className="font-black text-slate-900 dark:text-white block">
-                            ${r.totalRevenueUSD.toLocaleString()} USD
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4 font-mono text-slate-600 dark:text-zinc-400">
-                          ${r.avgDealSizeUSD.toLocaleString()}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center font-mono">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            {r.conversionRate}%
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-zinc-500 block mt-0.5">
-                            ປິດ {r.deliveredLeadsCount}/{r.deliveredLeadsCount + r.activeLeadsCount}
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center font-mono text-slate-600 dark:text-zinc-400">
-                          {r.salesBreakdown.length} ໃບບິນ
-                        </td>
-
-                        <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedRep(r);
-                            }}
-                            className="px-3 py-1.5 bg-white hover:bg-slate-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-900 dark:text-white rounded-lg text-xs font-bold transition-colors border border-slate-200 dark:border-zinc-700 shadow-2xs inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <span>ເບິ່ງການຂາຍ</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        {rank}
+                      </span>
+                    </td>
+                    <th scope="row" className="px-4 py-4 text-left font-medium">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-sm font-semibold text-slate-700 dark:bg-zinc-800 dark:text-zinc-200">
+                          {rep.avatarInitials}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold text-slate-900 dark:text-white">{rep.repName}</span>
+                          <span className="mt-0.5 block text-xs font-normal text-slate-600 dark:text-zinc-400">ທີ່ປຶກສາການຂາຍ</span>
+                        </span>
+                      </div>
+                    </th>
+                    <td className="px-4 py-4 text-right font-semibold tabular-nums text-slate-900 dark:text-white">
+                      {rep.totalUnits} ຄັນ
+                    </td>
+                    <td className="px-4 py-4 text-right tabular-nums">
+                      <span className="block font-semibold text-slate-900 dark:text-white">${rep.totalRevenueUSD.toLocaleString()} USD</span>
+                      <span className="mt-0.5 block text-xs text-slate-600 dark:text-zinc-400">{rep.totalRevenueLAK.toLocaleString()} LAK</span>
+                    </td>
+                    <td className="px-4 py-4 text-right tabular-nums">${rep.avgDealSizeUSD.toLocaleString()}</td>
+                    <td className="px-4 py-4 text-center tabular-nums">
+                      <span className="font-semibold text-slate-900 dark:text-white">
+                        {rep.conversionRate == null ? '—' : `${rep.conversionRate}%`}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-600 dark:text-zinc-400">
+                        ປິດ {rep.deliveredLeadsCount}/{rep.deliveredLeadsCount + rep.activeLeadsCount}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-right tabular-nums">
+                      {rep.salesBreakdown.length}
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRep(rep)}
+                        aria-label={`ເບິ່ງລາຍການຂາຍຂອງ ${rep.repName}`}
+                        className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        <span>ເບິ່ງການຂາຍ</span>
+                        <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            </table>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* DRILL-DOWN MODAL FOR SELECTED REP */}
+      <MonthlyBrandReport bills={bills} leads={leads} vehicles={vehicles} lang={lang} />
+
       {selectedRep && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-zinc-900/50">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white font-black text-lg font-mono flex items-center justify-center shadow-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setSelectedRep(null)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="leaderboard-detail-title"
+            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
+            onClick={event => event.stopPropagation()}
+          >
+            <header className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-zinc-800 sm:px-6">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 font-semibold text-slate-800 dark:bg-zinc-800 dark:text-white">
                   {selectedRep.avatarInitials}
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                    <span>{selectedRep.repName}</span>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
-                      {selectedRep.totalUnits} ຄັນ
-                    </span>
+                </span>
+                <div className="min-w-0">
+                  <h3 id="leaderboard-detail-title" className="truncate text-lg font-bold text-slate-900 dark:text-white">
+                    {selectedRep.repName}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400">
-                    ລາຍລະອຽດການປິດການຂາຍຕົວຈິງປະຈຳ{periodLabels[period]}
+                  <p className="text-sm text-slate-600 dark:text-zinc-400">
+                    {periodLabels[period]} · {selectedRep.totalUnits} ຄັນ
                   </p>
                 </div>
               </div>
-
               <button
+                type="button"
                 onClick={() => setSelectedRep(null)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                aria-label="ປິດລາຍລະອຽດ"
+                className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" aria-hidden="true" />
               </button>
-            </div>
+            </header>
 
-            {/* Modal Body: Stats Strip + Bill Breakdown */}
-            <div className="p-6 overflow-y-auto space-y-6">
-              {/* Mini Stats Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800 font-mono">
-                  <span className="text-[10px] uppercase text-slate-500 dark:text-zinc-500 block">ລົດທີ່ຂາຍອອກ</span>
-                  <span className="text-xl font-black text-slate-900 dark:text-white">{selectedRep.totalUnits} ຄັນ</span>
+            <div className="space-y-6 overflow-y-auto p-5 sm:p-6">
+              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-zinc-900">
+                  <dt className="text-xs text-slate-600 dark:text-zinc-400">ລົດທີ່ຂາຍອອກ</dt>
+                  <dd className="mt-1 font-semibold text-slate-900 dark:text-white">{selectedRep.totalUnits} ຄັນ</dd>
                 </div>
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800 font-mono">
-                  <span className="text-[10px] uppercase text-slate-500 dark:text-zinc-500 block">ຍອດຂາຍລວມ</span>
-                  <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">${selectedRep.totalRevenueUSD.toLocaleString()}</span>
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-zinc-900">
+                  <dt className="text-xs text-slate-600 dark:text-zinc-400">ຍອດຂາຍລວມ</dt>
+                  <dd className="mt-1 font-semibold text-slate-900 dark:text-white">${selectedRep.totalRevenueUSD.toLocaleString()}</dd>
                 </div>
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800 font-mono">
-                  <span className="text-[10px] uppercase text-slate-500 dark:text-zinc-500 block">ສະເລ່ຍ/ຄັນ</span>
-                  <span className="text-xl font-black text-slate-900 dark:text-white">${selectedRep.avgDealSizeUSD.toLocaleString()}</span>
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-zinc-900">
+                  <dt className="text-xs text-slate-600 dark:text-zinc-400">ສະເລ່ຍ/ຄັນ</dt>
+                  <dd className="mt-1 font-semibold text-slate-900 dark:text-white">${selectedRep.avgDealSizeUSD.toLocaleString()}</dd>
                 </div>
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800 font-mono">
-                  <span className="text-[10px] uppercase text-slate-500 dark:text-zinc-500 block">ອັດຕາປິດການຂາຍ</span>
-                  <span className="text-xl font-black text-blue-600 dark:text-blue-400">{selectedRep.conversionRate}%</span>
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-zinc-900">
+                  <dt className="text-xs text-slate-600 dark:text-zinc-400">ອັດຕາປິດການຂາຍ</dt>
+                  <dd className="mt-1 font-semibold text-slate-900 dark:text-white">
+                    {selectedRep.conversionRate == null ? '—' : `${selectedRep.conversionRate}%`}
+                  </dd>
                 </div>
-              </div>
+              </dl>
 
-              {/* Bill List */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400">
-                  ລາຍການບິນ & ລົດທີ່ປິດໄດ້ ({selectedRep.salesBreakdown.length} ລາຍການ)
+              <div>
+                <h4 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">
+                  ລາຍການບິນ ({selectedRep.salesBreakdown.length})
                 </h4>
-
                 {selectedRep.salesBreakdown.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-slate-500 border border-dashed rounded-2xl">
+                  <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-600 dark:border-zinc-700 dark:text-zinc-400">
                     ບໍ່ພົບລາຍການບິນ
-                  </div>
+                  </p>
                 ) : (
-                  <div className="space-y-2.5">
-                    {selectedRep.salesBreakdown.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 space-y-2"
-                      >
+                  <ul className="divide-y divide-slate-200 dark:divide-zinc-800">
+                    {selectedRep.salesBreakdown.map(item => (
+                      <li key={item.id} className="space-y-2 py-4 first:pt-0 last:pb-0">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-xs text-slate-900 dark:text-white">
-                              {item.billNumber}
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                              {item.paymentMethod === 'finance' ? 'ຜ່ອນຊຳລະ / Finance' : item.paymentMethod === 'transfer' ? 'ໂອນ QR' : 'ເງິນສົດ'}
-                            </span>
-                          </div>
-                          <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">
-                            {item.date || 'N/A'}
-                          </span>
+                          <span className="font-semibold text-slate-900 dark:text-white">{item.billNumber}</span>
+                          <span className="text-sm text-slate-600 dark:text-zinc-400">{item.date || 'N/A'}</span>
                         </div>
-
-                        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div className="flex flex-wrap items-start justify-between gap-3 text-sm">
                           <div>
-                            <span className="font-bold text-slate-900 dark:text-white block">{item.customerName}</span>
-                            <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-mono">ໂທ: {item.customerPhone}</span>
+                            <p className="font-medium text-slate-900 dark:text-white">{item.customerName}</p>
+                            <p className="text-slate-600 dark:text-zinc-400">ໂທ: {item.customerPhone}</p>
                           </div>
-
-                          <div className="text-right">
-                            <span className="font-bold text-slate-900 dark:text-white block">{item.model}</span>
-                            <span className="text-[10px] font-mono text-slate-500 dark:text-zinc-500 block">VIN: {item.vin.slice(0, 14)}...</span>
+                          <div className="sm:text-right">
+                            <p className="font-medium text-slate-900 dark:text-white">{item.model}</p>
+                            <p className="text-xs text-slate-600 dark:text-zinc-400">VIN: {item.vin.slice(0, 14)}...</p>
                           </div>
-
-                          <div className="text-right font-mono">
-                            <span className="font-black text-sm text-slate-900 dark:text-white block">
-                              ${item.amountUSD.toLocaleString()} USD
-                            </span>
-                          </div>
+                          <p className="font-semibold tabular-nums text-slate-900 dark:text-white">${item.amountUSD.toLocaleString()} USD</p>
                         </div>
-
-                        {item.notes && (
-                          <div className="text-[11px] text-slate-500 dark:text-zinc-400 pt-2 border-t border-slate-200/60 dark:border-zinc-800/60">
-                            ໝາຍເຫດ: {item.notes}
-                          </div>
-                        )}
-                      </div>
+                        {item.notes && <p className="border-t border-slate-100 pt-2 text-sm text-slate-600 dark:border-zinc-800 dark:text-zinc-400">ໝາຍເຫດ: {item.notes}</p>}
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/50 flex justify-between items-center">
+            <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-900/60 sm:px-6">
               <button
+                type="button"
                 onClick={() => {
                   setSelectedRep(null);
                   onNavigateMenu('bills');
                 }}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-bold inline-flex items-center gap-1 cursor-pointer"
+                className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-300"
               >
-                <FileText className="w-3.5 h-3.5" />
+                <FileText className="h-4 w-4" aria-hidden="true" />
                 <span>ໄປທີ່ໜ້າບັນທຶກບິນທັງໝົດ</span>
               </button>
-
               <button
+                type="button"
                 onClick={() => setSelectedRep(null)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                className="min-h-11 cursor-pointer rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 ປິດ
               </button>
-            </div>
-          </div>
+            </footer>
+          </section>
         </div>
       )}
     </div>

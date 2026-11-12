@@ -1,4 +1,5 @@
 import type {
+  ContactLogEntry,
   InventoryItem,
   InvoiceBillRecord,
   Lead,
@@ -6,7 +7,6 @@ import type {
   StockLogRecord,
   SystemUser,
   TestDriveBooking,
-  UserPermissions,
   UserRole,
   VehicleModel,
 } from '../types';
@@ -24,7 +24,6 @@ function requireOfflineDemo() {
 import {
   DEFAULT_OFFLINE_USERS,
   getOfflineBackendData,
-  offlineClearActiveUser,
   offlineDeactivateUser,
   offlineDeleteBill,
   offlineDeleteInventoryItem,
@@ -37,14 +36,17 @@ import {
   offlineSaveInventoryItem,
   offlineSaveLead,
   offlineSaveService,
+  offlineSaveSettingsPatch,
   offlineSaveTestDrive,
   offlineSaveUser,
   offlineSaveVehicleModel,
   offlineSignIn,
-  offlineSignUp,
 } from './offlineStore';
 import { AVATR_VEHICLES } from '../data/mockData';
 import { newRecordId } from './ids';
+import { normalizeRole, ROLE_LABELS, NO_ROLE_MESSAGE } from '../utils/roles';
+import { showToast } from '../components/common/Toast';
+import { localRangeToUtc } from '../utils/search';
 
 const isUuid = (val?: string | null): val is string => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val));
 import {
@@ -80,55 +82,77 @@ export interface BackendData {
   warnings: string[];
 }
 
-const roleLabels: Record<UserRole, string> = {
-  super_admin: 'Admin',
-  admin: 'Admin',
-  sales: 'Sales',
-  technician: 'Technician',
-  general_user: 'General User',
-};
-
-const rolePermissions = (row: DbRow | undefined): UserPermissions => ({
-  canManageUsers: Boolean(row?.canManageUsers),
-  canDeleteUsers: Boolean(row?.canDeleteUsers),
-  canGrantRoles: Boolean(row?.canGrantRoles),
-  canEditInventory: Boolean(row?.canEditInventory),
-  canUploadQR: Boolean(row?.canUploadQR),
-  canAddModels: Boolean(row?.canAddModels),
-  canDeductPOS: Boolean(row?.canDeductPOS),
-  canViewFinancials: Boolean(row?.canViewFinancials),
-  canUpdatePDI: Boolean(row?.canUpdatePDI),
-  canViewVehicles: Boolean(row?.canViewVehicles),
-});
-
 const initials = (name: string) => name.trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
-export function mapStaffProfile(profile: DbRow, permissionRow?: DbRow): SystemUser {
-  const role = (profile.role || 'general_user') as UserRole;
+/**
+ * Accounts whose stored role is neither Admin nor Sales (old Technician / General User accounts) have no access:
+ * they are shown as suspended Sales accounts until an Admin assigns a role and re-activates them.
+ */
+export function mapStaffProfile(profile: DbRow): SystemUser {
+  const role = normalizeRole(profile.role);
   return {
     id: profile.id,
     name: (profile.name || profile.email || 'Staff').replace(/Super\s*Admin/gi, 'Admin').trim(),
     email: profile.email || '',
     phone: profile.phone || '',
-    role,
-    roleTitleLo: (roleLabels[role] || roleLabels.general_user).replace(/Super\s*Admin/gi, 'Admin'),
+    role: role || 'sales',
+    dbRole: profile.role || undefined,
+    roleTitleLo: ROLE_LABELS[role || 'sales'],
     department: profile.department || '',
     avatarInitials: initials(profile.name || profile.email || 'S'),
-    permissions: rolePermissions(permissionRow),
-    status: profile.status === 'active' ? 'active' : 'suspended',
+    status: role && profile.status === 'active' ? 'active' : 'suspended',
     createdAt: profile.created_at || new Date().toISOString(),
     lastLogin: profile.last_login || undefined,
   };
 }
 
-let cachedStaffRoles: DbRow[] | null = null;
+/** Role to send when saving: keep a legacy 'super_admin' as it is, since it already means Admin. */
+function roleForSave(user: SystemUser): string {
+  return user.role === 'admin' && user.dbRole === 'super_admin' ? 'super_admin' : user.role;
+}
+
+/**
+ * Some fields need a database migration. Without it they are dropped when saving, so other accounts never see them.
+ * Tell staff once per session (the console logs every time).
+ */
+const warnedMigrations = new Set<string>();
+function warnMissingColumns(migration: string, what: string) {
+  console.warn(`${what} not saved to the database; apply migration ${migration}`);
+  if (warnedMigrations.has(migration)) return;
+  warnedMigrations.add(migration);
+  showToast(`ບັນທຶກແລ້ວ ແຕ່ ${what} ບໍ່ໄດ້ເຂົ້າຖານຂໍ້ມູນ (ບັນຊີອື່ນຈະບໍ່ເຫັນ). ກະລຸນາແຈ້ງ Admin ໃຫ້ apply migration ${migration}`, 'warning');
+}
+
+function sanitizeContactHistory(history: ContactLogEntry[]): Record<string, unknown>[] {
+  return history.slice(-500).map(e => ({
+    id: sanitizeText(e.id, 80),
+    at: sanitizeText(e.at, 40),
+    type: e.type,
+    note: sanitizeText(e.note, 1000),
+    by: sanitizeText(e.by, 120) || null,
+  }));
+}
+
+/**
+ * Contact history is shared: another account may have added entries since this copy was loaded.
+ * Keep every entry already in the database, add ours, and drop only entries removed on purpose.
+ */
+function mergeContactHistory(mine: ContactLogEntry[], latest: ContactLogEntry[], removedIds: string[] = []): ContactLogEntry[] {
+  const removed = new Set(removedIds);
+  const byId = new Map<string, ContactLogEntry>();
+  latest.forEach(e => { if (e?.id) byId.set(e.id, e); });
+  mine.forEach(e => { if (e?.id) byId.set(e.id, e); });
+  return Array.from(byId.values())
+    .filter(e => !removed.has(e.id))
+    .sort((a, b) => (a.at || '').localeCompare(b.at || ''));
+}
+
 let cachedVehicleModels: DbRow[] | null = null;
 let cachedStaffUsers: SystemUser[] | null = null;
 let activeStaffPromise: { userId: string; promise: Promise<SystemUser> } | null = null;
 let cachedStaffUser: { userId: string; user: SystemUser; timestamp: number } | null = null;
 
 export function clearStaffCache() {
-  cachedStaffRoles = null;
   activeStaffPromise = null;
   cachedStaffUser = null;
 }
@@ -147,27 +171,22 @@ export async function getSignedInStaff(userId: string): Promise<SystemUser> {
 
   const promise = (async () => {
     const client = requireSupabase();
-    const [profileRes, rolesRes] = await Promise.all([
-      client
-        .from('staff_profiles')
-        .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
-        .eq('id', userId)
-        .maybeSingle(),
-      cachedStaffRoles
-        ? Promise.resolve({ data: cachedStaffRoles, error: null })
-        : client.from('staff_roles').select('role_code,permissions'),
-    ]);
+    const profileRes = await client
+      .from('staff_profiles')
+      .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
+      .eq('id', userId)
+      .maybeSingle();
 
     if (profileRes.error) throw profileRes.error;
     const profile = profileRes.data;
     if (!profile || profile.status !== 'active') {
       throw new Error('This login does not have an active staff profile. Ask the administrator to set up access.');
     }
-    if (rolesRes.error) throw rolesRes.error;
-    if (!cachedStaffRoles && rolesRes.data) cachedStaffRoles = rolesRes.data;
+    if (!normalizeRole(profile.role)) {
+      throw new Error(NO_ROLE_MESSAGE);
+    }
 
-    const matchedRole = (cachedStaffRoles || []).find((r: DbRow) => r.role_code === profile.role);
-    const mapped = mapStaffProfile(profile, matchedRole?.permissions);
+    const mapped = mapStaffProfile(profile);
     cachedStaffUser = { userId, user: mapped, timestamp: Date.now() };
     return mapped;
   })();
@@ -202,38 +221,6 @@ export async function signInStaff(email: string, password: string, captchaToken?
   }
 }
 
-export async function signUpStaff(
-  email: string,
-  password: string,
-  name: string,
-  phone: string,
-  captchaToken?: string
-): Promise<SystemUser> {
-  if (!isSupabaseConfigured) {
-    requireOfflineDemo();
-    return offlineSignUp(email, name, phone);
-  }
-  const client = requireSupabase();
-  const { data, error } = await client.auth.signUp({
-    email: email.trim().toLowerCase(),
-    password,
-    options: {
-      data: { name: sanitizeText(name, 120), phone: sanitizePhone(phone, 30) },
-      captchaToken,
-      emailRedirectTo: typeof window !== "undefined" ? (window.location.origin + "/") : "https://avatrautoservice.bcsa7968.workers.dev/",
-    },
-  });
-  if (error) throw error;
-  if (!data.user) throw new Error('Sign-up did not return a user.');
-  if (!data.session) throw new Error('Account created. Confirm the email, then sign in.');
-  try {
-    return await getSignedInStaff(data.user.id);
-  } catch (profileError) {
-    await client.auth.signOut();
-    throw new Error('Account created and pending administrator approval.');
-  }
-}
-
 export async function createStaffAccount(input: {
   name: string;
   email: string;
@@ -244,28 +231,15 @@ export async function createStaffAccount(input: {
 }): Promise<SystemUser> {
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
-    const isAdmin = input.role === 'admin' || input.role === 'super_admin';
     const newUser: SystemUser = {
       id: `offline-user-${Date.now()}`,
       name: input.name,
       email: input.email.toLowerCase(),
       phone: input.phone,
       role: input.role,
-      roleTitleLo: roleLabels[input.role] || 'General User',
+      roleTitleLo: ROLE_LABELS[input.role],
       department: input.department,
       avatarInitials: (input.name || 'US').slice(0, 2).toUpperCase(),
-      permissions: {
-        canManageUsers: isAdmin,
-        canDeleteUsers: isAdmin,
-        canGrantRoles: isAdmin,
-        canEditInventory: isAdmin || input.role === 'technician',
-        canUploadQR: isAdmin,
-        canAddModels: isAdmin,
-        canDeductPOS: isAdmin || input.role === 'sales',
-        canViewFinancials: isAdmin || input.role === 'sales',
-        canUpdatePDI: isAdmin || input.role === 'technician',
-        canViewVehicles: true,
-      },
       status: 'active',
       createdAt: new Date().toISOString(),
     };
@@ -291,7 +265,7 @@ export async function createStaffAccount(input: {
   if (!data?.profile) {
     throw new Error(data?.error || 'Could not create the staff account.');
   }
-  const mapped = mapStaffProfile(data.profile, data.permissions);
+  const mapped = mapStaffProfile(data.profile);
   offlineSaveUser(mapped);
   return mapped;
 }
@@ -301,6 +275,7 @@ function mapVehicleModel(row: DbRow): VehicleModel {
   return {
     id: row.id,
     name: row.name || row.id,
+    brand: row.brand || 'AVATR',
     subTitle: row.subtitle || '',
     tagline: row.tagline || '',
     category: row.category || '',
@@ -329,6 +304,12 @@ function mapInventoryItem(row: DbRow, modelById: Map<string, VehicleModel>): Inv
   return {
     vin: row.vin,
     engineNumber: row.engine_number || undefined,
+    frontMotorNumber: row.front_motor_number || undefined,
+    rearMotorNumber: row.rear_motor_number || undefined,
+    powertrainType: row.powertrain_type === 'BEV' || row.powertrain_type === 'REEV' ? row.powertrain_type : undefined,
+    incomingBatch: row.incoming_batch || undefined,
+    expectedArrivalDate: row.expected_arrival_date || undefined,
+    issueNote: row.issue_note || undefined,
     model: model?.name || row.model_id || '',
     plateNumber: row.plate_number || '',
     color: row.color || '',
@@ -410,7 +391,31 @@ function mapLead(row: DbRow, modelById: Map<string, VehicleModel>, staffById: Ma
     createdAt: row.created_at || '',
     lastFollowUp: row.last_follow_up || undefined,
     testDriveDate: row.next_test_drive_at || undefined,
+    // Pipeline columns (migration 20261109120000); absent until it is applied
+    nextFollowUpAt: row.next_follow_up_at || undefined,
+    contactHistory: Array.isArray(row.contact_history) ? row.contact_history : undefined,
+    bookingDepositUSD: row.booking_deposit_usd == null ? undefined : Number(row.booking_deposit_usd),
+    bookingPaymentMethod: row.booking_payment_method || undefined,
+    bookingDate: row.booking_date || undefined,
+    bookingNote: row.booking_note || undefined,
+    // Excel-parity columns (migration 20261110120000)
+    listPriceUSD: row.list_price_usd == null ? undefined : Number(row.list_price_usd),
+    discountUSD: row.discount_usd == null ? undefined : Number(row.discount_usd),
+    deliveryWindow: row.delivery_window || undefined,
+    giftItems: Array.isArray(row.gift_items) && row.gift_items.length > 0 ? row.gift_items : undefined,
+    giftBudgetUSD: row.gift_budget_usd == null ? undefined : Number(row.gift_budget_usd),
+    vehicleDeliveredAt: row.vehicle_delivered_at || undefined,
+    vehicleDeliveredBy: row.vehicle_delivered_by || undefined,
+    deliveryNote: row.delivery_note || undefined,
   };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Bills store staff as account ids; show the staff name when it is known (falls back to the stored value). */
+function staffNameOf(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value) return undefined;
+  if (!UUID_RE.test(value)) return value;
+  return cachedStaffUsers?.find(u => u.id === value)?.name || undefined;
 }
 
 function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
@@ -456,6 +461,10 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
     tenureMonths: row.tenure_months || undefined,
     monthlyPaymentLAK: row.monthly_payment_lak == null ? undefined : Number(row.monthly_payment_lak),
     installmentPeriod: row.installment_period == null ? undefined : Number(row.installment_period),
+    // Not a DB column: derive it so receipts and down-payment bills stay distinguishable after reload.
+    installmentType: Number(row.installment_period) >= 1
+      ? 'monthly_installment'
+      : (row.bill_type === 'installment' ? 'down_payment' : undefined),
     freeGifts: gifts,
     warrantyTerms: row.warranty_terms || undefined,
     warrantyStartDate: row.warranty_start_date || undefined,
@@ -477,11 +486,41 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
     eventStartDate: item?.event_start_date || undefined,
     eventEndDate: item?.event_end_date || undefined,
     eventLocation: item?.event_location || undefined,
-    recordedBy: row.recorded_by || undefined,
+    recordedBy: staffNameOf(row.recorded_by),
+    salesRep: staffNameOf(row.sales_rep) || staffNameOf(row.recorded_by),
     notes: row.notes || undefined,
     status: (row.status as 'completed' | 'voided') || 'completed',
+    isArchived: row.is_archived === true ? true : undefined,
   };
 }
+
+/**
+ * Add the void reason / who / when (table bill_void_logs, migration 20261111120000_bill_void_reason) to voided bills.
+ * Without that migration the bills are returned unchanged.
+ */
+async function attachVoidInfo(bills: InvoiceBillRecord[]): Promise<InvoiceBillRecord[]> {
+  if (!isSupabaseConfigured) return bills;
+  const ids = bills.filter(b => b.status === 'voided').map(b => b.id);
+  if (ids.length === 0) return bills;
+  const client = requireSupabase();
+  const byId = new Map<string, DbRow>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await client
+      .from('bill_void_logs')
+      .select('bill_id,reason,voided_by_name,voided_at')
+      .in('bill_id', ids.slice(i, i + 200));
+    if (error) return bills; // table not created yet
+    (data || []).forEach((row: DbRow) => byId.set(row.bill_id, row));
+  }
+  if (byId.size === 0) return bills;
+  return bills.map(b => {
+    const log = byId.get(b.id);
+    return log ? { ...b, voidReason: log.reason, voidedBy: log.voided_by_name || undefined, voidedAt: log.voided_at } : b;
+  });
+}
+
+/** Most bills one date-range query returns; reaching it means the list may be incomplete. */
+export const BILL_QUERY_LIMIT = 1000;
 
 export async function fetchBillsByDateRange(params?: {
   dateFrom?: string;
@@ -494,7 +533,7 @@ export async function fetchBillsByDateRange(params?: {
   }
   const client = requireSupabase();
   const pageSize = 500;
-  const MAX_QUERY_LIMIT = 1000; // Hard ceiling to guard browser memory from unbounded date ranges
+  const MAX_QUERY_LIMIT = BILL_QUERY_LIMIT; // Hard ceiling to guard browser memory from unbounded date ranges
   let offset = 0;
   const allRows: DbRow[] = [];
   const targetTable = params?.includeArchived ? 'v_bills_10_year_audit' : 'bills';
@@ -522,10 +561,10 @@ export async function fetchBillsByDateRange(params?: {
     offset += pageSize;
   }
 
-  return allRows.map((row: DbRow) => {
+  return attachVoidInfo(allRows.map((row: DbRow) => {
     const firstItem = Array.isArray(row.bill_items) ? row.bill_items[0] : undefined;
     return mapBill(row, firstItem);
-  });
+  }));
 }
 
 export async function archiveFiscalYearBills(year: number): Promise<{
@@ -562,11 +601,13 @@ export async function fetchLeadsByDateRange(params?: {
       .order('created_at', { ascending: false })
       .range(offset, offset + pageSize - 1);
 
-    if (params?.dateFrom) {
-      query = query.gte('created_at', params.dateFrom);
+    // The dates are calendar days in Laos time; created_at is a UTC timestamp
+    const utcRange = localRangeToUtc(params?.dateFrom, params?.dateTo);
+    if (utcRange.from) {
+      query = query.gte('created_at', utcRange.from);
     }
-    if (params?.dateTo) {
-      query = query.lte('created_at', `${params.dateTo}T23:59:59`);
+    if (utcRange.to) {
+      query = query.lte('created_at', utcRange.to);
     }
 
     const { data, error } = await query;
@@ -583,6 +624,92 @@ export async function fetchLeadsByDateRange(params?: {
   const staffById = new Map((cachedStaffUsers || []).map((user) => [user.id, user]));
 
   return allRows.map((row: DbRow) => mapLead(row, modelById, staffById));
+}
+
+/** Read every row of a table page by page (PostgREST returns at most ~1000 rows per request). */
+async function fetchAllRows(table: 'vehicles' | 'customers'): Promise<{ data: DbRow[]; error: { message: string } | null }> {
+  const client = requireSupabase();
+  const pageSize = 1000;
+  const rows: DbRow[] = [];
+  for (let offset = 0; offset < 50000; offset += pageSize) {
+    const { data, error } = await client
+      .from(table)
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) return { data: rows, error };
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return { data: rows, error: null };
+}
+
+export const STOCK_HISTORY_PAGE_SIZE = 100;
+
+/**
+ * One page of stock movement history, newest first, with the bill (price, customer, voided or not) and the car.
+ * Bills are looked up separately: the archive keeps no foreign key from stock_movements to bills, and older
+ * bills are not in the app's first 100, which used to show $0 and no customer.
+ */
+export async function fetchStockMovements(
+  offset = 0,
+  limit = STOCK_HISTORY_PAGE_SIZE,
+  ctx?: { staffById?: Map<string, SystemUser>; modelById?: Map<string, VehicleModel> }
+): Promise<StockLogRecord[]> {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    return getOfflineBackendData().stockLogs.slice(offset, offset + limit);
+  }
+  const client = requireSupabase();
+  const { data: movements, error } = await client
+    .from('stock_movements')
+    .select('*, vehicles(model_id, plate_number, color)')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw error;
+  const rows = movements || [];
+
+  const billIds = [...new Set(rows.map((m: DbRow) => m.bill_id).filter(Boolean))] as string[];
+  const billById = new Map<string, DbRow>();
+  for (let i = 0; i < billIds.length; i += 100) {
+    const chunk = billIds.slice(i, i + 100);
+    const { data: bills } = await client
+      .from('v_bills_10_year_audit')
+      .select('id,customer_name,customer_phone,payment_method,status,notes,bill_items')
+      .in('id', chunk);
+    (bills || []).forEach((b: DbRow) => billById.set(b.id, b));
+  }
+
+  const staffById = ctx?.staffById || new Map((cachedStaffUsers || []).map(u => [u.id, u]));
+  const modelById = ctx?.modelById || new Map(((cachedVehicleModels || []).map(mapVehicleModel)).map(m => [m.id, m]));
+
+  return rows.map((movement: DbRow): StockLogRecord => {
+    const bill = billById.get(movement.bill_id);
+    const items = Array.isArray(bill?.bill_items) ? bill!.bill_items : [];
+    const item = items.find((it: DbRow) => it.vehicle_vin === movement.vehicle_vin) || items[0];
+    const vehicle = movement.vehicles as DbRow | null;
+    const model = (vehicle?.model_id && modelById.get(vehicle.model_id)?.name) || item?.model_name;
+    const staff = staffById.get(movement.recorded_by);
+    return {
+      id: movement.id,
+      billId: movement.bill_id || undefined,
+      type: movement.movement_type,
+      vin: movement.vehicle_vin,
+      model: model || '',
+      plateNumber: vehicle?.plate_number || item?.plate_number || '',
+      color: vehicle?.color || item?.color || '',
+      quantity: 1,
+      priceUSD: Number(item?.unit_price_usd) || 0,
+      priceLAK: Number(item?.unit_price_lak) || 0,
+      timestamp: movement.created_at,
+      recordedBy: staff?.name || movement.recorded_by || '',
+      customerName: bill?.customer_name || undefined,
+      customerPhone: bill?.customer_phone || undefined,
+      paymentMethod: bill?.payment_method || undefined,
+      notes: movement.notes || bill?.notes || undefined,
+      billVoided: bill?.status === 'voided' || undefined,
+    };
+  });
 }
 
 let activeLoadBackendPromise: Promise<BackendData> | null = null;
@@ -619,7 +746,6 @@ export async function loadBackendData(
       let modelsData: DbRow[] = [];
       let inventoryData: DbRow[] = [];
       let customersData: DbRow[] = [];
-      let rolesData: DbRow[] = [];
       let settingsConfig: Record<string, unknown> = {};
 
       const [rpcInit, profilesResult] = await Promise.all([
@@ -631,19 +757,16 @@ export async function loadBackendData(
         modelsData = rpcInit.data.models || [];
         inventoryData = rpcInit.data.vehicles || [];
         customersData = rpcInit.data.customers || [];
-        rolesData = rpcInit.data.roles || [];
         settingsConfig = rpcInit.data.settings?.config || rpcInit.data.settings || {};
       } else {
         // Graceful fallback to individual queries if RPC is not available
-        const [modelsResult, inventoryResult, customersResult, rolesResult, settingsResult] = await Promise.all([
+        const [modelsResult, inventoryResult, customersResult, settingsResult] = await Promise.all([
           cachedVehicleModels
             ? Promise.resolve({ data: cachedVehicleModels, error: null })
             : client.from('vehicle_models').select('id,name,subtitle,tagline,category,price_starting_usd,price_starting_lak,is_custom,colors,features,description,created_at').order('name'),
-          client.from('vehicles').select('*').order('created_at', { ascending: false }).range(0, 99),
-          client.from('customers').select('*').order('created_at', { ascending: false }).range(0, 99),
-          cachedStaffRoles
-            ? Promise.resolve({ data: cachedStaffRoles, error: null })
-            : client.from('staff_roles').select('role_code,permissions'),
+          // Every account must see the whole stock and customer list, so no 100-row cap here
+          fetchAllRows('vehicles'),
+          fetchAllRows('customers'),
           client.from('dealership_settings').select('config').eq('id', true).maybeSingle(),
         ]);
 
@@ -654,22 +777,21 @@ export async function loadBackendData(
         modelsData = modelsResult.data || [];
         inventoryData = inventoryResult.data || [];
         customersData = customersResult.data || [];
-        rolesData = rolesResult.data || [];
         settingsConfig = settingsResult.data?.config || {};
       }
 
       const profiles = profilesResult.error ? [] : (profilesResult.data || []);
-      if (rolesData.length > 0) cachedStaffRoles = rolesData;
       if (modelsData.length > 0) cachedVehicleModels = modelsData;
-      const permissionsByRole = new Map(rolesData.map((row: DbRow) => [row.role_code, row.permissions]));
-      const users = profiles.map((row: DbRow) => mapStaffProfile(row, permissionsByRole.get(row.role)));
+      const users = profiles.map((row: DbRow) => mapStaffProfile(row));
       if (users.length > 0) cachedStaffUsers = users;
       const staffById = new Map(users.map((user) => [user.id, user]));
       const dbModels = modelsData.map(mapVehicleModel);
       const models = dbModels.length > 0 ? dbModels : AVATR_VEHICLES;
       const modelById = new Map(models.map((model) => [model.id, model]));
-      const inventory = inventoryData.map((row: DbRow) => mapInventoryItem(row, modelById));
-      const inventoryByVin = new Map(inventoryData.map((row: DbRow) => [row.vin, row]));
+      // Cars whose import bill was voided stay in the database for history but are not stock
+      const inventory = inventoryData
+        .filter((row: DbRow) => row.status !== 'removed')
+        .map((row: DbRow) => mapInventoryItem(row, modelById));
       const leads = customersData.map((row: DbRow) => mapLead(row, modelById, staffById));
 
       // Yield Tier 1 immediately to all listeners
@@ -687,17 +809,20 @@ export async function loadBackendData(
       // Tier 2: Transactional logs, appointments, test drives, and bills (Paginated to 100 most recent records)
       const [billsResult, movementsResult, servicesResult, testDrivesResult] = await Promise.all([
         client.from('bills').select('*, bill_items(*)').order('bill_date', { ascending: false }).range(0, 99),
-        client.from('stock_movements').select('*').order('created_at', { ascending: false }).range(0, 99),
-        client.from('service_appointments').select('*').order('scheduled_date', { ascending: true }).range(0, 99),
-        client.from('test_drives').select('*').order('drive_date', { ascending: true }).range(0, 99),
+        fetchStockMovements(0, STOCK_HISTORY_PAGE_SIZE, { staffById, modelById })
+          .then(data => ({ data, error: null as { message: string } | null }))
+          .catch((error: { message?: string }) => ({ data: [] as StockLogRecord[], error: { message: error?.message || 'stock history' } })),
+        // Latest 100 (upcoming and recent). Ascending order would keep only the oldest 100 and hide new bookings.
+        client.from('service_appointments').select('*').order('scheduled_date', { ascending: false }).range(0, 99),
+        client.from('test_drives').select('*').order('drive_date', { ascending: false }).range(0, 99),
       ]);
 
       if (billsResult.error) throw billsResult.error;
 
-      const bills = (billsResult.data || []).map((row: DbRow) => {
+      const bills = await attachVoidInfo((billsResult.data || []).map((row: DbRow) => {
         const firstItem = Array.isArray(row.bill_items) ? row.bill_items[0] : undefined;
         return mapBill(row, firstItem);
-      });
+      }));
       const services = (servicesResult.error ? [] : (servicesResult.data || [])).map((row: DbRow): ServiceAppointment => ({
         id: row.id,
         customerName: row.customer_name,
@@ -725,33 +850,23 @@ export async function loadBackendData(
         salesRep: row.sales_rep || '',
         status: row.status,
       }));
-      const billById = new Map((billsResult.data || []).map((bill: DbRow) => [bill.id, bill]));
-      const stockLogs = (movementsResult.error ? [] : (movementsResult.data || [])).map((movement: DbRow): StockLogRecord => {
-        const bill = billById.get(movement.bill_id) as DbRow | undefined;
-        const item = Array.isArray(bill?.bill_items) ? bill.bill_items[0] : undefined;
-        const vehicle = inventoryByVin.get(movement.vehicle_vin);
-        const model = vehicle ? modelById.get(vehicle.model_id)?.name : item?.model_name;
-        const staff = staffById.get(movement.recorded_by);
-        return {
-          id: movement.id,
-          type: movement.movement_type,
-          vin: movement.vehicle_vin,
-          model: model || '',
-          plateNumber: vehicle?.plate_number || item?.plate_number || '',
-          color: vehicle?.color || item?.color || '',
-          quantity: 1,
-          priceUSD: Number(item?.unit_price_usd) || 0,
-          priceLAK: Number(item?.unit_price_lak) || 0,
-          timestamp: movement.created_at,
-          recordedBy: staff?.name || movement.recorded_by || '',
-          customerName: bill?.customer_name || undefined,
-          customerPhone: bill?.customer_phone || undefined,
-          paymentMethod: bill?.payment_method || undefined,
-          notes: movement.notes || bill?.notes || undefined,
-        };
-      });
+      const stockLogs: StockLogRecord[] = movementsResult.error ? [] : movementsResult.data;
+
+      const schemaWarnings: string[] = [];
+      if (!rpcInit.error && (customersData.length === 250 || inventoryData.length === 500)) {
+        schemaWarnings.push('ຖານຂໍ້ມູນສົ່ງລູກຄ້າໄດ້ສູງສຸດ 250 ຄົນ / ລົດ 500 ຄັນ: ຂໍ້ມູນທີ່ເກີນຈະບໍ່ສະແດງ. ກະລຸນາ apply migration 20261110120000_excel_parity_fields.');
+      }
+      if (customersData.length > 0 && !('contact_history' in customersData[0])) {
+        schemaWarnings.push('ຖານຂໍ້ມູນຍັງບໍ່ມີຖັນປະຫວັດການຕິດຕໍ່/ມັດຈຳ/ສົ່ງມອບ: ກະລຸນາ apply migration 20261109120000_customer_pipeline_fields.');
+      } else if (customersData.length > 0 && !('gift_items' in customersData[0])) {
+        schemaWarnings.push('ຖານຂໍ້ມູນຍັງບໍ່ມີຖັນລາຄາ/ຂອງແຖມ ຂອງລູກຄ້າ: ກະລຸນາ apply migration 20261110120000_excel_parity_fields.');
+      }
+      if (inventoryData.length > 0 && !('front_motor_number' in inventoryData[0])) {
+        schemaWarnings.push('ຖານຂໍ້ມູນຍັງບໍ່ມີຖັນເລກມໍເຕີ/ລອດ ຂອງລົດ: ກະລຸນາ apply migration 20261110120000_excel_parity_fields.');
+      }
 
       const warnings = [
+        ...schemaWarnings,
         servicesResult.error ? `Service appointments could not be loaded: ${servicesResult.error.message}` : null,
         testDrivesResult.error ? `Test drives could not be loaded: ${testDrivesResult.error.message}` : null,
       ].filter((warning): warning is string => Boolean(warning));
@@ -886,16 +1001,30 @@ export async function linkTestDriveToCustomer(bookingId: string, phone: string) 
 }
 
 export async function saveDealershipSettingsPatch(patch: Record<string, unknown>, actorId: string) {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    return offlineSaveSettingsPatch(patch);
+  }
   const client = requireSupabase();
   const { data: existing, error: readError } = await client.from('dealership_settings').select('config').eq('id', true).maybeSingle();
   if (readError) throw readError;
   const config = { ...((existing?.config || {}) as DbRow), ...patch };
-  const { error } = await client.from('dealership_settings').upsert({ id: true, config, updated_by: actorId });
+  // .select() makes a write that row-level security silently ignored come back empty instead of looking successful.
+  const { data: saved, error } = await client.from('dealership_settings').upsert({ id: true, config, updated_by: actorId }).select('config');
   if (error) throw error;
+  if (!saved || saved.length === 0) {
+    throw new Error('ບັນທຶກການຕັ້ງຄ່າບໍລິສັດບໍ່ສຳເລັດ: ບັນຊີນີ້ບໍ່ມີສິດແກ້ໄຂ');
+  }
   return config;
 }
 
-export async function saveLead(lead: Lead, assignedStaffId: string, saleBill?: InvoiceBillRecord) {
+/** Saves a customer and returns the saved copy (its contact history merged with the latest one in the database). */
+export async function saveLead(
+  lead: Lead,
+  assignedStaffId: string,
+  saleBill?: InvoiceBillRecord,
+  options?: { removedContactIds?: string[] }
+): Promise<Lead> {
   if (saleBill && !isSupabaseConfigured) {
     throw new Error(
       'Atomic POS sales require Supabase. Offline mode is demo-only.'
@@ -904,7 +1033,7 @@ export async function saveLead(lead: Lead, assignedStaffId: string, saleBill?: I
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
     offlineSaveLead(lead);
-    return;
+    return lead;
   }
   const client = requireSupabase();
 
@@ -1049,6 +1178,34 @@ export async function saveLead(lead: Lead, assignedStaffId: string, saleBill?: I
     after_sales_notes: sanitizeText(lead.afterSalesNotes, 1000) || null,
   };
 
+  // Pipeline columns (migration 20261109120000_customer_pipeline_fields)
+  const pipelineLeadPayload: Record<string, unknown> = {
+    ...extendedLeadPayload,
+    next_follow_up_at: sanitizeText(lead.nextFollowUpAt, 10) || null,
+    contact_history: sanitizeContactHistory(Array.isArray(lead.contactHistory) ? lead.contactHistory : []),
+    booking_deposit_usd: lead.bookingDepositUSD != null ? sanitizeNumber(lead.bookingDepositUSD, 0) : null,
+    booking_payment_method: lead.bookingPaymentMethod === 'cash' || lead.bookingPaymentMethod === 'transfer' ? lead.bookingPaymentMethod : null,
+    booking_date: sanitizeText(lead.bookingDate, 10) || null,
+    booking_note: sanitizeText(lead.bookingNote, 500) || null,
+    vehicle_delivered_at: sanitizeText(lead.vehicleDeliveredAt, 10) || null,
+    vehicle_delivered_by: sanitizeText(lead.vehicleDeliveredBy, 120) || null,
+    delivery_note: sanitizeText(lead.deliveryNote, 1000) || null,
+  };
+
+  // Excel-parity columns (migration 20261110120000_excel_parity_fields)
+  const parityLeadPayload: Record<string, unknown> = {
+    ...pipelineLeadPayload,
+    list_price_usd: lead.listPriceUSD != null ? sanitizeNumber(lead.listPriceUSD, 0) : null,
+    discount_usd: lead.discountUSD != null ? sanitizeNumber(lead.discountUSD, 0) : null,
+    delivery_window: sanitizeText(lead.deliveryWindow, 120) || null,
+    gift_items: Array.isArray(lead.giftItems)
+      ? lead.giftItems.slice(0, 30)
+          .map(g => ({ name: sanitizeText(g.name, 120), costUSD: sanitizeNumber(g.costUSD, 0) }))
+          .filter(g => g.name)
+      : [],
+    gift_budget_usd: lead.giftBudgetUSD != null ? sanitizeNumber(lead.giftBudgetUSD, 0) : null,
+  };
+
   if (saleBill) {
     await saveBillRecord(
       saleBill,
@@ -1057,19 +1214,46 @@ export async function saveLead(lead: Lead, assignedStaffId: string, saleBill?: I
       extendedLeadPayload
     );
     offlineSaveLead({ ...lead, id: safeLeadId });
-    return;
+    return { ...lead, id: safeLeadId };
   }
 
-  let { error } = await client.from('customers').upsert(extendedLeadPayload);
-  if (error && (error.code === 'PGRST204' || error.message?.includes('column'))) {
+  // Merge contact history with the copy in the database so entries added by other accounts are never overwritten
+  let savedHistory: ContactLogEntry[] = Array.isArray(lead.contactHistory) ? lead.contactHistory : [];
+  {
+    const latest = await client.from('customers').select('contact_history').eq('id', safeLeadId).maybeSingle();
+    if (!latest.error) {
+      const latestHistory = Array.isArray(latest.data?.contact_history) ? latest.data.contact_history as ContactLogEntry[] : [];
+      savedHistory = mergeContactHistory(savedHistory, latestHistory, options?.removedContactIds);
+    } else if (options?.removedContactIds?.length) {
+      savedHistory = savedHistory.filter(e => !options.removedContactIds!.includes(e.id));
+    }
+    pipelineLeadPayload.contact_history = sanitizeContactHistory(savedHistory);
+    parityLeadPayload.contact_history = pipelineLeadPayload.contact_history;
+  }
+
+  const isMissingColumn = (e: { code?: string; message?: string } | null) =>
+    Boolean(e && (e.code === 'PGRST204' || e.code === '42703' || e.message?.includes('column')));
+
+  let { error } = await client.from('customers').upsert(parityLeadPayload);
+  if (isMissingColumn(error)) {
+    warnMissingColumns('20261110120000_excel_parity_fields', 'ຂໍ້ມູນລາຄາ/ສ່ວນຫຼຸດ/ຂອງແຖມ ຂອງລູກຄ້າ');
+    ({ error } = await client.from('customers').upsert(pipelineLeadPayload));
+  }
+  if (isMissingColumn(error)) {
+    // Pipeline migration not applied yet: save everything else
+    warnMissingColumns('20261109120000_customer_pipeline_fields', 'ປະຫວັດການຕິດຕໍ່/ມັດຈຳ/ສົ່ງມອບ ຂອງລູກຄ້າ');
+    ({ error } = await client.from('customers').upsert(extendedLeadPayload));
+  }
+  if (isMissingColumn(error)) {
     // Fallback if new after-sales columns have not been migrated on the remote DB yet
-    const retry = await client.from('customers').upsert(baseLeadPayload);
-    error = retry.error;
+    ({ error } = await client.from('customers').upsert(baseLeadPayload));
   }
   if (error) throw error;
 
+  const saved: Lead = { ...lead, id: safeLeadId, contactHistory: savedHistory };
   // Sync offline store for instant local cache availability
-  offlineSaveLead({ ...lead, id: safeLeadId });
+  offlineSaveLead(saved);
+  return saved;
 }
 
 export async function updateLeadStatus(id: string, status: Lead['status']) {
@@ -1165,7 +1349,22 @@ export async function saveInventoryItem(item: InventoryItem) {
     promotion_discount_usd: sanitizeNumber(item.promotionDiscountUSD, 0),
     promotion_notes: sanitizeText(item.promotionNotes, 500) || null,
   };
+  // Excel-parity columns (migration 20261110120000_excel_parity_fields)
+  const parityKeys = ['front_motor_number', 'rear_motor_number', 'powertrain_type', 'incoming_batch', 'expected_arrival_date', 'issue_note'];
+  Object.assign(payload, {
+    front_motor_number: sanitizeText(item.frontMotorNumber, 60) || null,
+    rear_motor_number: sanitizeText(item.rearMotorNumber, 60) || null,
+    powertrain_type: item.powertrainType === 'BEV' || item.powertrainType === 'REEV' ? item.powertrainType : null,
+    incoming_batch: sanitizeText(item.incomingBatch, 120) || null,
+    expected_arrival_date: sanitizeText(item.expectedArrivalDate, 10) || null,
+    issue_note: sanitizeText(item.issueNote, 1000) || null,
+  });
   let { error } = await client.from('vehicles').upsert(payload, { onConflict: 'vin' });
+  if (error && parityKeys.some(k => error!.message?.includes(k))) {
+    warnMissingColumns('20261110120000_excel_parity_fields', 'ເລກມໍເຕີ/ລອດ/ກຳນົດມາຮອດ ຂອງລົດ');
+    parityKeys.forEach(k => delete payload[k]);
+    ({ error } = await client.from('vehicles').upsert(payload, { onConflict: 'vin' }));
+  }
   if (error && error.message?.includes('engine_number')) {
     delete payload.engine_number;
     const retry = await client.from('vehicles').upsert(payload, { onConflict: 'vin' });
@@ -1212,9 +1411,10 @@ export async function saveVehicleModel(model: VehicleModel, createdBy: string) {
     return;
   }
   const client = requireSupabase();
-  const { error } = await client.from('vehicle_models').upsert({
+  const modelPayload: Record<string, unknown> = {
     id: model.id,
     name: model.name,
+    brand: sanitizeText(model.brand, 60) || 'AVATR',
     subtitle: model.subTitle || null,
     tagline: model.tagline || null,
     category: model.category || null,
@@ -1235,7 +1435,13 @@ export async function saveVehicleModel(model: VehicleModel, createdBy: string) {
     powertrain: model.powertrain || null,
     is_custom: Boolean(model.isCustom),
     hero_image: model.heroImage || null,
-  }, { onConflict: 'id' });
+  };
+  let { error } = await client.from('vehicle_models').upsert(modelPayload, { onConflict: 'id' });
+  if (error && error.message?.includes('brand')) {
+    // migration 20261110120000 not applied yet
+    delete modelPayload.brand;
+    ({ error } = await client.from('vehicle_models').upsert(modelPayload, { onConflict: 'id' }));
+  }
   if (error) throw error;
 }
 
@@ -1522,6 +1728,21 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
   if (error) {
     throw new Error(error.message || 'Sale could not be saved.');
   }
+  if (vehicle && vehiclePayload) {
+    // record_vehicle_bill writes a fixed column list; add the Excel-parity fields after it
+    const parity = {
+      front_motor_number: sanitizeText(vehicle.frontMotorNumber, 60) || null,
+      rear_motor_number: sanitizeText(vehicle.rearMotorNumber, 60) || null,
+      powertrain_type: vehicle.powertrainType === 'BEV' || vehicle.powertrainType === 'REEV' ? vehicle.powertrainType : null,
+      incoming_batch: sanitizeText(vehicle.incomingBatch, 120) || null,
+      expected_arrival_date: sanitizeText(vehicle.expectedArrivalDate, 10) || null,
+      issue_note: sanitizeText(vehicle.issueNote, 1000) || null,
+    };
+    if (Object.values(parity).some(v => v != null)) {
+      const { error: parityError } = await client.from('vehicles').update(parity).eq('vin', sanitizeVIN(vehicle.vin));
+      if (parityError) warnMissingColumns('20261110120000_excel_parity_fields', 'ເລກມໍເຕີ/ລອດ/ກຳນົດມາຮອດ ຂອງລົດ');
+    }
+  }
   offlineSaveBill(bill);
 }
 
@@ -1595,11 +1816,11 @@ export async function saveStaffProfile(user: SystemUser) {
         name: user.name,
         phone: user.phone,
         department: user.department,
-        role: user.role,
+        role: roleForSave(user),
       },
     });
     if (!error && data?.profile) {
-      const mapped = mapStaffProfile(data.profile, data.permissions);
+      const mapped = mapStaffProfile(data.profile);
       offlineSaveUser(mapped);
       return mapped;
     }
@@ -1614,8 +1835,8 @@ export async function saveStaffProfile(user: SystemUser) {
       name: user.name,
       phone: user.phone || null,
       department: user.department || null,
-      role: user.role,
-      role_title: user.roleTitleLo || user.role,
+      role: roleForSave(user),
+      role_title: ROLE_LABELS[user.role],
       updated_at: new Date().toISOString(),
     })
     .eq('id', user.id)
@@ -1627,7 +1848,7 @@ export async function saveStaffProfile(user: SystemUser) {
     throw new Error('Staff profile could not be updated. Check your permissions and try again.');
   }
 
-  const mapped = mapStaffProfile(updatedProfile, user.permissions);
+  const mapped = mapStaffProfile(updatedProfile);
   offlineSaveUser(mapped);
   return mapped;
 }
@@ -1834,15 +2055,51 @@ export async function updateTestDriveBooking(booking: TestDriveBooking) {
   if (error) throw error;
 }
 
-export async function deleteBill(id: string) {
+export interface BillVoidInfo {
+  voidReason: string;
+  voidedBy: string;
+  voidedAt: string;
+}
+
+/** Void a bill (Admin only). A reason is required and is stored with who voided it and when. */
+export async function deleteBill(id: string, reason: string, actorName: string): Promise<BillVoidInfo> {
+  const cleanReason = sanitizeText(reason, 1000);
+  if (cleanReason.trim().length < 3) throw new Error('ກະລຸນາໃສ່ເຫດຜົນການຍົກເລີກບິນ (ຢ່າງໜ້ອຍ 3 ຕົວອັກສອນ)');
+  const fallbackInfo: BillVoidInfo = { voidReason: cleanReason, voidedBy: actorName, voidedAt: new Date().toISOString() };
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
     offlineDeleteBill(id);
-    return;
+    return fallbackInfo;
   }
   const client = requireSupabase();
-  const { error } = await client.rpc('delete_vehicle_bill', { p_bill_id: id });
-  if (error) throw error;
+  const { data, error } = await client.rpc('void_bill_with_reason', { p_bill_id: id, p_reason: cleanReason });
+  if (!error) {
+    return {
+      voidReason: data?.reason || cleanReason,
+      voidedBy: data?.voided_by_name || actorName,
+      voidedAt: data?.voided_at || fallbackInfo.voidedAt,
+    };
+  }
+  const rpcMissing = error.code === 'PGRST202' || error.code === '42883' || /void_bill_with_reason/.test(error.message || '');
+  if (!rpcMissing) throw error;
+
+  // Migration 20261111120000_bill_void_reason not applied yet: void the old way and keep the reason in the bill notes
+  const { error: voidError } = await client.rpc('delete_vehicle_bill', { p_bill_id: id });
+  if (voidError) throw voidError;
+  const { data: current } = await client.from('bills').select('notes').eq('id', id).maybeSingle();
+  const stamp = `[ຍົກເລີກ ${fallbackInfo.voidedAt.slice(0, 10)} ໂດຍ ${actorName}: ${cleanReason}]`;
+  const notes = [current?.notes, stamp].filter(Boolean).join('\n');
+  const { error: notesError } = await client.from('bills').update({ notes }).eq('id', id);
+  if (!warnedMigrations.has('20261111120000_bill_void_reason')) {
+    warnedMigrations.add('20261111120000_bill_void_reason');
+    showToast(
+      notesError
+        ? 'ຍົກເລີກບິນແລ້ວ ແຕ່ບັນທຶກເຫດຜົນບໍ່ສຳເລັດ. ກະລຸນາແຈ້ງ Admin ໃຫ້ apply migration 20261111120000_bill_void_reason'
+        : 'ຍົກເລີກບິນແລ້ວ. ເຫດຜົນຖືກບັນທຶກໄວ້ໃນໝາຍເຫດບິນ (ຊົ່ວຄາວ) ຈົນກວ່າຈະ apply migration 20261111120000_bill_void_reason',
+      'warning'
+    );
+  }
+  return fallbackInfo;
 }
 
 export async function handoverStaffPendingLeads(

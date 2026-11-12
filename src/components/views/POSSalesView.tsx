@@ -1,31 +1,29 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { isAdminRole } from '../../utils/roles';
 import { InventoryItem, VehicleModel, Language, InvoiceBillRecord, StockLogRecord, SystemUser, Lead } from '../../types';
 import { getStoredCompanyBankInfo, saveStoredCompanyBankInfo, CompanyBankInfo } from '../../data/companySettings';
 import { translations } from '../../data/translations';
 import { LAO_PROVINCES } from '../../data/laoProvinces';
 import {
   uploadCompanyQrCodeToStorage,
-  saveDealershipConfigToSupabase
+  resetCompanyQrCode
 } from '../../supabase';
 import { newRecordId } from '../../backend/ids';
 import { saveLead, uploadPaymentSlip, generateNextBillNumber } from '../../backend/data';
 import { generateInstallmentSchedule } from '../../utils/installment';
 import AvatrLogo from '../layout/AvatrLogo';
-import { ConfirmDeleteModal } from '../modals';
 import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
 import { showToast, ToastType } from '../common';
 import {
   Receipt,
   FileText,
-  ShoppingBag,
   CheckCircle2,
   Car,
   Search,
   CreditCard,
-  DollarSign,
   User,
+  UserSearch,
   Phone,
-  MapPin,
   Calendar,
   Sparkles,
   ShieldCheck,
@@ -33,21 +31,15 @@ import {
   ArrowRight,
   AlertCircle,
   FileCheck,
-  Plus,
-  Trash2,
   Banknote,
-  Smartphone,
   Building2,
   X,
   QrCode,
   Upload,
-  Image as ImageIcon,
   Check,
   Maximize2,
   RefreshCw,
-  Edit3,
   Lock,
-  Copy,
   Download,
   Loader2,
   ChevronDown
@@ -56,6 +48,7 @@ import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, formatWhatsAppNumber, openWhatsApp } from '../../utils/whatsapp';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { logIssuedDocument } from '../../utils/documentLogger';
+import { isSellable, isOnHand, compareInventory } from '../../data/stockSummary';
 
 interface POSSalesViewProps {
   inventory: InventoryItem[];
@@ -73,6 +66,8 @@ interface POSSalesViewProps {
   onNavigateToBills: () => void;
   prefilledCustomer?: Lead | null;
   onClearPrefilledCustomer?: () => void;
+  /** Open the customer picker (search CRM or quick-create a walk-in). */
+  onChooseCustomer?: () => void;
 }
 
 export default function POSSalesView({
@@ -82,7 +77,6 @@ export default function POSSalesView({
   setBills,
   leads,
   setLeads,
-  stockLogs,
   setStockLogs,
   vehicles,
   currentUser,
@@ -91,10 +85,18 @@ export default function POSSalesView({
   onNavigateToBills,
   prefilledCustomer,
   onClearPrefilledCustomer,
+  onChooseCustomer,
 }: POSSalesViewProps) {
   const t = translations[lang] || translations.lo;
-  // Available vehicles for sale (not sold and stock > 0)
-  const availableVehicles = inventory.filter(i => i.status !== 'sold' && i.stockQuantity > 0);
+  // Sellable now: PDI passed and ready / event / promotion. A reserved car shows only for the customer it is reserved for.
+  const reservationHolder = prefilledCustomer
+    ? { name: prefilledCustomer.customerName, phone: prefilledCustomer.phone }
+    : undefined;
+  const availableVehicles = inventory
+    .filter(item => isSellable(item, reservationHolder))
+    .sort(compareInventory(vehicles));
+  // On hand but blocked (PDI not passed, reserved for someone else...): shown as a count so staff know why.
+  const blockedOnHandCount = inventory.filter(item => isOnHand(item) && !isSellable(item, reservationHolder)).length;
 
   const [selectedVin, setSelectedVin] = useState<string>(availableVehicles[0]?.vin || '');
   const [vehicleSearch, setVehicleSearch] = useState('');
@@ -109,33 +111,21 @@ export default function POSSalesView({
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerIDCard, setCustomerIDCard] = useState('');
   const [salesRepName, setSalesRepName] = useState<string>(
-    () => prefilledCustomer?.assignedTo || (currentUser?.role === 'sales' ? currentUser.name : 'ທ້າວ ແສງອຸໄທ ສັນຕິສີໄວ')
+    // The customer's own consultant, otherwise whoever is making the sale. Never a fixed staff name.
+    () => prefilledCustomer?.assignedTo || currentUser?.name || ''
   );
 
+  // Pick the consultant from active staff accounts, so one person is always spelled the same way in Top Sales
   const salesRepSuggestions = useMemo(() => {
-    const suspendedNames = new Set(
-      users.filter((u) => u.status === 'suspended').map((u) => u.name.trim())
+    const names = new Set<string>(
+      users
+        .filter((u) => u.status === 'active' && (u.role === 'sales' || u.role === 'admin'))
+        .map((u) => u.name.trim())
+        .filter(Boolean)
     );
-    const activeStaffNames = users
-      .filter((u) => u.status === 'active' && (u.role === 'sales' || u.role === 'admin' || u.role === 'super_admin'))
-      .map((u) => u.name.trim());
-
-    const names = new Set<string>(activeStaffNames.length > 0 ? activeStaffNames : [
-      'ທ້າວ ແສງອຸໄທ ສັນຕິສີໄວ',
-      'ທ້າວ ສົມພອນ ໄຊຍະສິດ',
-      'ນາງ ມາລີ ວົງພະຈັນ',
-    ]);
     if (currentUser?.name && currentUser.status !== 'suspended') names.add(currentUser.name.trim());
-
-    leads.forEach(l => {
-      const trimmed = l.assignedTo ? l.assignedTo.trim() : '';
-      if (trimmed && trimmed !== 'Admin' && !suspendedNames.has(trimmed)) {
-        names.add(trimmed);
-      }
-    });
-
-    return Array.from(names).filter((name) => !suspendedNames.has(name));
-  }, [leads, users, currentUser?.name, currentUser?.status]);
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [users, currentUser?.name, currentUser?.status]);
   const [customerAddress, setCustomerAddress] = useState('');
   const [customerProvince, setCustomerProvince] = useState('ນະຄອນຫຼວງວຽງຈັນ');
   const [isProvinceDropdownOpen, setIsProvinceDropdownOpen] = useState(false);
@@ -187,9 +177,6 @@ export default function POSSalesView({
     };
   }, [isProvinceDropdownOpen, isDistrictDropdownOpen, isVillageDropdownOpen]);
 
-  // Package delete popup modal state
-  const [packageToDelete, setPackageToDelete] = useState<string | null>(null);
-
   // Pricing & Discounts (USD Only)
   const [discountUSD, setDiscountUSD] = useState<number | ''>('');
 
@@ -212,7 +199,7 @@ export default function POSSalesView({
 
   // Payment Options - Zero pre-filled values
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'finance'>('transfer');
-  const [bankName, setBankName] = useState('ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ');
+  const [bankName] = useState('ຊຳລະເງິນຜ່ານ QR ບໍລິສັດ');
   const [transferRef, setTransferRef] = useState('');
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [slipPreviewUrl, setSlipPreviewUrl] = useState<string | null>(null);
@@ -243,43 +230,24 @@ export default function POSSalesView({
       if (prefilledCustomer.province) {
         setCustomerProvince(prefilledCustomer.province);
       }
-      if (prefilledCustomer.district) {
-        setCustomerDistrict(prefilledCustomer.district);
-      }
-      if (prefilledCustomer.village) {
-        setCustomerVillage(prefilledCustomer.village);
-      }
+      setCustomerDistrict(prefilledCustomer.district || '');
+      setCustomerVillage(prefilledCustomer.village || '');
+      setCustomerCustomVillage('');
+      setCustomerAddressDetail('');
       if (prefilledCustomer.assignedTo && prefilledCustomer.assignedTo !== 'Admin') {
         setSalesRepName(prefilledCustomer.assignedTo);
       }
     }
   }, [prefilledCustomer]);
 
-  // Free Gifts & Privileges Packages (Dynamic List with LocalStorage & Admin Edit/Delete)
-  const DEFAULT_PACKAGES = [
-    'ຕູ້ສາກໄວ Home Charger 7kW ພ້ອມຕິດຕັ້ງມາດຕະຖານ CATL',
-    'ປະກັນໄພຊັ້ນ 1 (First Class Insurance) 1 ປີເຕັມ',
-    'ຟີມກັນຄວາມຮ້ອນ Ceramic 3M ຮອບຄັນ',
-    'ປ້າຍທະບຽນ VIP ກຳແພງນະຄອນ (ຈຳນວນຈຳກັດ)',
-    'ຊຸດຢາງປູພື້ນ Luxury Nappa Leather ຕົງລຸ້ນ AVATR',
-    'ສາຍສາກພົກພາສຸກເສີນ Portable EV Charger 3.5kW',
-    'ຊຸດອຸປະກອນສຸກເສີນ ແລະ ປ້ຳລົມໄຟຟ້າ AVATR'
-  ];
-
-  const [giftOptions, setGiftOptions] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('avatr_dealership_packages_v2');
-      return saved ? JSON.parse(saved) : DEFAULT_PACKAGES;
-    } catch {
-      return DEFAULT_PACKAGES;
-    }
-  });
-
-  // Empty selected gifts by default (ຄ່າເລີ່ມຕົ້ນບໍ່ມີການຕິກເລືອກໄວ້ກ່ອນ)
+  // Typed gift rows only; the form always renders one extra empty row after them.
   const [selectedGifts, setSelectedGifts] = useState<string[]>([]);
-  const [newPackageInput, setNewPackageInput] = useState('');
-
-  const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+  const trimTrailingEmpty = (rows: string[]) => {
+    const out = rows.slice();
+    while (out.length && out[out.length - 1] === '') out.pop();
+    return out;
+  };
+  const isSuperAdmin = isAdminRole(currentUser);
 
   // Company Official Banking & QR Code Settings
   const [companyBankInfo, setCompanyBankInfo] = useState<CompanyBankInfo>(() => getStoredCompanyBankInfo());
@@ -288,101 +256,51 @@ export default function POSSalesView({
   // Admin: Upload custom company QR Code to Supabase Storage / Cloud
   const handleCompanyQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດອັບໂຫລດຮູບ QR ບໍລິສັດໄດ້!', 'error');
       return;
     }
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        triggerToast('ກຳລັງອັບໂຫຼດຮູບ QR Code ໄປຍັງ Supabase Storage...');
-        const downloadUrl = await uploadCompanyQrCodeToStorage(file, currentUser);
-        const updated: CompanyBankInfo = {
-          ...companyBankInfo,
-          qrCodeUrl: downloadUrl,
-          updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-          updatedBy: currentUser?.name || 'Admin',
-        };
-        setCompanyBankInfo(updated);
-        saveStoredCompanyBankInfo(updated);
-        triggerToast('ອັບໂຫຼດຮູບ QR Code ບໍລິສັດສຳເລັດແລ້ວ! (Real-time Cloud Synced)');
-      } catch (err: any) {
-        console.error('Company QR upload error:', err);
-        // Fallback local reader
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const qrData = event.target?.result as string;
-          const updated: CompanyBankInfo = {
-            ...companyBankInfo,
-            qrCodeUrl: qrData,
-            updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-            updatedBy: currentUser?.name || 'Admin',
-          };
-          setCompanyBankInfo(updated);
-          saveStoredCompanyBankInfo(updated);
-          triggerToast('ອັບໂຫຼດຮູບ QR Code ບໍລິສັດສຳເລັດແລ້ວ!');
-        };
-        reader.readAsDataURL(file);
-      }
+    const input = e.target;
+    const file = input.files?.[0];
+    if (!file || !currentUser) return;
+    try {
+      triggerToast('ກຳລັງອັບໂຫຼດຮູບ QR ບໍລິສັດ...', 'info');
+      const downloadUrl = await uploadCompanyQrCodeToStorage(file, currentUser);
+      const updated: CompanyBankInfo = {
+        ...companyBankInfo,
+        qrCodeUrl: downloadUrl,
+        updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+        updatedBy: currentUser.name || 'Admin',
+      };
+      setCompanyBankInfo(updated);
+      saveStoredCompanyBankInfo(updated);
+      triggerToast('ປ່ຽນຮູບ QR ບໍລິສັດສຳເລັດ. ທຸກບັນຊີຈະເຫັນຮູບນີ້');
+    } catch (err) {
+      // No local-only fallback: a QR that only this browser can see would mislead other staff.
+      triggerToast(`ອັບໂຫຼດຮູບ QR ບໍ່ສຳເລັດ: ${err instanceof Error ? err.message : 'ກະລຸນາລອງໃໝ່'}`, 'error');
+    } finally {
+      input.value = ''; // allow choosing the same file again
     }
   };
 
   // Admin: Reset Company QR back to official default
   const handleResetCompanyQr = async () => {
-    if (!isSuperAdmin) return;
-    if (!confirm('ທ່ານຕ້ອງການຣີເຊັດຮູບ QR ບໍລິສັດກັບຄືນເປັນຄ່າມາດຕະຖານບໍ່?')) return;
+    if (!isSuperAdmin || !currentUser) return;
+    if (!confirm('ທ່ານຕ້ອງການລຶບຮູບ QR ບໍລິສັດອອກບໍ່? ທຸກບັນຊີຈະບໍ່ເຫັນ QR ນີ້ອີກ')) return;
+    try {
+      await resetCompanyQrCode(currentUser);
+    } catch (err) {
+      triggerToast(`ລຶບຮູບ QR ບໍ່ສຳເລັດ: ${err instanceof Error ? err.message : 'ກະລຸນາລອງໃໝ່'}`, 'error');
+      return;
+    }
     const updated: CompanyBankInfo = {
       ...companyBankInfo,
       qrCodeUrl: null,
       updatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      updatedBy: currentUser?.name || 'Admin',
+      updatedBy: currentUser.name || 'Admin',
     };
-    try {
-      await saveDealershipConfigToSupabase({ companyQrImageUrl: null });
-    } catch (e) {
-      console.warn('Supabase reset QR fallback:', e);
-    }
     setCompanyBankInfo(updated);
     saveStoredCompanyBankInfo(updated);
-    triggerToast('ຣີເຊັດຮູບ QR ບໍລິສັດເປັນຄ່າມາດຕະຖານຮຽບຮ້ອຍແລ້ວ!');
-  };
-
-  const handleAddPackage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດເພີ່ມໝວດໄດ້!');
-      return;
-    }
-    if (!newPackageInput.trim()) return;
-    const trimmed = newPackageInput.trim();
-    if (giftOptions.includes(trimmed)) {
-      triggerToast('ໝວດ/ແພັກເກດນີ້ມີຢູ່ໃນລາຍການແລ້ວ!');
-      return;
-    }
-    const updated = [...giftOptions, trimmed];
-    setGiftOptions(updated);
-    localStorage.setItem('avatr_dealership_packages_v2', JSON.stringify(updated));
-    try {
-      await saveDealershipConfigToSupabase({ campaignCategories: updated });
-    } catch (e) {
-      console.warn('Supabase save packages fallback:', e);
-    }
-    setNewPackageInput('');
-    triggerToast(`ເພີ່ມໝວດແພັກເກດ "${trimmed}" ສຳເລັດແລ້ວ!`);
-  };
-
-  const handleDeletePackage = (pkg: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດລົບໝວດໄດ້!');
-      return;
-    }
-    setPackageToDelete(pkg);
-  };
-
-  const toggleGift = (gift: string) => {
-    setSelectedGifts(prev =>
-      prev.includes(gift) ? prev.filter(g => g !== gift) : [...prev, gift]
-    );
+    triggerToast('ລຶບຮູບ QR ບໍລິສັດແລ້ວ');
   };
 
   const [saleNotes, setSaleNotes] = useState('');
@@ -410,6 +328,16 @@ export default function POSSalesView({
         status: 'delivered',
         priority: 'vip',
         notes: `ອອກເອກະສານຈາກບິນຂາຍ: ${targetBill.billNumber} | VIN: ${targetBill.vin}`,
+        // Real vehicle and payment data from the bill, so documents never fall back to placeholders.
+        vin: targetBill.vin,
+        engineNumber: targetBill.engineNumber,
+        color: targetBill.color,
+        plateNumber: targetBill.plateNumber,
+        listPriceUSD: targetBill.unitPriceUSD ?? targetBill.netTotalUSD,
+        discountUSD: targetBill.discountUSD,
+        paidAmountUSD: targetBill.amountUSD,
+        paymentTypeConfirmed: targetBill.paymentMethod === 'finance' ? 'down_payment' : 'full',
+        giftItems: (targetBill.freeGifts || []).filter(Boolean).map(name => ({ name, costUSD: 0 })),
         paymentType: (targetBill.paymentMethod as any) || 'cash',
         paymentDate: targetBill.date,
         paymentReceiptNo: targetBill.billNumber,
@@ -422,7 +350,17 @@ export default function POSSalesView({
     }
 
     const v = selectedVehicle;
+    const typedGifts = selectedGifts.map(g => g.trim()).filter(Boolean);
     return {
+      // Keep what the CRM already knows (deposit, booking date, gifts with cost...).
+      ...(prefilledCustomer || {}),
+      vin: v?.vin || prefilledCustomer?.vin,
+      engineNumber: v?.engineNumber || prefilledCustomer?.engineNumber,
+      color: v?.color || prefilledCustomer?.color,
+      plateNumber: v?.plateNumber || prefilledCustomer?.plateNumber,
+      listPriceUSD: v ? v.priceUSD : prefilledCustomer?.listPriceUSD,
+      discountUSD: v ? (Number(discountUSD) || 0) : prefilledCustomer?.discountUSD,
+      giftItems: typedGifts.length > 0 ? typedGifts.map(name => ({ name, costUSD: 0 })) : prefilledCustomer?.giftItems,
       id: prefilledCustomer?.id || 'pos-lead-temp',
       customerName: customerName.trim() || (lang === 'lo' ? 'ລູກຄ້າຊື້ລົດ AVATR (POS)' : 'AVATR POS Customer'),
       phone: customerPhone.trim() || '20XXXXXXXX',
@@ -430,14 +368,17 @@ export default function POSSalesView({
       village: customerVillage || customerCustomVillage || '',
       district: customerDistrict || '',
       province: customerProvince || 'ນະຄອນຫຼວງວຽງຈັນ',
-      category: 'walk_in',
-      source: 'POS Showroom',
-      interestedModel: v ? v.model : 'AVATR 11',
-      status: 'negotiation',
-      priority: 'high',
+      category: prefilledCustomer?.category || 'walk_in',
+      source: prefilledCustomer?.source || 'POS Showroom',
+      interestedModel: v ? v.model : (prefilledCustomer?.interestedModel || ''),
+      status: 'negotiation', // not sold yet: sale-stage documents stay locked
+      paymentTypeConfirmed: undefined,
+      installmentStatus: undefined,
+      vehicleDeliveredAt: undefined,
+      priority: prefilledCustomer?.priority || 'high',
       notes: v ? `VIN: ${v.vin} | ສີ: ${v.color || '-'} | ປ້າຍ: ${v.plateNumber || '-'}` : '',
       paymentType: paymentMethod,
-      paymentReceiptNo: v?.vin || '',
+      paymentReceiptNo: prefilledCustomer?.paymentReceiptNo || '',
       downPaymentPercent: downPaymentPercent,
       downPaymentUSD: typeof downPaymentUSDInput === 'number' ? downPaymentUSDInput : undefined,
       tenureMonths: tenureMonths,
@@ -593,12 +534,12 @@ export default function POSSalesView({
     if (isProcessingSale) return;
 
     if (!selectedVehicle) {
-      triggerToast('ກະລຸນາເລືອກລົດຍົນທີ່ຕ້ອງການຂາຍກ່ອນ!');
+      triggerToast('ກະລຸນາເລືອກລົດຍົນທີ່ຕ້ອງການຂາຍກ່ອນ!', 'error');
       return;
     }
 
     if (!customerName.trim() || !customerPhone.trim()) {
-      triggerToast('ກະລຸນາປ້ອນຊື່ ແລະ ເບີໂທລະສັບ ຂອງລູກຄ້າ!');
+      triggerToast('ກະລຸນາປ້ອນຊື່ ແລະ ເບີໂທລະສັບ ຂອງລູກຄ້າ!', 'error');
       return;
     }
 
@@ -617,12 +558,6 @@ export default function POSSalesView({
     ].filter(Boolean).join(', ');
 
     // 1. DEDUCT STOCK (ຕັດສະຕ໋ອກອອກ)
-    const updatedInventoryItem: InventoryItem = {
-      ...selectedVehicle,
-      stockQuantity: remainingQty,
-      status: remainingQty === 0 ? 'sold' : selectedVehicle.status,
-      reservedForCustomer: undefined,
-    };
 
     const normalizedPhone = customerPhone.replace(/\D/g, '');
     const matchedLead = prefilledCustomer
@@ -758,7 +693,7 @@ export default function POSSalesView({
       tenureMonths: paymentMethod === 'finance' ? tenureMonths : undefined,
       monthlyPaymentLAK: paymentMethod === 'finance' ? monthlyPaymentLAK : undefined,
       installmentType: paymentMethod === 'finance' ? 'down_payment' : undefined,
-      freeGifts: selectedGifts,
+      freeGifts: selectedGifts.map(gift => gift.trim()).filter(Boolean),
       warrantyTerms: 'ຮັບປະກັນແບັດເຕີຣີ CATL 8 ປີ / 160,000 km | ຕົວລົດ 5 ປີ / 120,000 km',
       salesRep: effectiveSalesRep,
       recordedBy: currentUser?.name || effectiveSalesRep,
@@ -786,7 +721,12 @@ export default function POSSalesView({
         const nextCar = availableVehicles.find(v => v.vin !== soldVin);
         setSelectedVin(nextCar?.vin || '');
       }
-      triggerToast(msg);
+      const friendlyMsg = msg.includes('require Supabase')
+        ? 'ບໍ່ສາມາດບັນທຶກການຂາຍໄດ້: ໂໝດ Offline ເປັນພຽງການທົດລອງ, ການຂາຍຕ້ອງເຊື່ອມຕໍ່ຖານຂໍ້ມູນ'
+        : msg.includes('already has a stock-out movement') || msg.includes('already sold') || msg.includes('not available')
+          ? 'ລົດຄັນນີ້ຖືກຂາຍ ຫຼື ຕັດສະຕ໋ອກໄປແລ້ວ ກະລຸນາເລືອກຄັນອື່ນ'
+          : msg;
+      triggerToast(friendlyMsg, 'error');
       return;
     } finally {
       setIsProcessingSale(false);
@@ -925,8 +865,8 @@ export default function POSSalesView({
       {/* WRAPPER FOR POS VIEWS - SUPPRESSED DURING PRINT WHEN BILL IS BEING PRINTED */}
       <div className={createdBill ? "print:hidden hide-on-print-pos space-y-6" : "space-y-6"}>
         {/* Top Banner */}
-        <div className="theme-adaptive-dark-surface relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-black border border-zinc-800 p-5 sm:p-7 rounded-3xl shadow-xl">
-          <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full bg-white/[0.04] blur-3xl pointer-events-none" />
+        <div className="theme-adaptive-dark-surface relative overflow-hidden bg-linear-to-br from-zinc-900 via-zinc-950 to-black border border-zinc-800 p-5 sm:p-7 rounded-3xl shadow-xl">
+          <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full bg-white/4 blur-3xl pointer-events-none" />
           <div className="relative flex flex-wrap items-center justify-between gap-5">
             <div className="min-w-0">
 
@@ -965,6 +905,13 @@ export default function POSSalesView({
 
 
 
+        {availableVehicles.length > 0 && blockedOnHandCount > 0 && (
+          <p className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-300">
+            {lang === 'lo'
+              ? `ສະແດງສະເພາະລົດທີ່ຂາຍໄດ້ທັນທີ. ອີກ ${blockedOnHandCount} ຄັນໃນສາງຍັງຂາຍບໍ່ໄດ້ (ກຳລັງ PDI, ຫາກໍນຳເຂົ້າ ຫຼື ຈອງແລ້ວ): ເບິ່ງໃນໜ້າສະຕ໋ອກ.`
+              : `Only cars that can be sold now are listed. ${blockedOnHandCount} more on hand cannot be sold yet (PDI, just imported or reserved).`}
+          </p>
+        )}
         {availableVehicles.length === 0 ? (
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-12 text-center text-zinc-400 space-y-4">
             <AlertCircle className="w-12 h-12 text-zinc-400 mx-auto" />
@@ -973,11 +920,18 @@ export default function POSSalesView({
             </h3>
             <p className="text-xs text-zinc-400 max-w-md mx-auto">
               {lang === 'lo'
-                ? 'ລົດໃນສາງທັງໝົດຖືກຂາຍ ຫຼື ຈອງໝົດແລ້ວ. ກະລຸນາໄປທີ່ເມນູ "ນຳເຂົ້າລົດຍົນ" ເພື່ອເພີ່ມລົດໃໝ່ເຂົ້າສາງກ່ອນ.'
+                ? 'ບໍ່ມີລົດທີ່ຜ່ານ PDI ແລະ ພ້ອມຂາຍ. ລົດທີ່ຈອງໄວ້ໃຫ້ລູກຄ້າຄົນອື່ນ ຫຼື ຍັງບໍ່ຜ່ານ PDI ຈະບໍ່ສະແດງຢູ່ນີ້.'
                 : lang === 'th'
-                  ? 'รถในคลังทั้งหมดถูกจำหน่ายหรือจองหมดแล้ว กรุณาไปที่เมนู "นำเข้ารถยนต์" เพื่อเพิ่มรถใหม่เข้าสต็อกก่อน'
-                  : 'All vehicles in stock have been sold or reserved. Please go to "Stock-In" to import new vehicles.'}
+                  ? 'ไม่มีรถที่ผ่าน PDI และพร้อมขาย รถที่จองให้ลูกค้าคนอื่นหรือยังไม่ผ่าน PDI จะไม่แสดงที่นี่'
+                  : 'No PDI-passed vehicles ready for sale. Cars reserved for other customers or not yet through PDI are not shown here.'}
             </p>
+            {blockedOnHandCount > 0 && (
+              <p className="text-xs font-semibold text-amber-400">
+                {lang === 'lo'
+                  ? `ມີ ${blockedOnHandCount} ຄັນໃນສາງທີ່ຍັງຂາຍບໍ່ໄດ້ (ກຳລັງ PDI, ຫາກໍນຳເຂົ້າ ຫຼື ຈອງແລ້ວ). ກວດເບິ່ງໃນໜ້າສະຕ໋ອກ.`
+                  : `${blockedOnHandCount} vehicle(s) on hand cannot be sold yet (PDI, just imported or reserved). Check the Stock page.`}
+              </p>
+            )}
           </div>
         ) : (
           <form onSubmit={handleProcessSale} className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12 lg:gap-6">
@@ -994,7 +948,7 @@ export default function POSSalesView({
                   </span>
                 </div>
 
-                {/* 1.1 Category Cards: All Models + Each Model with Photo */}
+                {/* 1.1 Category Cards: All Models + Each Model */}
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-zinc-400 font-medium flex items-center gap-1.5">
@@ -1011,21 +965,17 @@ export default function POSSalesView({
                     <button
                       type="button"
                       onClick={() => handleSelectModelCategory('all')}
-                      className={`relative flex-shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${selectedModelCategory === 'all'
+                      className={`relative shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${selectedModelCategory === 'all'
                         ? 'border-white bg-zinc-900 shadow-lg ring-2 ring-white/20'
                         : 'border-zinc-800 bg-zinc-950/80 hover:border-zinc-700 hover:bg-zinc-900/60'
                         }`}
                     >
                       <div className="relative h-16 w-full bg-zinc-900 overflow-hidden">
-                        <img
-                          src="https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=400&q=80"
-                          alt="All Models"
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105 opacity-85"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                        <div className="absolute inset-0 flex items-center justify-center pb-3"><Car className="w-7 h-7 text-zinc-700" /></div>
+                        <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent" />
                         {selectedModelCategory === 'all' && (
                           <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-white text-black flex items-center justify-center shadow-md">
-                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            <Check className="w-2.5 h-2.5 stroke-3" />
                           </span>
                         )}
                         <span className="absolute bottom-1.5 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-black/80 text-white border border-zinc-700 always-white-text">
@@ -1042,7 +992,7 @@ export default function POSSalesView({
                       </div>
                     </button>
 
-                    {/* Category Cards: Each Registered Model with Photo */}
+                    {/* Category Cards: Each Registered Model */}
                     {modelCategories.map((cat) => {
                       const isSelected = selectedModelCategory === cat.name;
                       return (
@@ -1050,26 +1000,17 @@ export default function POSSalesView({
                           type="button"
                           key={cat.name}
                           onClick={() => handleSelectModelCategory(cat.name)}
-                          className={`relative flex-shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${isSelected
+                          className={`relative shrink-0 w-28 sm:w-32 rounded-2xl border text-left overflow-hidden transition-all group cursor-pointer ${isSelected
                             ? 'border-white bg-zinc-900 shadow-lg ring-2 ring-white/20'
                             : 'border-zinc-800 bg-zinc-950/80 hover:border-zinc-700 hover:bg-zinc-900/60'
                             }`}
                         >
                           <div className="relative h-16 w-full bg-zinc-900 overflow-hidden">
-                            <img
-                              src={cat.image}
-                              alt={cat.name}
-                              onError={(e) => {
-                                const target = e.currentTarget;
-                                target.onerror = null;
-                                target.src = '/avatr-logo.png';
-                              }}
-                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                            <div className="absolute inset-0 flex items-center justify-center pb-3"><Car className="w-7 h-7 text-zinc-700" /></div>
+                            <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent" />
                             {isSelected && (
                               <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-white text-black flex items-center justify-center shadow-md">
-                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                <Check className="w-2.5 h-2.5 stroke-3" />
                               </span>
                             )}
                             <span className={`absolute bottom-1.5 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border always-white-text ${cat.count > 0
@@ -1106,11 +1047,9 @@ export default function POSSalesView({
                 </div>
 
                 {/* Vehicle Options List: Visual Car Cards */}
-                <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                <div className="max-h-85 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                   {filteredAvailableVehicles.map((item) => {
                     const isSelected = selectedVin === item.vin;
-                    const vehicleDef = vehicles.find(v => v.name === item.model);
-                    const displayImage = item.image || vehicleDef?.heroImage || '/avatr-logo.png';
 
                     return (
                       <button
@@ -1123,26 +1062,16 @@ export default function POSSalesView({
                           : 'bg-zinc-900/40 border-zinc-800/80 hover:border-zinc-700 text-zinc-400 hover:bg-zinc-900/70'
                           } w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex gap-3 items-center`}
                       >
-                        {/* Car Thumbnail Image */}
-                        <div className="relative w-16 h-14 rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 flex-shrink-0">
-                          <img
-                            src={displayImage}
-                            alt={item.model}
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              target.onerror = null;
-                              target.src = '/avatr-logo.png';
-                            }}
-                            className="w-full h-full object-cover"
-                          />
                           {isSelected && (
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                              <span className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shadow">
-                                <Check className="w-3 h-3 stroke-[3]" />
-                              </span>
-                            </div>
+                            <span className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center shadow shrink-0">
+                              <Check className="w-3 h-3 stroke-3" aria-hidden="true" />
+                            </span>
                           )}
-                        </div>
+
+                          {/* Car Thumbnail Image */}
+                          <div className="relative w-16 h-14 rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 shrink-0">
+                            <div className="absolute inset-0 flex items-center justify-center"><Car className="w-6 h-6 text-zinc-600" /></div>
+                          </div>
 
                         {/* Details */}
                         <div className="flex-1 min-w-0">
@@ -1152,8 +1081,14 @@ export default function POSSalesView({
                               ${item.priceUSD.toLocaleString()}
                             </span>
                           </div>
-                          <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
+                          <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-zinc-400">
                             <span className="truncate">VIN: {item.vin}</span>
+                            {isSelected && (
+                              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-current px-1.5 py-0.5 text-[10px] font-sans font-bold leading-none">
+                                <Check className="h-3 w-3" aria-hidden="true" />
+                                {lang === 'lo' ? 'ເລືອກແລ້ວ' : lang === 'th' ? 'เลือกแล้ว' : 'Selected'}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1">
                             <span className="flex items-center gap-1.5 truncate">
@@ -1192,16 +1127,7 @@ export default function POSSalesView({
                 {selectedVehicle && (
                   <div className="pt-4 border-t border-zinc-800 space-y-3">
                     <div className="relative h-36 rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800">
-                      <img
-                        src={selectedVehicle.image || selectedVehicle.imageUrl || vehicles.find(v => v.name === selectedVehicle.model)?.heroImage || '/avatr-logo.png'}
-                        alt={selectedVehicle.model}
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          target.onerror = null;
-                          target.src = '/avatr-logo.png';
-                        }}
-                        className="w-full h-full object-cover filter contrast-125"
-                      />
+                      <div className="absolute inset-0 flex items-center justify-center"><Car className="w-12 h-12 text-zinc-700 stroke-[1.5]" /></div>
                       <div className="absolute top-2 left-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-black/80 text-white border border-zinc-700 font-mono shadow-md backdrop-blur-md always-white-text">
                         <span className="text-white" style={{ color: '#ffffff' }}>{t.tableStock}: {selectedVehicle.stockQuantity} {t.unitCars}</span>
                       </div>
@@ -1217,7 +1143,7 @@ export default function POSSalesView({
                       </div>
                       <div className="flex justify-between text-zinc-400">
                         <span>{t.trimSpec}:</span>
-                        <span className="text-white font-medium text-right truncate max-w-[170px]">{selectedVehicle.trim}</span>
+                        <span className="text-white font-medium text-right truncate max-w-42.5">{selectedVehicle.trim}</span>
                       </div>
                       <div className="flex justify-between text-zinc-400">
                         <span>{lang === 'lo' ? 'ແບັດເຕີຣີ:' : lang === 'th' ? 'แบตเตอรี่:' : 'Battery:'}</span>
@@ -1229,7 +1155,7 @@ export default function POSSalesView({
                       </div>
                       <div className="flex justify-between text-zinc-400">
                         <span>{t.warehouseDest}:</span>
-                        <span className="text-zinc-300 font-medium truncate max-w-[170px]">{selectedVehicle.location}</span>
+                        <span className="text-zinc-300 font-medium truncate max-w-42.5">{selectedVehicle.location}</span>
                       </div>
                     </div>
                   </div>
@@ -1246,32 +1172,33 @@ export default function POSSalesView({
                     <User className="w-4 h-4 text-white" />
                     <span>2. {t.buyerInfo}</span>
                   </div>
-                  {prefilledCustomer && (
+                  {prefilledCustomer ? (
                     <div className="flex items-center gap-2">
                       <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/30 flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
                         <span>CRM: {prefilledCustomer.customerName}</span>
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onClearPrefilledCustomer?.();
-                          setCustomerName('');
-                          setCustomerPhone('');
-                          setCustomerIDCard('');
-                          setCustomerAddress('');
-                          setCustomerDistrict('');
-                          setCustomerVillage('');
-                          setCustomerCustomVillage('');
-                          setCustomerAddressDetail('');
-                        }}
-                        className="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors flex items-center gap-1 cursor-pointer"
-                        title={lang === 'lo' ? 'ຍົກເລີກການດຶງຂໍ້ມູນລູກຄ້າ CRM' : 'Clear prefilled customer'}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        <span>{lang === 'lo' ? 'ລຶບອອກ' : 'Clear'}</span>
-                      </button>
+                      {onChooseCustomer && (
+                        <button
+                          type="button"
+                          onClick={onChooseCustomer}
+                          className="text-zinc-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors flex items-center gap-1 cursor-pointer"
+                          title={lang === 'lo' ? 'ເລືອກລູກຄ້າຄົນອື່ນ' : lang === 'th' ? 'เลือกลูกค้าคนอื่น' : 'Choose another customer'}
+                        >
+                          <UserSearch className="w-3.5 h-3.5" />
+                          <span>{lang === 'lo' ? 'ປ່ຽນລູກຄ້າ' : lang === 'th' ? 'เปลี่ยนลูกค้า' : 'Change'}</span>
+                        </button>
+                      )}
                     </div>
+                  ) : onChooseCustomer && (
+                    <button
+                      type="button"
+                      onClick={onChooseCustomer}
+                      className="pos-choose-customer min-h-9 px-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <UserSearch className="w-3.5 h-3.5" />
+                      <span>{lang === 'lo' ? 'ເລືອກລູກຄ້າຈາກ CRM' : lang === 'th' ? 'เลือกลูกค้าจาก CRM' : 'Choose CRM customer'}</span>
+                    </button>
                   )}
                 </div>
 
@@ -1289,7 +1216,7 @@ export default function POSSalesView({
                   </div>
 
                   <div className="min-w-0">
-                    <label className="block text-zinc-400 mb-1 font-medium flex items-center gap-1.5 truncate">
+                    <label className="text-zinc-400 mb-1 font-medium flex items-center gap-1.5 truncate">
                       <Calendar className="w-3.5 h-3.5 text-white shrink-0" />
                       <span className="truncate">ວັນທີອອກບິນ (ວັນ/ເດືອນ/ປີ) <span className="text-red-500 font-bold ml-1">*</span></span>
                     </label>
@@ -1306,7 +1233,7 @@ export default function POSSalesView({
                     <div className="flex items-center justify-between gap-1.5 mb-1 min-w-0">
                       <label className="text-zinc-400 font-medium truncate">{t.buyerPhone} <span className="text-red-500 font-bold ml-1">*</span></label>
                       {canOpenWhatsApp && (
-                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50 shrink-0 max-w-[130px] truncate">
+                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/50 shrink-0 max-w-32.5 truncate">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
                           <span className="truncate">WA: {formatWhatsAppDisplay(customerPhone)}</span>
                         </span>
@@ -1360,28 +1287,31 @@ export default function POSSalesView({
                     <label className="block text-amber-400 mb-1 font-semibold truncate">
                       {lang === 'lo' ? 'ທີ່ປຶກສາການຂາຍ (Top Sales)' : lang === 'th' ? 'ที่ปรึกษาการขาย (Top Sales)' : 'Sales Consultant'} <span className="text-red-500 font-bold ml-1">*</span>
                     </label>
-                    <input
-                      type="text"
-                      list="pos-sales-rep-list"
+                    <select
+                      id="pos-sales-rep"
                       required
                       value={salesRepName}
                       onChange={(e) => setSalesRepName(e.target.value)}
-                      placeholder="ເລືອກ ຫຼື ພິມຊື່ພະນັກງານຂາຍ..."
                       className="w-full min-w-0 bg-zinc-900 border border-amber-500/40 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 focus-visible:ring-2 focus-visible:ring-amber-400/20 transition-colors"
-                    />
-                    <datalist id="pos-sales-rep-list">
+                    >
+                      <option value="" disabled>{lang === 'lo' ? 'ເລືອກທີ່ປຶກສາການຂາຍ...' : 'Choose a sales consultant...'}</option>
                       {salesRepSuggestions.map((rep) => (
-                        <option key={rep} value={rep} />
+                        <option key={rep} value={rep}>{rep}</option>
                       ))}
-                    </datalist>
+                      {/* Keep a consultant recorded on the customer even if the account is no longer active */}
+                      {salesRepName && !salesRepSuggestions.includes(salesRepName) && (
+                        <option value={salesRepName}>{salesRepName} {lang === 'lo' ? '(ຜູ້ຮັບຜິດຊອບລູກຄ້າ)' : '(customer owner)'}</option>
+                      )}
+                    </select>
                   </div>
 
-                  {/* Province Selector (All 18 Provinces) */}
-                  <div className="min-w-0">
-                    <label className="block text-zinc-400 mb-1 font-medium truncate">
-                      ແຂວງ / ນະຄອນຫຼວງ (18 ແຂວງ) <span className="text-red-500 font-bold ml-1">*</span>
-                    </label>
-                    <div className="relative min-w-0" ref={provinceDropdownRef}>
+                  <div className="sm:col-span-2 2xl:col-span-3 grid grid-cols-1 gap-4 sm:grid-cols-3 min-w-0">
+                    {/* Province Selector */}
+                    <div className="min-w-0">
+                      <label className="block text-zinc-400 mb-1 font-medium truncate">
+                        ແຂວງ / ນະຄອນຫຼວງ <span className="text-red-500 font-bold ml-1">*</span>
+                      </label>
+                      <div className="relative min-w-0" ref={provinceDropdownRef}>
                       <button
                         type="button"
                         aria-haspopup="listbox"
@@ -1395,11 +1325,6 @@ export default function POSSalesView({
                       >
                         <span className="truncate">
                           {selectedProvince?.nameLo || customerProvince}
-                          {selectedProvince?.nameEn && (
-                            <span className="ml-1 text-zinc-400">
-                              ({selectedProvince.nameEn})
-                            </span>
-                          )}
                         </span>
                         <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isProvinceDropdownOpen ? 'rotate-180' : ''}`} />
                       </button>
@@ -1432,15 +1357,15 @@ export default function POSSalesView({
                           ))}
                         </div>
                       )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* District Selector */}
-                  <div className="min-w-0">
-                    <label className="block text-zinc-400 mb-1 font-medium truncate">
-                      ເມືອງ (District) <span className="text-red-500 font-bold ml-1">*</span>
-                    </label>
-                    <div className="relative min-w-0" ref={districtDropdownRef}>
+                    {/* District Selector */}
+                    <div className="min-w-0">
+                      <label className="block text-zinc-400 mb-1 font-medium truncate">
+                        ເມືອງ <span className="text-red-500 font-bold ml-1">*</span>
+                      </label>
+                      <div className="relative min-w-0" ref={districtDropdownRef}>
                       <button
                         type="button"
                         aria-haspopup="listbox"
@@ -1454,7 +1379,6 @@ export default function POSSalesView({
                       >
                         <span className="truncate">
                           {districtOptions.find(district => district.nameLo === selectedDistrictName)?.nameLo || selectedDistrictName}
-                          {selectedDistrict?.nameEn && <span className="ml-1 text-zinc-400">({selectedDistrict.nameEn})</span>}
                         </span>
                         <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isDistrictDropdownOpen ? 'rotate-180' : ''}`} />
                       </button>
@@ -1486,15 +1410,15 @@ export default function POSSalesView({
                           ))}
                         </div>
                       )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Village Selector */}
-                  <div className="min-w-0">
-                    <label className="block text-zinc-400 mb-1 font-medium">
-                      ບ້ານ (Village) <span className="text-red-500 font-bold ml-1">*</span>
-                    </label>
-                    <div className="relative" ref={villageDropdownRef}>
+                    {/* Village Selector */}
+                    <div className="min-w-0">
+                      <label className="block text-zinc-400 mb-1 font-medium">
+                        ບ້ານ <span className="text-red-500 font-bold ml-1">*</span>
+                      </label>
+                      <div className="relative" ref={villageDropdownRef}>
                       <button
                         type="button"
                         aria-haspopup="listbox"
@@ -1508,7 +1432,7 @@ export default function POSSalesView({
                       >
                         <span className="truncate">
                           {customerVillage === '__custom__'
-                            ? '+ ລະບຸບ້ານອື່ນໆ...'
+                            ? '+ ບ້ານອື່ນ...'
                             : customerVillage || 'ເລືອກບ້ານ'}
                         </span>
                         <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isVillageDropdownOpen ? 'rotate-180' : ''}`} />
@@ -1550,17 +1474,18 @@ export default function POSSalesView({
                               : 'text-zinc-300 hover:bg-zinc-800'
                               }`}
                           >
-                            <span>+ ລະບຸບ້ານອື່ນໆ...</span>
+                            <span>+ ບ້ານອື່ນ...</span>
                           </button>
                         </div>
                       )}
+                      </div>
                     </div>
                   </div>
 
                   {customerVillage === '__custom__' && (
                     <div>
                       <label className="block text-zinc-400 mb-1 font-medium">
-                        ລະບຸຊື່ບ້ານ (Custom Village) *
+                        ຊື່ບ້ານ *
                       </label>
                       <input
                         type="text"
@@ -1573,16 +1498,15 @@ export default function POSSalesView({
                     </div>
                   )}
 
-                  {/* House No. / Street Details */}
-                  <div className="sm:col-span-2">
+                  <div className="sm:col-span-2 2xl:col-span-3">
                     <label className="block text-zinc-400 mb-1 font-medium">
-                      ເຮືອນເລກທີ / ຖະໜົນ / ຮ່ອມ (Street / House Details)
+                      ເຮືອນເລກທີ / ຖະໜົນ / ຮ່ອມ
                     </label>
                     <input
                       type="text"
                       value={customerAddressDetail}
                       onChange={(e) => setCustomerAddressDetail(e.target.value)}
-                      placeholder="ຕົວຢ່າງ: ເຮືອນເລກທີ 45, ຮ່ອມ 12, ຖະໜົນ ໄກສອນ ພົມວິຫານ"
+                      placeholder="ເຊັ່ນ 45, ຮ່ອມ 12"
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white focus-visible:ring-2 focus-visible:ring-white/20"
                     />
                   </div>
@@ -1695,10 +1619,10 @@ export default function POSSalesView({
                               type="button"
                               onClick={handleResetCompanyQr}
                               className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-xl text-xs border border-zinc-700 transition-colors flex items-center gap-1.5"
-                              title="ຣີເຊັດເປັນ QR ເລີ່ມຕົ້ນ"
+                              title="ລຶບຮູບ QR ບໍລິສັດອອກ (ທຸກບັນຊີຈະບໍ່ເຫັນ)"
                             >
                               <RefreshCw className="w-3 h-3" />
-                              <span>ຣີເຊັດ QR</span>
+                              <span>ລຶບ QR</span>
                             </button>
                           )}
                         </div>
@@ -1732,7 +1656,7 @@ export default function POSSalesView({
                         </div>
 
                         {/* Display Custom Uploaded QR or Stylized Vector QR */}
-                        <div className="relative p-2.5 bg-white rounded-2xl border-2 border-black flex items-center justify-center min-h-[180px] w-full max-w-[210px] overflow-hidden shadow-inner">
+                        <div className="relative p-2.5 bg-white rounded-2xl border-2 border-black flex items-center justify-center min-h-45 w-full max-w-52.5 overflow-hidden shadow-inner">
                           {companyBankInfo.qrCodeUrl ? (
                             <img
                               src={companyBankInfo.qrCodeUrl}
@@ -1740,68 +1664,11 @@ export default function POSSalesView({
                               className="w-44 h-44 object-contain rounded-xl shadow-sm"
                             />
                           ) : (
-                            <svg className="w-44 h-44" viewBox="0 0 140 140" fill="none">
-                              {/* Corner Markers */}
-                              <rect x="5" y="5" width="35" height="35" rx="6" fill="black" />
-                              <rect x="10" y="10" width="25" height="25" rx="3" fill="white" />
-                              <rect x="15" y="15" width="15" height="15" rx="2" fill="black" />
-
-                              <rect x="100" y="5" width="35" height="35" rx="6" fill="black" />
-                              <rect x="105" y="10" width="25" height="25" rx="3" fill="white" />
-                              <rect x="110" y="15" width="15" height="15" rx="2" fill="black" />
-
-                              <rect x="5" y="100" width="35" height="35" rx="6" fill="black" />
-                              <rect x="10" y="105" width="25" height="25" rx="3" fill="white" />
-                              <rect x="15" y="110" width="15" height="15" rx="2" fill="black" />
-
-                              {/* Data Pattern Modules */}
-                              <rect x="45" y="10" width="6" height="6" fill="black" />
-                              <rect x="55" y="10" width="6" height="12" fill="black" />
-                              <rect x="65" y="10" width="6" height="6" fill="black" />
-                              <rect x="75" y="10" width="6" height="18" fill="black" />
-                              <rect x="85" y="10" width="6" height="6" fill="black" />
-
-                              <rect x="45" y="25" width="18" height="6" fill="black" />
-                              <rect x="70" y="25" width="6" height="6" fill="black" />
-                              <rect x="85" y="25" width="8" height="6" fill="black" />
-
-                              <rect x="10" y="45" width="12" height="6" fill="black" />
-                              <rect x="28" y="45" width="6" height="12" fill="black" />
-                              <rect x="40" y="45" width="12" height="6" fill="black" />
-                              <rect x="60" y="45" width="6" height="18" fill="black" />
-                              <rect x="75" y="45" width="18" height="6" fill="black" />
-                              <rect x="105" y="45" width="6" height="12" fill="black" />
-                              <rect x="120" y="45" width="12" height="6" fill="black" />
-
-                              <rect x="10" y="60" width="6" height="18" fill="black" />
-                              <rect x="25" y="60" width="12" height="6" fill="black" />
-                              <rect x="45" y="60" width="6" height="6" fill="black" />
-                              <rect x="90" y="60" width="6" height="12" fill="black" />
-                              <rect x="110" y="60" width="18" height="6" fill="black" />
-
-                              <rect x="10" y="85" width="18" height="6" fill="black" />
-                              <rect x="35" y="85" width="6" height="6" fill="black" />
-                              <rect x="50" y="85" width="12" height="12" fill="black" />
-                              <rect x="70" y="85" width="6" height="6" fill="black" />
-                              <rect x="85" y="85" width="18" height="6" fill="black" />
-                              <rect x="115" y="85" width="15" height="12" fill="black" />
-
-                              <rect x="45" y="105" width="6" height="12" fill="black" />
-                              <rect x="60" y="105" width="18" height="6" fill="black" />
-                              <rect x="85" y="105" width="6" height="6" fill="black" />
-                              <rect x="100" y="105" width="12" height="18" fill="black" />
-                              <rect x="120" y="105" width="10" height="6" fill="black" />
-
-                              <rect x="45" y="125" width="18" height="6" fill="black" />
-                              <rect x="70" y="125" width="6" height="6" fill="black" />
-                              <rect x="85" y="120" width="12" height="12" fill="black" />
-                              <rect x="115" y="125" width="15" height="6" fill="black" />
-
-                              {/* Center AVATR Badge */}
-                              <rect x="52" y="52" width="36" height="36" rx="6" fill="white" stroke="black" strokeWidth="2" />
-                              <polygon points="70,57 82,70 70,83 58,70" fill="black" />
-                              <polygon points="70,62 77,70 70,78 63,70" fill="white" />
-                            </svg>
+                            <div className="w-44 h-44 flex flex-col items-center justify-center gap-2 text-center px-3" role="status">
+                              <QrCode className="w-10 h-10 text-zinc-300" aria-hidden="true" />
+                              <span className="text-xs font-bold text-black">ຍັງບໍ່ມີຮູບ QR ບໍລິສັດ</span>
+                              <span className="text-[11px] text-zinc-500 leading-snug">ໃຫ້ Admin ອັບໂຫຼດຮູບ QR ກ່ອນ. ຫ້າມໃຫ້ລູກຄ້າໂອນຈົນກວ່າຈະມີ QR ທາງການ</span>
+                            </div>
                           )}
                         </div>
 
@@ -1873,7 +1740,7 @@ export default function POSSalesView({
                               ) : (
                                 <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-red-400">PDF</div>
                               )}
-                              <span className="text-[11px] text-zinc-300 truncate max-w-[120px]">{slipFile?.name}</span>
+                              <span className="text-[11px] text-zinc-300 truncate max-w-30">{slipFile?.name}</span>
                             </div>
                             <button
                               type="button"
@@ -2025,95 +1892,48 @@ export default function POSSalesView({
                 </div>
               </div>
 
-              {/* Step 4: Free Gifts & Privileges Selection with Admin Management */}
+              {/* Step 4: Free Gifts & After-sales Services */}
               <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-sm sm:p-6 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
                   <div className="flex items-center gap-2 text-white font-bold text-sm">
                     <Sparkles className="w-4 h-4 text-zinc-300" />
-                    <span>4. {lang === 'lo' ? 'ເລືອກຊຸດຂອງແຖມ & ບໍລິການຫຼັງການຂາຍ' : lang === 'th' ? 'เลือกชุดของแถม & บริการหลังการขาย' : 'Dealership Packages & Privileges'}</span>
+                    <span>4. {lang === 'lo' ? 'ຂອງແຖມ ແລະ ບໍລິການຫຼັງການຂາຍ' : lang === 'th' ? 'ของแถมและบริการหลังการขาย' : 'Free Gifts & After-sales Services'}</span>
                   </div>
-                  {isSuperAdmin ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1 font-mono">
-                      <ShieldCheck className="w-3 h-3 text-zinc-200" /> {lang === 'lo' ? 'Admin' : lang === 'th' ? 'Admin' : 'Admin Mode'}
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-900 text-zinc-400 border border-zinc-800 flex items-center gap-1 font-mono">
-                      <Lock className="w-3 h-3 text-zinc-500" /> {lang === 'lo' ? 'ລາຍການມາດຕະຖານໂຊຣູມ' : lang === 'th' ? 'รายการมาตรฐานโชว์รูม' : 'Standard Showroom Packages'}
-                    </span>
-                  )}
                 </div>
 
-                {/* Admin: Add New Package Category Form */}
-                {isSuperAdmin && (
-                  <div className="p-3.5 bg-zinc-900/80 rounded-2xl border border-zinc-700 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-mono text-zinc-300 uppercase flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3" />
-                        <span>{lang === 'lo' ? 'ສິດ Admin: ເພີ່ມໝວດ / ແພັກເກດຂອງແຖມໃໝ່' : lang === 'th' ? 'สิทธิ์ Admin: เพิ่มหมวด / แพ็กเกจของแถมใหม่' : 'Add New Dealership Package'}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
+                <div className="space-y-2.5">
+                  {/* Always one empty row at the end; typing in it creates the next one (no add button). */}
+                  {[...selectedGifts, ''].map((gift, index, rows) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <label className="sr-only" htmlFor={`free-gift-${index}`}>
+                        {lang === 'lo' ? `ລາຍການຂອງແຖມ ຫຼື ບໍລິການ ${index + 1}` : lang === 'th' ? `รายการของแถมหรือบริการ ${index + 1}` : `Gift or service ${index + 1}`}
+                      </label>
                       <input
+                        id={`free-gift-${index}`}
                         type="text"
-                        value={newPackageInput}
-                        onChange={(e) => setNewPackageInput(e.target.value)}
-                        placeholder={lang === 'lo' ? 'ປ້ອນຊື່ໝວດຂອງແຖມ ຫຼື ບໍລິການໃໝ່...' : lang === 'th' ? 'กรอกชื่อหมวดของแถม หรือบริการใหม่...' : 'Enter package name...'}
-                        className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddPackage(e);
-                          }
+                        value={gift}
+                        onChange={(e) => {
+                          const next = rows.slice();
+                          next[index] = e.target.value;
+                          setSelectedGifts(trimTrailingEmpty(next));
                         }}
+                        placeholder={index === rows.length - 1
+                          ? (lang === 'lo' ? 'ພິມຂອງແຖມ ຫຼື ບໍລິການ (ພິມແລ້ວແຖວໃໝ່ຈະຂຶ້ນເອງ)' : lang === 'th' ? 'พิมพ์ของแถมหรือบริการ (แถวใหม่จะขึ้นเอง)' : 'Type a gift or service (a new row appears automatically)')
+                          : ''}
+                        className="min-h-11 min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
                       />
-                      <button
-                        type="button"
-                        onClick={handleAddPackage}
-                        className="px-3.5 py-2 bg-white hover:bg-zinc-200 text-black font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors flex-shrink-0 shadow-sm"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>{t.save}</span>
-                      </button>
+                      {index < rows.length - 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedGifts(trimTrailingEmpty(selectedGifts.filter((_, itemIndex) => itemIndex !== index)))}
+                          aria-label={lang === 'lo' ? `ລຶບລາຍການ ${index + 1}` : lang === 'th' ? `ลบรายการ ${index + 1}` : `Remove item ${index + 1}`}
+                          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-700 text-zinc-400 transition-colors hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
-                  </div>
-                )}
-
-                {/* Packages Selection Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  {giftOptions.map((gift, idx) => {
-                    const isChecked = selectedGifts.includes(gift);
-                    return (
-                      <div
-                        key={idx}
-                        onClick={() => toggleGift(gift)}
-                        className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all ${isChecked
-                          ? 'bg-zinc-900 border-white text-white'
-                          : 'bg-zinc-900/30 border-zinc-800/80 text-zinc-400 hover:text-zinc-200'
-                          }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => { }}
-                            className="rounded border-zinc-700 text-black focus:ring-0"
-                          />
-                          <span className="truncate">{gift}</span>
-                        </div>
-
-                        {isSuperAdmin && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeletePackage(gift, e)}
-                            className="p-1 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                  ))}
                 </div>
               </div>
 
@@ -2282,7 +2102,7 @@ export default function POSSalesView({
               </div>
 
               {/* Step 6: Final Price Summary & Execute Sale Button */}
-              <div className="theme-adaptive-dark-surface rounded-3xl border border-zinc-700 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 shadow-xl sm:p-6 space-y-4">
+              <div className="theme-adaptive-dark-surface rounded-3xl border border-zinc-700 bg-linear-to-br from-zinc-900 to-zinc-950 p-5 shadow-xl sm:p-6 space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b border-zinc-800 text-white font-bold text-sm">
                   <Receipt className="w-4 h-4 text-white" />
                   <span>6. {lang === 'lo' ? 'ສະຫຼຸບຍອດເງິນ & ຢືນຢັນການຂາຍ' : lang === 'th' ? 'สรุปยอดเงิน & ยืนยันการขาย' : 'Final Price Summary & Execute Sale'}</span>
@@ -2393,55 +2213,11 @@ export default function POSSalesView({
                       className="w-56 h-56 object-contain rounded-lg"
                     />
                   ) : (
-                    <svg className="w-56 h-56" viewBox="0 0 140 140" fill="none">
-                      <rect x="5" y="5" width="35" height="35" rx="6" fill="black" />
-                      <rect x="10" y="10" width="25" height="25" rx="3" fill="white" />
-                      <rect x="15" y="15" width="15" height="15" rx="2" fill="black" />
-                      <rect x="100" y="5" width="35" height="35" rx="6" fill="black" />
-                      <rect x="105" y="10" width="25" height="25" rx="3" fill="white" />
-                      <rect x="110" y="15" width="15" height="15" rx="2" fill="black" />
-                      <rect x="5" y="100" width="35" height="35" rx="6" fill="black" />
-                      <rect x="10" y="105" width="25" height="25" rx="3" fill="white" />
-                      <rect x="15" y="110" width="15" height="15" rx="2" fill="black" />
-                      <rect x="45" y="10" width="6" height="6" fill="black" />
-                      <rect x="55" y="10" width="6" height="12" fill="black" />
-                      <rect x="65" y="10" width="6" height="6" fill="black" />
-                      <rect x="75" y="10" width="6" height="18" fill="black" />
-                      <rect x="85" y="10" width="6" height="6" fill="black" />
-                      <rect x="45" y="25" width="18" height="6" fill="black" />
-                      <rect x="70" y="25" width="6" height="6" fill="black" />
-                      <rect x="85" y="25" width="8" height="6" fill="black" />
-                      <rect x="10" y="45" width="12" height="6" fill="black" />
-                      <rect x="28" y="45" width="6" height="12" fill="black" />
-                      <rect x="40" y="45" width="12" height="6" fill="black" />
-                      <rect x="60" y="45" width="6" height="18" fill="black" />
-                      <rect x="75" y="45" width="18" height="6" fill="black" />
-                      <rect x="105" y="45" width="6" height="12" fill="black" />
-                      <rect x="120" y="45" width="12" height="6" fill="black" />
-                      <rect x="10" y="60" width="6" height="18" fill="black" />
-                      <rect x="25" y="60" width="12" height="6" fill="black" />
-                      <rect x="45" y="60" width="6" height="6" fill="black" />
-                      <rect x="90" y="60" width="6" height="12" fill="black" />
-                      <rect x="110" y="60" width="18" height="6" fill="black" />
-                      <rect x="10" y="85" width="18" height="6" fill="black" />
-                      <rect x="35" y="85" width="6" height="6" fill="black" />
-                      <rect x="50" y="85" width="12" height="12" fill="black" />
-                      <rect x="70" y="85" width="6" height="6" fill="black" />
-                      <rect x="85" y="85" width="18" height="6" fill="black" />
-                      <rect x="115" y="85" width="15" height="12" fill="black" />
-                      <rect x="45" y="105" width="6" height="12" fill="black" />
-                      <rect x="60" y="105" width="18" height="6" fill="black" />
-                      <rect x="85" y="105" width="6" height="6" fill="black" />
-                      <rect x="100" y="105" width="12" height="18" fill="black" />
-                      <rect x="120" y="105" width="10" height="6" fill="black" />
-                      <rect x="45" y="125" width="18" height="6" fill="black" />
-                      <rect x="70" y="125" width="6" height="6" fill="black" />
-                      <rect x="85" y="120" width="12" height="12" fill="black" />
-                      <rect x="115" y="125" width="15" height="6" fill="black" />
-                      <rect x="52" y="52" width="36" height="36" rx="6" fill="white" stroke="black" strokeWidth="2" />
-                      <polygon points="70,57 82,70 70,83 58,70" fill="black" />
-                      <polygon points="70,62 77,70 70,78 63,70" fill="white" />
-                    </svg>
+                    <div className="w-56 h-56 flex flex-col items-center justify-center gap-2 text-center px-3" role="status">
+                      <QrCode className="w-10 h-10 text-zinc-300" aria-hidden="true" />
+                      <span className="text-xs font-bold text-black">ຍັງບໍ່ມີຮູບ QR ບໍລິສັດ</span>
+                      <span className="text-[11px] text-zinc-500 leading-snug">ໃຫ້ Admin ອັບໂຫຼດຮູບ QR ກ່ອນ. ຫ້າມໃຫ້ລູກຄ້າໂອນຈົນກວ່າຈະມີ QR ທາງການ</span>
+                    </div>
                   )}
                 </div>
 
@@ -2525,7 +2301,7 @@ export default function POSSalesView({
             {/* Bill Preview Card */}
             <div
               id="printable-pos-receipt"
-              className="a4-document-canvas w-full max-w-[794px] mx-auto p-6 sm:p-8 official-dealer-document bg-white text-black rounded-lg space-y-3.5 text-[11px] font-sans shadow-xl print:m-0 print:p-0 print:border-none print:shadow-none"
+              className="a4-document-canvas w-full max-w-198.5 mx-auto p-6 sm:p-8 official-dealer-document bg-white text-black rounded-lg space-y-3.5 text-[11px] font-sans shadow-xl print:m-0 print:p-0 print:border-none print:shadow-none"
               style={{ backgroundColor: '#ffffff', color: '#000000', border: 'none' }}
             >
               <div className="border-b-2 border-black pb-2.5">
@@ -2728,37 +2504,6 @@ export default function POSSalesView({
           </div>
         </div>
       )}
-
-      {/* Modern Confirmation Popup Modal for Deleting Package / Privilege */}
-      <ConfirmDeleteModal
-        isOpen={!!packageToDelete}
-        onClose={() => setPackageToDelete(null)}
-        onConfirm={async () => {
-          if (!packageToDelete) return;
-          const pkg = packageToDelete;
-          const updated = giftOptions.filter(g => g !== pkg);
-          setGiftOptions(updated);
-          setSelectedGifts(prev => prev.filter(g => g !== pkg));
-          localStorage.setItem('avatr_dealership_packages_v2', JSON.stringify(updated));
-          try {
-            await saveDealershipConfigToSupabase({ campaignCategories: updated });
-          } catch (e) {
-            console.warn('Supabase delete package fallback:', e);
-          }
-          triggerToast(`ລົບໝວດ "${pkg}" ອອກຮຽບຮ້ອຍແລ້ວ!`);
-          setPackageToDelete(null);
-        }}
-        itemName={packageToDelete || ''}
-        itemType="PACKAGE / PRIVILEGE"
-        title={lang === 'lo' ? 'ຢືນຢັນການລົບຊຸດຂອງແຖມ / ບໍລິການ' : 'Confirm Delete Package'}
-        description={lang === 'lo'
-          ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບ "${packageToDelete}" ອອກຈາກລາຍການຂອງແຖມ?`
-          : `Are you sure you want to delete package "${packageToDelete}"?`
-        }
-        confirmButtonText={lang === 'lo' ? 'ຢືນຢັນລົບ' : 'Delete'}
-        cancelButtonText={lang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
-        lang={lang}
-      />
 
       {/* Customer Document Suite Modal for POS */}
       {selectedDocCustomer && (

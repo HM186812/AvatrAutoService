@@ -1,5 +1,7 @@
 import type { IssuedDocumentRecord, IssuedDocType, IssuedDocumentAction } from '../types';
-import { supabase, isSupabaseConfigured } from '../backend/client';
+import { supabase, isSupabaseConfigured, isOfflineDemoEnabled } from '../backend/client';
+import { newRecordId } from '../backend/ids';
+import { showToast } from '../components/common/Toast';
 
 const STORAGE_KEY = 'avatr_offline_document_logs';
 export const DOCUMENT_LOG_EVENT = 'avatr_document_logged';
@@ -102,23 +104,57 @@ export const INITIAL_ISSUED_DOCUMENTS: IssuedDocumentRecord[] = [
   },
 ];
 
-export function getIssuedDocumentLogs(): IssuedDocumentRecord[] {
+/** Sample rows exist only for the offline demo; a real database never sees invented documents. */
+const seedLogs = (): IssuedDocumentRecord[] => (isOfflineDemoEnabled && !isSupabaseConfigured ? INITIAL_ISSUED_DOCUMENTS : []);
+
+/**
+ * With Supabase, the shared table `document_issuance_logs` is the only source: every account and device reads the
+ * same list, and a delete disappears everywhere. This browser keeps only an in-memory copy of that table.
+ * Without Supabase (offline demo), localStorage is the store.
+ */
+const useCloud = () => Boolean(isSupabaseConfigured && supabase);
+let cloudCache: IssuedDocumentRecord[] = [];
+
+if (isSupabaseConfigured) {
+  // Older versions kept a browser-only copy that could disagree with other accounts
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+}
+
+const notifyChanged = (detail: unknown) => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(DOCUMENT_LOG_EVENT, { detail }));
+  }
+};
+
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+function readLocalLogs(): IssuedDocumentRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_ISSUED_DOCUMENTS));
-      return INITIAL_ISSUED_DOCUMENTS;
+      const seeded = seedLogs();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+      return seeded;
     }
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_ISSUED_DOCUMENTS));
-      return INITIAL_ISSUED_DOCUMENTS;
-    }
-    return parsed;
+    // An empty list is a real state (e.g. after clearing): never refill it with samples.
+    return Array.isArray(parsed) ? parsed : seedLogs();
   } catch (err) {
     console.warn('Failed to parse issued document logs:', err);
-    return INITIAL_ISSUED_DOCUMENTS;
+    return seedLogs();
   }
+}
+
+function writeLocalLogs(logs: IssuedDocumentRecord[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+  } catch (err) {
+    console.error('Failed to save document logs:', err);
+  }
+}
+
+export function getIssuedDocumentLogs(): IssuedDocumentRecord[] {
+  return useCloud() ? cloudCache : readLocalLogs();
 }
 
 export function logIssuedDocument(
@@ -128,160 +164,173 @@ export function logIssuedDocument(
     issuedDate?: string;
   }
 ): IssuedDocumentRecord {
-  const currentLogs = getIssuedDocumentLogs();
   const now = new Date();
   const newRecord: IssuedDocumentRecord = {
-    id: data.id || `DOCLOG-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+    id: data.id && (!useCloud() || isUuid(data.id)) ? data.id : newRecordId(),
     issuedAt: data.issuedAt || now.toISOString(),
     issuedDate: data.issuedDate || now.toISOString().slice(0, 10),
     ...data,
   };
+  if (useCloud() && !isUuid(newRecord.id)) newRecord.id = newRecordId();
 
-  const updatedLogs = [newRecord, ...currentLogs];
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedLogs));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(DOCUMENT_LOG_EVENT, { detail: newRecord }));
+  if (!useCloud()) {
+    writeLocalLogs([newRecord, ...readLocalLogs()]);
+    notifyChanged(newRecord);
+    return newRecord;
+  }
+
+  // Show it right away; if the database refuses it, take it back out so no device shows an unsaved record
+  cloudCache = [newRecord, ...cloudCache];
+  notifyChanged(newRecord);
+  void (async () => {
+    try {
+      const { error } = await supabase!
+        .from('document_issuance_logs')
+        .insert({
+          id: newRecord.id,
+          document_type: newRecord.docType,
+          serial_number: newRecord.docNumber,
+          customer_name: newRecord.customerName,
+          customer_phone: newRecord.customerPhone || null,
+          vin: newRecord.vin || null,
+          lead_id: newRecord.leadId || null,
+          issued_by_name: newRecord.issuedBy,
+          notes: newRecord.notes || null,
+          metadata: {
+            docTitle: newRecord.docTitle,
+            action: newRecord.action,
+            amountUSD: newRecord.amountUSD,
+            amountLAK: newRecord.amountLAK,
+            model: newRecord.model,
+            billId: newRecord.billId,
+          },
+        });
+      if (error) throw error;
+    } catch (err) {
+      console.warn('Supabase document log sync error:', err);
+      cloudCache = cloudCache.filter(l => l.id !== newRecord.id);
+      notifyChanged({ failedId: newRecord.id });
+      // A print with no record in the shared database cannot be audited later
+      showToast(
+        `ພິມ/ບັນທຶກ ${newRecord.docNumber} ແລ້ວ ແຕ່ບັນທຶກປະຫວັດເຂົ້າຖານຂໍ້ມູນບໍ່ສຳເລັດ: ${err instanceof Error ? err.message : 'ກະລຸນາແຈ້ງ Admin'}`,
+        'error'
+      );
     }
-  } catch (err) {
-    console.error('Failed to save document log:', err);
-  }
-
-  // Asynchronous background sync to Supabase Cloud
-  if (isSupabaseConfigured && supabase) {
-    void (async () => {
-      try {
-        const { error } = await supabase
-          .from('document_issuance_logs')
-          .insert({
-            document_type: newRecord.docType,
-            serial_number: newRecord.docNumber,
-            customer_name: newRecord.customerName,
-            customer_phone: newRecord.customerPhone || null,
-            vin: newRecord.vin || null,
-            lead_id: newRecord.leadId || null,
-            issued_by_name: newRecord.issuedBy,
-            notes: newRecord.notes || null,
-            metadata: {
-              docTitle: newRecord.docTitle,
-              action: newRecord.action,
-              amountUSD: newRecord.amountUSD,
-              amountLAK: newRecord.amountLAK,
-              model: newRecord.model,
-              billId: newRecord.billId,
-            },
-          });
-        if (error) {
-          console.warn('Supabase document log sync notice:', error.message);
-        }
-      } catch (err) {
-        console.warn('Supabase document log sync error:', err);
-      }
-    })();
-  }
+  })();
 
   return newRecord;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapCloudRow(row: any): IssuedDocumentRecord {
+  return {
+    id: row.id,
+    docType: row.document_type as IssuedDocType,
+    docTitle: row.metadata?.docTitle || row.document_type,
+    docNumber: row.serial_number,
+    customerName: row.customer_name,
+    customerPhone: row.customer_phone || undefined,
+    leadId: row.lead_id || undefined,
+    billId: row.metadata?.billId || undefined,
+    vin: row.vin || undefined,
+    model: row.metadata?.model || undefined,
+    action: (row.metadata?.action as IssuedDocumentAction) || 'export_pdf',
+    formatLabel: row.metadata?.action === 'print' ? 'Print' : 'PDF',
+    issuedAt: row.created_at,
+    issuedDate: (row.created_at || '').slice(0, 10),
+    issuedBy: row.issued_by_name,
+    amountUSD: row.metadata?.amountUSD,
+    amountLAK: row.metadata?.amountLAK,
+    notes: row.notes || undefined,
+  };
+}
+
+let activeFetch: Promise<IssuedDocumentRecord[]> | null = null;
+
+/** Reload the whole shared history from the database (replaces this browser's copy). */
 export async function fetchDocumentLogsFromCloud(): Promise<IssuedDocumentRecord[]> {
-  if (!isSupabaseConfigured || !supabase) return getIssuedDocumentLogs();
-  try {
-    const { data, error } = await supabase
-      .from('document_issuance_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(100);
-    if (error) throw error;
-    if (data && data.length > 0) {
-      const cloudLogs: IssuedDocumentRecord[] = data.map((row: any) => ({
-        id: row.id,
-        docType: row.document_type as IssuedDocType,
-        docTitle: row.metadata?.docTitle || row.document_type,
-        docNumber: row.serial_number,
-        customerName: row.customer_name,
-        customerPhone: row.customer_phone || undefined,
-        leadId: row.lead_id || undefined,
-        vin: row.vin || undefined,
-        model: row.metadata?.model || undefined,
-        action: (row.metadata?.action as IssuedDocumentAction) || 'export_pdf',
-        formatLabel: row.metadata?.action === 'print' ? 'Print' : 'PDF',
-        issuedAt: row.created_at,
-        issuedDate: (row.created_at || '').slice(0, 10),
-        issuedBy: row.issued_by_name,
-        amountUSD: row.metadata?.amountUSD,
-        amountLAK: row.metadata?.amountLAK,
-        notes: row.notes || undefined,
-      }));
-      const local = getIssuedDocumentLogs();
-      const mergedMap = new Map<string, IssuedDocumentRecord>();
-      // Deduplicate by docNumber or id to avoid duplicates between client and cloud
-      cloudLogs.forEach((item) => {
-        const key = item.docNumber || item.id;
-        mergedMap.set(key, item);
-      });
-      local.forEach((item) => {
-        const key = item.docNumber || item.id;
-        if (!mergedMap.has(key)) {
-          mergedMap.set(key, item);
-        }
-      });
-      const merged = Array.from(mergedMap.values());
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      return merged;
+  if (!useCloud()) return readLocalLogs();
+  if (activeFetch) return activeFetch;
+  activeFetch = (async () => {
+    try {
+      const pageSize = 1000;
+      const rows: unknown[] = [];
+      for (let offset = 0; offset < 20000; offset += pageSize) {
+        const { data, error } = await supabase!
+          .from('document_issuance_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+      }
+      cloudCache = rows.map(mapCloudRow);
+      notifyChanged({ refreshed: true });
+    } catch (err) {
+      // Keep the last copy that came from the database
+      console.warn('Failed to fetch document logs from cloud:', err);
+    } finally {
+      activeFetch = null;
     }
-  } catch (err) {
-    console.warn('Failed to fetch document logs from cloud:', err);
-  }
-  return getIssuedDocumentLogs();
+    return cloudCache;
+  })();
+  return activeFetch;
 }
 
 export function deleteIssuedDocumentLog(id: string): IssuedDocumentRecord[] {
-  const currentLogs = getIssuedDocumentLogs();
-  const target = currentLogs.find((l) => l.id === id);
-  const filtered = currentLogs.filter((l) => l.id !== id);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(DOCUMENT_LOG_EVENT, { detail: { deletedId: id } }));
+  if (!useCloud()) {
+    const filtered = readLocalLogs().filter((l) => l.id !== id);
+    writeLocalLogs(filtered);
+    notifyChanged({ deletedId: id });
+    return filtered;
+  }
+
+  const previous = cloudCache;
+  const target = previous.find((l) => l.id === id);
+  cloudCache = previous.filter((l) => l.id !== id);
+  notifyChanged({ deletedId: id });
+  void (async () => {
+    try {
+      const query = supabase!.from('document_issuance_logs').delete();
+      const { data, error } = isUuid(id)
+        ? await query.eq('id', id).select('id')
+        : await query.eq('serial_number', target?.docNumber || id).select('id');
+      if (error) throw error;
+      // Row security answers a refused delete with zero rows and no error
+      if (!data || data.length === 0) throw new Error('ບໍ່ມີສິດລົບ (ສະເພາະ Admin) ຫຼື ລາຍການຖືກລົບໄປແລ້ວ');
+    } catch (err) {
+      console.warn('Failed to delete document log from Supabase:', err);
+      cloudCache = previous;
+      notifyChanged({ restoredId: id });
+      showToast(`ລົບປະຫວັດເອກະສານບໍ່ສຳເລັດ: ${err instanceof Error ? err.message : 'ກະລຸນາລອງໃໝ່'}`, 'error');
     }
-  } catch (err) {
-    console.error('Failed to delete document log:', err);
-  }
-  if (isSupabaseConfigured && supabase) {
-    void (async () => {
-      try {
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-        if (isUuid) {
-          await supabase.from('document_issuance_logs').delete().eq('id', id);
-        } else if (target?.docNumber) {
-          await supabase.from('document_issuance_logs').delete().eq('serial_number', target.docNumber);
-        }
-      } catch (err) {
-        console.warn('Failed to delete document log from Supabase:', err);
-      }
-    })();
-  }
-  return filtered;
+  })();
+  return cloudCache;
 }
 
 export function clearIssuedDocumentLogs(): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(DOCUMENT_LOG_EVENT, { detail: { cleared: true } }));
+  if (!useCloud()) {
+    writeLocalLogs([]);
+    notifyChanged({ cleared: true });
+    return;
+  }
+
+  const previous = cloudCache;
+  cloudCache = [];
+  notifyChanged({ cleared: true });
+  void (async () => {
+    try {
+      const { data, error } = await supabase!.from('document_issuance_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000').select('id');
+      if (error) throw error;
+      if (previous.length > 0 && (!data || data.length === 0)) throw new Error('ບໍ່ມີສິດລົບ (ສະເພາະ Admin)');
+    } catch (err) {
+      console.warn('Failed to clear document logs from Supabase:', err);
+      cloudCache = previous;
+      notifyChanged({ restored: true });
+      showToast(`ລ້າງປະຫວັດເອກະສານບໍ່ສຳເລັດ: ${err instanceof Error ? err.message : 'ກະລຸນາລອງໃໝ່'}`, 'error');
     }
-  } catch (err) {
-    console.error('Failed to clear document logs:', err);
-  }
-  if (isSupabaseConfigured && supabase) {
-    void (async () => {
-      try {
-        await supabase.from('document_issuance_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      } catch (err) {
-        console.warn('Failed to clear document logs from Supabase:', err);
-      }
-    })();
-  }
+  })();
 }
 
 export function getCustomerDocumentLogs(params: {

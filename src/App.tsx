@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { 
   Lead, 
   ServiceAppointment, 
@@ -13,7 +13,7 @@ import {
   KPITimeframe
 } from './types';
 import { translations } from './data/translations';
-import { getModelStockSummaries } from './data/stockSummary';
+import { getModelStockSummaries, isListedInStock } from './data/stockSummary';
 import { isOfflineDemoEnabled, isSupabaseConfigured, supabase } from './backend/client';
 import {
   clearStaffCache,
@@ -26,10 +26,15 @@ import {
   updateServiceAppointment,
 } from './backend/data';
 import { DEFAULT_OFFLINE_USERS } from './backend/offlineStore';
+import { getDueFollowUps, makeContactEntry } from './utils/followUp';
+import { getInstallmentCustomers } from './utils/installmentPortfolio';
+import { isAdminRole, canAccessMenu, normalizeRole, ROLE_LABELS } from './utils/roles';
+import { isMonthlyInstallmentBill } from './utils/installment';
 import { newRecordId } from './backend/ids';
 // Categorized Components & Views
 import { Sidebar } from './components/layout';
 import AvatrLogo from './components/layout/AvatrLogo';
+import { CompanyBankInfo, getStoredCompanyBankInfo, saveStoredCompanyBankInfo } from './data/companySettings';
 import { ToastContainer, showToast, ToastType, ViewSkeleton } from './components/common';
 import { LoginView } from './components/auth';
 
@@ -51,6 +56,7 @@ const QuotationModal = lazy(() => import('./components/modals/QuotationModal'));
 const ServiceModal = lazy(() => import('./components/modals/ServiceModal'));
 const TestDriveModal = lazy(() => import('./components/modals/TestDriveModal'));
 const VehicleModal = lazy(() => import('./components/modals/VehicleModal'));
+const CustomerPickerModal = lazy(() => import('./components/modals/CustomerPickerModal'));
 import { 
   Menu, 
   LayoutDashboard, 
@@ -64,19 +70,12 @@ import {
   AlertTriangle, 
   Key, 
   User as UserIcon, 
-  LogOut, 
-  DollarSign, 
-  Coins, 
-  Plus, 
-  ChevronRight, 
-  ShieldCheck, 
-  Lock,
-  Cloud,
-  CloudCheck,
-  Radio,
   Sun,
-  Moon
+  Moon,
+  Languages,
+  RefreshCw
 } from 'lucide-react';
+import { fetchDocumentLogsFromCloud } from './utils/documentLogger';
 
 export default function App() {
   const [currentMenu, setCurrentMenu] = useState<ActiveMenu>('dashboard');
@@ -134,6 +133,22 @@ export default function App() {
     }
   }, [theme]);
 
+  // Header language menu (opens below the language icon button)
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
+  const langMenuRef = useRef<HTMLDivElement>(null);
+  const langButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!isLangMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setIsLangMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isLangMenuOpen]);
+
   const handleSetLang = (newLang: Language) => {
     setLang(newLang);
     try {
@@ -148,7 +163,6 @@ export default function App() {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  const [activeSection, setActiveSection] = useState('home');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const FALLBACK_EMPTY_USER: SystemUser = {
@@ -156,21 +170,11 @@ export default function App() {
     name: '',
     email: '',
     phone: '',
-    role: 'general_user',
-    roleTitleLo: 'General User',
+    role: 'sales',
+    roleTitleLo: '',
     department: '',
     status: 'suspended',
     avatarInitials: '',
-    permissions: {
-      canManageUsers: false,
-      canDeleteUsers: false,
-      canGrantRoles: false,
-      canEditInventory: false,
-      canUploadQR: false,
-      canAddModels: false,
-      canDeductPOS: false,
-      canViewFinancials: false,
-    },
     createdAt: '',
   };
 
@@ -178,6 +182,29 @@ export default function App() {
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [currentUser, setCurrentUser] = useState<SystemUser>(FALLBACK_EMPTY_USER);
   const [leads, setLeads] = useState<Lead[]>([]);
+
+  // Keep the signed-in user in sync when an admin edits their own account
+  // from User Management (role, name, phone, department).
+  useEffect(() => {
+    const me = users.find(u => u.id === currentUser.id);
+    if (!me) return;
+    const changed =
+      me.role !== currentUser.role ||
+      me.roleTitleLo !== currentUser.roleTitleLo ||
+      me.name !== currentUser.name ||
+      me.phone !== currentUser.phone ||
+      me.department !== currentUser.department;
+    if (!changed) return;
+    setCurrentUser(prev => ({
+      ...prev,
+      role: me.role,
+      roleTitleLo: me.roleTitleLo,
+      name: me.name,
+      phone: me.phone,
+      department: me.department,
+      avatarInitials: me.avatarInitials || prev.avatarInitials,
+    }));
+  }, [users, currentUser]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [services, setServices] = useState<ServiceAppointment[]>([]);
   const [testDrives, setTestDrives] = useState<TestDriveBooking[]>([]);
@@ -189,6 +216,8 @@ export default function App() {
   const [backendError, setBackendError] = useState<string | null>(null);
 
   const refreshBackendData = useCallback(async () => {
+    // The document history is shared too: reload it with everything else
+    void fetchDocumentLogsFromCloud();
     // Fast Progressive Loading: update critical catalog & leads as soon as Tier 1 completes
     const data = await loadBackendData((tier1) => {
       if (tier1.users) setUsers(tier1.users);
@@ -227,12 +256,25 @@ export default function App() {
     }
     if (data.settings && typeof data.settings === 'object') {
       const settings = data.settings as Record<string, unknown>;
-      if (settings.companyBankInfo) {
-        try {
-          localStorage.setItem('avatr_company_bank_info_v2', JSON.stringify(settings.companyBankInfo));
-        } catch {
-          // ignore
-        }
+      // The company QR lives in the shared dealership settings (set by Admin only).
+      // Every account takes it from there, so a stale copy in this browser never wins.
+      try {
+        const stored = getStoredCompanyBankInfo();
+        const fromDb = (settings.companyBankInfo && typeof settings.companyBankInfo === 'object')
+          ? settings.companyBankInfo as Partial<CompanyBankInfo>
+          : {};
+        const qr = typeof settings.companyQrImageUrl === 'string' && settings.companyQrImageUrl
+          ? settings.companyQrImageUrl
+          : null;
+        saveStoredCompanyBankInfo({
+          ...stored,
+          ...fromDb,
+          qrCodeUrl: qr,
+          updatedAt: typeof settings.companyQrUpdatedAt === 'string' ? settings.companyQrUpdatedAt : stored.updatedAt,
+          updatedBy: typeof settings.companyQrUpdatedBy === 'string' ? settings.companyQrUpdatedBy : stored.updatedBy,
+        });
+      } catch {
+        // ignore quota or private mode errors
       }
       if (Array.isArray(settings.currencies)) {
         try {
@@ -242,7 +284,8 @@ export default function App() {
         }
       }
     }
-    setBackendError(data.warnings.length ? data.warnings.join(' ') : null);
+    // Offline demo warnings are informational, not database errors
+    setBackendError(isSupabaseConfigured && data.warnings.length ? data.warnings.join(' ') : null);
   }, []);
 
   useEffect(() => {
@@ -288,11 +331,14 @@ export default function App() {
       if (savedOfflineUser) {
         try {
           const user = JSON.parse(savedOfflineUser);
-          if (user && user.id && user.id !== 'user-tech-01' && !user.name?.includes('ຊ່າງເຕັກນິກ')) {
-            const cleanUser = {
-              ...user,
+          const savedRole = user ? normalizeRole(user.role) : null;
+          if (user && user.id && savedRole && user.id !== 'user-tech-01' && !user.name?.includes('ຊ່າງເຕັກນິກ')) {
+            const { permissions: _legacyPermissions, ...rest } = user;
+            const cleanUser: SystemUser = {
+              ...rest,
               name: (user.name || '').replace(/Super\s*Admin/gi, 'Admin').trim(),
-              roleTitleLo: user.roleTitleLo === 'Super Admin' ? 'Admin' : (user.roleTitleLo || 'Admin').replace(/Super\s*Admin/gi, 'Admin'),
+              role: savedRole,
+              roleTitleLo: ROLE_LABELS[savedRole],
             };
             setCurrentUser(cleanUser);
             setIsLoggedIn(true);
@@ -365,33 +411,58 @@ export default function App() {
     };
   }, [refreshBackendData]);
 
+  // Keep every account in step with the shared database: reload when the tab becomes visible again
+  // and every minute while it is open (not while hidden), so changes made by other accounts show up.
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const lastRefreshAt = useRef(0);
+  const runRefresh = useCallback(async (force = false) => {
+    if (!force && Date.now() - lastRefreshAt.current < 15_000) return;
+    lastRefreshAt.current = Date.now();
+    setIsRefreshing(true);
+    try {
+      await refreshBackendData();
+    } catch (error) {
+      console.warn('Background refresh failed:', error);
+      if (force) showToast('ໂຫຼດຂໍ້ມູນໃໝ່ບໍ່ສຳເລັດ: ' + (error instanceof Error ? error.message : ''), 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshBackendData]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    lastRefreshAt.current = Date.now(); // the login itself just loaded everything
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') void runRefresh();
+    };
+    const timer = window.setInterval(refreshIfVisible, 60_000);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    window.addEventListener('focus', refreshIfVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+      window.removeEventListener('focus', refreshIfVisible);
+    };
+  }, [isLoggedIn, runRefresh]);
+
   // Alert counts: Grouped by vehicle model (ໝວດ/ລຸ້ນລົດ). If available units in stock < 5, trigger low stock alert!
   const modelStockSummaries = useMemo(() => getModelStockSummaries(vehicles, inventory), [vehicles, inventory]);
   const lowStockCount = modelStockSummaries.filter(m => m.isLowStock).length;
   const outOfStockCount = modelStockSummaries.filter(m => m.isOutOfStock).length;
 
   // Active installment & leasing portfolio count
-  const installmentCount = useMemo(() => {
-    return leads.filter(l => 
-      l.paymentType === 'installment' || 
-      l.paymentType === 'finance' || 
-      Boolean(l.downPaymentPercent) || 
-      Boolean(l.financeCompany) || 
-      Boolean(l.installmentRecords && l.installmentRecords.length > 0) ||
-      l.installmentStatus === 'active_repaying' ||
-      l.installmentStatus === 'completed' ||
-      l.installmentStatus === 'approved' ||
-      l.installmentStatus === 'pending_approval'
-    ).length;
-  }, [leads]);
+  // Same customer set as the Dashboard and the Installment page
+  const installmentCount = useMemo(() => getInstallmentCustomers(leads, bills).length, [leads, bills]);
 
   // Modal States
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
+  const [leadToEdit, setLeadToEdit] = useState<Lead | null>(null);
+  const followUpDueCount = useMemo(() => getDueFollowUps(leads).length, [leads]);
   const [isServiceOpen, setIsServiceOpen] = useState(false);
   const [isTestDriveOpen, setIsTestDriveOpen] = useState(false);
   const [testDriveInitialModel, setTestDriveInitialModel] = useState('AVATR 12');
   
-  const [selectedVehicleForModal, setSelectedVehicleForModal] = useState<VehicleModel | null>(null);
+  const [selectedVehicleForModal] = useState<VehicleModel | null>(null);
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
 
   const [quoteVehicle, setQuoteVehicle] = useState<VehicleModel | null>(null);
@@ -400,17 +471,31 @@ export default function App() {
 
   const [prefilledCustomerForPOS, setPrefilledCustomerForPOS] = useState<Lead | null>(null);
 
+  const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
+
+  // Every sale starts from a customer: without one, ask for it first (search CRM or quick-create a walk-in)
   const handleSelectCustomerForPOS = (lead?: Lead | null) => {
-    setPrefilledCustomerForPOS(lead || null);
+    if (!lead) {
+      setIsCustomerPickerOpen(true);
+      return;
+    }
+    setPrefilledCustomerForPOS(lead);
+    setIsCustomerPickerOpen(false);
     setCurrentMenu('pos_sales');
   };
 
+  // Views navigate with plain menu ids; route 'pos_sales' through the customer picker
+  const navigateMenu = (menu: ActiveMenu) => {
+    if (menu === 'pos_sales') handleSelectCustomerForPOS(null);
+    else setCurrentMenu(menu);
+  };
+
   // Role & Admin Check
-  const isAdmin = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+  const isAdmin = isAdminRole(currentUser);
 
   // Guard admin-only sections (Inventory, Stock-In, Stock Alerts, User Management)
   useEffect(() => {
-    if (!isAdmin && (currentMenu === 'inventory' || currentMenu === 'stock_in' || currentMenu === 'alerts' || currentMenu === 'users')) {
+    if (!canAccessMenu(currentUser, currentMenu)) {
       setCurrentMenu('dashboard');
     }
   }, [currentUser.role, currentMenu, isAdmin]);
@@ -457,23 +542,34 @@ export default function App() {
   }, [isLoggedIn, handleLogout]);
 
   // Delete Bill Handler (Admin only - synced to Supabase)
-  const handleDeleteBill = async (billId: string) => {
-    if (currentUser.role !== 'super_admin' && currentUser.role !== 'admin') {
-      triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບບິນ!');
-      return;
+  /** Void a bill (Admin only). Returns true when it was voided, so batch actions can report results. */
+  const handleDeleteBill = async (billId: string, options: { reason: string; silent?: boolean; bill?: InvoiceBillRecord }): Promise<boolean> => {
+    if (!isAdminRole(currentUser)) {
+      triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດຍົກເລີກບິນ!', 'error');
+      return false;
+    }
+    // Older bills loaded by the bills page date filter are not in `bills`: use the copy passed along
+    const targetBill = bills.find(b => b.id === billId) || options.bill;
+    if (targetBill?.status === 'voided') {
+      // Voiding twice would return the same car to stock twice
+      if (!options.silent) triggerToast(`ບິນ ${targetBill.billNumber} ຖືກຍົກເລີກແລ້ວ`, 'error');
+      return false;
     }
     try {
-      const targetBill = bills.find(b => b.id === billId);
-      await deleteBill(billId);
-      setBills(prev => prev.map(b => b.id === billId ? { ...b, status: 'voided' } : b));
+      const voidInfo = await deleteBill(billId, options.reason, currentUser.name);
+      setBills(prev => prev.some(b => b.id === billId)
+        ? prev.map(b => b.id === billId ? { ...b, status: 'voided', ...voidInfo } : b)
+        : (targetBill ? [{ ...targetBill, status: 'voided', ...voidInfo }, ...prev] : prev));
       if (targetBill?.vin) {
         const billType = targetBill.billType || targetBill.type;
-        if ((billType === 'sale' || billType === 'installment') && targetBill.installmentType !== 'monthly_installment') {
+        if (isMonthlyInstallmentBill(targetBill)) {
+          // A monthly receipt never moved stock: leave inventory and stock logs untouched.
+        } else if (billType === 'sale' || billType === 'installment') {
           setInventory(prev => {
             const exists = prev.some(item => item.vin === targetBill.vin);
             if (exists) {
               return prev.map(item =>
-                item.vin === targetBill.vin ? { ...item, status: 'ready', stockQuantity: 1 } : item
+                item.vin === targetBill.vin ? { ...item, status: 'pdi', pdiStatus: 'pending', reservedForCustomer: undefined, stockQuantity: 1 } : item
               );
             }
             return [
@@ -485,14 +581,14 @@ export default function App() {
                 plateNumber: targetBill.plateNumber || 'ລໍຖ້າຂຶ້ນທະບຽນ',
                 color: targetBill.color || '-',
                 colorHex: '#18181b',
-                interiorColor: targetBill.interiorColor || 'Black',
-                battery: targetBill.battery || 'CATL Ternary Lithium',
+                interiorColor: targetBill.interiorColor || '',
+                battery: targetBill.battery || '',
                 priceUSD: targetBill.unitPriceUSD || targetBill.netTotalUSD || 0,
                 priceLAK: targetBill.unitPriceLAK || targetBill.netTotalLAK || 0,
                 stockQuantity: 1,
-                status: 'ready',
-                pdiStatus: 'passed',
-                location: 'ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ',
+                // A car coming back from a customer is checked again before it can be sold
+                status: 'pdi',
+                pdiStatus: 'pending',
                 arrivalDate: (targetBill.date || new Date().toISOString()).slice(0, 10),
                 mileageKm: 0,
               },
@@ -505,11 +601,78 @@ export default function App() {
             setInventory(prev => prev.filter(item => item.vin !== targetBill.vin));
           }
         }
-        setStockLogs(prev => prev.filter(log => !(log.billId === billId || (log.vin === targetBill.vin && log.type === (billType === 'import' ? 'stock_in' : 'stock_out')))));
+        if (!isMonthlyInstallmentBill(targetBill) && (billType === 'sale' || billType === 'installment' || billType === 'import')) {
+          // Same as the database: the original movement stays (marked voided) and a reversing movement is added
+          const originalType = billType === 'import' ? 'stock_in' : 'stock_out';
+          const reversal: StockLogRecord = {
+            id: `LOG-VOID-${billId}`,
+            billId,
+            type: billType === 'import' ? 'import_void' : 'stock_return',
+            vin: targetBill.vin,
+            model: targetBill.model || '',
+            plateNumber: targetBill.plateNumber || '',
+            color: targetBill.color || '',
+            quantity: 1,
+            priceUSD: targetBill.unitPriceUSD || targetBill.netTotalUSD || 0,
+            priceLAK: targetBill.unitPriceLAK || targetBill.netTotalLAK || 0,
+            timestamp: voidInfo.voidedAt,
+            recordedBy: voidInfo.voidedBy || currentUser.name,
+            customerName: targetBill.customerName,
+            customerPhone: targetBill.customerPhone,
+            notes: `ຍົກເລີກບິນ ${targetBill.billNumber}: ${voidInfo.voidReason}`,
+            billVoided: true,
+          };
+          setStockLogs(prev => [
+            reversal,
+            ...prev.map(log => (log.billId === billId || (log.vin === targetBill.vin && log.type === originalType && !log.billVoided))
+              ? { ...log, billVoided: true }
+              : log),
+          ]);
+        }
       }
-      triggerToast(lang === 'lo' ? 'ຍົກເລີກບິນ ແລະ ຄືນສະຕ໋ອກລົດຮຽບຮ້ອຍແລ້ວ!' : 'ยกเลิกบิลและคืนสต็อกรถเรียบร้อยแล้ว!');
+      // A voided sale / down-payment bill means the deal is off: the customer goes back to negotiating.
+      let customerNote = '';
+      const billType = targetBill ? (targetBill.billType || targetBill.type) : undefined;
+      if (targetBill && (billType === 'sale' || billType === 'installment') && !isMonthlyInstallmentBill(targetBill)) {
+        const phone = (targetBill.customerPhone || '').replace(/\D/g, '');
+        const lead = leads.find(l => l.id === targetBill.leadId) ||
+          (phone.length >= 6 ? leads.find(l => (l.phone || '').replace(/\D/g, '') === phone) : undefined);
+        if (lead) {
+          const reverted: Lead = {
+            ...lead,
+            status: 'negotiation',
+            paymentTypeConfirmed: undefined,
+            installmentStatus: undefined,
+            installmentRecords: undefined,
+            isPaymentCompleted: false,
+            paidAmountUSD: undefined,
+            paidAmountLAK: undefined,
+            paymentReceiptNo: undefined,
+            vehicleDeliveredAt: undefined,
+            vehicleDeliveredBy: undefined,
+            vin: lead.vin === targetBill.vin ? undefined : lead.vin,
+            engineNumber: lead.vin === targetBill.vin ? undefined : lead.engineNumber,
+            contactHistory: [
+              ...(lead.contactHistory || []),
+              makeContactEntry('status', `ບິນ ${targetBill.billNumber} ຖືກຍົກເລີກ (ເຫດຜົນ: ${voidInfo.voidReason}): ກັບໄປເປັນລູກຄ້າກຳລັງຕໍ່ລອງ`, currentUser.name),
+            ],
+          };
+          try {
+            await saveLead(reverted, currentUser.id);
+            setLeads(prev => prev.map(l => l.id === lead.id ? reverted : l));
+            customerNote = ` ລູກຄ້າ ${lead.customerName} ກັບໄປເປັນ "ກຳລັງຕໍ່ລອງ".`;
+          } catch (err) {
+            customerNote = ` ແຕ່ອັບເດດລູກຄ້າບໍ່ສຳເລັດ: ${err instanceof Error ? err.message : ''}`;
+          }
+        }
+      }
+      if (!options.silent) {
+        triggerToast(`ຍົກເລີກບິນ ${targetBill?.billNumber || ''} ແລ້ວ.${customerNote}`);
+      }
+      return true;
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Bill could not be deleted.');
+      triggerToast(`ຍົກເລີກບິນ ${targetBill?.billNumber || ''} ບໍ່ສຳເລັດ: ${error instanceof Error ? error.message : 'ກະລຸນາລອງໃໝ່'}`, 'error');
+      return false;
     }
   };
 
@@ -518,14 +681,27 @@ export default function App() {
   };
 
   // Handlers
-  const handleAddLead = async (leadData: Omit<Lead, 'id' | 'createdAt'> & { createdAt?: string }) => {
+  const handleAddLead = async (leadData: Omit<Lead, 'id' | 'createdAt'> & { createdAt?: string }): Promise<Lead> => {
     const newLead: Lead = { ...leadData, id: newRecordId(), createdAt: leadData.createdAt || new Date().toISOString() };
     try {
       await saveLead(newLead, currentUser.id);
       setLeads(prev => [newLead, ...prev]);
       triggerToast(`ເພີ່ມຂໍ້ມູນລູກຄ້າ ${newLead.customerName} ສຳເລັດ`);
+      return newLead;
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Customer could not be saved.');
+      triggerToast(error instanceof Error ? error.message : 'Customer could not be saved.', 'error');
+      throw error; // keep the form open with the entered data
+    }
+  };
+
+  const handleUpdateLead = async (updatedLead: Lead) => {
+    try {
+      await saveLead(updatedLead, currentUser.id);
+      setLeads(prev => prev.map(l => (l.id === updatedLead.id ? updatedLead : l)));
+      triggerToast(`ແກ້ໄຂຂໍ້ມູນລູກຄ້າ ${updatedLead.customerName} ສຳເລັດ`);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : 'Customer could not be updated.', 'error');
+      throw error;
     }
   };
 
@@ -536,7 +712,8 @@ export default function App() {
       setServices(prev => [newService, ...prev]);
       triggerToast(`ນັດບໍລິການ ${newService.model} ບັນທຶກແລ້ວ`);
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Appointment could not be saved.');
+      triggerToast(error instanceof Error ? error.message : 'Appointment could not be saved.', 'error');
+      throw error;
     }
   };
 
@@ -549,7 +726,8 @@ export default function App() {
       setServices(prev => prev.map(s => s.id === id ? updated : s));
       triggerToast(lang === 'lo' ? 'ອັບເດດສະຖານະການບໍລິການສຳເລັດ' : 'Service status updated');
     } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Could not update service status');
+      triggerToast(error instanceof Error ? error.message : 'Could not update service status', 'error');
+      throw error;
     }
   };
 
@@ -575,28 +753,11 @@ export default function App() {
     setIsQuoteOpen(true);
   };
 
-  const handleSelectVehicle = (vehicle: VehicleModel) => {
-    setSelectedVehicleForModal(vehicle);
-    setIsVehicleModalOpen(true);
-  };
 
-  const handleSubmitWebInquiry = async (name: string, phone: string, model: string, message: string) => {
-    await handleAddLead({
-      customerName: name,
-      phone: phone,
-      category: 'online',
-      interestedModel: model as any,
-      status: 'new',
-      priority: 'high',
-      source: 'web',
-      notes: message || 'ສອບຖາມຜ່ານແບບຟອມໜ້າເວັບໄຊທ໌',
-      assignedTo: currentUser?.name || 'Admin',
-    });
-  };
 
   if (isAuthLoading) {
     return (
-      <div className="min-h-[100dvh] w-full bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden select-none">
+      <div className="min-h-dvh w-full bg-slate-950 text-white flex flex-col items-center justify-center p-6 relative overflow-hidden select-none">
         <div className="absolute w-96 h-96 rounded-full bg-blue-600/10 blur-[120px] pointer-events-none" />
         
         <div className="relative z-10 flex flex-col items-center gap-5 text-center">
@@ -614,7 +775,7 @@ export default function App() {
           </div>
 
           <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden mt-2">
-            <div className="w-1/2 h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full animate-pulse" />
+            <div className="w-1/2 h-full bg-linear-to-r from-blue-500 to-emerald-400 rounded-full animate-pulse" />
           </div>
         </div>
       </div>
@@ -632,7 +793,6 @@ export default function App() {
           setBackendError(null);
           void refreshBackendData();
         }}
-        onRegisterUser={(newUser) => setUsers(prev => [newUser, ...prev.filter(u => u.id !== newUser.id)])}
         lang={lang}
         setLang={handleSetLang}
         theme={theme}
@@ -642,7 +802,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell min-h-[100dvh] bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
+    <div className="app-shell min-h-dvh bg-black text-white flex flex-col lg:flex-row font-sans selection:bg-white selection:text-black">
       {/* Modern High-Agency Luxury Toast Container */}
       <ToastContainer />
 
@@ -651,9 +811,9 @@ export default function App() {
         currentMenu={currentMenu}
         setCurrentMenu={setCurrentMenu}
         lang={lang}
-        setLang={handleSetLang}
         leadCount={leads.length}
-        stockCount={inventory.length}
+        followUpDueCount={followUpDueCount}
+        stockCount={inventory.filter(isListedInStock).length}
         lowStockCount={lowStockCount}
         outOfStockCount={outOfStockCount}
         billsCount={bills.length}
@@ -663,25 +823,23 @@ export default function App() {
         isMobileOpen={isMobileSidebarOpen}
         setIsMobileOpen={setIsMobileSidebarOpen}
         onLogout={handleLogout}
-        theme={theme}
-        onToggleTheme={toggleTheme}
       />
 
       {/* MAIN CONTENT CANVAS */}
-      <div className="lg:pl-72 flex-1 flex flex-col min-w-0 min-h-[100dvh]">
+      <div className="lg:pl-20 flex-1 flex flex-col min-w-0 min-h-dvh">
         {/* Top Header Strip inside Main Area */}
         <header className="app-header sticky top-0 z-30 bg-white/90 dark:bg-black/90 backdrop-blur-md border-b border-slate-200/90 dark:border-zinc-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="lg:hidden p-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-colors flex-shrink-0"
+              className="lg:hidden p-2 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-colors shrink-0"
             >
               <Menu className="w-5 h-5" />
             </button>
 
             {/* Current Active Section Heading */}
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="p-2 rounded-xl bg-blue-50 dark:bg-zinc-900 border border-blue-200 dark:border-zinc-800 text-blue-600 dark:text-white flex-shrink-0 shadow-2xs">
+              <span className="p-2 rounded-xl bg-blue-50 dark:bg-zinc-900 border border-blue-200 dark:border-zinc-800 text-blue-600 dark:text-white shrink-0 shadow-2xs">
                 {currentMenu === 'dashboard' && <LayoutDashboard className="w-4 h-4" />}
                 {currentMenu === 'sales_leaderboard' && <Trophy className="w-4 h-4 text-amber-500" />}
                 {currentMenu === 'pos_sales' && <ShoppingBag className="w-4 h-4 text-blue-600 dark:text-emerald-400" />}
@@ -714,37 +872,99 @@ export default function App() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             {/* Database Connection Status Indicator */}
             <div 
               className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 font-mono text-[11px]"
               title={backendError || (isSupabaseConfigured ? 'Supabase configured' : 'ໂໝດ Localhost Offline (ຕັດການເຊື່ອມຕໍ່ຖານຂໍ້ມູນແລ້ວ)')}
             >
-              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured && !backendError ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+              <span className={`w-2 h-2 rounded-full ${backendError ? 'bg-rose-500' : isSupabaseConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
               <span className="text-slate-600 dark:text-zinc-300 font-medium">
                 {backendError ? 'DB Error' : isSupabaseConfigured ? 'Supabase Cloud' : 'Localhost (Offline)'}
               </span>
             </div>
 
-            {/* Theme Toggle Button (Light / Night Mode) */}
+            {/* Theme Toggle (icon button, same style as the sidebar menu icons) */}
             <button
+              type="button"
               onClick={toggleTheme}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs bg-slate-50 hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+              aria-label={theme === 'dark' ? t.lightMode : t.darkMode}
               title={theme === 'dark' ? t.lightMode : t.darkMode}
+              className="header-icon-btn flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-800 transition-colors hover:bg-slate-200 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
             >
-              {theme === 'dark' ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-zinc-200" />
-                  <span className="text-[11px] font-medium hidden sm:inline">{t.lightMode}</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-slate-700" />
-                  <span className="text-[11px] font-medium hidden sm:inline">{t.darkMode}</span>
-                </>
-              )}
+              {theme === 'dark'
+                ? <Sun aria-hidden="true" className="h-5 w-5" />
+                : <Moon aria-hidden="true" className="h-5 w-5" />}
             </button>
 
+            {/* Language Switcher (icon button + dropdown) */}
+            <div
+              ref={langMenuRef}
+              className="relative"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setIsLangMenuOpen(false);
+                  langButtonRef.current?.focus();
+                }
+              }}
+            >
+              <button
+                ref={langButtonRef}
+                type="button"
+                onClick={() => setIsLangMenuOpen((isOpen) => !isOpen)}
+                aria-label={lang === 'lo' ? 'ເລືອກພາສາ' : lang === 'th' ? 'เลือกภาษา' : 'Choose language'}
+                aria-expanded={isLangMenuOpen}
+                aria-controls="header-language-options"
+                title={lang === 'lo' ? 'ເລືອກພາສາ' : lang === 'th' ? 'เลือกภาษา' : 'Choose language'}
+                className="header-icon-btn flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-800 transition-colors hover:bg-slate-200 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-800 dark:bg-zinc-900/90 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+              >
+                <Languages aria-hidden="true" className="h-5 w-5" />
+              </button>
+              {isLangMenuOpen && (
+                <div
+                  id="header-language-options"
+                  role="group"
+                  aria-label={lang === 'lo' ? 'ເລືອກພາສາ' : lang === 'th' ? 'เลือกภาษา' : 'Choose language'}
+                  className="absolute right-0 top-full z-60 mt-2 flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  {([
+                    { code: 'lo', short: 'LO', label: 'ລາວ' },
+                    { code: 'en', short: 'EN', label: 'English' },
+                    { code: 'th', short: 'TH', label: 'ไทย' },
+                  ] as const).map(({ code, short, label }) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => {
+                        handleSetLang(code);
+                        setIsLangMenuOpen(false);
+                      }}
+                      aria-label={label}
+                      aria-pressed={lang === code}
+                      title={label}
+                      className={`flex h-10 min-w-10 items-center justify-center rounded-lg px-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                        lang === code
+                          ? 'bg-blue-100 text-blue-800 dark:bg-zinc-700 dark:text-white'
+                          : 'text-slate-700 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      {short}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void runRefresh(true)}
+              disabled={isRefreshing}
+              aria-label="ໂຫຼດຂໍ້ມູນລ່າສຸດ"
+              title="ໂຫຼດຂໍ້ມູນລ່າສຸດຈາກຖານຂໍ້ມູນ (ອັບເດດເອງທຸກ 1 ນາທີ)"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-60 transition-colors"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
             <span className="px-3 py-1.5 rounded-xl text-xs font-bold border border-blue-200 dark:border-zinc-700 bg-blue-50 dark:bg-zinc-900 text-blue-700 dark:text-zinc-200">{currentUser.roleTitleLo}</span>
           </div>
         </header>
@@ -766,7 +986,7 @@ export default function App() {
               isAdmin={isAdmin}
               activeTimeframe={sharedTimeframe}
               onTimeframeChange={setSharedTimeframe}
-              onNavigateMenu={(menu) => setCurrentMenu(menu)}
+              onNavigateMenu={navigateMenu}
               onOpenNewLead={() => setIsNewLeadOpen(true)}
               onOpenQuote={handleOpenQuoteForVehicle}
               onOpenNewService={() => setIsServiceOpen(true)}
@@ -794,6 +1014,7 @@ export default function App() {
               onNavigateToBills={() => setCurrentMenu('bills')}
               prefilledCustomer={prefilledCustomerForPOS}
               onClearPrefilledCustomer={() => setPrefilledCustomerForPOS(null)}
+              onChooseCustomer={() => setIsCustomerPickerOpen(true)}
             />
           )}
 
@@ -801,6 +1022,7 @@ export default function App() {
             <CustomerView
               leads={leads}
               setLeads={setLeads}
+              onEditLead={(lead) => setLeadToEdit(lead)}
               vehicles={vehicles}
               currentUser={currentUser}
               lang={lang}
@@ -808,7 +1030,7 @@ export default function App() {
               onOpenNewLead={() => setIsNewLeadOpen(true)}
               onOpenQuote={handleOpenQuoteForVehicle}
               onSelectCustomerForPOS={handleSelectCustomerForPOS}
-              onNavigateMenu={(menu) => setCurrentMenu(menu)}
+              onNavigateMenu={navigateMenu}
               bills={bills}
               setBills={setBills}
               services={services}
@@ -865,10 +1087,7 @@ export default function App() {
               isSuperAdmin={isAdmin}
               onDeleteBill={handleDeleteBill}
               onOpenNewImport={isAdmin ? () => setCurrentMenu('stock_in') : undefined}
-              onOpenNewSale={() => {
-                setPrefilledCustomerForPOS(null);
-                setCurrentMenu('pos_sales');
-              }}
+              onOpenNewSale={() => handleSelectCustomerForPOS(null)}
             />
           )}
 
@@ -881,7 +1100,7 @@ export default function App() {
               lang={lang}
               initialPeriod={sharedTimeframe}
               onPeriodChange={setSharedTimeframe}
-              onNavigateMenu={(menu) => setCurrentMenu(menu)}
+              onNavigateMenu={navigateMenu}
             />
           )}
 
@@ -894,7 +1113,7 @@ export default function App() {
               vehicles={vehicles}
               currentUser={currentUser}
               lang={lang}
-              onNavigateMenu={(menu) => setCurrentMenu(menu)}
+              onNavigateMenu={navigateMenu}
               onNavigateTab={(tab) => {
                 setCustomerViewInitialTab(tab);
                 setCurrentMenu('customers');
@@ -937,6 +1156,8 @@ export default function App() {
               onClose={() => setCurrentMenu('dashboard')}
               users={users}
               setUsers={setUsers}
+              leads={leads}
+              setLeads={setLeads}
             />
           )}
           </Suspense>
@@ -947,15 +1168,35 @@ export default function App() {
 
       {/* Lazy-loaded Modals with Suspense */}
       <Suspense fallback={null}>
-        {isNewLeadOpen && (
+        {(isNewLeadOpen || leadToEdit) && (
           <NewLeadModal
-            isOpen={isNewLeadOpen}
-            onClose={() => setIsNewLeadOpen(false)}
-            onAddLead={handleAddLead}
+            key={leadToEdit ? `edit-${leadToEdit.id}` : 'new'}
+            isOpen={isNewLeadOpen || Boolean(leadToEdit)}
+            onClose={() => { setIsNewLeadOpen(false); setLeadToEdit(null); }}
+            onAddLead={async (leadData) => { await handleAddLead(leadData); }}
+            initialLead={leadToEdit}
+            onUpdateLead={handleUpdateLead}
+            existingLeads={leads}
+            staffOptions={users.filter(u => u.status !== 'suspended' && (u.role === 'sales' || u.role === 'admin')).map(u => u.name)}
             vehicles={vehicles}
             inventory={inventory}
             currentUser={currentUser}
             lang={lang}
+          />
+        )}
+
+        {isCustomerPickerOpen && (
+          <CustomerPickerModal
+            leads={leads}
+            vehicles={vehicles}
+            lang={lang}
+            staffName={currentUser.name}
+            onClose={() => setIsCustomerPickerOpen(false)}
+            onPick={(lead) => handleSelectCustomerForPOS(lead)}
+            onCreate={async (leadData) => {
+              const created = await handleAddLead(leadData);
+              handleSelectCustomerForPOS(created);
+            }}
           />
         )}
 
@@ -965,6 +1206,7 @@ export default function App() {
             onClose={() => setIsServiceOpen(false)}
             onAddService={handleAddService}
             lang={lang}
+            modelOptions={vehicles.map(v => v.name)}
           />
         )}
 

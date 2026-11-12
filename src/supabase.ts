@@ -1,8 +1,8 @@
 import type { DealershipConfig, InventoryItem, InvoiceBillRecord, SystemUser, VehicleModel } from './types';
+import { isAdminRole } from './utils/roles';
 import { isSupabaseConfigured, requireSupabase, supabase } from './backend/client';
 import {
   deactivateStaffProfile,
-  deleteBill,
   deleteInventoryItem,
   deleteVehicleModel,
   getSignedInStaff,
@@ -39,10 +39,6 @@ export async function saveBillToSupabase(bill: InvoiceBillRecord, vehicle?: Inve
   await saveBillRecord(bill, await currentStaffId(), vehicle);
 }
 
-export async function deleteBillFromSupabase(billId: string) {
-  await deleteBill(billId);
-}
-
 export async function saveVehicleModelToSupabase(model: VehicleModel, actorId?: string) {
   await saveVehicleModel(model, actorId || await currentStaffId());
 }
@@ -75,7 +71,26 @@ export async function deleteUserFromSupabase(userId: string) {
   await deactivateStaffProfile(userId);
 }
 
+/** Admin-only: the company QR is shared with every account through dealership settings. */
+function assertCanManageCompanyQr(staff: SystemUser) {
+  if (!isAdminRole(staff)) {
+    throw new Error('ສະເພາະ Admin ຈຶ່ງສາມາດປ່ຽນຮູບ QR ບໍລິສັດໄດ້');
+  }
+}
+
+const qrStamp = (staff: SystemUser) => ({
+  companyQrUpdatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+  companyQrUpdatedBy: staff.name || 'Admin',
+});
+
+export async function resetCompanyQrCode(staff: SystemUser) {
+  assertCanManageCompanyQr(staff);
+  await saveDealershipSettingsPatch({ companyQrImageUrl: null, ...qrStamp(staff) }, staff.id);
+}
+
 export async function uploadCompanyQrCodeToStorage(file: File, staff: SystemUser) {
+  assertCanManageCompanyQr(staff);
+  if (!file.type.startsWith('image/')) throw new Error('ກະລຸນາເລືອກໄຟລ໌ຮູບພາບ (JPG, PNG ຫຼື WebP)');
   if (!isSupabaseConfigured) {
     const reader = new FileReader();
     const dataUrl = await new Promise<string>((resolve) => {
@@ -83,10 +98,11 @@ export async function uploadCompanyQrCodeToStorage(file: File, staff: SystemUser
       reader.onerror = () => resolve('');
       reader.readAsDataURL(file);
     });
-    await saveDealershipSettingsPatch({ companyQrImageUrl: dataUrl, uploadedBy: staff.id }, staff.id);
+    if (!dataUrl) throw new Error('ອ່ານໄຟລ໌ຮູບບໍ່ໄດ້');
+    await saveDealershipSettingsPatch({ companyQrImageUrl: dataUrl, uploadedBy: staff.id, ...qrStamp(staff) }, staff.id);
     return dataUrl;
   }
   const { url } = await uploadDealershipAsset(file, 'qr');
-  await saveDealershipSettingsPatch({ companyQrImageUrl: url, uploadedBy: staff.id }, staff.id);
+  await saveDealershipSettingsPatch({ companyQrImageUrl: url, uploadedBy: staff.id, ...qrStamp(staff) }, staff.id);
   return url;
 }

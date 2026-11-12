@@ -9,16 +9,10 @@ import {
   Printer, 
   Download, 
   Search, 
-  Plus, 
-  FileText, 
-  Building2, 
-  User, 
   Phone, 
   Calendar, 
-  Coins, 
   Check, 
   RotateCcw,
-  BadgePercent,
   Loader2
 } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';

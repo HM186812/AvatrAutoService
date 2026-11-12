@@ -37,12 +37,7 @@ export default function VehicleModal({
 
         {/* Hero Visual */}
         <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-t-3xl bg-zinc-900">
-          <img
-            src={vehicle.heroImage}
-            alt={vehicle.name}
-            className="w-full h-full object-cover object-center transform transition-transform duration-700 hover:scale-105 filter grayscale contrast-125 hover:grayscale-0"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
+          <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent"></div>
           
           <div className="absolute bottom-4 left-6 right-6 flex flex-wrap items-end justify-between gap-4 always-white-text">
             <div>
@@ -142,7 +137,7 @@ export default function VehicleModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {vehicle.features.map((feat, idx) => (
                 <div key={idx} className="flex items-start gap-2 bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-300">
-                  <Check className="w-4 h-4 text-white flex-shrink-0 mt-0.5" />
+                  <Check className="w-4 h-4 text-white shrink-0 mt-0.5" />
                   <span>{feat}</span>
                 </div>
               ))}

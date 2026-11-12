@@ -3,7 +3,7 @@ import { CustomCurrencyConfig, Language } from '../../types';
 import { translations } from '../../data/translations';
 import { saveStoredCurrencies } from '../../data/currencies';
 import { saveDealershipConfigToSupabase } from '../../supabase';
-import { DollarSign, Plus, Trash2, Check, X, RefreshCw, ShieldCheck, Lock } from 'lucide-react';
+import { DollarSign, Plus, Trash2, Check, X, RefreshCw, ShieldCheck } from 'lucide-react';
 import { showToast } from '../common';
 
 interface CurrencyModalProps {

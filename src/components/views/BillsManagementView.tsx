@@ -1,8 +1,9 @@
+import { withVehicleFromBills } from '../../utils/documentCustomer';
+import { isAdminRole } from '../../utils/roles';
 import { useState, useMemo, useEffect, useRef, useDeferredValue } from 'react';
 import {
   InvoiceBillRecord,
   Language,
-  BillType,
   Lead,
   VehicleModel,
   SystemUser,
@@ -19,7 +20,6 @@ import {
   Download,
   X,
   CheckCircle2,
-  Car,
   Calendar,
   CreditCard,
   ShieldCheck,
@@ -28,32 +28,26 @@ import {
   Phone,
   User,
   Sparkles,
-  ArrowUpRight,
-  Filter,
   Receipt,
   PackagePlus,
   QrCode,
   Trash2,
   Loader2,
-  Coins,
-  BadgePercent,
   Plus,
-  ChevronRight,
-  TrendingUp,
-  SlidersHorizontal,
   Clock,
   FileCheck,
   ReceiptText,
   UploadCloud
 } from 'lucide-react';
+import { isMonthlyInstallmentBill } from '../../utils/installment';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl } from '../../utils/whatsapp';
-import { saveBillToSupabase } from '../../supabase';
+import { isSupabaseConfigured } from '../../supabase';
 import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 import QuotationModal from '../modals/QuotationModal';
-import { saveLead, deleteBill, fetchBillsByDateRange, attachSlipToBill } from '../../backend/data';
+import { saveLead, fetchBillsByDateRange, attachSlipToBill, archiveFiscalYearBills, BILL_QUERY_LIMIT } from '../../backend/data';
 import SlipPreviewModal from '../modals/SlipPreviewModal';
 import IssuedDocumentsRegistryTab from './IssuedDocumentsRegistryTab';
 import { getIssuedDocumentLogs, deleteIssuedDocumentLog, logIssuedDocument, DOCUMENT_LOG_EVENT, fetchDocumentLogsFromCloud } from '../../utils/documentLogger';
@@ -68,7 +62,7 @@ interface BillsManagementViewProps {
   currentUser?: SystemUser | null;
   lang: Language;
   isSuperAdmin?: boolean;
-  onDeleteBill?: (billId: string) => void;
+  onDeleteBill?: (billId: string, options: { reason: string; silent?: boolean; bill?: InvoiceBillRecord }) => Promise<boolean> | boolean | void;
   onOpenNewSale?: () => void;
   onOpenNewImport?: () => void;
 }
@@ -107,7 +101,18 @@ export default function BillsManagementView({
   const [dateTo, setDateTo] = useState<string>(savedFilter.dateTo || '');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'amount_desc' | 'amount_asc'>(savedFilter.sortBy || 'newest');
   const [extraFetchedBills, setExtraFetchedBills] = useState<InvoiceBillRecord[]>([]);
+  // Fiscal-year archive: archived bills are read-only and shown only when asked for
+  const [includeArchived, setIncludeArchived] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [archiveYear, setArchiveYear] = useState<number>(() => new Date().getFullYear() - 1);
+  const [isArchiving, setIsArchiving] = useState(false);
+  // Void dialog: a reason is required for every void (single or batch)
+  const [voidTargets, setVoidTargets] = useState<InvoiceBillRecord[] | null>(null);
+  const [voidReasonInput, setVoidReasonInput] = useState('');
+  const [isVoiding, setIsVoiding] = useState(false);
   const [isLoadingRangeBills, setIsLoadingRangeBills] = useState(false);
+  // The date-range query stops at BILL_QUERY_LIMIT bills; when it does, totals may be incomplete
+  const [rangeLimitHit, setRangeLimitHit] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -124,7 +129,6 @@ export default function BillsManagementView({
   const [selectedBillForPrint, setSelectedBillForPrint] = useState<InvoiceBillRecord | null>(null);
   const [selectedBillIds, setSelectedBillIds] = useState<string[]>([]);
   const [isExportingBillPdf, setIsExportingBillPdf] = useState(false);
-  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
 
   // Modal states for Installment Ledger & Documents
   const [selectedCustomerForLedger, setSelectedCustomerForLedger] = useState<Lead | null>(null);
@@ -285,6 +289,7 @@ export default function BillsManagementView({
       });
       baseList = Array.from(byId.values());
     }
+    if (!includeArchived) baseList = baseList.filter(b => !b.isArchived);
 
     // Role-based visibility: sales reps see only bills they personally closed or recorded
     if (currentUser?.role === 'sales') {
@@ -303,7 +308,7 @@ export default function BillsManagementView({
     }
 
     return baseList;
-  }, [bills, extraFetchedBills, currentUser]);
+  }, [bills, extraFetchedBills, currentUser, includeArchived]);
 
   const effectiveDbRange = useMemo((): { dateFrom?: string; dateTo?: string } => {
     const now = new Date();
@@ -338,9 +343,10 @@ export default function BillsManagementView({
   useEffect(() => {
     let cancelled = false;
     setIsLoadingRangeBills(true);
-    fetchBillsByDateRange(effectiveDbRange)
+    fetchBillsByDateRange({ ...effectiveDbRange, includeArchived })
       .then((fetched) => {
         if (cancelled) return;
+        setRangeLimitHit(isSupabaseConfigured && fetched.length >= BILL_QUERY_LIMIT);
         setExtraFetchedBills(prev => {
           const byId = new Map<string, InvoiceBillRecord>();
           prev.forEach(b => byId.set(b.id, b));
@@ -357,7 +363,7 @@ export default function BillsManagementView({
     return () => {
       cancelled = true;
     };
-  }, [effectiveDbRange]);
+  }, [effectiveDbRange, includeArchived]);
 
   const matchesTimeFilter = (rawDate?: string): boolean => {
     const ymd = normalizeDateYMD(rawDate);
@@ -389,9 +395,12 @@ export default function BillsManagementView({
     [allLoadedBills, timePreset, selectedYear, selectedMonth, dateFrom, dateTo]
   );
 
-  const saleBills = timeFilteredBills.filter(b => b.billType === 'sale' && !isInstallmentBill(b));
-  const importBills = timeFilteredBills.filter(b => b.billType === 'import');
-  const installmentBills = timeFilteredBills.filter(isInstallmentBill);
+  // Voided bills stay listed (with their label) but never count in totals or counts, like the Dashboard and CRM
+  const activeTimeFilteredBills = timeFilteredBills.filter(b => b.status !== 'voided');
+  const voidedInRangeCount = timeFilteredBills.length - activeTimeFilteredBills.length;
+  const saleBills = activeTimeFilteredBills.filter(b => b.billType === 'sale' && !isInstallmentBill(b));
+  const importBills = activeTimeFilteredBills.filter(b => b.billType === 'import');
+  const installmentBills = activeTimeFilteredBills.filter(isInstallmentBill);
 
   // Leads matching installment & down payment category
   const installmentLeads = useMemo(() => {
@@ -603,7 +612,7 @@ export default function BillsManagementView({
   }, [filteredBills, sortBy]);
 
   const filteredTotalUSD = useMemo(() => {
-    return filteredBills.reduce((sum, b) => sum + (b.netTotalUSD || b.amountUSD || 0), 0);
+    return filteredBills.filter(b => b.status !== 'voided').reduce((sum, b) => sum + (b.netTotalUSD || b.amountUSD || 0), 0);
   }, [filteredBills]);
 
   const searchPlaceholderByField: Record<typeof searchField, string> = {
@@ -667,45 +676,95 @@ export default function BillsManagementView({
     );
   };
 
+  /** Void one bill. Older bills loaded by the date filter are passed along and marked on screen too. */
+  const voidBill = async (bill: InvoiceBillRecord, reason: string, silent = false): Promise<boolean> => {
+    if (!onDeleteBill || bill.isArchived) return false;
+    const result = await onDeleteBill(bill.id, { reason, silent, bill });
+    if (result === false) return false;
+    const voidInfo = { voidReason: reason.trim(), voidedBy: currentUser?.name, voidedAt: new Date().toISOString() };
+    setExtraFetchedBills(prev => prev.map(b => (b.id === bill.id ? { ...b, status: 'voided', ...voidInfo } : b)));
+    return true;
+  };
+
+  // Batch voiding is an Admin action; voided bills cannot be selected again
+  const canBatchVoid = Boolean(isSuperAdmin && onDeleteBill);
+  // "Select all" covers only the bills on the current page, so a batch void never touches bills nobody looked at
+  const selectableBills = paginatedBills.filter(b => b.status !== 'voided' && !b.isArchived);
   const toggleSelectAll = () => {
-    if (selectedBillIds.length === filteredBills.length && filteredBills.length > 0) {
+    if (selectedBillIds.length === selectableBills.length && selectableBills.length > 0) {
       setSelectedBillIds([]);
     } else {
-      setSelectedBillIds(filteredBills.map(b => b.id));
+      setSelectedBillIds(selectableBills.map(b => b.id));
     }
   };
 
-  // Batch delete selected bills
-  const handleDeleteSelectedBills = async () => {
-    if (selectedBillIds.length === 0) return;
-    const count = selectedBillIds.length;
-    const confirmText = lang === 'lo'
-      ? `ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບ ${count} ໃບບິນທີ່ເລືອກໄວ້? ຂໍ້ມູນຈະຖືກລົບອອກຈາກລະບົບ.`
-      : lang === 'th'
-        ? `คุณแน่ใจหรือไม่ว่าต้องการลบ ${count} ใบบิลที่เลือกไว้?`
-        : `Are you sure you want to delete ${count} selected bill(s)?`;
+  // Batch void selected bills: opens the same reason dialog as the single button
+  const handleDeleteSelectedBills = () => {
+    if (!canBatchVoid || selectedBillIds.length === 0) return;
+    const targets = selectedBillIds
+      .map(id => allLoadedBills.find(b => b.id === id))
+      .filter((b): b is InvoiceBillRecord => Boolean(b) && b!.status !== 'voided' && !b!.isArchived);
+    if (targets.length === 0) return;
+    setVoidReasonInput('');
+    setVoidTargets(targets);
+  };
 
-    if (!window.confirm(confirmText)) return;
+  const handleConfirmVoid = async () => {
+    if (!voidTargets || isVoiding) return;
+    const reason = voidReasonInput.trim();
+    if (reason.length < 3) {
+      showToast(lang === 'lo' ? 'ກະລຸນາໃສ່ເຫດຜົນການຍົກເລີກ (ຢ່າງໜ້ອຍ 3 ຕົວອັກສອນ)' : 'Enter a void reason (at least 3 characters)', 'warning');
+      return;
+    }
+    setIsVoiding(true);
+    const single = voidTargets.length === 1;
+    let ok = 0;
+    const failed: string[] = [];
+    for (const bill of voidTargets) {
+      try {
+        if (await voidBill(bill, reason, !single)) ok++;
+        else failed.push(bill.billNumber || bill.id);
+      } catch {
+        failed.push(bill.billNumber || bill.id);
+      }
+    }
+    setIsVoiding(false);
+    setVoidTargets(null);
+    setSelectedBillIds(prev => prev.filter(id => !voidTargets.some(b => b.id === id && ok > 0)));
+    if (!single) {
+      if (failed.length === 0) {
+        showToast(lang === 'lo' ? `ຍົກເລີກ ${ok} ບິນແລ້ວ` : `Voided ${ok} bill(s)`, 'success');
+      } else {
+        showToast(
+          lang === 'lo'
+            ? `ຍົກເລີກສຳເລັດ ${ok} ບິນ, ບໍ່ສຳເລັດ ${failed.length} ບິນ: ${failed.join(', ')}`
+            : `Voided ${ok}, failed ${failed.length}: ${failed.join(', ')}`,
+          'error'
+        );
+      }
+    }
+  };
 
-    setIsDeletingBatch(true);
+  // Year-end archive (Admin): moves a closed fiscal year out of the active bills table
+  const handleConfirmArchive = async () => {
+    if (isArchiving) return;
+    setIsArchiving(true);
     try {
-      const idsToDelete = [...selectedBillIds];
-      for (const billId of idsToDelete) {
-        if (onDeleteBill) {
-          await onDeleteBill(billId);
-        } else {
-          await deleteBill(billId);
-        }
-      }
-      if (setBills) {
-        setBills(prev => prev.filter(b => !idsToDelete.includes(b.id)));
-      }
-      setSelectedBillIds([]);
+      const result = await archiveFiscalYearBills(archiveYear);
+      const yearPrefix = String(archiveYear);
+      setBills?.(prev => prev.filter(b => !(b.date || '').startsWith(yearPrefix)));
+      setExtraFetchedBills(prev => prev.filter(b => !(b.date || '').startsWith(yearPrefix)));
+      setArchiveDialogOpen(false);
+      showToast(
+        lang === 'lo'
+          ? `Archive ປີ ${archiveYear} ສຳເລັດ: ${result?.archived_bills_count ?? 0} ບິນ`
+          : `Archived ${result?.archived_bills_count ?? 0} bills of ${archiveYear}`,
+        'success'
+      );
     } catch (err) {
-      console.error('Error batch deleting bills:', err);
-      showToast(err instanceof Error ? err.message : 'Could not delete selected bills.', 'error');
+      showToast(err instanceof Error ? err.message : 'Archive failed', 'error');
     } finally {
-      setIsDeletingBatch(false);
+      setIsArchiving(false);
     }
   };
 
@@ -868,6 +927,10 @@ export default function BillsManagementView({
 
   // Helper: Open official signed documents for an installment bill or lead
   const handleOpenDocumentsForBill = (bill: InvoiceBillRecord, docType: DocumentType = 'installment_schedule') => {
+    if (bill.status === 'voided') {
+      showToast(lang === 'lo' ? `ບິນ ${bill.billNumber} ຖືກຍົກເລີກແລ້ວ: ອອກເອກະສານສັນຍາຈາກບິນນີ້ບໍ່ໄດ້` : `Bill ${bill.billNumber} is voided: contract documents cannot be issued from it`, 'error');
+      return;
+    }
     const matchedLead = findLeadForBill(bill);
 
     if (matchedLead) {
@@ -972,7 +1035,8 @@ export default function BillsManagementView({
       'DownPaymentUSD',
       'TenureMonths',
       'BillAmountUSD',
-      'RecordedBy'
+      'RecordedBy',
+      'Status'
     ];
 
     const rows = filteredBills.map(b => [
@@ -987,7 +1051,8 @@ export default function BillsManagementView({
       b.downPaymentUSD ?? '',
       b.tenureMonths ?? '',
       b.netTotalUSD ?? b.amountUSD ?? '',
-      csvCell(b.recordedBy)
+      csvCell(b.recordedBy),
+      csvCell(b.status === 'voided' ? 'voided' : 'completed')
     ]);
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
@@ -1116,11 +1181,14 @@ export default function BillsManagementView({
               </span>
             </div>
             <div className="text-2xl font-bold tabular-nums text-white sm:text-3xl">
-              {timeFilteredBills.length} <span className="text-sm font-sans font-medium text-zinc-400">{t.unitBills}</span>
+              {activeTimeFilteredBills.length} <span className="text-sm font-sans font-medium text-zinc-400">{t.unitBills}</span>
+              {voidedInRangeCount > 0 && (
+                <span className="block text-[11px] font-sans font-medium text-zinc-500">{lang === 'lo' ? `+ ${voidedInRangeCount} ບິນຍົກເລີກ (ບໍ່ນັບຍອດ)` : `+ ${voidedInRangeCount} voided (not counted)`}</span>
+              )}
             </div>
             <div className="mt-4 flex items-center justify-between gap-2 border-t border-zinc-800 pt-3 text-xs text-zinc-400">
               <span>{t.tableStatus}:</span>
-              <span className="font-semibold text-zinc-200">{isLoadingRangeBills ? (lang === 'lo' ? 'ກຳລັງດຶງຂໍ້ມູນຕາມຊ່ວງເວລາ...' : 'Loading range...') : t.supabaseLiveSync}</span>
+              <span className="font-semibold text-zinc-200">{isLoadingRangeBills ? (lang === 'lo' ? 'ກຳລັງດຶງຂໍ້ມູນຕາມຊ່ວງເວລາ...' : 'Loading range...') : isSupabaseConfigured ? t.supabaseLiveSync : (lang === 'lo' ? 'Offline Demo (ບັນທຶກໃນເຄື່ອງ)' : lang === 'th' ? 'Offline Demo (บันทึกในเครื่อง)' : 'Offline Demo (Local only)')}</span>
             </div>
           </div>
         </section>
@@ -1195,7 +1263,7 @@ export default function BillsManagementView({
                     : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                     }`}
                 >
-                  {t.filterAllBills} ({timeFilteredBills.length})
+                  {t.filterAllBills} ({activeTimeFilteredBills.length})
                 </button>
 
                 <button
@@ -1459,7 +1527,109 @@ export default function BillsManagementView({
         )}
 
         {/* Selected Bills Action Toolbar */}
-        {selectedBillIds.length > 0 && (
+        {rangeLimitHit && (
+          <div role="alert" className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs text-amber-200">
+            {lang === 'lo'
+              ? `ຊ່ວງເວລານີ້ມີບິນຫຼາຍກວ່າ ${BILL_QUERY_LIMIT.toLocaleString()} ໃບ: ລະບົບສະແດງໄດ້ສູງສຸດ ${BILL_QUERY_LIMIT.toLocaleString()} ໃບລ່າສຸດ ສະນັ້ນຍອດລວມອາດບໍ່ຄົບ. ກະລຸນາເລືອກປີ ຫຼື ເດືອນ ໃຫ້ແຄບລົງ.`
+              : `This period has more than ${BILL_QUERY_LIMIT.toLocaleString()} bills. Only the latest ${BILL_QUERY_LIMIT.toLocaleString()} are shown, so totals may be incomplete. Pick a narrower year or month.`}
+          </div>
+        )}
+
+        {isSupabaseConfigured && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-xs">
+            <label className="inline-flex items-center gap-2 cursor-pointer text-zinc-300">
+              <input
+                type="checkbox"
+                checked={includeArchived}
+                onChange={(e) => setIncludeArchived(e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-white"
+              />
+              <span>{lang === 'lo' ? 'ສະແດງບິນໃນ archive (ປີທີ່ປິດບັນຊີແລ້ວ, ເບິ່ງໄດ້ຢ່າງດຽວ)' : 'Include archived bills (closed years, read-only)'}</span>
+            </label>
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setArchiveDialogOpen(true)}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-semibold text-zinc-200 hover:bg-zinc-800"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>{lang === 'lo' ? 'Archive ບິນທ້າຍປີ' : 'Year-end archive'}</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {archiveDialogOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="archive-dialog-title">
+            <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-5 text-sm text-zinc-200 space-y-4">
+              <h3 id="archive-dialog-title" className="text-base font-bold text-white">{lang === 'lo' ? 'Archive ບິນທ້າຍປີ' : 'Year-end archive'}</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                {lang === 'lo'
+                  ? 'ຍ້າຍບິນທັງໝົດຂອງປີທີ່ເລືອກອອກຈາກລາຍການປັດຈຸບັນ ໄປເກັບໄວ້ໃນ archive (ເບິ່ງຍ້ອນຫຼັງໄດ້ ແຕ່ແກ້ໄຂ ຫຼື ຍົກເລີກບໍ່ໄດ້). ອັນດັບການຂາຍ ແລະ ລາຍງານຂອງປີນັ້ນ ຈະບໍ່ນັບບິນເຫຼົ່ານີ້ອີກ. ເຮັດໄດ້ສະເພາະປີທີ່ຜ່ານມາແລ້ວ.'
+                  : 'Moves every bill of the chosen year into the archive (viewable, but no edits or voids). Rankings and reports for that year stop counting them. Only past years can be archived.'}
+              </p>
+              <label className="block text-xs text-zinc-400">
+                {lang === 'lo' ? 'ປີບັນຊີ' : 'Fiscal year'}
+                <select
+                  value={archiveYear}
+                  onChange={(e) => setArchiveYear(Number(e.target.value))}
+                  className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white"
+                >
+                  {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 1 - i).map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setArchiveDialogOpen(false)} disabled={isArchiving} className="rounded-lg border border-zinc-700 px-3.5 py-2 text-xs font-semibold text-zinc-300 hover:bg-zinc-800">
+                  {lang === 'lo' ? 'ຍົກເລີກ' : 'Cancel'}
+                </button>
+                <button type="button" onClick={() => void handleConfirmArchive()} disabled={isArchiving} className="rounded-lg bg-white px-3.5 py-2 text-xs font-bold text-zinc-950 hover:bg-zinc-200 disabled:opacity-60">
+                  {isArchiving ? (lang === 'lo' ? 'ກຳລັງ archive...' : 'Archiving...') : (lang === 'lo' ? `ຢືນຢັນ archive ປີ ${archiveYear}` : `Archive ${archiveYear}`)}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {voidTargets && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="void-dialog-title">
+            <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-5 text-sm text-zinc-200 space-y-4">
+              <h3 id="void-dialog-title" className="text-base font-bold text-white">
+                {voidTargets.length === 1
+                  ? (lang === 'lo' ? `ຍົກເລີກບິນ ${voidTargets[0].billNumber}` : `Void bill ${voidTargets[0].billNumber}`)
+                  : (lang === 'lo' ? `ຍົກເລີກ ${voidTargets.length} ບິນທີ່ເລືອກ` : `Void ${voidTargets.length} bills`)}
+              </h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                {lang === 'lo'
+                  ? `ບິນຈະຍັງສະແດງ (ປ້າຍ "ຍົກເລີກແລ້ວ") ແຕ່ບໍ່ນັບໃນຍອດ. ${voidTargets.some(b => b.billType === 'import') ? 'ລົດຈາກບິນນຳເຂົ້າຈະອອກຈາກສະຕ໋ອກ. ' : ''}${voidTargets.some(b => b.billType !== 'import' && !isMonthlyInstallmentBill(b)) ? 'ລົດຈາກບິນຂາຍຈະກັບຄືນສະຕ໋ອກ (ລໍຖ້າ PDI) ແລະ ລູກຄ້າກັບໄປເປັນ "ກຳລັງຕໍ່ລອງ". ' : ''}ກູ້ຄືນບໍ່ໄດ້.`
+                  : 'The bill stays listed as voided and stops counting in totals. This cannot be undone.'}
+              </p>
+              <label className="block text-xs text-zinc-400">
+                {lang === 'lo' ? 'ເຫດຜົນການຍົກເລີກ (ຈຳເປັນ)' : 'Reason (required)'}
+                <textarea
+                  value={voidReasonInput}
+                  onChange={(e) => setVoidReasonInput(e.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  autoFocus
+                  placeholder={lang === 'lo' ? 'ເຊັ່ນ: ລູກຄ້າຍົກເລີກການຊື້, ອອກບິນຜິດ VIN...' : 'e.g. customer cancelled, wrong VIN...'}
+                  className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-zinc-500 focus:outline-none"
+                />
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setVoidTargets(null)} disabled={isVoiding} className="rounded-lg border border-zinc-700 px-3.5 py-2 text-xs font-semibold text-zinc-300 hover:bg-zinc-800">
+                  {lang === 'lo' ? 'ປິດ' : 'Close'}
+                </button>
+                <button type="button" onClick={() => void handleConfirmVoid()} disabled={isVoiding || voidReasonInput.trim().length < 3} className="rounded-lg bg-red-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-red-500 disabled:opacity-50">
+                  {isVoiding ? (lang === 'lo' ? 'ກຳລັງຍົກເລີກ...' : 'Voiding...') : (lang === 'lo' ? 'ຢືນຢັນຍົກເລີກບິນ' : 'Void')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {canBatchVoid && selectedBillIds.length > 0 && (
           <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3.5 text-xs shadow-sm sm:p-4">
             <div className="flex items-center gap-2">
               <span className="rounded-lg border border-sky-400/20 bg-sky-400/10 p-1.5 text-sky-600">
@@ -1500,19 +1670,19 @@ export default function BillsManagementView({
               <button
                 type="button"
                 onClick={handleDeleteSelectedBills}
-                disabled={isDeletingBatch}
+                disabled={isVoiding}
                 className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/10 hover:bg-red-500 text-red-300 hover:text-white px-3.5 py-1.5 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer shadow-sm"
                 title="ລົບທຸກໃບບິນທີ່ເລືອກ"
               >
-                {isDeletingBatch ? (
+                {isVoiding ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <Trash2 className="w-3.5 h-3.5" />
                 )}
                 <span>
-                  {isDeletingBatch
-                    ? (lang === 'lo' ? 'ກຳລັງລົບ...' : 'Deleting...')
-                    : (lang === 'lo' ? `ລົບບິນທີ່ເລືອກ (${selectedBillIds.length})` : `Delete Selected (${selectedBillIds.length})`)}
+                  {isVoiding
+                    ? (lang === 'lo' ? 'ກຳລັງຍົກເລີກ...' : 'Voiding...')
+                    : (lang === 'lo' ? `ຍົກເລີກບິນທີ່ເລືອກ (${selectedBillIds.length})` : `Void selected (${selectedBillIds.length})`)}
                 </span>
               </button>
 
@@ -1533,7 +1703,7 @@ export default function BillsManagementView({
             onDeleteLog={handleDeleteIssuedDocLog}
             onReopenDoc={handleReopenIssuedDoc}
             lang={lang}
-            canDelete={currentUser?.role === 'super_admin' || currentUser?.role === 'admin'}
+            canDelete={isAdminRole(currentUser)}
           />
         ) : filterType === 'installment' && installmentSubTab === 'contracts' ? (
           <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-sm">
@@ -1761,13 +1931,16 @@ export default function BillsManagementView({
                 <thead className="sticky top-0 border-b border-zinc-800 bg-zinc-900 text-[11px] font-semibold text-zinc-400">
                   <tr>
                     <th className="w-8 py-2.5 pl-3 pr-1 text-center whitespace-nowrap">
+                      {canBatchVoid && (
                       <input
                         type="checkbox"
-                        checked={selectedBillIds.length === filteredBills.length && filteredBills.length > 0}
+                        checked={selectedBillIds.length === selectableBills.length && selectableBills.length > 0}
                         onChange={toggleSelectAll}
                         className="w-3.5 h-3.5 rounded cursor-pointer accent-white"
-                        title="ເລືອກທັງໝົດ"
+                        title="ເລືອກທັງໝົດ (ຍົກເວັ້ນບິນທີ່ຍົກເລີກແລ້ວ)"
+                        aria-label="ເລືອກທັງໝົດ"
                       />
+                      )}
                     </th>
                     <th className="px-2 py-2.5 whitespace-nowrap">{t.billType}</th>
                     <th className="px-2.5 py-2.5 whitespace-nowrap">{t.billNumber} & {t.billDate}</th>
@@ -1802,16 +1975,19 @@ export default function BillsManagementView({
                         <tr
                           key={bill.id}
                           className={`hover:bg-zinc-900/50 transition-colors ${selectedBillIds.includes(bill.id) ? 'bg-zinc-900/40' : ''
-                            } ${isInstallment ? 'bg-amber-500/[0.02]' : ''}`}
+                            } ${isInstallment ? 'bg-amber-500/2' : ''}`}
                         >
                           {/* Selection Checkbox */}
                           <td className="py-2.5 pl-3 pr-1 text-center">
+                            {canBatchVoid && bill.status !== 'voided' && !bill.isArchived && (
                             <input
                               type="checkbox"
                               checked={selectedBillIds.includes(bill.id)}
                               onChange={() => toggleSelectBill(bill.id)}
                               className="w-3.5 h-3.5 rounded cursor-pointer accent-white"
+                              aria-label={`ເລືອກບິນ ${bill.billNumber}`}
                             />
+                            )}
                           </td>
 
                           {/* Bill Type Badge */}
@@ -1847,7 +2023,22 @@ export default function BillsManagementView({
                                   {lang === 'lo' ? 'ຍົກເລີກແລ້ວ' : lang === 'th' ? 'ยกเลิกแล้ว' : 'VOIDED'}
                                 </span>
                               )}
+                              {bill.isArchived && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-zinc-700/40 text-zinc-300 border border-zinc-600" title={lang === 'lo' ? 'ບິນໃນ archive: ເບິ່ງໄດ້ຢ່າງດຽວ' : 'Archived: read-only'}>
+                                  ARCHIVE
+                                </span>
+                              )}
                             </div>
+                            {bill.status === 'voided' && bill.voidReason && (
+                              <span className="block max-w-55 text-[10px] text-red-300/90 font-sans whitespace-normal" title={bill.voidReason}>
+                                {lang === 'lo' ? 'ເຫດຜົນ' : 'Reason'}: {bill.voidReason}
+                                {(bill.voidedBy || bill.voidedAt) && (
+                                  <span className="block text-zinc-500">
+                                    {bill.voidedBy || ''}{bill.voidedAt ? ` • ${bill.voidedAt.slice(0, 10)}` : ''}
+                                  </span>
+                                )}
+                              </span>
+                            )}
                             <span className="text-[10px] text-zinc-500 font-sans block">{bill.date}</span>
                             {bill.transferRef && (
                               <button
@@ -1897,11 +2088,11 @@ export default function BillsManagementView({
 
                           {/* Vehicle Details */}
                           <td className="py-2.5 px-2.5">
-                            <strong className="text-white font-sans text-xs block truncate max-w-[150px]">{bill.model}</strong>
+                            <strong className="text-white font-sans text-xs block truncate max-w-37.5">{bill.model}</strong>
                             <button
                               type="button"
                               onClick={() => applyQuickSearch('vinPlate', bill.vin)}
-                              className="text-zinc-400 hover:text-amber-300 text-[10px] font-mono block truncate max-w-[150px] text-left cursor-pointer"
+                              className="text-zinc-400 hover:text-amber-300 text-[10px] font-mono block truncate max-w-37.5 text-left cursor-pointer"
                               title="ຄລິກເພື່ອເບິ່ງບິນທັງໝົດຂອງລົດຄັນນີ້ (VIN)"
                             >
                               {bill.vin}
@@ -1915,7 +2106,7 @@ export default function BillsManagementView({
                           {/* Customer or Supplier */}
                           <td className="py-2.5 px-2.5 font-sans">
                             {bill.billType === 'sale' || isInstallment ? (
-                              <div className="max-w-[160px]">
+                              <div className="max-w-40">
                                 {bill.customerName ? (
                                   <button
                                     type="button"
@@ -1950,7 +2141,7 @@ export default function BillsManagementView({
                                 )}
                               </div>
                             ) : (
-                              <div className="max-w-[160px]">
+                              <div className="max-w-40">
                                 <span className="text-zinc-200 font-medium text-xs block truncate">
                                   <button
                                     type="button"
@@ -1992,7 +2183,7 @@ export default function BillsManagementView({
                                 {bill.paymentMethod === 'transfer' ? t.paymentTransfer : t.paymentCash}
                               </span>
                             ) : (
-                              <span className="text-zinc-400 font-sans text-[10px] truncate max-w-[110px] block">
+                              <span className="text-zinc-400 font-sans text-[10px] truncate max-w-27.5 block">
                                 {bill.destinationWarehouse || 'Showroom Depot'}
                               </span>
                             )}
@@ -2063,12 +2254,11 @@ export default function BillsManagementView({
                               </button>
 
 
-                              {isSuperAdmin && onDeleteBill && bill.status !== 'voided' && (
+                              {isSuperAdmin && onDeleteBill && bill.status !== 'voided' && !bill.isArchived && (
                                 <button
                                   onClick={() => {
-                                    if (window.confirm(`${t.confirmDeleteBill} (${bill.billNumber})?`)) {
-                                      onDeleteBill(bill.id);
-                                    }
+                                    setVoidReasonInput('');
+                                    setVoidTargets([bill]);
                                   }}
                                   className="p-1 bg-zinc-900 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 border border-zinc-700 rounded-lg transition-colors cursor-pointer"
                                   title={lang === 'lo' ? 'ຍົກເລີກບິນ' : lang === 'th' ? 'ยกเลิกบิล' : 'Void Bill'}
@@ -2175,9 +2365,22 @@ export default function BillsManagementView({
             {/* PRINTABLE BILL CANVAS (Borderless Full A4 Sheet Layout) */}
             <div
               id="printable-official-bill"
-              className="official-dealer-document a4-document-canvas w-full max-w-[794px] mx-auto p-6 sm:p-8 bg-white text-black font-sans text-xs leading-normal rounded-sm shadow-xl flex flex-col justify-between print:m-0 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto print:max-h-[278mm] print:break-inside-avoid print:page-break-inside-avoid print:page-break-after-avoid print:overflow-hidden"
-              style={{ backgroundColor: '#ffffff', color: '#000000', border: 'none' }}
+              className="official-dealer-document a4-document-canvas w-full max-w-198.5 mx-auto p-6 sm:p-8 bg-white text-black font-sans text-xs leading-normal rounded-sm shadow-xl flex flex-col justify-between print:m-0 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto print:max-h-[278mm] print:break-inside-avoid print:page-break-inside-avoid print:page-break-after-avoid print:overflow-hidden"
+              style={{ backgroundColor: '#ffffff', color: '#000000', border: 'none', position: 'relative' }}
             >
+              {/* VOID mark: printed and exported with the bill, so a voided bill can never pass as valid */}
+              {selectedBillForPrint.status === 'voided' && (
+                <div aria-label="ບິນນີ້ຖືກຍົກເລີກແລ້ວ" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 20 }}>
+                  <div style={{ transform: 'rotate(-28deg)', border: '6px solid #dc2626', color: '#dc2626', opacity: 0.55, padding: '12px 36px', borderRadius: 12, textAlign: 'center', fontWeight: 900, lineHeight: 1.1 }}>
+                    <div style={{ fontSize: 64, letterSpacing: 6 }}>VOID</div>
+                    <div style={{ fontSize: 26 }}>ຍົກເລີກແລ້ວ</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>ບິນນີ້ບໍ່ມີຜົນໃຊ້ໄດ້</div>
+                    {selectedBillForPrint.voidReason && (
+                      <div style={{ fontSize: 12, marginTop: 4, maxWidth: 360 }}>ເຫດຜົນ: {selectedBillForPrint.voidReason}</div>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Top Section: Top-Left 3x4 cm Transparent AVATR Logo & Centered National Motto */}
               <div>
                 <div className="flex items-start justify-between gap-4 pb-1">
@@ -2333,7 +2536,7 @@ export default function BillsManagementView({
                 {/* Free Gifts & Warranty Terms for Sales */}
                 {selectedBillForPrint.freeGifts && selectedBillForPrint.freeGifts.length > 0 && (
                   <div className="p-2 bg-zinc-50 rounded border border-black space-y-0.5 text-[10px]">
-                    <span className="font-bold text-black uppercase block flex items-center gap-1">
+                    <span className="font-bold text-black uppercase flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-black" />
                       <span>ຊຸດຂອງແຖມ & ສິດທິພິເສດ (Dealership Privileges):</span>
                     </span>
@@ -2361,7 +2564,7 @@ export default function BillsManagementView({
                         <p className="text-[9px] text-black">LAO THANI TRACTOR SOLE CO., LTD</p>
                       </div>
 
-                      <div className="w-12 h-12 bg-white p-0.5 rounded border border-black flex items-center justify-center flex-shrink-0">
+                      <div className="w-12 h-12 bg-white p-0.5 rounded border border-black flex items-center justify-center shrink-0">
                         {getStoredCompanyBankInfo().qrCodeUrl ? (
                           <img src={getStoredCompanyBankInfo().qrCodeUrl!} alt="QR" className="w-full h-full object-contain" />
                         ) : (
@@ -2396,7 +2599,7 @@ export default function BillsManagementView({
 
                     {/* Dedicated Installment / Financing Breakdown */}
                     {isInstallmentBill(selectedBillForPrint) && (
-                      <div className="pt-0.5 mt-0.5 border-t border-black/60 text-[10px] font-sans space-y-0.5 bg-amber-500/10 p-1.5 rounded border border-amber-500/30">
+                      <div className="pt-0.5 mt-0.5 text-[10px] font-sans space-y-0.5 bg-amber-500/10 p-1.5 rounded border border-amber-500/30">
                         <div className="flex justify-between font-mono font-bold text-black">
                           <span>ເງິນດາວ ({selectedBillForPrint.downPaymentPercent || 30}%):</span>
                           <span>${(selectedBillForPrint.downPaymentUSD || Math.round(selectedBillForPrint.netTotalUSD * ((selectedBillForPrint.downPaymentPercent || 30) / 100))).toLocaleString()} USD</span>
@@ -2500,7 +2703,7 @@ export default function BillsManagementView({
         <CustomerDocumentsModal
           isOpen={Boolean(selectedCustomerForDocs)}
           onClose={() => setSelectedCustomerForDocs(null)}
-          customer={selectedCustomerForDocs.customer}
+          customer={withVehicleFromBills(selectedCustomerForDocs.customer, bills)}
           vehicles={vehicles}
           currentUser={currentUser || undefined}
           lang={lang}

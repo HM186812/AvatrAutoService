@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, ExternalLink, Download, FileText, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { InvoiceBillRecord, Language } from '../../types';
 import { getPaymentSlipUrl } from '../../backend/data';

@@ -1,3 +1,5 @@
+import { withVehicleFromBills } from '../../utils/documentCustomer';
+import { phoneMatches } from '../../utils/search';
 import { useState, useMemo, useEffect } from 'react';
 import {
   Lead,
@@ -17,7 +19,6 @@ import { ACTIVE_PROMOTIONS } from '../../data/promotions';
 import {
   Users,
   Car,
-  DollarSign,
   TrendingUp,
   Clock,
   ShieldCheck,
@@ -37,28 +38,27 @@ import {
   Building2,
   ShoppingBag,
   Plus,
-  Hash,
-  Eye,
-  CheckCircle,
   Coins,
   Download,
   Search,
   Calendar,
-  Filter,
   Wrench,
   BatteryCharging,
-  Activity,
-  AlertTriangle
+  AlertTriangle,
+  CalendarClock
 } from 'lucide-react';
-import { getModelStockSummaries } from '../../data/stockSummary';
+import { getModelStockSummaries, isSellable, isOnHand } from '../../data/stockSummary';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl } from '../../utils/whatsapp';
-import { DEFAULT_EXCHANGE_RATE_LAK, calculateInstallmentSummary, generateInstallmentSchedule } from '../../utils/installment';
+import { buildInstallmentContracts, summarizeInstallmentPortfolio } from '../../utils/installmentPortfolio';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
-import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
+import CustomerDocumentsModal from '../modals/CustomerDocumentsModal';
 import { saveLead } from '../../backend/data';
 import TopSalesWidget from './TopSalesWidget';
-import { parseBillDate } from '../../utils/salesLeaderboard';
+import { parseBillDate, isInPeriod, computeLeaderboard } from '../../utils/salesLeaderboard';
+import { usePeriodBills } from '../../utils/usePeriodBills';
+import { isMonthlyInstallmentBill } from '../../utils/installment';
+import { getDueFollowUps, getFollowUpState, formatDateKey } from '../../utils/followUp';
 
 interface DashboardViewProps {
   leads: Lead[];
@@ -94,7 +94,6 @@ export default function DashboardView({
   activeTimeframe,
   onTimeframeChange,
   onNavigateMenu,
-  onOpenNewLead,
   onOpenQuote,
   onOpenNewService,
   onOpenNewTestDrive,
@@ -126,14 +125,12 @@ export default function DashboardView({
   const importedCars = inventory.filter(i => i.status === 'imported');
   const pdiCars = inventory.filter(i => i.status === 'pdi');
   const readyCars = inventory.filter(i => i.status === 'ready');
-  const readyAvatr12 = readyCars.filter(c => c.model.includes('12')).length;
-  const readyAvatr11 = readyCars.filter(c => c.model.includes('11')).length;
-  const readyAvatr07 = readyCars.filter(c => c.model.includes('07')).length;
-  const otherReady = Math.max(0, readyCars.length - (readyAvatr12 + readyAvatr11 + readyAvatr07));
+  // Same rule as POS: what can be sold right now, out of what is physically in the warehouse
+  const sellableCars = inventory.filter(i => isSellable(i));
+  const onHandCars = inventory.filter(isOnHand);
   const reservedCars = inventory.filter(i => i.status === 'reserved');
   const eventCars = inventory.filter(i => i.status === 'event');
   const promoCars = inventory.filter(i => i.status === 'promotion');
-  const soldCars = inventory.filter(i => i.status === 'sold');
 
   // Dynamic Event & Promotion Campaigns derived from active inventory + static campaigns
   const displayedPromotions = useMemo(() => {
@@ -184,17 +181,6 @@ export default function DashboardView({
     return modelSummaries.filter(m => m.isLowStock || m.isOutOfStock);
   }, [modelSummaries]);
 
-  // Sale & Delivery Bills (Includes Full Sales & Installment Down Payments)
-  const saleBills = useMemo(() => {
-    return (bills || []).filter(b =>
-      b.status !== 'voided' && (
-        b.billType === 'sale' ||
-        b.billType === 'installment' ||
-        b.type === 'sale' ||
-        b.type === 'installment'
-      )
-    );
-  }, [bills]);
 
   // Modals for Installment Ledger & Customer Documents inside Dashboard
   const [selectedLeadForLedger, setSelectedLeadForLedger] = useState<Lead | null>(null);
@@ -202,85 +188,37 @@ export default function DashboardView({
   const [installmentSearchQuery, setInstallmentSearchQuery] = useState('');
   const [installmentStatusFilter, setInstallmentStatusFilter] = useState<'all' | 'delivered' | 'active' | 'completed'>('all');
 
-  // Filter installment leads (leads with installment type or finance info)
-  const installmentLeads = useMemo(() => {
-    return leads.filter(l =>
-      l.paymentType === 'installment' ||
-      l.paymentType === 'finance' ||
-      Boolean(l.downPaymentPercent) ||
-      Boolean(l.financeCompany) ||
-      Boolean(l.installmentRecords && l.installmentRecords.length > 0)
-    );
-  }, [leads]);
+  // Installment portfolio: the same customers, prices and totals as the Installment page and the Sidebar badge
+  const installmentContracts = useMemo(
+    () => buildInstallmentContracts(leads, bills, vehicles),
+    [leads, bills, vehicles]
+  );
+  const contractByLeadId = useMemo(
+    () => new Map(installmentContracts.map(c => [c.lead.id, c])),
+    [installmentContracts]
+  );
+  const installmentLeads = useMemo(() => installmentContracts.map(c => c.lead), [installmentContracts]);
 
-  // Filter installment bills
-  const installmentBills = useMemo(() => {
-    return bills.filter(b =>
-      b.status !== 'voided' && (
-        b.billType === 'installment' ||
-        b.paymentMethod === 'finance' ||
-        Boolean(b.financeCompany) ||
-        Boolean(b.downPaymentPercent && b.downPaymentPercent > 0)
-      )
-    );
-  }, [bills]);
+  // Monthly installment receipts recorded as bills
+  const installmentReceiptBills = useMemo(
+    () => bills.filter(b => b.status !== 'voided' && isMonthlyInstallmentBill(b)),
+    [bills]
+  );
 
-  // Compute Comprehensive Portfolio Metrics
   const portfolioMetrics = useMemo(() => {
-    let totalVehicleValueUSD = 0;
-    let totalDownPaymentUSD = 0;
-    let totalFinancedUSD = 0;
-    let totalCollectedUSD = 0;
-    let totalOutstandingUSD = 0;
-    let onTimeInstallments = 0;
-    let totalInstallmentsChecked = 0;
-
-    installmentLeads.forEach(lead => {
-      const matchedVeh = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
-      const vehiclePrice = matchedVeh?.priceStartingUSD || 50000;
-      totalVehicleValueUSD += vehiclePrice;
-
-      const downUSD = lead.downPaymentUSD || Math.round(vehiclePrice * ((lead.downPaymentPercent || 30) / 100));
-      totalDownPaymentUSD += downUSD;
-
-      const loanPrincipal = Math.max(0, vehiclePrice - downUSD);
-      totalFinancedUSD += loanPrincipal;
-
-      const schedule = lead.installmentRecords && lead.installmentRecords.length > 0
-        ? lead.installmentRecords
-        : generateInstallmentSchedule(lead, vehiclePrice);
-
-      const summary = calculateInstallmentSummary(lead, schedule, vehiclePrice);
-      totalCollectedUSD += summary.totalPaidInstallmentsUSD;
-      totalOutstandingUSD += summary.remainingInstallmentsUSD;
-
-      totalInstallmentsChecked += schedule.length;
-      onTimeInstallments += schedule.filter(s => s.status === 'paid').length;
-    });
-
-    const averageDownPercent = totalVehicleValueUSD > 0
-      ? Math.round((totalDownPaymentUSD / totalVehicleValueUSD) * 100)
-      : 30;
-
-    const healthRate = totalInstallmentsChecked > 0
-      ? Math.min(100, Math.round((onTimeInstallments / totalInstallmentsChecked) * 100) + 70)
-      : 98;
-
+    const s = summarizeInstallmentPortfolio(installmentContracts);
+    const health = s.onTimeRatePercent;
     return {
-      totalCustomers: installmentLeads.length,
-      totalVehicleValueUSD,
-      totalDownPaymentUSD,
-      totalDownPaymentLAK: totalDownPaymentUSD * DEFAULT_EXCHANGE_RATE_LAK,
-      averageDownPercent,
-      totalFinancedUSD,
-      totalFinancedLAK: totalFinancedUSD * DEFAULT_EXCHANGE_RATE_LAK,
-      totalCollectedUSD,
-      totalCollectedLAK: totalCollectedUSD * DEFAULT_EXCHANGE_RATE_LAK,
-      totalOutstandingUSD,
-      totalOutstandingLAK: totalOutstandingUSD * DEFAULT_EXCHANGE_RATE_LAK,
-      healthRate,
+      ...s,
+      totalCustomers: s.totalContracts,
+      healthRate: health,
+      healthLabel: health === null
+        ? 'ຍັງບໍ່ມີງວດຄົບກຳນົດ'
+        : health >= 90 ? 'ລະດັບດີ (Low Risk)'
+          : health >= 70 ? 'ຕ້ອງຕິດຕາມ (Medium Risk)'
+            : 'ຄວາມສ່ຽງສູງ (High Risk)',
     };
-  }, [installmentLeads, vehicles]);
+  }, [installmentContracts]);
 
   // Group by Tenure
   const tenureBreakdown = useMemo(() => {
@@ -306,7 +244,7 @@ export default function DashboardView({
         const q = installmentSearchQuery.toLowerCase();
         return (
           lead.customerName.toLowerCase().includes(q) ||
-          lead.phone.toLowerCase().includes(q) ||
+          phoneMatches(lead.phone, q) ||
           (lead.interestedModel && lead.interestedModel.toLowerCase().includes(q)) ||
           (lead.province && lead.province.toLowerCase().includes(q))
         );
@@ -341,28 +279,23 @@ export default function DashboardView({
   const handleExportInstallmentCsv = () => {
     if (installmentLeads.length === 0) return;
     const headers = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ແຂວງ', 'ລຸ້ນລົດ', 'ເງິນດາວ %', 'ເງິນດາວ (USD)', 'ຍອດກູ້ຢືມ (USD)', 'ໄລຍະຜ່ອນ (ເດືອນ)', 'ຄ່າງວດ/ເດືອນ (USD)', 'ຄ່າງວດ/ເດືອນ (LAK)', 'ຈ່າຍແລ້ວ (ງວດ)', 'ສະຖານະ'];
-    const rows = installmentLeads.map(lead => {
-      const v = vehicles.find(veh => veh.name === lead.interestedModel);
-      const p = v?.priceStartingUSD || 50000;
-      const dpUSD = lead.downPaymentUSD || Math.round(p * ((lead.downPaymentPercent || 30) / 100));
-      const loanUSD = Math.max(0, p - dpUSD);
-      const tenure = lead.tenureMonths || 48;
-      const monthlyUSD = lead.monthlyPaymentUSD || Math.round(loanUSD / tenure);
-      const monthlyLAK = lead.monthlyPaymentLAK || Math.round((loanUSD * DEFAULT_EXCHANGE_RATE_LAK) / tenure);
-      const paidCount = (lead.installmentRecords || []).filter(r => r.status === 'paid').length;
+    const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = installmentContracts.map(({ lead, summary, isCompleted }) => {
+      const monthlyUSD = lead.monthlyPaymentUSD || summary.monthlyPaymentUSD;
+      const monthlyLAK = lead.monthlyPaymentLAK || summary.monthlyPaymentLAK;
       return [
-        `"${lead.customerName}"`,
-        `"${lead.phone}"`,
-        `"${lead.province || 'Vientiane'}"`,
-        `"${lead.interestedModel || 'AVATR'}"`,
-        `${lead.downPaymentPercent || 30}%`,
-        dpUSD,
-        loanUSD,
-        tenure,
+        csvCell(lead.customerName),
+        csvCell(lead.phone),
+        csvCell(lead.province || 'Vientiane'),
+        csvCell(lead.interestedModel || 'AVATR'),
+        `${summary.downPaymentPercent}%`,
+        summary.downPaymentUSD,
+        summary.principalFinancedUSD,
+        summary.tenure,
         monthlyUSD,
         monthlyLAK,
-        `${paidCount}/${tenure}`,
-        `"${lead.status === 'delivered' ? 'ຈ່າຍດາວແລ້ວ' : 'ກຳລັງຜ່ອນ'}"`,
+        `${summary.paidCount}/${summary.totalCount}`,
+        csvCell(isCompleted ? 'ຜ່ອນຄົບແລ້ວ' : lead.status === 'delivered' ? 'ຈ່າຍດາວແລ້ວ' : 'ກຳລັງຜ່ອນ'),
       ].join(',');
     });
     const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
@@ -380,87 +313,55 @@ export default function DashboardView({
   // Timestamp filtering for Day, Week, Month, Year (Local time aware)
   const now = new Date();
 
-  const isWithinTimeframe = (dateVal?: string | null, tf: KPITimeframe = timeframe): boolean => {
-    const d = parseBillDate(dateVal);
-    if (!d) return false;
-    const time = d.getTime();
-    if (isNaN(time)) return false;
+  // Same period rule as Top Sales ("week" = Monday → today), so every page shows the same numbers
+  const isWithinTimeframe = (dateVal?: string | null, tf: KPITimeframe = timeframe): boolean =>
+    isInPeriod(parseBillDate(dateVal), tf, now);
 
-    if (tf === 'day') {
-      return (
-        d.getFullYear() === now.getFullYear() &&
-        d.getMonth() === now.getMonth() &&
-        d.getDate() === now.getDate()
-      );
-    }
-    if (tf === 'week') {
-      const past7Days = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-      return time >= past7Days && time <= now.getTime() + 24 * 60 * 60 * 1000;
-    }
-    if (tf === 'month') {
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    }
-    if (tf === 'year') {
-      return d.getFullYear() === now.getFullYear();
-    }
-    return true;
-  };
+  // Every bill of the selected period (the app only keeps the latest 100 in memory)
+  const { bills: periodBills } = usePeriodBills(bills || [], timeframe);
 
-  const getMetrics = (tf: KPITimeframe) => {
-    const tfLeads = leads.filter(l => isWithinTimeframe(l.createdAt, tf));
-    const tfBills = saleBills.filter(b => isWithinTimeframe(b.date || b.timestamp, tf));
-    const tfTestDrives = testDrives.filter(td => isWithinTimeframe(td.date, tf));
-
-    // Separate new vehicle sale deals (1 VIN = 1 vehicle) from monthly installment receipts
-    const seenDealKeys = new Set<string>();
-    let vehicleSalesUnits = 0;
-    let vehicleSalesRevenueUSD = 0;
-    let monthlyInstallmentCollectedUSD = 0;
-
-    tfBills.forEach(b => {
-      if (b.installmentType === 'monthly_installment') {
-        monthlyInstallmentCollectedUSD += Number(b.amountUSD || 0);
-      } else {
-        const key = b.vin ? `vin:${b.vin}` : `bill:${b.id}`;
-        if (!seenDealKeys.has(key)) {
-          seenDealKeys.add(key);
-          vehicleSalesUnits += Math.max(1, Number(b.quantity) || 1);
-          vehicleSalesRevenueUSD += Number(b.netTotalUSD || b.amountUSD || 0);
-        }
-      }
-    });
-
-    const totalRevenueUSD = vehicleSalesRevenueUSD + monthlyInstallmentCollectedUSD;
-    const tfDeliveredLeads = tfLeads.filter(l => l.status === 'delivered').length;
-
+  // Vehicle sales come from the same calculation as the Top Sales page (1 car = 1 deal, voided bills and
+  // monthly receipts excluded, Excel-imported deliveries included). Monthly receipts are reported separately
+  // so a financed car is never counted twice (full price at sale + its installments).
+  const kpiData = useMemo(() => {
+    const ranking = computeLeaderboard(periodBills, leads, timeframe, now);
+    const salesCount = ranking.reduce((sum, r) => sum + r.totalUnits, 0);
+    const vehicleSalesRevenueUSD = ranking.reduce((sum, r) => sum + r.totalRevenueUSD, 0);
+    const monthlyInstallmentCollectedUSD = periodBills
+      .filter(b => b.status !== 'voided' && isMonthlyInstallmentBill(b) && isWithinTimeframe(b.date || b.timestamp, timeframe))
+      .reduce((sum, b) => sum + Number(b.amountUSD || b.netTotalUSD || 0), 0);
     return {
-      leads: tfLeads.length,
-      revenueUSD: totalRevenueUSD,
+      leads: leads.filter(l => isWithinTimeframe(l.createdAt, timeframe)).length,
+      revenueUSD: vehicleSalesRevenueUSD,
       vehicleSalesRevenueUSD,
       monthlyInstallmentCollectedUSD,
-      testDrives: tfTestDrives.length,
-      deliveries: Math.max(vehicleSalesUnits, tfDeliveredLeads),
-      salesCount: vehicleSalesUnits,
-      label: {
-        day: t.tfDay,
-        week: t.tfWeek,
-        month: t.tfMonth,
-        year: t.tfYear,
-      }[tf],
+      testDrives: testDrives.filter(td => isWithinTimeframe(td.date, timeframe)).length,
+      deliveries: salesCount,
+      salesCount,
+      label: { day: t.tfDay, week: t.tfWeek, month: t.tfMonth, year: t.tfYear }[timeframe],
     };
-  };
-
-  const kpiData = {
-    day: getMetrics('day'),
-    week: getMetrics('week'),
-    month: getMetrics('month'),
-    year: getMetrics('year'),
-  }[timeframe];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodBills, leads, testDrives, timeframe, t]);
 
   // Timeframe-filtered sales bills for the live sales table
   const timeframeSaleBills = useMemo(() => {
-    return saleBills.filter(b => isWithinTimeframe(b.date || b.timestamp, timeframe));
-  }, [saleBills, timeframe]);
+    return periodBills.filter(b =>
+      b.status !== 'voided' &&
+      (b.billType === 'sale' || b.billType === 'installment' || b.type === 'sale' || b.type === 'installment') &&
+      isWithinTimeframe(b.date || b.timestamp, timeframe));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodBills, timeframe]);
+
+  // Open appointments (not finished or cancelled), soonest first
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const openServices = useMemo(() => services
+    .filter(s => s.status !== 'completed')
+    .sort((a, b) => `${a.scheduledDate || ''} ${a.scheduledTime || ''}`.localeCompare(`${b.scheduledDate || ''} ${b.scheduledTime || ''}`)),
+    [services]);
+  const upcomingTestDrives = useMemo(() => testDrives
+    .filter(td => td.status !== 'completed' && td.status !== 'cancelled' && (td.date || '') >= todayKey)
+    .sort((a, b) => `${a.date || ''} ${a.timeSlot || ''}`.localeCompare(`${b.date || ''} ${b.timeSlot || ''}`)),
+    [testDrives, todayKey]);
 
   // Filtered sales for the sales display section
   const filteredSales = timeframeSaleBills.filter(b => {
@@ -521,7 +422,7 @@ export default function DashboardView({
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-slate-900 dark:text-white">{kpiData.leads}</span>
+            <span className="text-4xl font-black font-mono text-slate-900 dark:text-white">{kpiData.leads}</span>
             <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">ລູກຄ້າ</span>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-white">
@@ -545,12 +446,12 @@ export default function DashboardView({
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-slate-900 dark:text-white">{readyCars.length}</span>
-            <span className="text-xs text-emerald-600 dark:text-white font-semibold font-mono">
-              ຄັນ {inventory.length > 0 ? `(${Math.round((readyCars.length / inventory.length) * 100)}%)` : ''}
+            <span className="text-4xl font-black font-mono text-slate-900 dark:text-white">{sellableCars.length}</span>
+            <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">
+              ຄັນ {onHandCars.length > 0 ? `/ ${onHandCars.length} ໃນສາງ` : ''}
             </span>
           </div>
-          <div className={`mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 ${isAdmin ? 'group-hover:text-emerald-600 dark:group-hover:text-white' : ''
+          <div className={`mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 ${isAdmin ? 'group-hover:text-blue-600 dark:group-hover:text-white' : ''
             }`}>
             <span>
               {lowStockModels.length > 0 ? (
@@ -563,7 +464,7 @@ export default function DashboardView({
               )}
             </span>
             {isAdmin && (
-              <span className="flex items-center gap-1 text-emerald-600 dark:text-white font-medium group-hover:underline">
+              <span className="flex items-center gap-1 text-slate-500 dark:text-zinc-400 font-medium group-hover:text-blue-600 dark:group-hover:text-white group-hover:underline">
                 <span>{lowStockModels.length > 0 ? 'ເຕືອນສາງ' : 'ກວດສາງ'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </span>
@@ -583,7 +484,7 @@ export default function DashboardView({
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-slate-900 dark:text-white">{kpiData.salesCount}</span>
+            <span className="text-4xl font-black font-mono text-slate-900 dark:text-white">{kpiData.salesCount}</span>
             <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">ຄັນທີ່ຂາຍອອກ</span>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-white">
@@ -605,13 +506,15 @@ export default function DashboardView({
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white">
+            <span className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white">
               ${kpiData.revenueUSD.toLocaleString()}
             </span>
             <span className="text-xs text-blue-600 font-mono font-bold">USD</span>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-white">
-            <span className="font-mono text-slate-500 dark:text-zinc-400 font-medium">≈ {((kpiData.revenueUSD * 22000) / 1000000).toFixed(0)}M LAK</span>
+            <span className="font-mono text-slate-500 dark:text-zinc-400 font-medium" title={lang === 'lo' ? 'ເງິນງວດທີ່ຮັບໃນຊ່ວງນີ້ (ບໍ່ລວມໃນຍອດຂາຍລົດ)' : 'Installments collected in this period (not part of vehicle sales)'}>
+              {lang === 'lo' ? '+ ເງິນງວດຮັບ' : '+ Installments'} ${kpiData.monthlyInstallmentCollectedUSD.toLocaleString()}
+            </span>
             <span className="flex items-center gap-1 text-blue-600 dark:text-white font-semibold group-hover:underline">
               <span>{t.viewBillsAction}</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -619,6 +522,63 @@ export default function DashboardView({
           </div>
         </div>
       </div>
+
+      {/* SECTION: Follow-ups due today / overdue */}
+      {(() => {
+        const due = getDueFollowUps(leads);
+        const overdueCount = due.filter(l => getFollowUpState(l) === 'overdue').length;
+        const todayCount = due.length - overdueCount;
+        return (
+          <section aria-labelledby="dash-followups-title" className="bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 rounded-3xl p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2.5 rounded-2xl bg-amber-50 text-amber-600 dark:bg-zinc-900 dark:text-amber-400"><CalendarClock className="w-4 h-4" /></span>
+                <div>
+                  <h2 id="dash-followups-title" className="text-sm font-bold text-slate-900 dark:text-white">ລູກຄ້າທີ່ຕ້ອງຕິດຕາມ</h2>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    ມື້ນີ້ <strong className="text-amber-600 dark:text-amber-400">{todayCount}</strong> · ເລີຍກຳນົດ <strong className="text-rose-600 dark:text-rose-400">{overdueCount}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateMenu('customers')}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900 cursor-pointer"
+              >
+                <span>ເປີດ CRM</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {due.length === 0 ? (
+              <p className="mt-3 text-xs text-slate-500 dark:text-zinc-500">ບໍ່ມີລູກຄ້າທີ່ຕ້ອງຕິດຕາມມື້ນີ້</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-slate-100 dark:divide-zinc-800/80">
+                {due.slice(0, 5).map(lead => {
+                  const overdue = getFollowUpState(lead) === 'overdue';
+                  return (
+                    <li key={lead.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+                      <div className="min-w-0">
+                        <span className="font-semibold text-slate-900 dark:text-white">{lead.customerName}</span>
+                        <span className="ml-2 font-mono text-slate-500 dark:text-zinc-400">{lead.phone}</span>
+                        <span className="ml-2 text-slate-500 dark:text-zinc-500">{lead.interestedModel}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {lead.assignedTo && <span className="text-slate-500 dark:text-zinc-400">{lead.assignedTo}</span>}
+                        <span className={`px-2 py-0.5 rounded-full font-mono font-bold text-[10px] ${overdue ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'}`}>
+                          {overdue ? 'ເລີຍກຳນົດ ' : 'ມື້ນີ້ '}{formatDateKey(lead.nextFollowUpAt)}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+                {due.length > 5 && (
+                  <li className="pt-2 text-xs text-slate-500 dark:text-zinc-400">+ ອີກ {due.length - 5} ລາຍການ ໃນໜ້າ CRM</li>
+                )}
+              </ul>
+            )}
+          </section>
+        );
+      })()}
 
       {/* SECTION: ຈັດອັນດັບພະນັກງານຂາຍ Top Sales Widget (Top 3 Podium & Leaderboard) */}
       <TopSalesWidget
@@ -853,7 +813,7 @@ export default function DashboardView({
             </div>
             <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-zinc-800/80 flex justify-between text-[11px] text-slate-600 dark:text-zinc-400">
               <span>ອັດຕາດາວສະເລ່ຍ:</span>
-              <span className="text-slate-900 dark:text-white font-bold">{portfolioMetrics.averageDownPercent}% ຂອງມູນຄ່າລົດ</span>
+              <span className="text-slate-900 dark:text-white font-bold">{portfolioMetrics.averageDownPercent === null ? '—' : `${portfolioMetrics.averageDownPercent}% ຂອງມູນຄ່າລົດ`}</span>
             </div>
           </div>
 
@@ -889,11 +849,11 @@ export default function DashboardView({
               </span>
             </div>
             <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400">
-              ${portfolioMetrics.totalCollectedUSD.toLocaleString()} USD
+              ${portfolioMetrics.totalInstallmentsPaidUSD.toLocaleString()} USD
             </div>
             <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-zinc-800/80 flex justify-between text-[11px] text-slate-600 dark:text-zinc-400">
               <span>ບິນຮັບເງິນງວດໃນລະບົບ:</span>
-              <span className="text-emerald-600 dark:text-emerald-300 font-bold">{installmentBills.length} ໃບບິນ</span>
+              <span className="text-emerald-600 dark:text-emerald-300 font-bold">{installmentReceiptBills.length} ໃບບິນ</span>
             </div>
           </div>
 
@@ -914,9 +874,7 @@ export default function DashboardView({
             <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-zinc-800/80 flex justify-between text-[11px] text-slate-600 dark:text-zinc-400">
               <span>ຄວາມຄືບໜ້າການເກັບ:</span>
               <span className="text-purple-600 dark:text-purple-300 font-bold">
-                {portfolioMetrics.totalFinancedUSD > 0
-                  ? Math.round((portfolioMetrics.totalCollectedUSD / portfolioMetrics.totalFinancedUSD) * 100)
-                  : 0}% ສຳເລັດ
+                {portfolioMetrics.repaymentProgressPercent}% ສຳເລັດ
               </span>
             </div>
           </div>
@@ -938,7 +896,7 @@ export default function DashboardView({
             <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-zinc-800/80 flex justify-between text-[11px] text-slate-600 dark:text-zinc-400 font-sans">
               <span>ສະຖານະ:</span>
               <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                {installmentLeads.filter(l => l.status === 'delivered').length} ຈ່າຍດາວແລ້ວ
+                {portfolioMetrics.activeContracts} ກຳລັງຜ່ອນ • {portfolioMetrics.completedContracts} ຄົບແລ້ວ
               </span>
             </div>
           </div>
@@ -955,11 +913,11 @@ export default function DashboardView({
               </span>
             </div>
             <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400">
-              {portfolioMetrics.healthRate}%
+              {portfolioMetrics.healthRate === null ? '—' : `${portfolioMetrics.healthRate}%`}
             </div>
             <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-zinc-800/80 flex justify-between text-[11px] text-slate-600 dark:text-zinc-400">
-              <span>ການປະເມີນຄວາມສ່ຽງ:</span>
-              <span className="text-emerald-600 dark:text-emerald-300 font-bold">ລະດັບດີຫຼາຍ (Low Risk)</span>
+              <span>ງວດທີ່ຄົບກຳນົດ ຈ່າຍແລ້ວ:</span>
+              <span className="text-emerald-600 dark:text-emerald-300 font-bold">{portfolioMetrics.healthLabel}</span>
             </div>
           </div>
         </div>
@@ -1032,18 +990,18 @@ export default function DashboardView({
                   </tr>
                 ) : (
                   filteredInstallmentCustomers.map((lead) => {
-                    const matchedVeh = vehicles.find(v => v.name === lead.interestedModel);
-                    const basePrice = matchedVeh?.priceStartingUSD || 50000;
-                    const downUSD = lead.downPaymentUSD || Math.round(basePrice * ((lead.downPaymentPercent || 30) / 100));
-                    const loanUSD = Math.max(0, basePrice - downUSD);
-                    const tenureMonths = lead.tenureMonths || 48;
-                    const monthlyUSD = lead.monthlyPaymentUSD || Math.round(loanUSD / tenureMonths);
-                    const monthlyLAK = lead.monthlyPaymentLAK || Math.round((loanUSD * DEFAULT_EXCHANGE_RATE_LAK) / tenureMonths);
+                    const contract = contractByLeadId.get(lead.id);
+                    if (!contract) return null;
+                    const { summary } = contract;
+                    const basePrice = contract.priceUSD;
+                    const downUSD = summary.downPaymentUSD;
+                    const loanUSD = summary.principalFinancedUSD;
+                    const tenureMonths = summary.tenure;
+                    const monthlyUSD = lead.monthlyPaymentUSD || summary.monthlyPaymentUSD;
 
                     // Progress
-                    const records = lead.installmentRecords || [];
-                    const paidCount = records.filter(r => r.status === 'paid').length;
-                    const progressPct = Math.round((paidCount / tenureMonths) * 100);
+                    const paidCount = summary.paidCount;
+                    const progressPct = summary.progressPercent;
 
                     return (
                       <tr key={lead.id} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors">
@@ -1074,7 +1032,7 @@ export default function DashboardView({
                         {/* Down Payment */}
                         <td className="py-3 px-4">
                           <strong className="text-amber-600 dark:text-amber-400 block">${downUSD.toLocaleString()} USD</strong>
-                          <span className="text-[11px] text-slate-600 dark:text-zinc-400 font-sans">ດາວ {lead.downPaymentPercent || 30}%</span>
+                          <span className="text-[11px] text-slate-600 dark:text-zinc-400 font-sans">ດາວ {summary.downPaymentPercent}%</span>
                         </td>
 
                         {/* Loan & Tenure */}
@@ -1092,7 +1050,7 @@ export default function DashboardView({
                         {/* Progress */}
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-between text-[11px] mb-1 font-sans">
-                            <span className="text-slate-600 dark:text-zinc-400">{paidCount}/{tenureMonths} ງວດ</span>
+                            <span className="text-slate-600 dark:text-zinc-400">{paidCount}/{summary.totalCount} ງວດ</span>
                             <span className="text-amber-600 dark:text-amber-400 font-bold">{progressPct}%</span>
                           </div>
                           <div className="w-24 h-1.5 bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden">
@@ -1105,7 +1063,12 @@ export default function DashboardView({
 
                         {/* Status */}
                         <td className="py-3 px-4 font-sans">
-                          {lead.status === 'delivered' ? (
+                          {contract.isCompleted ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              <span>ຜ່ອນຄົບແລ້ວ</span>
+                            </span>
+                          ) : lead.status === 'delivered' ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                               <span>ຈ່າຍດາວແລ້ວ</span>
@@ -1200,18 +1163,18 @@ export default function DashboardView({
                   </div>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                  {services.length} ລາຍການ
+                  {openServices.length} ລາຍການ
                 </span>
               </div>
 
               {/* Service Items List */}
               <div className="space-y-2.5">
-                {services.length === 0 ? (
+                {openServices.length === 0 ? (
                   <div className="py-8 text-center text-slate-500 dark:text-zinc-500 text-xs">
-                    ຍັງບໍ່ມີຂໍ້ມູນການນັດໝາຍສູນບໍລິການ
+                    ບໍ່ມີນັດໝາຍສູນບໍລິການທີ່ລໍຖ້າ
                   </div>
                 ) : (
-                  services.slice(0, 4).map((svc) => {
+                  openServices.slice(0, 4).map((svc) => {
                     const getServiceTypeBadge = (type: string) => {
                       switch (type) {
                         case 'battery_check':
@@ -1273,7 +1236,7 @@ export default function DashboardView({
                                 ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/30'
                                 : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30'
                               }`}>
-                              {svc.status === 'completed' ? 'ສຳເລັດແລ້ວ' : svc.status === 'in_progress' ? 'ກຳລັງກວດເຊັກ' : 'ລໍຖ້າຄິວ'}
+                              {svc.status === 'completed' ? 'ສຳເລັດແລ້ວ' : svc.status === 'in_progress' ? 'ກຳລັງກວດເຊັກ' : svc.status === 'inspection_done' ? 'ກວດເສັດແລ້ວ' : 'ລໍຖ້າຄິວ'}
                             </span>
                           </div>
                         </div>
@@ -1283,14 +1246,6 @@ export default function DashboardView({
                 )}
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={onOpenNewService ? onOpenNewService : () => onNavigateMenu('customers')}
-              className="mt-3 w-full py-2 px-3 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <span>+ ເປີດຟອມນັດໝາຍສູນບໍລິການ →</span>
-            </button>
           </div>
 
           {/* Column 2: ຕາຕະລາງລູກຄ້ານັດທົດລອງຂັບ */}
@@ -1308,18 +1263,18 @@ export default function DashboardView({
                   </div>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
-                  {testDrives.length} ຄິວນັດ
+                  {upcomingTestDrives.length} ຄິວນັດ
                 </span>
               </div>
 
               {/* Test Drive Items List */}
               <div className="space-y-2.5">
-                {testDrives.length === 0 ? (
+                {upcomingTestDrives.length === 0 ? (
                   <div className="py-8 text-center text-slate-500 dark:text-zinc-500 text-xs">
-                    ຍັງບໍ່ມີຂໍ້ມູນການນັດໝາຍທົດລອງຂັບ
+                    ບໍ່ມີຄິວທົດລອງຂັບທີ່ຈະມາເຖິງ
                   </div>
                 ) : (
-                  testDrives.slice(0, 4).map((td) => {
+                  upcomingTestDrives.slice(0, 4).map((td) => {
                     return (
                       <div
                         key={td.id}
@@ -1381,14 +1336,6 @@ export default function DashboardView({
                 )}
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={onOpenNewTestDrive ? onOpenNewTestDrive : () => onNavigateMenu('customers')}
-              className="mt-3 w-full py-2 px-3 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <span> ເປີດຟອມຈອງທົດລອງຂັບ →</span>
-            </button>
           </div>
         </div>
       </div>
@@ -1465,7 +1412,7 @@ export default function DashboardView({
           {/* Stage 3: ພ້ອມຂາຍ */}
           <div className="bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3 hover:border-slate-300 dark:hover:border-zinc-700 transition-colors shadow-sm dark:shadow-none">
             <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-600 text-white border border-emerald-700 dark:bg-white dark:text-black dark:border-zinc-300 font-bold">
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-600 text-white border border-emerald-700 dark:bg-white dark:text-black dark:border-zinc-300">
                 {t.stage3Ready}
               </span>
               <span className="text-xl font-black font-mono text-slate-900 dark:text-white">{readyCars.length}</span>
@@ -1511,7 +1458,7 @@ export default function DashboardView({
           {/* Stage 5: ລົດງານ Event */}
           <div className="bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3 hover:border-slate-300 dark:hover:border-zinc-700 transition-colors shadow-sm dark:shadow-none">
             <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 dark:bg-zinc-800 text-purple-800 dark:text-zinc-200 border border-purple-200 dark:border-zinc-700 flex items-center gap-1 font-bold">
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 dark:bg-zinc-800 text-purple-800 dark:text-zinc-200 border border-purple-200 dark:border-zinc-700 flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-purple-600 dark:text-zinc-400" />
                 <span>{t.stage5Event}</span>
               </span>
@@ -1537,7 +1484,7 @@ export default function DashboardView({
           {/* Stage 6: ລົດແຄມເປນໂປຣໂມຊັນ */}
           <div className="bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3 hover:border-slate-300 dark:hover:border-zinc-700 transition-colors shadow-sm dark:shadow-none">
             <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 dark:bg-zinc-800 text-amber-800 dark:text-zinc-200 border border-amber-200 dark:border-zinc-700 flex items-center gap-1 font-bold">
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 dark:bg-zinc-800 text-amber-800 dark:text-zinc-200 border border-amber-200 dark:border-zinc-700 flex items-center gap-1">
                 <Flame className="w-3 h-3 text-amber-600 dark:text-zinc-400" />
                 <span>{t.stage6Promo}</span>
               </span>
@@ -1584,7 +1531,7 @@ export default function DashboardView({
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {/* Category 1: Walk in */}
-          <article className="space-y-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-5 transition-colors hover:border-emerald-500/40 shadow-sm dark:shadow-none">
+          <article className="space-y-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/4 p-5 transition-colors hover:border-emerald-500/40 shadow-sm dark:shadow-none">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-2.5">
@@ -1625,7 +1572,7 @@ export default function DashboardView({
           </article>
 
           {/* Category 2: Online */}
-          <article className="space-y-4 rounded-2xl border border-sky-500/20 bg-sky-500/[0.04] p-5 transition-colors hover:border-sky-500/40 shadow-sm dark:shadow-none">
+          <article className="space-y-4 rounded-2xl border border-sky-500/20 bg-sky-500/4 p-5 transition-colors hover:border-sky-500/40 shadow-sm dark:shadow-none">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-2.5">
@@ -1666,7 +1613,7 @@ export default function DashboardView({
           </article>
 
           {/* Category 3: Event */}
-          <article className="space-y-4 rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-5 transition-colors hover:border-violet-500/40 shadow-sm dark:shadow-none">
+          <article className="space-y-4 rounded-2xl border border-violet-500/20 bg-violet-500/4 p-5 transition-colors hover:border-violet-500/40 shadow-sm dark:shadow-none">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-2.5">
@@ -1731,7 +1678,7 @@ export default function DashboardView({
             )}
             <button
               type="button"
-              onClick={() => onNavigateMenu('inventory')}
+              onClick={() => onNavigateMenu('pos_sales')}
               className="text-xs text-white bg-blue-600 hover:bg-blue-500 font-bold flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors shadow-sm cursor-pointer"
             >
               <BadgePercent className="w-3.5 h-3.5" />
@@ -1755,27 +1702,15 @@ export default function DashboardView({
                 className="bg-slate-50 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 rounded-2xl overflow-hidden flex flex-col justify-between transition-all hover:shadow-xl group shadow-sm dark:shadow-none"
               >
                 <div>
-                  {/* Image Banner with Badge */}
-                  <div className="relative h-40 w-full overflow-hidden bg-slate-900 dark:bg-zinc-950">
-                    <img
-                      src={promo.imageUrl}
-                      alt={lang === 'lo' ? promo.titleLo : promo.titleEn}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent"></div>
-
-                    <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 always-white-text">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border backdrop-blur-md bg-black/80 text-white border-zinc-700 shadow-md">
-                        <span style={{ color: '#ffffff' }}>{promo.badge}</span>
-                      </span>
-                    </div>
-
-                    <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between text-[11px] font-mono always-white-text">
-                      <span className="flex items-center gap-1 text-zinc-200" style={{ color: '#e4e4e7' }}>
-                        <Clock className="w-3 h-3 text-zinc-300" />
-                        <span>{promo.period}</span>
-                      </span>
-                    </div>
+                  {/* Badge & Period Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
+                    <span className="always-white-text px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-black/80 text-white border-zinc-700">
+                      <span style={{ color: '#ffffff' }}>{promo.badge}</span>
+                    </span>
+                    <span className="flex items-center gap-1 text-[11px] font-mono text-slate-500 dark:text-zinc-400">
+                      <Clock className="w-3 h-3" />
+                      <span>{promo.period}</span>
+                    </span>
                   </div>
 
                   {/* Campaign Body */}
@@ -1786,7 +1721,7 @@ export default function DashboardView({
                       </h3>
                       {promo.eventLocation && (
                         <p className="text-[11px] text-slate-600 dark:text-zinc-400 flex items-center gap-1 mt-1 truncate">
-                          <MapPin className="w-3 h-3 text-slate-500 dark:text-zinc-500 flex-shrink-0" />
+                          <MapPin className="w-3 h-3 text-slate-500 dark:text-zinc-500 shrink-0" />
                           <span>{promo.eventLocation}</span>
                         </p>
                       )}
@@ -1809,7 +1744,7 @@ export default function DashboardView({
                       <ul className="text-[11px] text-slate-800 dark:text-zinc-300 space-y-0.5 font-medium">
                         {promo.freeGifts.slice(0, 3).map((gift, idx) => (
                           <li key={idx} className="flex items-start gap-1.5 truncate">
-                            <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                            <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                             <span className="truncate">{gift}</span>
                           </li>
                         ))}
@@ -1870,7 +1805,7 @@ export default function DashboardView({
         <CustomerDocumentsModal
           isOpen={Boolean(selectedLeadForDocs)}
           onClose={() => setSelectedLeadForDocs(null)}
-          customer={selectedLeadForDocs}
+          customer={withVehicleFromBills(selectedLeadForDocs, bills)}
           vehicles={vehicles}
           currentUser={currentUser || undefined}
           initialDoc="installment_schedule"

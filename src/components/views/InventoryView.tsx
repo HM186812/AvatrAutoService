@@ -1,14 +1,15 @@
-import { useState, useMemo } from 'react';
-import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SaleLogRecord, SystemUser, InvoiceBillRecord } from '../../types';
+import { useState, useMemo, Fragment } from 'react';
+import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SystemUser, InvoiceBillRecord } from '../../types';
 import { translations } from '../../data/translations';
-import { getModelStockSummaries, LOW_STOCK_THRESHOLD } from '../../data/stockSummary';
+import { getModelStockSummaries, LOW_STOCK_THRESHOLD, brandOf, compareInventory, isSellable, isOnHand, isListedInStock, notSellableReason, SALE_READY_STATUSES } from '../../data/stockSummary';
 import {
   saveInventoryItemToSupabase,
   deleteInventoryItemFromSupabase,
   saveVehicleModelToSupabase
 } from '../../supabase';
 import { ConfirmDeleteModal, EditVehicleModelModal } from '../modals';
-import { showToast } from '../common';
+import ImportStockCsvModal from '../modals/ImportStockCsvModal';
+import { showToast, ToastType } from '../common';
 import {
   Car,
   Search,
@@ -18,37 +19,28 @@ import {
   ShieldCheck,
   CheckCircle2,
   Clock,
-  FileText,
   X,
   DollarSign,
   MapPin,
   History,
   Check,
-  ShoppingBag,
-  UserCheck,
   Sparkles,
-  Printer,
-  ChevronDown,
   ArrowDownLeft,
   ArrowUpRight,
   Phone,
-  PackagePlus,
   Trash2,
-  Upload,
   Calendar,
-  Lock,
   AlertTriangle,
-  Image as ImageIcon,
   LayoutGrid,
   List,
   Copy,
   Tag,
-  Wrench
+  Upload
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
-import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
-import { newRecordId } from '../../backend/ids';
-import { saveBillRecord } from '../../backend/data';
+import { getWhatsAppUrl } from '../../utils/whatsapp';
+import { fetchStockMovements, STOCK_HISTORY_PAGE_SIZE } from '../../backend/data';
+import { isSupabaseConfigured } from '../../backend/client';
 
 interface InventoryViewProps {
   inventory: InventoryItem[];
@@ -73,19 +65,45 @@ export default function InventoryView({
   setStockLogs,
   vehicles,
   setVehicles,
-  currentUser,
   isSuperAdmin = false,
+  currentUser,
   lang,
-  onOpenQuote,
   onNavigateToStockIn,
 }: InventoryViewProps) {
   const t = translations[lang];
+  const L3 = (lo: string, en: string, th: string) => (lang === 'en' ? en : lang === 'th' ? th : lo);
+  // Labels for the Excel-parity stock fields
+  const XS = {
+    in_transit: L3('ລົດຂາເຂົ້າ', 'In transit', 'รถกำลังมา'),
+    in_transit_sub: L3('ກຳລັງສົ່ງມາ ຍັງບໍ່ຮອດສາງ', 'Shipped, not arrived', 'กำลังขนส่ง'),
+    problem: L3('ລົດມີບັນຫາ', 'Has a problem', 'รถมีปัญหา'),
+    problem_sub: L3('ຂາຍບໍ່ໄດ້ ຈົນກວ່າຈະແກ້', 'Not sellable until fixed', 'ขายไม่ได้จนกว่าจะแก้'),
+    parts_donor: L3('ລົດຖອດອາໄຫຼ່', 'Parts donor', 'รถถอดอะไหล่'),
+    parts_donor_sub: L3('ໃຊ້ຖອດອາໄຫຼ່', 'Used for parts', 'ใช้ถอดอะไหล่'),
+    batch: L3('ລອດນຳເຂົ້າ', 'Shipment batch', 'ล็อตนำเข้า'),
+    batch_ph: L3('ເຊັ່ນ ລົດຂາເຂົ້າ 8 ເດືອນ 10', 'e.g. Batch 8 · Oct', 'เช่น ล็อต 8 เดือน 10'),
+    eta: L3('ຄາດວ່າຈະຮອດ', 'Expected arrival', 'คาดว่าจะถึง'),
+    issue: L3('ບັນຫາ / ອາໄຫຼ່ທີ່ຖອດ', 'Problem / parts removed', 'ปัญหา / อะไหล่ที่ถอด'),
+    issue_ph: L3('ອະທິບາຍບັນຫາ ຫຼື ອາໄຫຼ່ທີ່ຖອດອອກ', 'Describe the problem or parts removed', 'อธิบายปัญหาหรืออะไหล่ที่ถอด'),
+    powertrain: L3('ປະເພດເຄື່ອງ', 'Powertrain', 'ประเภทขับเคลื่อน'),
+    bev: L3('ໄຟຟ້າລ້ວນ', 'full electric', 'ไฟฟ้าล้วน'),
+    reev: L3('ມີເຄື່ອງປັ່ນໄຟ', 'range extender', 'มีเครื่องปั่นไฟ'),
+    front_motor: L3('ເລກມໍເຕີໜ້າ', 'Front motor no.', 'เลขมอเตอร์หน้า'),
+    rear_motor: L3('ເລກມໍເຕີຫຼັງ', 'Rear motor no.', 'เลขมอเตอร์หลัง'),
+    engine_reev: L3('ເລກເຄື່ອງຈັກ (REEV)', 'Engine no. (REEV)', 'เลขเครื่องยนต์ (REEV)'),
+    engine_legacy: L3('ເລກຈັກ (ອື່ນໆ)', 'Engine / other no.', 'เลขเครื่อง (อื่นๆ)'),
+    import_csv: L3('ນຳເຂົ້າ CSV', 'Import CSV', 'นำเข้า CSV'),
+  };
 
   const [activeTab, setActiveTab] = useState<'inventory' | 'sales_history'>('inventory');
-  const [historyFilter, setHistoryFilter] = useState<'all' | 'stock_in' | 'stock_out'>('all');
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'stock_in' | 'stock_out' | 'reversed'>('all');
+  // Older history is loaded page by page from the database
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
+  const [historyExhausted, setHistoryExhausted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [selectedModelFilter, setSelectedModelFilter] = useState<string>('all');
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState<string>('all');
   const [eventPromoFilter, setEventPromoFilter] = useState<'all' | 'event_only' | 'standard'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
@@ -97,6 +115,8 @@ export default function InventoryView({
   const lowStockModels = useMemo(() => {
     return modelSummaries.filter(m => m.isLowStock || m.isOutOfStock);
   }, [modelSummaries]);
+
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
   // EDIT VEHICLE MODAL STATE (USD Only & 3 Tabs)
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -153,8 +173,8 @@ export default function InventoryView({
   }, [editingItem?.eventStartDate, editingItem?.eventEndDate]);
 
   // Toast message
-  const triggerToast = (msg: string) => {
-    showToast(msg, 'success');
+  const triggerToast = (msg: string, type: ToastType = 'success') => {
+    showToast(msg, type);
   };
 
   // Edit Vehicle Model / Category State
@@ -164,7 +184,7 @@ export default function InventoryView({
   const handleRequestEditModel = (e: React.MouseEvent, v: VehicleModel) => {
     e.stopPropagation();
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດແກ້ໄຂໝວດ/ລຸ້ນຍານຍົນໄດ້!');
+      triggerToast('ສະເພາະ Admin ຈຶ່ງສາມາດແກ້ໄຂໝວດ/ລຸ້ນຍານຍົນໄດ້!', 'error');
       return;
     }
     setModelToEdit(v);
@@ -208,6 +228,18 @@ export default function InventoryView({
     if (!editingItem) return;
     setIsSavingEdit(true);
 
+    // A car can be offered for sale only after PDI has passed; a reservation needs a customer name.
+    if (SALE_READY_STATUSES.includes(editingItem.status) && editingItem.pdiStatus !== 'passed') {
+      triggerToast('ຕັ້ງເປັນ "ພ້ອມຂາຍ / Event / ໂປຣໂມຊັນ" ບໍ່ໄດ້ ເພາະ PDI ຍັງບໍ່ຜ່ານ. ໃຫ້ກວດ PDI ແລະ ຕັ້ງເປັນ "ຜ່ານ" ກ່ອນ', 'error');
+      setIsSavingEdit(false);
+      return;
+    }
+    if (editingItem.status === 'reserved' && !editingItem.reservedForCustomer?.trim()) {
+      triggerToast('ກະລຸນາປ້ອນຊື່ ຫຼື ເບີໂທ ລູກຄ້າທີ່ຈອງລົດຄັນນີ້', 'error');
+      setIsSavingEdit(false);
+      return;
+    }
+
     const originalItem = inventory.find(i => i.vin === editingItem.vin);
     const updatedItem: InventoryItem = {
       ...editingItem,
@@ -220,7 +252,7 @@ export default function InventoryView({
     try {
       await saveInventoryItemToSupabase(updatedItem);
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be saved.');
+      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be saved.', 'error');
       setIsSavingEdit(false);
       return;
     }
@@ -237,11 +269,11 @@ export default function InventoryView({
 
   const handleRequestDeleteItem = (item: InventoryItem) => {
     if (!isSuperAdmin) {
-      triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!');
+      triggerToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ມີສິດລົບລົດອອກຈາກຖານຂໍ້ມູນ!', 'error');
       return;
     }
     if (item.status === 'sold') {
-      triggerToast('ລົດຄັນນີ້ຂາຍອອກແລ້ວ! ກະລຸນາລົບບິນຂາຍໃນໜ້າຈັດການບິນກ່ອນ.');
+      triggerToast('ລົດຄັນນີ້ຂາຍອອກແລ້ວ! ກະລຸນາລົບບິນຂາຍໃນໜ້າຈັດການບິນກ່ອນ.', 'error');
       return;
     }
     setInventoryToDelete(item);
@@ -255,7 +287,7 @@ export default function InventoryView({
     try {
       await deleteInventoryItemFromSupabase(target.vin);
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be deleted.');
+      triggerToast(err instanceof Error ? err.message : 'Vehicle could not be deleted.', 'error');
       setIsDeletingInventory(false);
       return;
     }
@@ -270,46 +302,81 @@ export default function InventoryView({
     triggerToast(`ລົບລົດ ${target.model} (VIN: ${target.vin}) ອອກຈາກຖານຂໍ້ມູນສຳເລັດແລ້ວ!`);
   };
 
-  const handleEditImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && editingItem) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setEditingItem({
-          ...editingItem,
-          image: event.target?.result as string,
-        });
-        triggerToast('ອັບໂຫຼດຮູບລົດຈາກອຸປະກອນສຳເລັດ!');
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  // Brands present in the catalog or in stock, for the brand filter
+  const brandOptions = useMemo(() => {
+    const set = new Set<string>();
+    vehicles.forEach(v => set.add(v.brand?.trim() || 'AVATR'));
+    inventory.forEach(i => set.add(brandOf(i.model, vehicles)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [vehicles, inventory]);
 
-  // Filtered Inventory
+  // Filtered Inventory, sorted brand → model → status → arrival date
   const filteredInventory = inventory.filter(item => {
     if (selectedStatusFilter === 'all') {
       if (item.status === 'sold' || item.stockQuantity === 0) return false;
+    } else if (selectedStatusFilter === 'sellable') {
+      if (!isSellable(item)) return false;
     } else if (item.status !== selectedStatusFilter) {
       return false;
     }
+    if (selectedBrandFilter !== 'all' && brandOf(item.model, vehicles) !== selectedBrandFilter) return false;
     if (selectedModelFilter !== 'all' && item.model !== selectedModelFilter) return false;
     const isEventOrPromo = item.status === 'event' || item.status === 'promotion' || Boolean(item.eventCampaign);
     if (eventPromoFilter === 'event_only' && !isEventOrPromo) return false;
     if (eventPromoFilter === 'standard' && isEventOrPromo) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      return (
-        item.vin.toLowerCase().includes(q) ||
-        (item.plateNumber || '').toLowerCase().includes(q) ||
-        item.model.toLowerCase().includes(q) ||
-        (item.color || '').toLowerCase().includes(q)
-      );
+      // Also search motor / engine numbers, the reserving customer and the customs document
+      return [
+        item.vin, item.plateNumber, item.model, item.color, item.trim,
+        item.engineNumber, item.frontMotorNumber, item.rearMotorNumber,
+        item.reservedForCustomer, item.importDocNumber, item.incomingBatch,
+      ].some(v => (v || '').toLowerCase().includes(q));
     }
     return true;
-  });
+  }).sort(compareInventory(vehicles));
+  // Same rules as the Dashboard and POS: listed = not sold, on hand = in the warehouse, sellable = POS can sell it
+  const sellableCount = inventory.filter(i => isSellable(i)).length;
+  const listedStockCount = inventory.filter(isListedInStock).length;
+  const onHandCount = inventory.filter(isOnHand).length;
+  const notArrivedOrProblemCount = listedStockCount - onHandCount;
+  // Movements of voided bills stay in the history (marked) but no longer count
+  // Stored timestamps are UTC; show them as local (Laos) date and time
+  const formatLogTime = (value?: string) => {
+    if (!value) return '';
+    if (!/[zZ]|[+-]d{2}:?d{2}$/.test(value)) return value;
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+  const isReversal = (log: StockLogRecord) => log.type === 'stock_return' || log.type === 'import_void';
+  const activeStockIns = stockLogs.filter(l => l.type === 'stock_in' && !l.billVoided);
+  const activeStockOuts = stockLogs.filter(l => l.type === 'stock_out' && !l.billVoided);
+  const reversalLogs = stockLogs.filter(isReversal);
   const filteredStockLogs = stockLogs.filter(log => (
-    historyFilter === 'all' || log.type === historyFilter
+    historyFilter === 'all' ||
+    (historyFilter === 'reversed' ? isReversal(log) : log.type === historyFilter)
   ));
+  const canLoadMoreHistory = isSupabaseConfigured && !historyExhausted &&
+    stockLogs.filter(l => !l.id.startsWith('LOG-')).length >= STOCK_HISTORY_PAGE_SIZE;
+  const handleLoadMoreHistory = async () => {
+    if (isLoadingMoreHistory) return;
+    setIsLoadingMoreHistory(true);
+    try {
+      const offset = stockLogs.filter(l => !l.id.startsWith('LOG-')).length;
+      const older = await fetchStockMovements(offset, STOCK_HISTORY_PAGE_SIZE);
+      if (older.length < STOCK_HISTORY_PAGE_SIZE) setHistoryExhausted(true);
+      setStockLogs(prev => {
+        const seen = new Set(prev.map(l => l.id));
+        return [...prev, ...older.filter(l => !seen.has(l.id))];
+      });
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Could not load older history', 'error');
+    } finally {
+      setIsLoadingMoreHistory(false);
+    }
+  };
   const withoutStageNumber = (label: string) => label.replace(/^\d+\.\s*/, '');
   const inventoryStatusLabels: Record<StockStatus, string> = {
     ready: t.readyForSale,
@@ -319,6 +386,10 @@ export default function InventoryView({
     sold: lang === 'lo' ? 'ຂາຍແລ້ວ' : lang === 'th' ? 'ขายแล้ว' : 'Sold',
     event: withoutStageNumber(t.stage5Event),
     promotion: withoutStageNumber(t.stage6Promo),
+    in_transit: XS.in_transit,
+    problem: XS.problem,
+    parts_donor: XS.parts_donor,
+    removed: lang === 'lo' ? 'ຍົກເລີກນຳເຂົ້າ' : lang === 'th' ? 'ยกเลิกนำเข้า' : 'Import voided',
   };
   const pdiStatusLabel = (status: PDIStatus) => {
     if (status === 'passed') return t.pdiPassedLabel;
@@ -351,7 +422,7 @@ export default function InventoryView({
                 }`}
             >
               <Car className="w-4 h-4" />
-              <span>{t.tabStockList} ({inventory.length})</span>
+              <span>{t.tabStockList} ({listedStockCount})</span>
             </button>
 
             <button
@@ -383,8 +454,8 @@ export default function InventoryView({
               },
               {
                 label: lang === 'lo' ? 'ພ້ອມຂາຍ' : lang === 'th' ? 'พร้อมขาย' : 'Ready for sale',
-                value: inventory.filter(item => item.status === 'ready').reduce((total, item) => total + item.stockQuantity, 0),
-                caption: t.stage3Ready,
+                value: sellableCount,
+                caption: lang === 'lo' ? 'ຜ່ານ PDI, ບໍ່ຕິດຈອງ' : 'PDI passed, not reserved',
                 icon: CheckCircle2,
                 tone: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800',
               },
@@ -505,22 +576,9 @@ export default function InventoryView({
                     )}
 
                     <div className="flex items-center gap-3 mb-2.5">
-                      {/* Model Logo / Photo */}
+                      {/* Model Icon */}
                       <div className="w-14 h-11 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-950 shrink-0 flex items-center justify-center shadow-inner">
-                        {(modelObj.heroImage || summary.model?.heroImage) ? (
-                          <img
-                            src={modelObj.heroImage || summary.model?.heroImage}
-                            alt={summary.modelName}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              target.onerror = null;
-                              target.src = '/avatr-logo.png';
-                            }}
-                          />
-                        ) : (
-                          <Car className="w-5 h-5 text-slate-400 dark:text-zinc-600" />
-                        )}
+                        <Car className="w-5 h-5 text-slate-400 dark:text-zinc-600" />
                       </div>
 
                       <div className="min-w-0 flex-1 pr-7">
@@ -603,8 +661,33 @@ export default function InventoryView({
                   <span>{t.quickStockInBtn}</span>
                 </button>
               )}
+              {onNavigateToStockIn && (
+                <button
+                  type="button"
+                  onClick={() => setShowCsvImport(true)}
+                  className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-xs font-bold text-white transition-all hover:bg-zinc-800"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>{XS.import_csv}</span>
+                </button>
+              )}
             </div>
           </div>
+          {showCsvImport && (
+            <ImportStockCsvModal
+              vehicles={vehicles}
+              inventory={inventory}
+              lang={lang}
+              currentUserName={currentUser?.name}
+              onClose={() => setShowCsvImport(false)}
+              onImported={(items, newBills, newLogs) => {
+                setInventory(prev => [...items, ...prev.filter(p => !items.some(i => i.vin === p.vin))]);
+                if (newBills.length) setBills(prev => [...newBills, ...prev]);
+                if (newLogs.length) setStockLogs(prev => [...newLogs, ...prev]);
+                triggerToast(L3(`ນຳເຂົ້າລົດ ${items.length} ຄັນ ສຳເລັດ`, `Imported ${items.length} vehicles`, `นำเข้ารถ ${items.length} คันสำเร็จ`));
+              }}
+            />
+          )}
 
           {/* Filter and Search Bar */}
           <div className="inventory-filter-panel rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-xs shadow-sm sm:p-5">
@@ -628,12 +711,13 @@ export default function InventoryView({
                   <span className="text-zinc-500">/ {inventory.length.toLocaleString()}</span>
                   <span>{lang === 'lo' ? 'ລາຍການ' : lang === 'th' ? 'รายการ' : 'vehicles'}</span>
                 </span>
-                {(searchQuery.trim() || selectedStatusFilter !== 'all' || selectedModelFilter !== 'all' || eventPromoFilter !== 'all') && (
+                {(searchQuery.trim() || selectedStatusFilter !== 'all' || selectedModelFilter !== 'all' || selectedBrandFilter !== 'all' || eventPromoFilter !== 'all') && (
                   <button
                     type="button"
                     onClick={() => {
                       setSearchQuery('');
                       setSelectedStatusFilter('all');
+                      setSelectedBrandFilter('all');
                       setSelectedModelFilter('all');
                       setEventPromoFilter('all');
                     }}
@@ -646,7 +730,7 @@ export default function InventoryView({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
               <label className="inventory-filter-field min-w-0 sm:col-span-2 xl:col-span-2">
                 <span className="inventory-filter-label mb-1.5 block text-[10px] font-semibold text-zinc-500">
                   {lang === 'lo' ? 'ຄົ້ນຫາລົດ' : lang === 'th' ? 'ค้นหารถ' : 'Search vehicles'}
@@ -655,10 +739,10 @@ export default function InventoryView({
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <input
                     type="text"
-                    placeholder={t.searchPlaceholder}
+                    placeholder={lang === 'lo' ? 'VIN, ເລກມໍເຕີ/ຈັກ, ປ້າຍ, ລຸ້ນ, ສີ, ຜູ້ຈອງ…' : lang === 'th' ? 'VIN, เลขมอเตอร์, ทะเบียน, รุ่น, สี, ผู้จอง…' : 'VIN, motor/engine no., plate, model, color, reserved for…'}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    aria-label={lang === 'lo' ? 'ຄົ້ນຫາ VIN, ປ້າຍທະບຽນ, ລຸ້ນ ຫຼື ສີ' : lang === 'th' ? 'ค้นหา (VIN, ทะเบียน, รุ่น, สี)' : 'Search VIN, plate, model, or color'}
+                    aria-label={lang === 'lo' ? 'ຄົ້ນຫາ VIN, ເລກມໍເຕີ, ປ້າຍທະບຽນ, ລຸ້ນ, ສີ ຫຼື ຊື່ຜູ້ຈອງ' : 'Search VIN, motor number, plate, model, color, or reserving customer'}
                     className={`min-h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 pl-9 text-white placeholder-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${searchQuery ? 'pr-10' : 'pr-3'
                       }`}
                   />
@@ -683,13 +767,31 @@ export default function InventoryView({
                   className="min-h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
                   <option value="all">{t.filterAllStatus}</option>
+                  <option value="sellable">{lang === 'lo' ? '✓ ຂາຍໄດ້ດຽວນີ້ (ຜ່ານ PDI)' : '✓ Sellable now (PDI passed)'}</option>
                   <option value="ready">{t.stage3Ready}</option>
                   <option value="pdi">{t.stage2PDI}</option>
                   <option value="imported">{t.stage1Imported}</option>
                   <option value="reserved">{t.stage4Reserved}</option>
                   <option value="event">{t.stage5Event}</option>
                   <option value="promotion">{t.stage6Promo}</option>
+                  <option value="in_transit">{XS.in_transit}</option>
+                  <option value="problem">{XS.problem}</option>
+                  <option value="parts_donor">{XS.parts_donor}</option>
                   <option value="sold">{t.stockSold}</option>
+                </select>
+              </label>
+
+              <label className="inventory-filter-field min-w-0">
+                <span className="inventory-filter-label mb-1.5 block text-[10px] font-semibold text-zinc-500">
+                  {lang === 'lo' ? 'ຍີ່ຫໍ້' : lang === 'th' ? 'ยี่ห้อ' : 'Brand'}
+                </span>
+                <select
+                  value={selectedBrandFilter}
+                  onChange={(e) => { setSelectedBrandFilter(e.target.value); setSelectedModelFilter('all'); }}
+                  className="min-h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="all">{lang === 'lo' ? `ທຸກຍີ່ຫໍ້ (${brandOptions.length})` : `All brands (${brandOptions.length})`}</option>
+                  {brandOptions.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </label>
 
@@ -700,10 +802,16 @@ export default function InventoryView({
                   onChange={(e) => setSelectedModelFilter(e.target.value)}
                   className="min-h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
-                  <option value="all">{t.filterAllModels} ({vehicles.length})</option>
-                  {vehicles.map((v) => (
-                    <option key={v.id || v.name} value={v.name}>{v.name}</option>
-                  ))}
+                  <option value="all">{t.filterAllModels}</option>
+                  {brandOptions
+                    .filter(b => selectedBrandFilter === 'all' || b === selectedBrandFilter)
+                    .map(b => (
+                      <optgroup key={b} label={b}>
+                        {modelSummaries.filter(m => m.brand === b).map(m => (
+                          <option key={m.modelName} value={m.modelName}>{m.modelName}</option>
+                        ))}
+                      </optgroup>
+                    ))}
                 </select>
               </label>
 
@@ -788,30 +896,65 @@ export default function InventoryView({
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {filteredInventory.map((item) => {
-                const vehicle = vehicles.find(v => v.name === item.model) || vehicles[0];
-
+              {filteredInventory.map((item, idx) => {
+                const prev = filteredInventory[idx - 1];
+                const brand = brandOf(item.model, vehicles);
+                const newBrand = !prev || brandOf(prev.model, vehicles) !== brand;
+                const newModel = newBrand || prev.model !== item.model;
+                const summary = newModel ? modelSummaries.find(m => m.modelName === item.model) : undefined;
                 return (
+                  <Fragment key={item.vin}>
+                  {newBrand && (
+                    <h3 className="col-span-full mt-2 first:mt-0 text-sm font-black uppercase tracking-wider text-white">{brand}</h3>
+                  )}
+                  {newModel && (
+                    <div className="col-span-full flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-zinc-800 pb-3 pt-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-zinc-100">{item.model}</span>
+                        {summary?.isLowStock && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-300">
+                            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                            {lang === 'lo' ? 'ໃກ້ໝົດ' : lang === 'th' ? 'ใกล้หมด' : 'Low stock'}
+                          </span>
+                        )}
+                      </div>
+                      {summary && (
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          {[
+                            {
+                              label: lang === 'lo' ? 'ຂາຍໄດ້' : lang === 'th' ? 'พร้อมขาย' : 'Sellable',
+                              value: summary.sellableCount,
+                            },
+                            {
+                              label: lang === 'lo' ? 'ວ່າງ' : lang === 'th' ? 'ว่าง' : 'Available',
+                              value: summary.count,
+                            },
+                            {
+                              label: lang === 'lo' ? 'ຈອງ' : lang === 'th' ? 'จอง' : 'Reserved',
+                              value: summary.reservedCount,
+                            },
+                            ...(summary.inTransitCount > 0
+                              ? [{
+                                  label: lang === 'lo' ? 'ກຳລັງມາ' : lang === 'th' ? 'กำลังมา' : 'In transit',
+                                  value: summary.inTransitCount,
+                                }]
+                              : []),
+                          ].map(({ label, value }) => (
+                            <span key={label} className="inline-flex items-baseline gap-1.5 rounded-lg border border-zinc-800/80 bg-zinc-900/60 px-2.5 py-1.5">
+                              <span className="text-zinc-400">{label}</span>
+                              <span className="font-bold tabular-nums text-zinc-100">{value}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div
-                    key={item.vin}
                     className="bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-2xl overflow-hidden flex flex-col justify-between transition-all hover:shadow-xl group"
                   >
                     {/* Compact Image & Badges */}
-                    <div className="relative h-32 bg-zinc-900 overflow-hidden">
-                      <img
-                        src={item.image || vehicle?.heroImage || '/avatr-logo.png'}
-                        alt={item.model}
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          target.onerror = null;
-                          if (vehicle?.heroImage && target.src !== vehicle.heroImage) {
-                            target.src = vehicle.heroImage;
-                          } else {
-                            target.src = '/avatr-logo.png';
-                          }
-                        }}
-                        className="w-full h-full object-cover filter contrast-125 transition-transform duration-500 group-hover:scale-105"
-                      />
+                    <div className="relative h-32 bg-zinc-900 overflow-hidden flex items-center justify-center">
+                      <Car className="w-10 h-10 text-zinc-700 stroke-[1.5]" />
 
                       {/* Status Badge */}
                       <div className="absolute left-2 top-2 flex flex-wrap gap-1">
@@ -820,28 +963,29 @@ export default function InventoryView({
                             : item.status === 'pdi' ? 'bg-amber-400'
                               : item.status === 'sold' ? 'bg-zinc-400'
                                 : item.status === 'reserved' ? 'bg-violet-400'
+                                  : item.status === 'problem' || item.status === 'parts_donor' ? 'bg-rose-500'
                                   : 'bg-sky-400'
                             }`} />
                           {inventoryStatusLabels[item.status]}
                         </span>
                       </div>
 
-                      {/* Stock Quantity Badge (Top Right) */}
-                      <div className={`absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold backdrop-blur-md shadow-md font-mono ${item.stockQuantity === 0
-                        ? 'stock-badge-out bg-zinc-950/90 text-zinc-400 border border-zinc-800'
-                        : item.stockQuantity < 5
-                          ? 'stock-badge-low bg-amber-950/90 text-amber-300 border border-amber-500/80 shadow-amber-950/40'
-                          : 'stock-badge-normal bg-black/85 text-white border border-zinc-700 always-white-text'
-                        }`}>
-                        {item.stockQuantity < 5 && item.stockQuantity > 0 ? (
-                          <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 animate-pulse stock-low-icon" />
-                        ) : (
-                          <Car className="w-3 h-3 text-zinc-300 shrink-0 stock-normal-icon" />
-                        )}
-                        <span>
-                          {item.stockQuantity} {t.unitCars}
-                        </span>
-                      </div>
+                      {/* Sellability badge (Top Right): low stock is a model-level alert, not a per-car one */}
+                      {(() => {
+                        const reason = notSellableReason(item);
+                        return (
+                          <div
+                            title={reason || (lang === 'lo' ? 'ຂາຍໄດ້ດຽວນີ້' : 'Sellable now')}
+                            className={`absolute top-2 right-2 flex max-w-[70%] items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold backdrop-blur-md shadow-md border ${reason
+                              ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-zinc-950/90 dark:text-amber-300 dark:border-amber-500/60'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/90 dark:text-emerald-300 dark:border-emerald-500/60'
+                              }`}
+                          >
+                            {reason ? <AlertTriangle className="w-3 h-3 shrink-0" /> : <CheckCircle2 className="w-3 h-3 shrink-0" />}
+                            <span className="truncate">{reason || (lang === 'lo' ? 'ຂາຍໄດ້' : 'Sellable')}</span>
+                          </div>
+                        );
+                      })()}
 
                       {/* Price */}
                       <div className="absolute bottom-2 right-2 bg-black/85 backdrop-blur-md px-2 py-0.5 rounded-lg border border-zinc-700 text-right shadow-md always-white-text">
@@ -883,9 +1027,29 @@ export default function InventoryView({
                             {pdiStatusLabel(item.pdiStatus)}
                           </strong>
                         </div>
+                        {(item.frontMotorNumber || item.rearMotorNumber || item.engineNumber) && (
+                          <div className="min-w-0 col-span-2">
+                            <span className="block text-zinc-500 text-[9px]">{lang === 'lo' ? 'ເລກມໍເຕີ / ຈັກ' : 'Motor / engine no.'}</span>
+                            <strong className="block truncate font-mono text-zinc-300 font-normal" title={[item.frontMotorNumber, item.rearMotorNumber, item.engineNumber].filter(Boolean).join(' / ')}>
+                              {[item.frontMotorNumber && `ໜ້າ ${item.frontMotorNumber}`, item.rearMotorNumber && `ຫຼັງ ${item.rearMotorNumber}`, item.engineNumber && `ຈັກ ${item.engineNumber}`].filter(Boolean).join(' · ')}
+                            </strong>
+                          </div>
+                        )}
+                        {item.status === 'reserved' && (
+                          <div className="min-w-0 col-span-2">
+                            <span className="block text-zinc-500 text-[9px]">{lang === 'lo' ? 'ຈອງໃຫ້' : 'Reserved for'}</span>
+                            <strong className="block truncate text-violet-300 font-semibold">{item.reservedForCustomer || (lang === 'lo' ? 'ບໍ່ໄດ້ລະບຸ' : 'Not specified')}</strong>
+                          </div>
+                        )}
+                        {item.status === 'in_transit' && item.expectedArrivalDate && (
+                          <div className="min-w-0 col-span-2">
+                            <span className="block text-zinc-500 text-[9px]">{lang === 'lo' ? 'ຄາດວ່າຈະຮອດ' : 'Expected arrival'}</span>
+                            <strong className="block truncate text-sky-300 font-semibold">{item.expectedArrivalDate}</strong>
+                          </div>
+                        )}
                         <div className="min-w-0 col-span-2">
-                          <span className="block text-zinc-500 text-[9px]">{lang === 'lo' ? 'ທີ່ຕັ້ງ' : 'Location'}</span>
-                          <strong className="block truncate text-zinc-400 font-normal" title={item.location || ''}>{item.location || '—'}</strong>
+                          <span className="block text-zinc-500 text-[9px]">{lang === 'lo' ? 'ທີ່ຕັ້ງ / ສາງ' : 'Location'}</span>
+                          <strong className="block truncate text-zinc-400 font-normal" title={item.location || item.destinationWarehouse || ''}>{item.location || item.destinationWarehouse || '—'}</strong>
                         </div>
                       </div>
 
@@ -913,6 +1077,7 @@ export default function InventoryView({
                       </div>
                     </div>
                   </div>
+                  </Fragment>
                 );
               })}
             </div>
@@ -935,20 +1100,12 @@ export default function InventoryView({
                 </thead>
                 <tbody className="divide-y divide-zinc-850">
                   {filteredInventory.map((item) => {
-                    const vehicle = vehicles.find(v => v.name === item.model) || vehicles[0];
                     return (
                       <tr key={item.vin} className="hover:bg-zinc-900/40 transition-colors">
                         <td className="py-2 px-3">
-                          <img
-                            src={item.image || vehicle?.heroImage || '/avatr-logo.png'}
-                            alt={item.model}
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              target.onerror = null;
-                              target.src = '/avatr-logo.png';
-                            }}
-                            className="w-12 h-8 rounded-lg object-cover border border-zinc-800 shrink-0"
-                          />
+                          <div className="w-12 h-8 rounded-lg border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center">
+                            <Car className="w-4 h-4 text-zinc-600" />
+                          </div>
                         </td>
                         <td className="py-2 px-3 font-semibold text-white">
                           <div className="font-bold">{item.model}</div>
@@ -967,6 +1124,7 @@ export default function InventoryView({
                               : item.status === 'pdi' ? 'bg-amber-400'
                                 : item.status === 'sold' ? 'bg-zinc-400'
                                   : item.status === 'reserved' ? 'bg-violet-400'
+                                  : item.status === 'problem' || item.status === 'parts_donor' ? 'bg-rose-500'
                                     : 'bg-sky-400'
                               }`} />
                             {inventoryStatusLabels[item.status]}
@@ -978,7 +1136,7 @@ export default function InventoryView({
                           </span>
                         </td>
                         <td className="py-2 px-3 text-center font-mono font-bold">
-                          <span className={item.stockQuantity < 5 && item.stockQuantity > 0 ? 'text-amber-400' : 'text-zinc-200'}>
+                          <span className="text-zinc-200">
                             {item.stockQuantity}
                           </span>
                         </td>
@@ -1030,10 +1188,10 @@ export default function InventoryView({
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
-                {stockLogs.filter(l => l.type === 'stock_in').reduce((acc, curr) => acc + curr.quantity, 0)} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
+                {activeStockIns.reduce((acc, curr) => acc + curr.quantity, 0)} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
               <p className="text-[11px] text-zinc-400 mt-1">
-                {stockLogs.filter(l => l.type === 'stock_in').length} {t.unitBills}
+                {activeStockIns.length} {t.unitBills}
               </p>
             </div>
 
@@ -1049,11 +1207,16 @@ export default function InventoryView({
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
-                {stockLogs.filter(l => l.type === 'stock_out').length} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
+                {activeStockOuts.length} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
               <div className="text-[11px] text-white font-mono font-bold mt-1">
-                ${stockLogs.filter(l => l.type === 'stock_out').reduce((acc, curr) => acc + curr.priceUSD, 0).toLocaleString()}
+                ${activeStockOuts.reduce((acc, curr) => acc + curr.priceUSD, 0).toLocaleString()}
               </div>
+              {reversalLogs.length > 0 && (
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  {lang === 'lo' ? `ບໍ່ນັບ ${reversalLogs.length} ລາຍການທີ່ບິນຖືກຍົກເລີກ` : `${reversalLogs.length} voided not counted`}
+                </p>
+              )}
             </div>
 
             {/* In-Stock Balance Summary */}
@@ -1061,17 +1224,22 @@ export default function InventoryView({
               <div className="flex items-center justify-between text-zinc-400 mb-2">
                 <span className="font-semibold text-xs text-zinc-300 flex items-center gap-1.5">
                   <Car className="w-4 h-4 text-zinc-300" />
-                  <span>{t.stockAvailable}</span>
+                  <span>{lang === 'lo' ? 'ລົດໃນສາງ' : lang === 'th' ? 'รถในสต็อก' : 'Cars on hand'}</span>
                 </span>
                 <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px] border border-zinc-700">
                   BALANCE
                 </span>
               </div>
               <div className="text-2xl font-black font-mono text-white">
-                {inventory.reduce((acc, curr) => acc + curr.stockQuantity, 0)} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
+                {onHandCount} <span className="text-xs text-zinc-400 font-sans">{t.unitCars}</span>
               </div>
               <p className="text-[11px] text-zinc-400 mt-1">
-                {inventory.filter(i => i.status === 'ready').reduce((acc, item) => acc + item.stockQuantity, 0)} {t.unitCars} {t.readyForSale}
+                {sellableCount} {t.unitCars} {t.readyForSale}
+                {notArrivedOrProblemCount > 0 && (
+                  <span className="block text-zinc-500">
+                    {lang === 'lo' ? `+ ${notArrivedOrProblemCount} ຄັນ ກຳລັງມາ / ມີບັນຫາ (ບໍ່ນັບ)` : `+ ${notArrivedOrProblemCount} in transit / problem (not counted)`}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -1128,6 +1296,18 @@ export default function InventoryView({
                   <span>{t.badgeSale}</span>
                   <span className="font-mono">({stockLogs.filter(l => l.type === 'stock_out').length})</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilter('reversed')}
+                  aria-pressed={historyFilter === 'reversed'}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${historyFilter === 'reversed'
+                    ? 'bg-white text-black font-bold shadow-sm'
+                    : 'text-zinc-400 hover:text-white'
+                    }`}
+                >
+                  <span>{lang === 'lo' ? 'ຍົກເລີກ / ຮັບຄືນ' : lang === 'th' ? 'ยกเลิก / รับคืน' : 'Voided / returned'}</span>
+                  <span className="font-mono">({reversalLogs.length})</span>
+                </button>
               </div>
             </div>
 
@@ -1165,16 +1345,31 @@ export default function InventoryView({
                             <ArrowDownLeft className="w-3 h-3 text-zinc-300" />
                             <span>{t.historyStockIn}</span>
                           </span>
+                        ) : log.type === 'stock_return' ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1 w-max">
+                            <ArrowDownLeft className="w-3 h-3" />
+                            <span>{lang === 'lo' ? 'ຮັບຄືນເຂົ້າສາງ (ຍົກເລີກບິນຂາຍ)' : lang === 'th' ? 'รับคืน (ยกเลิกบิลขาย)' : 'Returned (sale voided)'}</span>
+                          </span>
+                        ) : log.type === 'import_void' ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-300 border border-red-500/30 flex items-center gap-1 w-max">
+                            <ArrowUpRight className="w-3 h-3" />
+                            <span>{lang === 'lo' ? 'ອອກຈາກສາງ (ຍົກເລີກບິນນຳເຂົ້າ)' : lang === 'th' ? 'ออกจากสต็อก (ยกเลิกนำเข้า)' : 'Removed (import voided)'}</span>
+                          </span>
                         ) : (
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1 w-max">
                             <ArrowUpRight className="w-3 h-3 text-zinc-300" />
                             <span>{t.historyStockOut}</span>
                           </span>
                         )}
+                        {log.billVoided && !isReversal(log) && (
+                          <span className="mt-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
+                            {lang === 'lo' ? 'ບິນຖືກຍົກເລີກ (ບໍ່ນັບ)' : 'Bill voided (not counted)'}
+                          </span>
+                        )}
                         <span className="text-zinc-500 text-[10px] block mt-1">{log.id}</span>
                       </td>
                       <td className="py-3 px-4 text-zinc-400 text-[11px] font-sans">
-                        {log.timestamp}
+                        {formatLogTime(log.timestamp)}
                       </td>
                       <td className="py-3 px-4">
                         <strong className="text-white font-sans block text-xs">{log.model}</strong>
@@ -1184,9 +1379,12 @@ export default function InventoryView({
                         )}
                       </td>
                       <td className="py-3 px-4 font-sans text-xs">
-                        {log.type === 'stock_out' ? (
+                        {log.type === 'stock_out' || log.type === 'stock_return' ? (
                           <div>
                             <span className="text-white font-semibold block">{log.customerName || 'Customer'}</span>
+                            {log.type === 'stock_return' && log.notes && (
+                              <span className="text-[10px] text-amber-300/90 block">{log.notes}</span>
+                            )}
                             {log.customerPhone && (
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-zinc-400 font-mono text-[11px] flex items-center gap-1">
@@ -1219,14 +1417,18 @@ export default function InventoryView({
                         )}
                       </td>
                       <td className="py-3 px-4">
-                        <span className="font-bold text-white">
+                        <span className={`font-bold ${log.billVoided ? 'text-zinc-500 line-through' : 'text-white'}`}>
                           ${log.priceUSD.toLocaleString()} USD
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        {log.type === 'stock_in' ? (
+                        {log.type === 'stock_in' || log.type === 'stock_return' ? (
                           <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[11px] font-bold border border-zinc-700">
                             +{log.quantity} {t.unitCars}
+                          </span>
+                        ) : log.type === 'import_void' ? (
+                          <span className="px-2 py-0.5 rounded bg-zinc-900 text-red-300 text-[11px] font-bold border border-red-500/30">
+                            -{log.quantity} {t.unitCars}
                           </span>
                         ) : (
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.remainingStock === 0
@@ -1245,6 +1447,21 @@ export default function InventoryView({
                 </tbody>
               </table>
             </div>
+            {canLoadMoreHistory && (
+              <div className="border-t border-zinc-800 p-4 text-center">
+                <button
+                  type="button"
+                  onClick={() => void handleLoadMoreHistory()}
+                  disabled={isLoadingMoreHistory}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
+                >
+                  <History className="h-4 w-4" />
+                  {isLoadingMoreHistory
+                    ? (lang === 'lo' ? 'ກຳລັງໂຫຼດ...' : 'Loading...')
+                    : (lang === 'lo' ? `ໂຫຼດປະຫວັດເກົ່າເພີ່ມ (${STOCK_HISTORY_PAGE_SIZE} ລາຍການ)` : `Load ${STOCK_HISTORY_PAGE_SIZE} older entries`)}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1328,7 +1545,7 @@ export default function InventoryView({
                     }`}
                 >
                   <Car className="w-4 h-4 shrink-0 text-cyan-400" />
-                  <span className="truncate">{lang === 'lo' ? '2. ຂໍ້ມູນລົດ & ຮູບພາບ' : lang === 'th' ? '2. ข้อมูลสเปก & รูปภาพ' : '2. Specs & Media'}</span>
+                  <span className="truncate">{lang === 'lo' ? '2. ຂໍ້ມູນລົດ' : lang === 'th' ? '2. ข้อมูลสเปก' : '2. Specs'}</span>
                 </button>
 
                 <button
@@ -1463,6 +1680,9 @@ export default function InventoryView({
                         { key: 'reserved' as StockStatus, label: t.stage4Reserved, sub: lang === 'lo' ? 'ລູກຄ້າຈອງແລ້ວ' : 'Reserved', color: 'indigo' },
                         { key: 'event' as StockStatus, label: t.stage5Event, sub: lang === 'lo' ? 'ອອກງານ Roadshow' : 'Event Exhibition', color: 'rose' },
                         { key: 'promotion' as StockStatus, label: t.stage6Promo, sub: lang === 'lo' ? 'ໂປຣໂມຊັນພິເສດ' : 'Special Promo', color: 'purple' },
+                        { key: 'in_transit' as StockStatus, label: XS.in_transit, sub: XS.in_transit_sub, color: 'sky' },
+                        { key: 'problem' as StockStatus, label: XS.problem, sub: XS.problem_sub, color: 'orange' },
+                        { key: 'parts_donor' as StockStatus, label: XS.parts_donor, sub: XS.parts_donor_sub, color: 'stone' },
                         { key: 'sold' as StockStatus, label: t.stockSold, sub: lang === 'lo' ? 'ຂາຍແລ້ວ' : 'Sold Out', color: 'zinc' },
                       ].map((st) => {
                         const isSelected = editingItem.status === st.key;
@@ -1487,6 +1707,52 @@ export default function InventoryView({
                         );
                       })}
                     </div>
+
+                    {editingItem.status === 'reserved' && (
+                      <label className="block p-3 rounded-xl bg-violet-500/10 border border-violet-500/20 text-xs font-semibold text-zinc-300">
+                        {lang === 'lo' ? 'ຈອງໃຫ້ລູກຄ້າ (ຊື່ ແລະ/ຫຼື ເບີໂທ) *' : 'Reserved for (name and/or phone) *'}
+                        <input id="edit-reserved-for" type="text" maxLength={120} value={editingItem.reservedForCustomer || ''}
+                          onChange={(e) => setEditingItem({ ...editingItem, reservedForCustomer: e.target.value })}
+                          placeholder={lang === 'lo' ? 'ທ່ານ ບຸນມີ 020 5555 1234' : 'Mr. Bounmy 020 5555 1234'}
+                          className="mt-1.5 w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500" />
+                        <span className="mt-1 block font-normal text-zinc-500">
+                          {lang === 'lo' ? 'POS ຈະສະແດງລົດຄັນນີ້ສະເພາະເມື່ອຂາຍໃຫ້ລູກຄ້າຄົນນີ້' : 'POS offers this car only when selling to this customer'}
+                        </span>
+                      </label>
+                    )}
+                    {SALE_READY_STATUSES.includes(editingItem.status) && editingItem.pdiStatus !== 'passed' && (
+                      <p role="alert" className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+                        {lang === 'lo'
+                          ? 'PDI ຍັງບໍ່ຜ່ານ: ບັນທຶກເປັນສະຖານະນີ້ບໍ່ໄດ້. ໄປແທັບ PDI ແລ້ວຕັ້ງເປັນ "ຜ່ານ" ກ່ອນ.'
+                          : 'PDI has not passed: this status cannot be saved. Set PDI to "passed" first.'}
+                      </p>
+                    )}
+                    {editingItem.status === 'in_transit' && (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 p-3 rounded-xl bg-sky-500/10 border border-sky-500/20">
+                        <label className="block text-xs font-semibold text-zinc-300">
+                          {XS.batch}
+                          <input type="text" maxLength={120} value={editingItem.incomingBatch || ''}
+                            onChange={(e) => setEditingItem({ ...editingItem, incomingBatch: e.target.value })}
+                            placeholder={XS.batch_ph}
+                            className="mt-1.5 w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500" />
+                        </label>
+                        <label className="block text-xs font-semibold text-zinc-300">
+                          {XS.eta}
+                          <input type="date" value={(editingItem.expectedArrivalDate || '').slice(0, 10)}
+                            onChange={(e) => setEditingItem({ ...editingItem, expectedArrivalDate: e.target.value })}
+                            className="mt-1.5 w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-zinc-500" />
+                        </label>
+                      </div>
+                    )}
+                    {(editingItem.status === 'problem' || editingItem.status === 'parts_donor') && (
+                      <label className="block p-3 rounded-xl bg-orange-500/10 border border-orange-500/20 text-xs font-semibold text-zinc-300">
+                        {XS.issue}
+                        <textarea rows={2} maxLength={1000} value={editingItem.issueNote || ''}
+                          onChange={(e) => setEditingItem({ ...editingItem, issueNote: e.target.value })}
+                          placeholder={XS.issue_ph}
+                          className="mt-1.5 w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500" />
+                      </label>
+                    )}
 
                     {/* Quick navigation hint if event or promotion is chosen */}
                     {(editingItem.status === 'event' || editingItem.status === 'promotion') && (
@@ -1526,16 +1792,36 @@ export default function InventoryView({
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       <div>
                         <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                          {lang === 'lo' ? 'ເລກຈັກ / Motor No.' : 'Motor / Engine No.'}
+                          {XS.powertrain}
                         </label>
-                        <input
-                          type="text"
-                          value={editingItem.engineNumber || ''}
-                          onChange={(e) => setEditingItem({ ...editingItem, engineNumber: e.target.value })}
-                          placeholder="e.g. TZ210XYA01"
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
-                        />
+                        <select
+                          value={editingItem.powertrainType || ''}
+                          onChange={(e) => setEditingItem({ ...editingItem, powertrainType: (e.target.value || undefined) as InventoryItem['powertrainType'] })}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500"
+                        >
+                          <option value="">—</option>
+                          <option value="BEV">BEV ({XS.bev})</option>
+                          <option value="REEV">REEV ({XS.reev})</option>
+                        </select>
                       </div>
+
+                      {([
+                        ['frontMotorNumber', XS.front_motor, '2102312SCR10SC...'],
+                        ['rearMotorNumber', XS.rear_motor, '210260026910T...'],
+                        ['engineNumber', editingItem.powertrainType === 'REEV' ? XS.engine_reev : XS.engine_legacy, 'THUAFA05175'],
+                      ] as const).map(([field, label, ph]) => (
+                        <div key={field}>
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">{label}</label>
+                          <input
+                            type="text"
+                            maxLength={60}
+                            value={editingItem[field] || ''}
+                            onChange={(e) => setEditingItem({ ...editingItem, [field]: e.target.value })}
+                            placeholder={ph}
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+                          />
+                        </div>
+                      ))}
 
                       <div>
                         <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
@@ -1631,76 +1917,6 @@ export default function InventoryView({
                     </div>
                   </div>
 
-                  {/* Vehicle Image Upload & Preview Card */}
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4.5 sm:p-5 space-y-4">
-                    <div className="border-b border-zinc-800/80 pb-2.5 flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                          <ImageIcon className="w-4 h-4 text-cyan-400" />
-                          <span>{t.uploadCarImage}</span>
-                        </h4>
-                        <p className="text-xs text-zinc-400 mt-0.5">
-                          {lang === 'lo' ? 'ຮູບພາບລົດຄັນນີ້ສຳລັບສະແດງໃນລະບົບສະຕ໋ອກ ແລະ ໃບສະເໜີລາຄາ' : 'Vehicle photo preview for inventory catalog & quotes'}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-500 uppercase px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
-                        16:9 HD
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                      {/* Image Preview Box */}
-                      <div className="md:col-span-6 aspect-video rounded-2xl bg-zinc-950 border border-zinc-800 overflow-hidden relative flex items-center justify-center">
-                        {editingItem.image || editingItem.imageUrl ? (
-                          <img
-                            src={editingItem.image || editingItem.imageUrl}
-                            alt={editingItem.model}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center text-zinc-600 gap-1.5 p-4 text-center">
-                            <Car className="w-8 h-8 stroke-[1.5]" />
-                            <span className="text-xs">{lang === 'lo' ? 'ບໍ່ມີຮູບພາບລົດ' : 'No photo uploaded'}</span>
-                          </div>
-                        )}
-                        <span className="absolute bottom-2 left-2 rounded-md bg-black/70 backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold text-white always-white-text">
-                          {editingItem.model}
-                        </span>
-                      </div>
-
-                      {/* Image Actions */}
-                      <div className="md:col-span-6 space-y-3">
-                        <label className="w-full cursor-pointer inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl border border-zinc-700 font-semibold text-xs transition-colors cursor-pointer active:scale-95">
-                          <Upload className="w-4 h-4 text-white" />
-                          <span>{lang === 'lo' ? 'ອັບໂຫຼດຮູບຈາກອຸປະກອນ' : 'Upload Photo from Device'}</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleEditImageUpload}
-                            className="hidden"
-                          />
-                        </label>
-                        <p className="text-[11px] text-zinc-500 leading-relaxed">
-                          {lang === 'lo'
-                            ? 'ຮອງຮັບໄຟລ໌ JPG, PNG, WEBP (ແນະນຳອັດຕາສ່ວນ 16:9 ເພື່ອຄວາມຄົມຊັດ)'
-                            : 'Supports JPG, PNG, WEBP (Recommended 16:9 ratio)'}
-                        </p>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
-                            {lang === 'lo' ? 'ຫຼື ປ້ອນລິ້ງຮູບພາບ (Image URL):' : 'Or enter direct image URL:'}
-                          </label>
-                          <input
-                            type="url"
-                            value={editingItem.image || ''}
-                            onChange={(e) => setEditingItem({ ...editingItem, image: e.target.value })}
-                            placeholder="https://example.com/car.jpg"
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-300 font-mono placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               )}
 

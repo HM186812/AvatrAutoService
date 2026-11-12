@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { VehicleModel, Language } from '../../types';
 import AvatrLogo from '../layout/AvatrLogo';
-import { X, Printer, Phone, Download, CheckCircle, ShieldCheck, Loader2, Calendar } from 'lucide-react';
+import { X, Printer, Download, CheckCircle, Loader2, Calendar } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { showToast } from '../common';
 import { logIssuedDocument, getLatestDocumentIssuance } from '../../utils/documentLogger';
@@ -146,6 +146,7 @@ export default function QuotationModal({
             <button
               type="button"
               onClick={onClose}
+              aria-label={lang === 'lo' ? 'ປິດ' : lang === 'th' ? 'ปิด' : 'Close'}
               className="p-1.5 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
