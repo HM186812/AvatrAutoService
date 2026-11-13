@@ -19,6 +19,7 @@ import { exportElementToPdf } from '../../utils/pdfExport';
 import { showToast } from '../common';
 import { logIssuedDocument } from '../../utils/documentLogger';
 import AvatrLogo from '../layout/AvatrLogo';
+import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import { 
   generateInstallmentSchedule, 
   calculateInstallmentSummary,
@@ -44,15 +45,15 @@ export default function InstallmentLedgerModal({
   lang = 'lo',
   onUpdateCustomerRecords,
 }: InstallmentLedgerModalProps) {
-  if (!isOpen || !customer) return null;
-
-  const matchingVehicle = vehicles.find(v => v.name === customer.interestedModel) || vehicles[0];
+  const matchingVehicle = customer
+    ? vehicles.find(v => v.name === customer.interestedModel) || vehicles[0]
+    : vehicles[0];
   const vehiclePriceUSD = matchingVehicle?.priceStartingUSD || 45000;
 
   // Initialize records from customer or generate fresh schedule
-  const [records, setRecords] = useState<InstallmentPaymentRecord[]>(() => {
-    return generateInstallmentSchedule(customer, vehiclePriceUSD);
-  });
+  const [records, setRecords] = useState<InstallmentPaymentRecord[]>(() =>
+    customer ? generateInstallmentSchedule(customer, vehiclePriceUSD) : []
+  );
 
   const [filterTab, setFilterTab] = useState<'all' | 'due' | 'paid' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,6 +67,9 @@ export default function InstallmentLedgerModal({
   const [payRef, setPayRef] = useState('');
   const [payNotes, setPayNotes] = useState('');
   const [payAmountUSD, setPayAmountUSD] = useState<number>(0);
+  const [isExportingLedgerPdf, setIsExportingLedgerPdf] = useState(false);
+
+  if (!isOpen || !customer) return null;
 
   // Summary calculation
   const summary = calculateInstallmentSummary(customer, records, vehiclePriceUSD);
@@ -227,8 +231,6 @@ export default function InstallmentLedgerModal({
     });
   };
 
-  const [isExportingLedgerPdf, setIsExportingLedgerPdf] = useState(false);
-
   const handleExportPDF = async () => {
     try {
       setIsExportingLedgerPdf(true);
@@ -305,7 +307,7 @@ export default function InstallmentLedgerModal({
                 ສັນຕິພາບ ເອກະລາດ ປະຊາທິປະໄຕ ເອກະພາບ ວັດທະນາຖາວອນ
               </p>
               <h2 className="text-base font-black tracking-widest text-black uppercase leading-tight">
-                AVATR AUTO SERVICE SOLE CO., LTD
+                {getStoredCompanyBankInfo().accountName}
               </h2>
               <p className="text-[10.5px] font-semibold text-black">
                 ສູນຈຳໜ່າຍ ແລະ ບໍລິການລົດຍົນໄຟຟ້າ AVATR ຢ່າງເປັນທາງການ ປະຈຳ ສປປ ລາວ

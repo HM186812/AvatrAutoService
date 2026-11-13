@@ -110,7 +110,7 @@ export default function ServiceModal({
             </div>
             <div>
               <h3 className="font-bold text-base text-white">
-                {lang === 'lo' ? 'ນັດໝາຍສ້ອມບຳລຸງ avatrAutoService' : lang === 'th' ? 'นัดหมายซ่อมบำรุง avatrAutoService' : 'Schedule Auto Service'}
+                {lang === 'lo' ? 'ນັດໝາຍສ້ອມບຳລຸງ AVATR Auto Service' : lang === 'th' ? 'นัดหมายซ่อมบำรุง AVATR Auto Service' : 'Schedule Auto Service'}
               </h3>
               <p className="text-xs text-zinc-400">
                 {lang === 'lo' ? 'ສູນບໍລິການແບັດເຕີຣີ CATL & ລະບົບໄຟຟ້າວຽງຈັນ' : lang === 'th' ? 'ศูนย์บริการแบตเตอรี่ CATL & ระบบไฟฟ้าเวียงจันทน์' : 'Authorized EV Service Center'}

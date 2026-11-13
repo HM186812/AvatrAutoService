@@ -40,6 +40,7 @@ export default function ConfirmPayoffModal({
       onClose();
     } catch (err: any) {
       setErrorMsg(err?.message || 'ເກີດຂໍ້ຜິດພາດໃນການຢືນຢັນປິດສັນຍາ');
+    } finally {
       setIsSubmitting(false);
     }
   };

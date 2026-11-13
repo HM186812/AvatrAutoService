@@ -359,49 +359,6 @@ export const INITIAL_TEST_DRIVES: TestDriveBooking[] = [
   }
 ];
 
-export const FAQ_LIST = [
-  {
-    questionLo: 'ການຮັບປະກັນລົດ ແລະ ແບັດເຕີຣີ AVATR ໃນລາວມີແນວໃດ?',
-    questionEn: 'What is the warranty coverage for AVATR vehicles and batteries in Laos?',
-    questionTh: 'การรับประกันรถยนต์และแบตเตอรี่ AVATR มีเงื่อนไขอย่างไร?',
-    answerLo: 'ລົດ AVATR ທຸກຄັນມາພ້ອມການຮັບປະກັນແບັດເຕີຣີແຮງສູງ CATL ດົນເຖິງ 8 ປີ ຫຼື 160,000 ກິໂລແມັດ. ການຮັບປະກັນຕົວລົດທົ່ວໄປ 5 ປີ ຫຼື 120,000 ກິໂລແມັດ ພ້ອມບໍລິການກູ້ໄພສຸກເສີນ 24 ຊົ່ວໂມງໃນລາວ ໂດຍສູນ avatrAutoService.',
-    answerEn: 'All AVATR vehicles feature an 8-year / 160,000 km warranty for the CATL high-voltage battery pack and 5-year / 120,000 km comprehensive vehicle warranty with 24/7 roadside assistance in Laos.',
-    answerTh: 'รถยนต์ AVATR ทุกคันมาพร้อมการรับประกันชุดแบตเตอรี่แรงดันสูง CATL นาน 8 ปี หรือ 160,000 กิโลเมตร และรับประกันตัวรถทั่วไป 5 ปี หรือ 120,000 กิโลเมตร พร้อมบริการช่วยเหลือฉุกเฉิน 24 ชั่วโมง โดยศูนย์ avatrAutoService',
-  },
-  {
-    questionLo: 'ການສາກໄຟລົດ AVATR ໃນລາວ ສະດວກບໍ່ ແລະ ໃຊ້ເວລາດົນປານໃດ?',
-    questionEn: 'How convenient is EV charging in Laos, and how fast is AVATR charging?',
-    questionTh: 'การชาร์จไฟรถยนต์ AVATR สะดวกหรือไม่ และใช้เวลานานเท่าใด?',
-    answerLo: 'ສະດວກຫຼາຍ! ລົດ AVATR ມາພ້ອມສະຖາປັດຕະຍະກຳ 800V Ultra-Fast Charging ສາມາດສາກໄຟໄວ 30% ຫາ 80% ພາຍໃນພຽງ 10-15 ນາທີ ທີ່ສະຖານີສາກໄວ DC. ນອກຈາກນັ້ນ ພວກເຮົາແຖມຟຣີຕູ້ສາກ Home Charger 7kW - 11kW ຕິດຕັ້ງໃຫ້ເຖິງບ້ານ.',
-    answerEn: 'Extremely convenient! Powered by 800V high-voltage architecture, AVATR charges from 30% to 80% in just 10-15 minutes at DC fast stations. Every purchase includes a complimentary 7-11kW home charger with full home installation.',
-    answerTh: 'สะดวกมาก! รถยนต์ AVATR พัฒนาบนสถาปัตยกรรมแรงดันสูง 800V Ultra-Fast Charging สามารถชาร์จด่วนจาก 30% ถึง 80% ในเวลาเพียง 10-15 นาที ที่สถานีชาร์จเร็ว DC นอกจากนี้ยังแถมฟรีตู้ชาร์จ Home Charger 7kW - 11kW พร้อมติดตั้งถึงบ้าน',
-  },
-  {
-    questionLo: 'ຂັບຂີ່ລົດໄຟຟ້າໃນລະດູຝົນ ຫຼື ນ້ຳຖ້ວມຂັງໃນວຽງຈັນ ປອດໄພບໍ່?',
-    questionEn: 'Is it safe to drive in rain and waterlogged roads in Vientiane?',
-    questionTh: 'การขับขี่รถยนต์ไฟฟ้าในช่วงฤดูฝนหรือมีน้ำท่วมขัง ปลอดภัยหรือไม่?',
-    answerLo: 'ປອດໄພສູງສຸດ! ຊຸດແບັດເຕີຣີ ແລະ ມໍເຕີ້ຂອງ AVATR ຜ່ານມາດຕະຖານກັນນ້ຳ ແລະ ຝຸ່ນລະດັບ IP68/IP69K ສາມາດລຸຍນ້ຳເລິກ 300mm ໄດ້ຢ່າງປອດໄພ ພ້ອມລະບົບຕັດກະແສໄຟອັດຕະໂນມັດ (Millisecond Isolation) ຫາກເກີດເຫດສຸກເສີນ.',
-    answerEn: 'Completely safe. AVATR battery packs and electric drive units are certified to IP68/IP69K waterproof and dustproof standards, capable of wading through 300mm of standing water with millisecond-level high-voltage isolation safety cutoffs.',
-    answerTh: 'ปลอดภัยสูงสุด! ชุดแบตเตอรี่และมอเตอร์ขับเคลื่อนของ AVATR ได้รับมาตรฐานกันน้ำและฝุ่นระดับ IP68/IP69K สามารถลุยน้ำลึก 300 มม. ได้อย่างมั่นใจ พร้อมระบบตัดไฟแรงดันสูงอัตโนมัติในระดับมิลลิวินาทีเมื่อเกิดเหตุฉุกเฉิน',
-  },
-  {
-    questionLo: 'ຂັ້ນຕອນການຈົດທະບຽນປ້າຍເລກລົດໄຟຟ້າໃນລາວໃຊ້ເວລາດົນບໍ່?',
-    questionEn: 'How long does electric vehicle registration and plating take in Laos?',
-    questionTh: 'ขั้นตอนการจดทะเบียนป้ายทะเบียนรถยนต์ไฟฟ้าใช้เวลานานเท่าใด?',
-    answerLo: 'ທີມງານ avatrAutoService ຈະດູແລເອກະສານເສຍພາສີ, ອາກອນ, ແລະ ຈົດທະບຽນປ້າຍເຫຼືອງ/ປ້າຍຂາວ ໃຫ້ຄົບວົງຈອນພາຍໃນ 3-5 ວັນລັດຖະການ.',
-    answerEn: 'Our avatrAutoService team handles customs clearance, luxury EV duty incentives, and vehicle registration completely within 3-5 business days.',
-    answerTh: 'ทีมงาน avatrAutoService ดูแลการเดินเอกสารภาษี ศุลกากร และจดทะเบียนป้ายทะเบียนให้อย่างครบวงจรภายใน 3-5 วันทำการ',
-  },
-];
-
-export const INITIAL_INVENTORY: InventoryItem[] = [];
-
-export const INITIAL_USERS: SystemUser[] = [];
-
-export const INITIAL_STOCK_LOGS: StockLogRecord[] = [];
-
-export const INITIAL_SALES_LOGS: StockLogRecord[] = [];
-
 export const INITIAL_BILLS: InvoiceBillRecord[] = [
   {
     id: 'BILL-2026-0001',

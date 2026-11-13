@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Lead, VehicleModel, Language, SystemUser, IssuedDocumentRecord } from '../../types';
+import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import AvatrLogo from '../layout/AvatrLogo';
 import {
   X,
@@ -97,15 +98,17 @@ export default function CustomerDocumentsModal({
   initialDoc = 'booking',
   customerGroup,
 }: CustomerDocumentsModalProps) {
-  if (!isOpen || !customer) return null;
+  const companyBankInfo = getStoredCompanyBankInfo();
 
   // Match vehicle from models
-  const matchingVehicle = vehicles.find(v => v.name === customer.interestedModel) || vehicles[0];
-  const defaultModelName = customer.interestedModel || matchingVehicle?.name || 'AVATR 07';
+  const matchingVehicle = customer
+    ? vehicles.find(v => v.name === customer.interestedModel) || vehicles[0]
+    : vehicles[0];
+  const defaultModelName = customer?.interestedModel || matchingVehicle?.name || 'AVATR 07';
 
   // Every value below comes from the customer's own record. Nothing is invented:
   // a missing value stays empty, and issuing is blocked until it is filled in.
-  const agreedPrice = customer.listPriceUSD != null
+  const agreedPrice = customer?.listPriceUSD != null
     ? customer.listPriceUSD - (customer.discountUSD || 0)
     : undefined;
   const defaultBasePrice = agreedPrice ?? matchingVehicle?.priceStartingUSD ?? 0;
@@ -113,31 +116,31 @@ export default function CustomerDocumentsModal({
     const d = new Date();
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
   })();
-  const giftsText = (customer.giftItems || []).map(g => g.name.trim()).filter(Boolean).join(', ');
+  const giftsText = (customer?.giftItems || []).map(g => g.name.trim()).filter(Boolean).join(', ');
 
   const isInstallment =
-    customer.paymentType === 'installment' ||
-    customer.paymentType === 'finance' ||
-    Boolean(customer.downPaymentPercent) ||
-    Boolean(customer.financeCompany) ||
-    Boolean(customer.installmentRecords && customer.installmentRecords.length > 0) ||
-    customer.installmentStatus === 'active_repaying' ||
-    customer.installmentStatus === 'approved' ||
-    customer.installmentStatus === 'pending_approval';
+    customer?.paymentType === 'installment' ||
+    customer?.paymentType === 'finance' ||
+    Boolean(customer?.downPaymentPercent) ||
+    Boolean(customer?.financeCompany) ||
+    Boolean(customer?.installmentRecords && customer.installmentRecords.length > 0) ||
+    customer?.installmentStatus === 'active_repaying' ||
+    customer?.installmentStatus === 'approved' ||
+    customer?.installmentStatus === 'pending_approval';
 
   // Workflow stage: each document opens only once its step has happened.
   const hasDeposit = Boolean(
-    customer.bookingDepositUSD || customer.paidAmountUSD || customer.downPaymentUSD || customer.paymentTypeConfirmed
+    customer?.bookingDepositUSD || customer?.paidAmountUSD || customer?.downPaymentUSD || customer?.paymentTypeConfirmed
   );
   const isSold =
-    customer.status === 'delivered' ||
-    Boolean(customer.vehicleDeliveredAt) ||
-    customer.paymentTypeConfirmed === 'full' ||
-    customer.paymentTypeConfirmed === 'down_payment' ||
-    customer.paymentTypeConfirmed === 'installment_completed' ||
-    customer.installmentStatus === 'active_repaying' ||
-    customer.installmentStatus === 'completed' ||
-    customer.installmentStatus === 'contract_signed';
+    customer?.status === 'delivered' ||
+    Boolean(customer?.vehicleDeliveredAt) ||
+    customer?.paymentTypeConfirmed === 'full' ||
+    customer?.paymentTypeConfirmed === 'down_payment' ||
+    customer?.paymentTypeConfirmed === 'installment_completed' ||
+    customer?.installmentStatus === 'active_repaying' ||
+    customer?.installmentStatus === 'completed' ||
+    customer?.installmentStatus === 'contract_signed';
   const stageLockReason: Partial<Record<DocumentType, string>> = {};
   if (!hasDeposit && !isSold) {
     stageLockReason.booking = 'ບັນທຶກເງິນມັດຈຳກ່ອນ (ປຸ່ມ "ຮັບມັດຈຳ")';
@@ -152,7 +155,7 @@ export default function CustomerDocumentsModal({
   // Debt & installment documents (Tab 5 & Tab 6) are strictly restricted to the Installment Customers group
   const showDebtAndInstallmentDocs = customerGroup
     ? customerGroup === 'installment_customers'
-    : isInstallment && !customer.isPaymentCompleted;
+    : isInstallment && !customer?.isPaymentCompleted;
 
   const safeInitialDoc: DocumentType =
     !showDebtAndInstallmentDocs && (initialDoc === 'installment_schedule' || initialDoc === 'credit_agreement')
@@ -163,7 +166,7 @@ export default function CustomerDocumentsModal({
   const [showToolbar, setShowToolbar] = useState(false);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [, setIsPaymentConfirmedNow] = useState(customer.status === 'delivered');
+  const [, setIsPaymentConfirmedNow] = useState(customer?.status === 'delivered');
   const [customerDocLogs, setCustomerDocLogs] = useState<IssuedDocumentRecord[]>(() =>
     getCustomerDocumentLogs({
       leadId: customer?.id,
@@ -212,14 +215,15 @@ export default function CustomerDocumentsModal({
   }, [activeDoc, customer?.customerName, customer?.id, customer?.phone, customer?.vin]);
 
   const defaultDownPaymentUSD = isInstallment
-    ? (customer.downPaymentUSD ||
-      (customer.downPaymentPercent && defaultBasePrice ? Math.round(defaultBasePrice * (customer.downPaymentPercent / 100)) : 0))
-    : (customer.bookingDepositUSD || customer.paidAmountUSD || 0);
+    ? (customer?.downPaymentUSD != null
+      ? customer.downPaymentUSD
+      : (customer?.downPaymentPercent != null && defaultBasePrice ? Math.round(defaultBasePrice * (customer.downPaymentPercent / 100)) : 0))
+    : (customer?.bookingDepositUSD || customer?.paidAmountUSD || 0);
 
-  const numId = customer.id.replace(/\D/g, '') || '185';
-  const defaultVin = customer.vin || '';
-  const defaultMotorNo = customer.engineNumber || '';
-  const defaultColor = customer.color || '';
+  const numId = customer?.id?.replace(/\D/g, '') || '185';
+  const defaultVin = customer?.vin || '';
+  const defaultMotorNo = customer?.engineNumber || '';
+  const defaultColor = customer?.color || '';
   const defaultInterior = '';
 
   // State variables synchronized with customer & dealership
@@ -231,19 +235,19 @@ export default function CustomerDocumentsModal({
 
   // Document serial numbers
   const [bookingNo, setBookingNo] = useState<string>(`B${numId}/KM7`);
-  const [receiptNo, setReceiptNo] = useState<string>(customer.paymentReceiptNo || `R${numId}/KM7`);
+  const [receiptNo, setReceiptNo] = useState<string>(customer?.paymentReceiptNo || `R${numId}/KM7`);
   const [deliveryNo, setDeliveryNo] = useState<string>(`D${numId}`);
   const [scheduleNo, setScheduleNo] = useState<string>(`SCH${numId}/KM7`);
   // No shared default: every credit agreement needs its own number (auto-numbering comes in phase 2).
   const [creditAgreementNo, setCreditAgreementNo] = useState<string>(
-    customer.paymentReceiptNo?.includes('KM7') ? customer.paymentReceiptNo : ''
+    customer?.paymentReceiptNo?.includes('KM7') ? customer.paymentReceiptNo : ''
   );
   const [km7ReleaseNo, setKm7ReleaseNo] = useState<string>(`KM7-${numId}`);
 
   // Financing & Bank specifications for ໃບສັນຍາໜີ້ສິນ (Tripartite Credit Agreement)
   // Lender details: from the customer's finance company, or filled by picking a lender preset.
-  const lenderPreset = FINANCE_LENDER_PRESETS.find(p => customer.financeCompany && p.match.test(customer.financeCompany));
-  const [financeBankName, setFinanceBankName] = useState<string>(lenderPreset?.name || customer.financeCompany || '');
+  const lenderPreset = FINANCE_LENDER_PRESETS.find(p => customer?.financeCompany && p.match.test(customer.financeCompany));
+  const [financeBankName, setFinanceBankName] = useState<string>(lenderPreset?.name || customer?.financeCompany || '');
   const [financeBankPhone, setFinanceBankPhone] = useState<string>(lenderPreset?.phone || '');
   const [financeBankVillage, setFinanceBankVillage] = useState<string>(lenderPreset?.village || '');
   const [financeBankDistrict, setFinanceBankDistrict] = useState<string>(lenderPreset?.district || '');
@@ -264,6 +268,28 @@ export default function CustomerDocumentsModal({
   );
   const [km7SlipLayout, setKm7SlipLayout] = useState<'triplicate' | 'single'>('single');
 
+  // Pricing & deposit breakdown
+  const [basePriceUSD, setBasePriceUSD] = useState<number>(defaultBasePrice);
+  const [colorOptionUSD, setColorOptionUSD] = useState<number>(0);
+  const [specOptionUSD, setSpecOptionUSD] = useState<number>(0);
+  const [depositUSD, setDepositUSD] = useState<number>(defaultDownPaymentUSD);
+  const [deliverySchedule] = useState<string>(customer?.deliveryWindow || '');
+
+  // Free gifts & handover details: the gifts recorded with the deposit or the POS sale
+  const [freeGiftsBooking] = useState<string>(giftsText);
+  const [freeGiftsDelivery] = useState<string>(giftsText ? `ແຖມ: ${giftsText}` : '');
+  const [keyCount] = useState<number>(2);
+  const [registrationProvince] = useState<string>(
+    customer?.province || 'ນະຄອນຫຼວງວຽງຈັນ'
+  );
+
+  const [paymentDateTime] = useState<string>(customer?.paymentDate || customer?.bookingDate || '');
+
+  // Date & Sales staff
+  const [docDate, setDocDate] = useState<string>(todayDisplay);
+
+  if (!isOpen || !customer) return null;
+
   // Active document serial number (ເລກທີ) linked with current active document
   const docChassisNo =
     activeDoc === 'booking' ? bookingNo :
@@ -283,31 +309,12 @@ export default function CustomerDocumentsModal({
     else setBookingNo(val);
   };
 
-  // Pricing & deposit breakdown
-  const [basePriceUSD, setBasePriceUSD] = useState<number>(defaultBasePrice);
-  const [colorOptionUSD, setColorOptionUSD] = useState<number>(0);
-  const [specOptionUSD, setSpecOptionUSD] = useState<number>(0);
-  const [depositUSD, setDepositUSD] = useState<number>(defaultDownPaymentUSD);
-  const [deliverySchedule] = useState<string>(customer.deliveryWindow || '');
-
-  // Free gifts & handover details: the gifts recorded with the deposit or the POS sale
-  const [freeGiftsBooking] = useState<string>(giftsText);
-  const [freeGiftsDelivery] = useState<string>(giftsText ? `ແຖມ: ${giftsText}` : '');
-  const [keyCount] = useState<number>(2);
-  const [registrationProvince] = useState<string>(
-    customer.province || 'ນະຄອນຫຼວງວຽງຈັນ'
-  );
-
   const bankDestination = 'ໂອນເງິນ / QR';
   const payerAccountName = customer.customerName;
   const payerSourceAccount = customer.paymentMethodRef || '';
   const transferReferenceDisplay = payerSourceAccount
     .replace(/^(BCEL(?:\s+ONE)?|JDB(?:\s+SMART BANKING)?|LDB)(?:[-\s/]+)?/i, '')
     .trim();
-  const [paymentDateTime] = useState<string>(customer.paymentDate || customer.bookingDate || '');
-
-  // Date & Sales staff
-  const [docDate, setDocDate] = useState<string>(todayDisplay);
   const officerInCharge = currentUser?.name || customer.assignedTo || '';
 
   // Derived financials
@@ -1156,12 +1163,12 @@ export default function CustomerDocumentsModal({
                   <p className="font-bold text-[10px] tracking-wider uppercase text-black leading-tight">LAO PEOPLE'S DEMOCRATIC REPUBLIC</p>
                   <p className="text-[9.5px] tracking-wide text-black leading-tight">Peace Independence Democracy Unity Prosperity</p>
                   <h2 className="text-sm sm:text-base font-bold text-black leading-tight pt-1">ບໍລິສັດ ລາວທານີ ກົນຈັກໜັກ ຈຳກັດຜູ້ດຽວ.</h2>
-                  <h3 className="text-xs sm:text-[13px] font-black tracking-wide uppercase text-black leading-tight">LAOTHANI TRACTOR SOLE CO., LTD</h3>
+                  <h3 className="text-xs sm:text-[13px] font-black tracking-wide uppercase text-black leading-tight">{companyBankInfo.accountName}</h3>
                   <p className="text-[10px] text-black mt-0.5 leading-tight">
                     Office: Kaysone Phomvihane Road, Ban Sivilay, Xaythani District, Vientiane Lao PDR
                   </p>
                   <p className="text-[10px] text-black leading-tight">
-                    Tel: {activeDoc === 'credit_agreement' ? '(856-20) 58182000' : '(856-20) 58181999'}
+                    Tel: {companyBankInfo.hotline}
                   </p>
                 </div>
 
@@ -1706,8 +1713,8 @@ export default function CustomerDocumentsModal({
                   <div className="p-2.5 bg-zinc-50 border border-black rounded space-y-1">
                     <h3 className="font-bold text-black uppercase text-xs">1. ຝ່າຍຜູ້ມອບສິດ (Principal):</h3>
                     <p className="leading-relaxed">
-                      <strong>ບໍລິສັດ ລາວທານີ ກົນຈັກໜັກ ຈຳກັດຜູ້ດຽວ. (LAOTHANI TRACTOR SOLE CO., LTD)</strong><br />
-                      ສຳນັກງານຕັ້ງຢູ່: ຖະໜົນໄກສອນ ພົມວິຫານ, ບ້ານ ສີວິໄລ, ເມືອງ ໄຊທານີ, ນະຄອນຫຼວງວຽງຈັນ. ໂທ: (856-20) 58181999<br />
+                      <strong>ບໍລິສັດ ລາວທານີ ກົນຈັກໜັກ ຈຳກັດຜູ້ດຽວ. ({companyBankInfo.accountName})</strong><br />
+                      ສຳນັກງານຕັ້ງຢູ່: {companyBankInfo.branch}. ໂທ: {companyBankInfo.hotline}<br />
                       ໂດຍຜູ້ຕາງໜ້າ / ຜູ້ຮັບຜິດຊອບ: <strong>{officerInCharge}</strong>.
                     </p>
                   </div>
@@ -1831,47 +1838,46 @@ export default function CustomerDocumentsModal({
                   </tbody>
                 </table>
 
-                {/* 2-Column Side-by-Side Landscape Schedule Grid (Fits 24 periods cleanly across A4 Landscape) */}
-                <div className="grid grid-cols-2 gap-3 pt-0.5">
-                  {[installmentRows.slice(0, 12), installmentRows.slice(12, 24)].map((colRows, colIdx) => (
-                    <table key={colIdx} className="w-full border-collapse border border-black text-[10.5px] font-mono">
-                      <thead className="bg-zinc-100 font-sans text-[10.5px]">
-                        <tr>
-                          <th className="border border-black px-1.5 py-1 text-center w-10">ງວດ</th>
-                          <th className="border border-black px-2 py-1 text-left">ວັນທີກຳນົດ</th>
-                          <th className="border border-black px-1.5 py-1 text-right">ເງິນຕົ້ນ ($)</th>
-                          <th className="border border-black px-1.5 py-1 text-right">ດອກເບ້ຍ ($)</th>
-                          <th className="border border-black px-1.5 py-1 text-right">ຄ່າງວດ ($)</th>
-                          <th className="border border-black px-1.5 py-1 text-center font-sans">ສະຖານະ</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {colRows.map((row) => (
-                          <tr key={row.period} className={row.status === 'paid' ? 'bg-emerald-50/50' : ''}>
-                            <td className="border border-black px-1.5 py-0.5 text-center font-bold">#{row.period}</td>
-                            <td className="border border-black px-2 py-0.5 text-left">{row.dueDate}</td>
-                            <td className="border border-black px-1.5 py-0.5 text-right">${row.principalUSD.toLocaleString()}</td>
-                            <td className="border border-black px-1.5 py-0.5 text-right">${row.interestUSD.toLocaleString()}</td>
-                            <td className="border border-black px-1.5 py-0.5 text-right font-bold">${row.amountUSD.toLocaleString()}</td>
-                            <td className="border border-black px-1.5 py-0.5 text-center font-sans text-[10px]">
-                              {row.status === 'paid' ? (
-                                <span className="font-bold">ຊຳລະແລ້ວ</span>
-                              ) : (
-                                <span>ລໍຖ້າຕາມງວດ</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ))}
-                </div>
-
-                {tenure > 24 && (
-                  <div className="border border-black bg-zinc-50 py-1 px-3 text-center text-[11px] font-sans font-bold">
-                    ... ງວດທີ 25 ເຖິງ ງວດທີ {tenure} ຊຳລະທຸກໆວັນທີ 10 ຂອງແຕ່ລະເດືອນ ໃນອັດຕາ ${monthlyPaymentUSD.toLocaleString()} USD ຈົນຄົບສັນຍາ ...
-                  </div>
-                )}
+                {/* 2-Column Side-by-Side Schedule Grid (Renders full tenure cleanly) */}
+                {(() => {
+                  const splitAt = Math.ceil(installmentRows.length / 2);
+                  return (
+                    <div className="grid grid-cols-2 gap-3 pt-0.5">
+                      {[installmentRows.slice(0, splitAt), installmentRows.slice(splitAt)].map((colRows, colIdx) => (
+                        <table key={colIdx} className="w-full border-collapse border border-black text-[10.5px] font-mono">
+                          <thead className="bg-zinc-100 font-sans text-[10.5px]">
+                            <tr>
+                              <th className="border border-black px-1.5 py-1 text-center w-10">ງວດ</th>
+                              <th className="border border-black px-2 py-1 text-left">ວັນທີກຳນົດ</th>
+                              <th className="border border-black px-1.5 py-1 text-right">ເງິນຕົ້ນ ($)</th>
+                              <th className="border border-black px-1.5 py-1 text-right">ດອກເບ້ຍ ($)</th>
+                              <th className="border border-black px-1.5 py-1 text-right">ຄ່າງວດ ($)</th>
+                              <th className="border border-black px-1.5 py-1 text-center font-sans">ສະຖານະ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {colRows.map((row) => (
+                              <tr key={row.period} className={row.status === 'paid' ? 'bg-emerald-50/50' : ''}>
+                                <td className="border border-black px-1.5 py-0.5 text-center font-bold">#{row.period}</td>
+                                <td className="border border-black px-2 py-0.5 text-left">{row.dueDate}</td>
+                                <td className="border border-black px-1.5 py-0.5 text-right">${row.principalUSD.toLocaleString()}</td>
+                                <td className="border border-black px-1.5 py-0.5 text-right">${row.interestUSD.toLocaleString()}</td>
+                                <td className="border border-black px-1.5 py-0.5 text-right font-bold">${row.amountUSD.toLocaleString()}</td>
+                                <td className="border border-black px-1.5 py-0.5 text-center font-sans text-[10px]">
+                                  {row.status === 'paid' ? (
+                                    <span className="font-bold">ຊຳລະແລ້ວ</span>
+                                  ) : (
+                                    <span>ລໍຖ້າຕາມງວດ</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* Important Notes */}
                 <div className="text-[10px] leading-relaxed font-sans flex flex-wrap items-center justify-between gap-2 pt-0.5">
@@ -2019,7 +2025,7 @@ export default function CustomerDocumentsModal({
                       <td className="border border-black px-2 py-2 font-mono text-center text-[11px] font-bold">{docMotorNo}</td>
                       <td className="border border-black px-2 py-2 font-mono font-bold text-center text-[11px]">{docVin}</td>
                       <td className="border border-black px-2 py-2 text-center text-[11px]">
-                        {docColor || 'Contton Whith / ສີຂາວ'}
+                        {docColor || 'Cotton White / ສີຂາວ'}
                       </td>
                       <td className="border border-black px-1.5 py-2 text-center text-[11px] font-semibold">
                         {docInterior || 'ເບາະ Full Caramel luxe'}
@@ -2060,25 +2066,27 @@ export default function CustomerDocumentsModal({
                     <tbody>
                       <tr>
                         <td className="border border-black px-2 py-1 font-semibold w-36">ຄ່າງວດ</td>
-                        <td className="border border-black px-2 py-1 font-mono text-center"></td>
+                        <td className="border border-black px-2 py-1 font-mono font-bold text-center">
+                          ${monthlyPaymentUSD.toLocaleString()} USD / ເດືອນ ({tenure} ງວດ)
+                        </td>
                       </tr>
                       <tr>
                         <td className="border border-black px-2 py-1 font-semibold">ກຳນົດການຊຳລະ</td>
-                        <td className="border border-black px-2 py-1 text-center"></td>
+                        <td className="border border-black px-2 py-1 text-center">ທຸກໆວັນທີ 10 ຂອງແຕ່ລະເດືອນ</td>
                       </tr>
                       <tr>
                         <td className="border border-black px-2 py-1 font-semibold">ຄິດໄລ່ດອກເບ້ຍ</td>
-                        <td className="border border-black px-2 py-1 text-right font-mono pr-4">% / ເດືອນ</td>
+                        <td className="border border-black px-2 py-1 text-right font-mono pr-4">0.625% / ເດືອນ (7.5%/ປີ)</td>
                       </tr>
                       <tr>
                         <td className="border border-black px-2 py-1 font-semibold">ຫຼັກຊັບຄ້ຳປະກັນ</td>
-                        <td className="border border-black px-2 py-1 text-center"></td>
+                        <td className="border border-black px-2 py-1 text-center">ຍານພາຫະນະ {selectedModel} ({docVin || 'ຕາມເລກຖັງສັນຍາ'})</td>
                       </tr>
                       <tr>
                         <td className="border border-black px-2 py-1 font-semibold">
                           ຖ້າກາຍກຳນົດການຊຳລະ<br />ຕ້ອງໄດ້ເສຍດອກເບ້ຍເພີ່ມ :
                         </td>
-                        <td className="border border-black px-2 py-1 text-right font-mono pr-4 align-bottom">% / ເດືອນ</td>
+                        <td className="border border-black px-2 py-1 text-right font-mono pr-4 align-bottom">{financePenaltyRate}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -2255,11 +2263,23 @@ export default function CustomerDocumentsModal({
                                 <tr className="border-b border-black/20">
                                   <td className="py-1.5 font-bold align-top">ລາຍການຂອງແຖມ</td>
                                   <td className="py-1.5 pl-1 leading-relaxed">
-                                    1. ຫົວສາກ Adapter CCS2 (01 ໜ່ວຍ)<br />
-                                    2. ຕູ້ສາກໄຟ Home Charger 7kW + ສາຍ 15m<br />
-                                    3. ບັດສາກໄຟຟ້າ Bluedot (1,000,000 ກີບ)<br />
-                                    4. ຟິມກັນຄວາມຮ້ອນ + ພົມປູພື້ນພຣີມຽມ<br />
-                                    5. ຂຶ້ນທະບຽນປ້າຍລົດ & ປະກັນໄພຊັ້ນ 1
+                                    {(() => {
+                                      const giftList = (customer.giftItems || []).map(g => g.name.trim()).filter(Boolean);
+                                      if (giftList.length > 0) {
+                                        return giftList.map((g, i) => (
+                                          <span key={`${g}-${i}`} className="block">{i + 1}. {g}</span>
+                                        ));
+                                      }
+                                      return (
+                                        <>
+                                          1. ຫົວສາກ Adapter CCS2 (01 ໜ່ວຍ)<br />
+                                          2. ຕູ້ສາກໄຟ Home Charger 7kW + ສາຍ 15m<br />
+                                          3. ບັດສາກໄຟຟ້າ Bluedot (1,000,000 ກີບ)<br />
+                                          4. ຟິມກັນຄວາມຮ້ອນ + ພົມປູພື້ນພຣີມຽມ<br />
+                                          5. ຂຶ້ນທະບຽນປ້າຍລົດ & ປະກັນໄພຊັ້ນ 1
+                                        </>
+                                      );
+                                    })()}
                                   </td>
                                 </tr>
                                 <tr>
@@ -2333,46 +2353,65 @@ export default function CustomerDocumentsModal({
                         </tr>
                       </thead>
                       <tbody>
-                        <tr>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
-                          <td className="border border-black px-3 py-1.5 font-bold">ຫົວສາກໄວມາດຕະຖານ (EV Fast Charging Adapter CCS2)</td>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
-                          <td className="border border-black px-2 py-1.5 text-center">ໜ່ວຍ</td>
-                          <td className="border border-black px-2.5 py-1.5 text-center font-bold">ເບີກຈ່າຍພ້ອມລົດ</td>
-                          <td className="border border-black px-3 py-1.5 font-mono text-[11px]">{km7RequisitionNote}</td>
-                        </tr>
-                        <tr>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">02</td>
-                          <td className="border border-black px-3 py-1.5 font-bold">ຕູ້ສາກໄຟບ້ານ Home Charger 7kW ພ້ອມຕິດຕັ້ງ ແລະ ສາຍໄຟ 15 ແມັດ</td>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
-                          <td className="border border-black px-2 py-1.5 text-center">ຊຸດ</td>
-                          <td className="border border-black px-2.5 py-1.5 text-center font-bold">ເບີກຈ່າຍ / ນັດຕິດຕັ້ງ</td>
-                          <td className="border border-black px-3 py-1.5 text-[11px]">ລວມຄ່າແຮງຕິດຕັ້ງມາດຕະຖານ 15m</td>
-                        </tr>
-                        <tr>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">03</td>
-                          <td className="border border-black px-3 py-1.5 font-bold">ບັດສາກໄຟຟ້າ Bluedot EV Charging Card</td>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
-                          <td className="border border-black px-2 py-1.5 text-center">ບັດ</td>
-                          <td className="border border-black px-2.5 py-1.5 text-center font-bold">ເບີກຈ່າຍພ້ອມລົດ</td>
-                          <td className="border border-black px-3 py-1.5 font-mono text-[11px]">ມູນຄ່າ 1,000,000 ກີບ</td>
-                        </tr>
-                        <tr>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">04</td>
-                          <td className="border border-black px-3 py-1.5 font-bold">ຟິມກັນຄວາມຮ້ອນຮອບຄັນ ແລະ ຊຸດພົມປູພື້ນພຣີມຽມ AVATR</td>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
-                          <td className="border border-black px-2 py-1.5 text-center">ຊຸດ</td>
-                          <td className="border border-black px-2.5 py-1.5 text-center font-bold">ຕິດຕັ້ງສຳເລັດ</td>
-                          <td className="border border-black px-3 py-1.5 text-[11px]">ກວດເຊັກຄຸນນະພາບ PDI ຄົບຖ້ວນ</td>
-                        </tr>
-                        <tr>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">05</td>
-                          <td className="border border-black px-3 py-1.5 font-bold">ຄ່າທຳນຽມຂຶ້ນທະບຽນປ້າຍລົດ ແລະ ປະກັນໄພຊັ້ນ 1 (1 ປີ)</td>
-                          <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
-                          <td className="border border-black px-2 py-1.5 text-center">ຄັນ</td>
-                          <td className="border border-black px-2.5 py-1.5 text-center font-bold">ດຳເນີນການ</td>
-                          <td className="border border-black px-3 py-1.5 text-[11px]">ແຂວງຂຶ້ນທະບຽນ: {registrationProvince}</td>
-                        </tr>
+                        {(() => {
+                          const giftList = (customer.giftItems || []).map(g => g.name.trim()).filter(Boolean);
+                          if (giftList.length > 0) {
+                            return giftList.map((giftName, idx) => (
+                              <tr key={`${giftName}-${idx}`}>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">{String(idx + 1).padStart(2, '0')}</td>
+                                <td className="border border-black px-3 py-1.5 font-bold">{giftName}</td>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
+                                <td className="border border-black px-2 py-1.5 text-center">ຊຸດ/ອັນ</td>
+                                <td className="border border-black px-2.5 py-1.5 text-center font-bold">ເບີກຈ່າຍພ້ອມລົດ</td>
+                                <td className="border border-black px-3 py-1.5 text-[11px]">{idx === 0 ? (km7RequisitionNote || '-') : '-'}</td>
+                              </tr>
+                            ));
+                          }
+                          return (
+                            <>
+                              <tr>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
+                                <td className="border border-black px-3 py-1.5 font-bold">ຫົວສາກໄວມາດຕະຖານ (EV Fast Charging Adapter CCS2)</td>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
+                                <td className="border border-black px-2 py-1.5 text-center">ໜ່ວຍ</td>
+                                <td className="border border-black px-2.5 py-1.5 text-center font-bold">ເບີກຈ່າຍພ້ອມລົດ</td>
+                                <td className="border border-black px-3 py-1.5 font-mono text-[11px]">{km7RequisitionNote}</td>
+                              </tr>
+                              <tr>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">02</td>
+                                <td className="border border-black px-3 py-1.5 font-bold">ຕູ້ສາກໄຟບ້ານ Home Charger 7kW ພ້ອມຕິດຕັ້ງ ແລະ ສາຍໄຟ 15 ແມັດ</td>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
+                                <td className="border border-black px-2 py-1.5 text-center">ຊຸດ</td>
+                                <td className="border border-black px-2.5 py-1.5 text-center font-bold">ເບີກຈ່າຍ / ນັດຕິດຕັ້ງ</td>
+                                <td className="border border-black px-3 py-1.5 text-[11px]">ລວມຄ່າແຮງຕິດຕັ້ງມາດຕະຖານ 15m</td>
+                              </tr>
+                              <tr>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">03</td>
+                                <td className="border border-black px-3 py-1.5 font-bold">ບັດສາກໄຟຟ້າ Bluedot EV Charging Card</td>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
+                                <td className="border border-black px-2 py-1.5 text-center">ບັດ</td>
+                                <td className="border border-black px-2.5 py-1.5 text-center font-bold">ເບີກຈ່າຍພ້ອມລົດ</td>
+                                <td className="border border-black px-3 py-1.5 font-mono text-[11px]">ມູນຄ່າ 1,000,000 ກີບ</td>
+                              </tr>
+                              <tr>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">04</td>
+                                <td className="border border-black px-3 py-1.5 font-bold">ຟິມກັນຄວາມຮ້ອນຮອບຄັນ ແລະ ຊຸດພົມປູພື້ນພຣີມຽມ AVATR</td>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
+                                <td className="border border-black px-2 py-1.5 text-center">ຊຸດ</td>
+                                <td className="border border-black px-2.5 py-1.5 text-center font-bold">ຕິດຕັ້ງສຳເລັດ</td>
+                                <td className="border border-black px-3 py-1.5 text-[11px]">ກວດເຊັກຄຸນນະພາບ PDI ຄົບຖ້ວນ</td>
+                              </tr>
+                              <tr>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">05</td>
+                                <td className="border border-black px-3 py-1.5 font-bold">ຄ່າທຳນຽມຂຶ້ນທະບຽນປ້າຍລົດ ແລະ ປະກັນໄພຊັ້ນ 1 (1 ປີ)</td>
+                                <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">01</td>
+                                <td className="border border-black px-2 py-1.5 text-center">ຄັນ</td>
+                                <td className="border border-black px-2.5 py-1.5 text-center font-bold">ດຳເນີນການ</td>
+                                <td className="border border-black px-3 py-1.5 text-[11px]">ແຂວງຂຶ້ນທະບຽນ: {registrationProvince}</td>
+                              </tr>
+                            </>
+                          );
+                        })()}
                       </tbody>
                     </table>
 

@@ -28,13 +28,14 @@ test.describe('Authentication & Session', () => {
     // Verify authenticated app shell
     const aside = page.locator('aside');
     await expect(aside).toBeVisible({ timeout: 15_000 });
-    await expect(aside).toContainText('test01@gmail.com');
+    await expect(aside).toContainText(TEST_CREDENTIALS.email);
 
-    // Click logout
-    const logoutBtn = aside.locator('button').filter({ hasText: /ອອກຈາກລະບົບ|ออกจากระบบ|Sign Out|Log Out/ }).first();
-    if (await logoutBtn.isVisible()) {
-      await logoutBtn.click();
-      await expect(page.locator('input[type="password"]').first()).toBeVisible({ timeout: 10_000 });
-    }
+    // Click logout (icon button exposes label via aria-label / title)
+    const logoutBtn = aside.locator(
+      'button[aria-label*="ອອກຈາກລະບົບ"], button[aria-label*="ออกจากระบบ"], button[aria-label*="Sign Out"], button[aria-label*="Log Out"], button[title*="ອອກຈາກລະບົບ"], button[title*="ออกจากระบบ"], button[title*="Sign Out"], button[title*="Log Out"]'
+    ).first();
+    await expect(logoutBtn).toBeVisible({ timeout: 5_000 });
+    await logoutBtn.click();
+    await expect(page.locator('input[type="password"]').first()).toBeVisible({ timeout: 10_000 });
   });
 });

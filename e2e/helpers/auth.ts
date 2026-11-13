@@ -149,12 +149,29 @@ export async function cleanupTestData(target: string | { buyerName?: string; tes
 
     if (typeof target === 'string') {
       const prefix = target;
-      // Delete test customers
+      const { data: matchingBills } = await supabase
+        .from('bills')
+        .select('id')
+        .ilike('bill_number', `%${prefix}%`);
+      if (matchingBills && matchingBills.length > 0) {
+        const billIds = matchingBills.map((b: { id: string }) => b.id);
+        await supabase.from('bill_items').delete().in('bill_id', billIds);
+        await supabase.from('stock_movements').delete().in('bill_id', billIds);
+        await supabase.from('bills').delete().in('id', billIds);
+      }
+
+      const { data: matchingVehicles } = await supabase
+        .from('vehicles')
+        .select('vin')
+        .ilike('vin', `%${prefix}%`);
+      if (matchingVehicles && matchingVehicles.length > 0) {
+        const vins = matchingVehicles.map((v: { vin: string }) => v.vin);
+        await supabase.from('stock_movements').delete().in('vehicle_vin', vins);
+        await supabase.from('bill_items').delete().in('vehicle_vin', vins);
+        await supabase.from('vehicles').delete().in('vin', vins);
+      }
+
       await supabase.from('customers').delete().ilike('name', `%${prefix}%`);
-      // Delete test bills
-      await supabase.from('bills').delete().ilike('bill_number', `%${prefix}%`);
-      // Delete test vehicles
-      await supabase.from('vehicles').delete().ilike('vin', `%${prefix}%`);
     } else {
       const { buyerName, testVin } = target;
 

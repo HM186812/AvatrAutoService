@@ -3,7 +3,7 @@ import path from 'path';
 import { TEST_CREDENTIALS } from './helpers/auth';
 
 test('Live POS Real Sale Submission & Bill Verification for test staff', async ({ page }) => {
-  const screenshotsDir = path.resolve(process.cwd(), 'docs/verification-screenshots/full-audit');
+  const screenshotsDir = path.resolve(process.cwd(), 'test-results/screenshots/full-audit');
   test.setTimeout(90_000);
 
   console.log(`--- Step 1: Login with ${TEST_CREDENTIALS.email} ---`);

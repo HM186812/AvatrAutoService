@@ -578,7 +578,7 @@ export const translations: Record<'lo' | 'en' | 'th', TranslationSchema> = {
     tabPipeline: 'ຈັດການລູກຄ້າ (CRM Pipeline)',
     tabTestDrives: 'ຕາຕະລາງທົດລອງຂັບ',
     tabServiceBays: 'ສູນບໍລິການ avatrAutoService',
-    tabCalculator: 'ຄຳນວນເງິນດາວน์ & ຄ່າງວດ',
+    tabCalculator: 'ຄຳນວນເງິນດາວ & ຄ່າງວດ',
 
     // Actions & Common
     addNewLead: 'ເພີ່ມລູກຄ້າໃໝ່',

@@ -57,7 +57,7 @@ function normalizeOfflineUser(raw: SystemUser): SystemUser {
   const role = normalizeRole(user.role);
   return {
     ...user,
-    name: (user.name || '').replace(/Supers*Admin/gi, 'Admin').trim(),
+    name: (user.name || '').replace(/Super\s*Admin/gi, 'Admin').trim(),
     role: role || 'sales',
     roleTitleLo: ROLE_LABELS[role || 'sales'],
     status: role ? user.status : 'suspended',
@@ -251,7 +251,10 @@ export function offlineSignIn(emailOrId: string): SystemUser {
     (u) => u.email.toLowerCase() === clean || u.id.toLowerCase() === clean || (clean === 'admin' && u.role === 'admin')
   );
 
-  const activeUser = matched || DEFAULT_OFFLINE_USERS[0];
+  if (!matched) {
+    throw new Error('Offline demo account not found.');
+  }
+  const activeUser = matched;
   if (activeUser.status === 'suspended') {
     throw new Error(normalizeRole((rawUsers.find(u => u.id === activeUser.id) || activeUser).role) ? 'This account is suspended.' : NO_ROLE_MESSAGE);
   }

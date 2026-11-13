@@ -464,7 +464,7 @@ function mapBill(row: DbRow, item: DbRow | undefined): InvoiceBillRecord {
     // Not a DB column: derive it so receipts and down-payment bills stay distinguishable after reload.
     installmentType: Number(row.installment_period) >= 1
       ? 'monthly_installment'
-      : (row.bill_type === 'installment' ? 'down_payment' : undefined),
+      : (row.type === 'installment' ? 'down_payment' : undefined),
     freeGifts: gifts,
     warrantyTerms: row.warranty_terms || undefined,
     warrantyStartDate: row.warranty_start_date || undefined,
@@ -714,6 +714,7 @@ export async function fetchStockMovements(
 
 let activeLoadBackendPromise: Promise<BackendData> | null = null;
 let activeTier1Listeners: Array<(initial: Partial<BackendData>) => void> = [];
+let latestTier1Payload: Partial<BackendData> | null = null;
 
 export async function loadBackendData(
   onInitialTierLoaded?: (initial: Partial<BackendData>) => void
@@ -730,12 +731,19 @@ export async function loadBackendData(
     return offlineData;
   }
 
-  if (onInitialTierLoaded) {
-    activeTier1Listeners.push(onInitialTierLoaded);
+  if (activeLoadBackendPromise) {
+    if (onInitialTierLoaded) {
+      if (latestTier1Payload) {
+        try { onInitialTierLoaded(latestTier1Payload); } catch (_) {}
+      } else {
+        activeTier1Listeners.push(onInitialTierLoaded);
+      }
+    }
+    return activeLoadBackendPromise;
   }
 
-  if (activeLoadBackendPromise) {
-    return activeLoadBackendPromise;
+  if (onInitialTierLoaded) {
+    activeTier1Listeners.push(onInitialTierLoaded);
   }
 
   activeLoadBackendPromise = (async () => {
@@ -802,6 +810,7 @@ export async function loadBackendData(
         leads,
         settings: settingsConfig,
       };
+      latestTier1Payload = tier1Payload;
       for (const listener of activeTier1Listeners) {
         try { listener(tier1Payload); } catch (_) {}
       }
@@ -867,6 +876,8 @@ export async function loadBackendData(
 
       const warnings = [
         ...schemaWarnings,
+        profilesResult.error ? `Staff profiles could not be loaded: ${profilesResult.error.message}` : null,
+        movementsResult.error ? `Stock movements could not be loaded: ${movementsResult.error.message}` : null,
         servicesResult.error ? `Service appointments could not be loaded: ${servicesResult.error.message}` : null,
         testDrivesResult.error ? `Test drives could not be loaded: ${testDrivesResult.error.message}` : null,
       ].filter((warning): warning is string => Boolean(warning));
@@ -886,6 +897,7 @@ export async function loadBackendData(
     } finally {
       activeLoadBackendPromise = null;
       activeTier1Listeners = [];
+      latestTier1Payload = null;
     }
   })();
 
@@ -1049,7 +1061,7 @@ export async function saveLead(
         (m.name && m.name.toLowerCase().replace(/\s+/g, '') === target.replace(/\s+/g, '')) ||
         (m.id && m.id.toLowerCase().replace(/[-_\s]+/g, '') === target.replace(/[-_\s]+/g, ''))
       );
-      modelId = matched?.id || models[0].id || null;
+      modelId = matched?.id || null;
     }
   } catch (err) {
     console.warn('Could not query vehicle_models for lead:', err);
@@ -1076,11 +1088,14 @@ export async function saveLead(
       finalAssignedStaffId = lead.assignedTo;
     } else {
       try {
-        const { data: matchedStaff } = await client
-          .from('staff_profiles')
-          .select('id')
-          .or('name.eq."' + lead.assignedTo + '",email.eq."' + lead.assignedTo + '"')
-          .maybeSingle();
+        const safeAssignee = sanitizeText(lead.assignedTo, 120).replace(/["\\]/g, '');
+        const { data: matchedStaff } = safeAssignee
+          ? await client
+              .from('staff_profiles')
+              .select('id')
+              .or(`name.eq."${safeAssignee}",email.eq."${safeAssignee}"`)
+              .maybeSingle()
+          : { data: null };
         if (matchedStaff?.id) {
           finalAssignedStaffId = matchedStaff.id;
         }
@@ -1208,10 +1223,10 @@ export async function saveLead(
 
   if (saleBill) {
     await saveBillRecord(
-      saleBill,
+      { ...saleBill, leadId: saleBill.leadId || safeLeadId },
       assignedStaffId,
       undefined,
-      extendedLeadPayload
+      parityLeadPayload
     );
     offlineSaveLead({ ...lead, id: safeLeadId });
     return { ...lead, id: safeLeadId };
@@ -1339,7 +1354,7 @@ export async function saveInventoryItem(item: InventoryItem) {
     pdi_notes: sanitizeText(item.pdiNotes, 1000) || null,
     location: sanitizeText(item.location, 100) || null,
     image_url: sanitizeText(item.imageUrl || item.image, 500) || null,
-    reserved_for_customer: item.reservedForCustomer || null,
+    reserved_for_customer: isUuid(item.reservedForCustomer) ? item.reservedForCustomer : null,
     arrival_date: sanitizeText(item.arrivalDate, 30) || null,
     mileage_km: sanitizeNumber(item.mileageKm, 0),
     event_campaign: sanitizeText(item.eventCampaign, 100) || null,
@@ -1443,6 +1458,7 @@ export async function saveVehicleModel(model: VehicleModel, createdBy: string) {
     ({ error } = await client.from('vehicle_models').upsert(modelPayload, { onConflict: 'id' }));
   }
   if (error) throw error;
+  cachedVehicleModels = null;
 }
 
 export async function deleteVehicleModel(id: string) {
@@ -1459,6 +1475,7 @@ export async function deleteVehicleModel(id: string) {
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('Vehicle model was not deleted. Check your access and try again.');
+  cachedVehicleModels = null;
 }
 
 export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, vehicle?: InventoryItem, customerPayload?: Record<string, unknown>) {
@@ -1486,8 +1503,9 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
 
   // Handle installment payment receipts or updates to an already-recorded bill without re-triggering stock movement RPC
   let existingBill: { id: string } | null = null;
-  if (type === 'installment') {
-    const { data } = await client.from('bills').select('id').eq('id', bill.id).maybeSingle();
+  if (!customerPayload && bill.id) {
+    const { data, error: existingErr } = await client.from('bills').select('id').eq('id', bill.id).maybeSingle();
+    if (existingErr) throw existingErr;
     existingBill = data;
   }
   if (type === 'installment' || existingBill) {
@@ -1548,8 +1566,8 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     }
     if (directErr) throw new Error(directErr.message || 'Bill could not be saved.');
 
-    if (existingBill && (bill.plateNumber || bill.model || bill.color)) {
-      await client
+    if (existingBill && (bill.plateNumber || bill.model || bill.color || bill.engineNumber)) {
+      const { error: itemUpdateErr } = await client
         .from('bill_items')
         .update({
           model_name: sanitizeText(bill.model, 100) || undefined,
@@ -1558,6 +1576,21 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
           engine_number: sanitizeText(bill.engineNumber, 60) || null,
         })
         .eq('bill_id', bill.id);
+      if (itemUpdateErr) throw new Error(itemUpdateErr.message || 'Bill item details could not be updated.');
+    } else if (!existingBill && type === 'installment' && sanitizeVIN(bill.vin)) {
+      const { error: itemInsertErr } = await client.from('bill_items').insert({
+        id: newRecordId(),
+        bill_id: bill.id,
+        line_number: 1,
+        vehicle_vin: sanitizeVIN(bill.vin),
+        engine_number: sanitizeText(bill.engineNumber, 60) || null,
+        model_name: sanitizeText(bill.model, 100) || 'AVATR',
+        plate_number: sanitizeText(bill.plateNumber, 30) || null,
+        color: sanitizeText(bill.color, 60) || null,
+        unit_price_usd: sanitizeNumber(bill.unitPriceUSD, 0),
+        unit_price_lak: sanitizeNumber(bill.unitPriceLAK, 0),
+      });
+      if (itemInsertErr) throw new Error(itemInsertErr.message || 'Installment bill item could not be saved.');
     }
 
     offlineSaveBill(bill);
@@ -1623,7 +1656,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
       pdi_notes: sanitizeText(vehicle.pdiNotes, 1000) || null,
       location: sanitizeText(vehicle.location, 100) || null,
       image_url: sanitizeText(vehicle.imageUrl || vehicle.image, 500) || null,
-      reserved_for_customer: vehicle.reservedForCustomer || null,
+      reserved_for_customer: isUuid(vehicle.reservedForCustomer) ? vehicle.reservedForCustomer : null,
       arrival_date: arrivalDateIso,
       mileage_km: sanitizeNumber(vehicle.mileageKm, 0),
       event_campaign: sanitizeText(vehicle.eventCampaign, 100) || null,
@@ -1801,6 +1834,31 @@ export async function attachSlipToBill(billId: string, file: File): Promise<stri
   return path;
 }
 
+interface ParsedEdgeError {
+  message: string;
+  unavailable: boolean;
+}
+
+async function parseEdgeError(edgeError: unknown): Promise<ParsedEdgeError> {
+  const errObj = (edgeError && typeof edgeError === 'object')
+    ? edgeError as { name?: string; message?: string; context?: { status?: number; json?: () => Promise<{ error?: string }> } }
+    : {};
+  let message = errObj.message || 'Edge function call failed';
+  const status = typeof errObj.context?.status === 'number' ? errObj.context.status : undefined;
+  if (typeof errObj.context?.json === 'function') {
+    try {
+      const body = await errObj.context.json();
+      if (body?.error) message = body.error;
+    } catch {}
+  }
+  const unavailable =
+    status === 404 ||
+    errObj.name === 'FunctionsFetchError' ||
+    message.includes('Failed to send') ||
+    message.includes('404');
+  return { message, unavailable };
+}
+
 export async function saveStaffProfile(user: SystemUser) {
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
@@ -1808,27 +1866,31 @@ export async function saveStaffProfile(user: SystemUser) {
     return user;
   }
   const client = requireSupabase();
-  try {
-    const { data, error } = await client.functions.invoke('manage-staff', {
-      body: {
-        action: 'update',
-        userId: user.id,
-        name: user.name,
-        phone: user.phone,
-        department: user.department,
-        role: roleForSave(user),
-      },
-    });
-    if (!error && data?.profile) {
-      const mapped = mapStaffProfile(data.profile);
-      offlineSaveUser(mapped);
-      return mapped;
+  const { data, error } = await client.functions.invoke('manage-staff', {
+    body: {
+      action: 'update',
+      userId: user.id,
+      name: user.name,
+      phone: user.phone,
+      department: user.department,
+      role: roleForSave(user),
+    },
+  });
+  if (!error && data?.profile) {
+    const mapped = mapStaffProfile(data.profile);
+    cachedStaffUsers = null;
+    offlineSaveUser(mapped);
+    return mapped;
+  }
+  if (error) {
+    const parsed = await parseEdgeError(error);
+    if (!parsed.unavailable) {
+      throw new Error(parsed.message);
     }
-  } catch (err) {
-    console.warn('manage-staff update invocation error, trying direct update fallback:', err);
+    console.warn('manage-staff update unavailable, trying direct update fallback:', parsed.message);
   }
 
-  // Fallback direct table update
+  // Fallback direct table update when edge function is unreachable or not deployed
   const { data: updatedProfile, error: updateError } = await client
     .from('staff_profiles')
     .update({
@@ -1849,6 +1911,7 @@ export async function saveStaffProfile(user: SystemUser) {
   }
 
   const mapped = mapStaffProfile(updatedProfile);
+  cachedStaffUsers = null;
   offlineSaveUser(mapped);
   return mapped;
 }
@@ -1860,17 +1923,19 @@ export async function deactivateStaffProfile(id: string) {
     return;
   }
   const client = requireSupabase();
-  try {
-    const { error } = await client.functions.invoke('manage-staff', {
-      body: { action: 'suspend', userId: id },
-    });
-    if (!error) {
-      offlineDeactivateUser(id);
-      return;
-    }
-  } catch (err) {
-    console.warn('manage-staff suspend invocation error, trying direct update fallback:', err);
+  const { error: edgeError } = await client.functions.invoke('manage-staff', {
+    body: { action: 'suspend', userId: id },
+  });
+  if (!edgeError) {
+    cachedStaffUsers = null;
+    offlineDeactivateUser(id);
+    return;
   }
+  const parsed = await parseEdgeError(edgeError);
+  if (!parsed.unavailable) {
+    throw new Error(parsed.message);
+  }
+  console.warn('manage-staff suspend unavailable, trying direct update fallback:', parsed.message);
 
   const { data, error } = await client
     .from('staff_profiles')
@@ -1884,6 +1949,7 @@ export async function deactivateStaffProfile(id: string) {
     throw new Error('Staff account could not be suspended. Check your permissions and try again.');
   }
 
+  cachedStaffUsers = null;
   offlineDeactivateUser(id);
 }
 
@@ -1893,17 +1959,23 @@ export async function reactivateStaffProfile(id: string) {
     return;
   }
   const client = requireSupabase();
-  try {
-    const { error } = await client.functions.invoke('manage-staff', {
-      body: { action: 'reactivate', userId: id },
-    });
-    if (!error) return;
-  } catch {}
+  const { error: edgeError } = await client.functions.invoke('manage-staff', {
+    body: { action: 'reactivate', userId: id },
+  });
+  if (!edgeError) {
+    cachedStaffUsers = null;
+    return;
+  }
+  const parsed = await parseEdgeError(edgeError);
+  if (!parsed.unavailable) {
+    throw new Error(parsed.message);
+  }
 
-  try {
-    const { error: rpcError } = await client.rpc('reactivate_staff_profile', { p_user_id: id });
-    if (!rpcError) return;
-  } catch {}
+  const { error: rpcError } = await client.rpc('reactivate_staff_profile', { p_user_id: id });
+  if (!rpcError) {
+    cachedStaffUsers = null;
+    return;
+  }
 
   const { data, error } = await client
     .from('staff_profiles')
@@ -1916,6 +1988,7 @@ export async function reactivateStaffProfile(id: string) {
   if (!data) {
     throw new Error('Staff account could not be reactivated. Check your permissions and try again.');
   }
+  cachedStaffUsers = null;
 }
 
 export async function deleteStaffProfile(id: string) {
@@ -1926,85 +1999,32 @@ export async function deleteStaffProfile(id: string) {
   }
 
   const client = requireSupabase();
-  let edgeErrorMsg = '';
 
   // 1. Try edge function first (handles auth.admin.deleteUser + staff_profiles cascade)
-  try {
-    const { error: edgeError } = await client.functions.invoke('manage-staff', {
-      body: { action: 'delete', userId: id },
-    });
-    if (!edgeError) {
-      offlineDeleteUser(id);
-      return;
-    }
-
-    edgeErrorMsg = edgeError.message;
-    if (edgeError && typeof edgeError === 'object' && 'context' in edgeError) {
-      const ctx = (edgeError as { context?: { json?: () => Promise<{ error?: string }> } }).context;
-      if (typeof ctx?.json === 'function') {
-        try {
-          const errBody = await ctx.json();
-          if (errBody?.error) edgeErrorMsg = errBody.error;
-        } catch {}
-      }
-    }
-
-    // If it's a critical safety block (last admin or self delete), abort immediately with clear message
-    if (edgeErrorMsg.includes('last active') || edgeErrorMsg.includes('own account')) {
-      throw new Error(edgeErrorMsg);
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('last active') || msg.includes('own account')) {
-      throw err;
-    }
-    console.warn('manage-staff edge function delete failed, attempting fallbacks:', err);
+  const { error: edgeError } = await client.functions.invoke('manage-staff', {
+    body: { action: 'delete', userId: id },
+  });
+  if (!edgeError) {
+    cachedStaffUsers = null;
+    offlineDeleteUser(id);
+    return;
   }
 
-  // 2. Fall back to RPC delete_staff_profile if edge function is unreachable or not yet deployed
-  let rpcErrorMsg = '';
-  try {
-    const { error: rpcError } = await client.rpc('delete_staff_profile', { p_user_id: id });
-    if (!rpcError) {
-      offlineDeleteUser(id);
-      return;
-    }
-    rpcErrorMsg = rpcError.message;
-    if (rpcErrorMsg.includes('last active') || rpcErrorMsg.includes('own account')) {
-      throw new Error(rpcErrorMsg);
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('last active') || msg.includes('own account')) {
-      throw err;
-    }
-    console.warn('RPC delete_staff_profile failed, attempting direct table delete:', err);
+  const parsed = await parseEdgeError(edgeError);
+  if (!parsed.unavailable) {
+    throw new Error(parsed.message);
+  }
+  console.warn('manage-staff edge function unavailable, attempting RPC fallback:', parsed.message);
+
+  // 2. Fall back to RPC delete_staff_profile only if edge function is unreachable or not yet deployed
+  const { error: rpcError } = await client.rpc('delete_staff_profile', { p_user_id: id });
+  if (!rpcError) {
+    cachedStaffUsers = null;
+    offlineDeleteUser(id);
+    return;
   }
 
-  // 3. Fall back to direct delete on staff_profiles table
-  try {
-    const { error: directError } = await client
-      .from('staff_profiles')
-      .delete()
-      .eq('id', id);
-    if (!directError) {
-      offlineDeleteUser(id);
-      return;
-    }
-  } catch (err) {
-    console.warn('Direct delete staff_profiles failed:', err);
-  }
-
-  // 4. Clean up from offline store
-  offlineDeleteUser(id);
-
-  // If both server methods had definitive errors that weren't network/function 404, throw informative error
-  if (edgeErrorMsg && !edgeErrorMsg.includes('Failed to send') && !edgeErrorMsg.includes('404')) {
-    throw new Error(edgeErrorMsg);
-  }
-  if (rpcErrorMsg && !rpcErrorMsg.includes('function public.delete_staff_profile') && !rpcErrorMsg.includes('PGRST202')) {
-    throw new Error(rpcErrorMsg);
-  }
+  throw new Error(rpcError.message || parsed.message || 'Staff account could not be deleted.');
 }
 
 export async function updateServiceAppointment(appointment: ServiceAppointment) {

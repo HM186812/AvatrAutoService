@@ -1,8 +1,17 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Storage Strategy Plan 3 & Void Bill Soft-Delete', () => {
-  test('compressImageToWebP compresses images to WebP <= 300KB in browser', async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
     await page.goto('/');
+    const hasDevSource = await page.evaluate(async () => {
+      const res = await fetch('/src/utils/imageCompressor.ts');
+      const ct = res.headers.get('content-type') || '';
+      return res.ok && !ct.includes('text/html');
+    });
+    test.skip(!hasDevSource, 'Raw TS module import requires Vite dev server');
+  });
+
+  test('compressImageToWebP compresses images to WebP <= 300KB in browser', async ({ page }) => {
 
     // Evaluate compression directly in browser environment where canvas API exists
     const result = await page.evaluate(async () => {
@@ -47,8 +56,6 @@ test.describe('Storage Strategy Plan 3 & Void Bill Soft-Delete', () => {
   });
 
   test('non-image files pass through compressImageToWebP untouched', async ({ page }) => {
-    await page.goto('/');
-
     const result = await page.evaluate(async () => {
       const pdfBlob = new Blob(['%PDF-1.4 test stream content'], { type: 'application/pdf' });
       const pdfFile = new File([pdfBlob], 'sample-contract.pdf', { type: 'application/pdf' });

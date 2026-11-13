@@ -6,7 +6,10 @@ test.describe('Theme & Localization', () => {
     await loginAsAdmin(page);
 
     const aside = page.locator('aside');
-    const themeBtn = aside.locator('button').filter({ hasText: /โหมด|ໂໝດ|Dark|Light/ }).first();
+    const themeBtn = aside.locator(
+      'button[title*="ໂໝດ"], button[title*="โหมด"], button[title*="Mode"], button[aria-label*="ໂໝດ"], button[aria-label*="โหมด"], button[aria-label*="Mode"]'
+    ).first();
+    await expect(themeBtn).toBeVisible({ timeout: 5_000 });
 
     // Toggle theme
     await themeBtn.click();

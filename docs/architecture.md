@@ -9,11 +9,11 @@ graph TD
     Store["useAppStore & Offline Mutation Queue"]
     
     subgraph "Edge & CDN (Cloudflare)"
-        CFPages["Cloudflare Pages (Global CDN & SSL)"]
+        CFWorkers["Cloudflare Workers Static Assets (Global CDN & SSL)"]
     end
 
     subgraph "Supabase Cloud Platform (Region: ap-southeast-1)"
-        Auth["Supabase Auth (GoTrue)"]
+        Auth["Supabase Auth (GoTrue, Signup Disabled / Invite-Only)"]
         EdgeFn["Deno Edge Functions (create-staff, manage-staff)"]
         Storage["Supabase Storage (dealership-assets, avatr-assets, payment-slips)"]
         
@@ -26,7 +26,7 @@ graph TD
         end
     end
 
-    Client -->|Static Assets| CFPages
+    Client -->|Static Assets| CFWorkers
     Client -->|Bot Token| Turnstile
     Client -->|Local State & Offline Queue| Store
     Client -->|Authentication| Auth
@@ -50,11 +50,11 @@ graph TD
 - **Solution**: A PostgreSQL `SECURITY DEFINER` function compiles `models`, `vehicles`, `customers` (limit 250), `roles`, and `settings` into a single JSON payload. Initial load drops from >1.5s to ~250ms.
 
 ### 2.2 Bundle Splitting & Lazy-Loaded Modals
-- **Problem**: Main bundle was 831 kB because `docx`, pdf generators, and all 5 modals were bundled into the entry chunk.
+- **Problem**: Main entry bundle loaded heavy PDF export libraries and all views/modals eagerly.
 - **Solution**:
-  - `docx` and pdf generators moved to `vendor-pdf` chunk.
-  - Modals (`NewLeadModal`, `QuotationModal`, `ServiceModal`, `TestDriveModal`, `VehicleModal`) converted to `React.lazy()` with `<Suspense>`.
-  - **Result**: Main bundle shrunk to **215 kB (55 kB gzipped) — a 74% reduction**.
+  - `jspdf` and `html2canvas-pro` separated into `vendor-pdf` chunk, loaded dynamically on PDF export.
+  - Views and modals (`NewLeadModal`, `QuotationModal`, `ServiceModal`, `TestDriveModal`, `CustomerDocumentsModal`, etc.) converted to `React.lazy()` with `<ErrorBoundary>` and `<Suspense>`.
+  - **Result**: Main entry bundle keeps initial load lightweight with on-demand view/modal chunking.
 
 ### 2.3 RLS Sequential Scan Elimination (STABLE Security Definer)
 - **Problem**: RLS policies executed inline subqueries on `staff_profiles` on every single row check, generating 128,734 sequential scans.

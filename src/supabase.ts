@@ -1,11 +1,10 @@
 import type { DealershipConfig, InventoryItem, InvoiceBillRecord, SystemUser, VehicleModel } from './types';
 import { isAdminRole } from './utils/roles';
-import { isSupabaseConfigured, requireSupabase, supabase } from './backend/client';
+import { isOfflineDemoEnabled, isSupabaseConfigured, requireSupabase, supabase } from './backend/client';
 import {
   deactivateStaffProfile,
   deleteInventoryItem,
   deleteVehicleModel,
-  getSignedInStaff,
   saveBillRecord,
   saveDealershipSettingsPatch,
   saveInventoryItem,
@@ -15,12 +14,16 @@ import {
 } from './backend/data';
 
 export { isSupabaseConfigured, requireSupabase, supabase };
-export const db = supabase;
 export const auth = supabase?.auth ?? null;
 export const storage = supabase?.storage ?? null;
 
 async function currentStaffId() {
-  if (!isSupabaseConfigured) return 'user-admin-01';
+  if (!isSupabaseConfigured) {
+    if (!isOfflineDemoEnabled) {
+      throw new Error('Supabase is not configured. Offline Demo is disabled.');
+    }
+    return 'user-admin-01';
+  }
   const { data, error } = await requireSupabase().auth.getUser();
   if (error) throw error;
   if (!data.user) throw new Error('A signed-in staff account is required.');
@@ -57,18 +60,6 @@ export async function saveUserToSupabase(user: SystemUser) {
     return;
   }
   await saveStaffProfile(user);
-}
-
-export async function getUserFromSupabase(userId: string): Promise<SystemUser | null> {
-  try {
-    return await getSignedInStaff(userId);
-  } catch {
-    return null;
-  }
-}
-
-export async function deleteUserFromSupabase(userId: string) {
-  await deactivateStaffProfile(userId);
 }
 
 /** Admin-only: the company QR is shared with every account through dealership settings. */

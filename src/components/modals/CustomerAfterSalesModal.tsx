@@ -79,43 +79,41 @@ export default function CustomerAfterSalesModal({
   lang = 'lo',
   onSave,
 }: CustomerAfterSalesModalProps) {
-  if (!isOpen || !customer) return null;
-
   // Form State
-  const [customerName, setCustomerName] = useState(customer.customerName || '');
-  const [phone, setPhone] = useState(customer.phone || '');
-  const [idCardNumber, setIdCardNumber] = useState(customer.idCardNumber || '');
-  const [province, setProvince] = useState(customer.province || 'ນະຄອນຫຼວງວຽງຈັນ');
-  const [district, setDistrict] = useState(customer.district || '');
-  const [village, setVillage] = useState(customer.village || '');
+  const [customerName, setCustomerName] = useState(customer?.customerName || '');
+  const [phone, setPhone] = useState(customer?.phone || '');
+  const [idCardNumber, setIdCardNumber] = useState(customer?.idCardNumber || '');
+  const [province, setProvince] = useState(customer?.province || 'ນະຄອນຫຼວງວຽງຈັນ');
+  const [district, setDistrict] = useState(customer?.district || '');
+  const [village, setVillage] = useState(customer?.village || '');
 
-  const [model, setModel] = useState(customer.model || 'AVATR 12');
-  const [plateNumber, setPlateNumber] = useState(customer.plateNumber || '');
-  const [vin, setVin] = useState(customer.vin || '');
-  const [engineNumber, setEngineNumber] = useState(customer.engineNumber || '');
-  const [color, setColor] = useState(customer.color || '');
-  const [purchaseDate, setPurchaseDate] = useState(customer.purchaseDate || new Date().toISOString().slice(0, 10));
-  const [currentMileageKm, setCurrentMileageKm] = useState<number | ''>(customer.currentMileageKm ?? '');
-  const [batteryHealthSOH, setBatteryHealthSOH] = useState<number | ''>(customer.batteryHealthSOH ?? '');
+  const [model, setModel] = useState(customer?.model || 'AVATR 12');
+  const [plateNumber, setPlateNumber] = useState(customer?.plateNumber || '');
+  const [vin, setVin] = useState(customer?.vin || '');
+  const [engineNumber, setEngineNumber] = useState(customer?.engineNumber || '');
+  const [color, setColor] = useState(customer?.color || '');
+  const [purchaseDate, setPurchaseDate] = useState(customer?.purchaseDate || new Date().toISOString().slice(0, 10));
+  const [currentMileageKm, setCurrentMileageKm] = useState<number | ''>(customer?.currentMileageKm ?? '');
+  const [batteryHealthSOH, setBatteryHealthSOH] = useState<number | ''>(customer?.batteryHealthSOH ?? '');
 
   // Warranty State (Manual & Custom Expiry as requested)
-  const defaultStartDate = customer.warrantyStartDate || customer.purchaseDate || new Date().toISOString().slice(0, 10);
+  const defaultStartDate = customer?.warrantyStartDate || customer?.purchaseDate || new Date().toISOString().slice(0, 10);
   const [warrantyStartDate, setWarrantyStartDate] = useState(defaultStartDate);
-  
+
   // Default 8-year expiry calculation if none exists
-  const initialExpiry = customer.warrantyExpiryDate || (() => {
+  const initialExpiry = customer?.warrantyExpiryDate || (() => {
     const d = new Date(defaultStartDate);
-    d.setFullYear(d.getFullYear() + (customer.warrantyYears || 8));
+    d.setFullYear(d.getFullYear() + (customer?.warrantyYears || 8));
     return d.toISOString().slice(0, 10);
   })();
 
   const [warrantyExpiryDate, setWarrantyExpiryDate] = useState(initialExpiry);
-  const [warrantyYears, setWarrantyYears] = useState<number>(customer.warrantyYears || 8);
-  const [warrantyDistanceKm, setWarrantyDistanceKm] = useState<number>(customer.warrantyDistanceKm || 160000);
+  const [warrantyYears, setWarrantyYears] = useState<number>(customer?.warrantyYears || 8);
+  const [warrantyDistanceKm, setWarrantyDistanceKm] = useState<number>(customer?.warrantyDistanceKm || 160000);
   const [warrantyTerms, setWarrantyTerms] = useState(
-    customer.warrantyTerms || 'ຮັບປະກັນແບັດເຕີຣີ EV CATL & ມໍເຕີໄຟຟ້າ'
+    customer?.warrantyTerms || 'ຮັບປະກັນແບັດເຕີຣີ EV CATL & ມໍເຕີໄຟຟ້າ'
   );
-  const [afterSalesNotes, setAfterSalesNotes] = useState(customer.afterSalesNotes || '');
+  const [afterSalesNotes, setAfterSalesNotes] = useState(customer?.afterSalesNotes || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Synchronize when customer changes
@@ -154,6 +152,8 @@ export default function CustomerAfterSalesModal({
       setAfterSalesNotes(customer.afterSalesNotes || '');
     }
   }, [customer]);
+
+  if (!isOpen || !customer) return null;
 
   // Apply Quick Preset Years (Sets expiry date while keeping it manual & editable)
   const applyYearPreset = (years: number, distance: number, termsName: string) => {

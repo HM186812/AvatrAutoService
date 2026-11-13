@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { VehicleModel, Language } from '../../types';
 import { X, BatteryCharging, Zap, Cpu, ShieldCheck, Check, Phone } from 'lucide-react';
 
@@ -19,9 +19,13 @@ export default function VehicleModal({
   onOpenTestDrive,
   lang,
 }: VehicleModalProps) {
-  if (!isOpen || !vehicle) return null;
+  const [selectedColor, setSelectedColor] = useState(vehicle?.colors?.[0]);
 
-  const [selectedColor, setSelectedColor] = useState(vehicle.colors[0]);
+  useEffect(() => {
+    setSelectedColor(vehicle?.colors?.[0]);
+  }, [vehicle]);
+
+  if (!isOpen || !vehicle) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
@@ -103,7 +107,7 @@ export default function VehicleModal({
               <span className="text-xs text-zinc-400 font-medium block">
                 {lang === 'lo' ? 'ເລືອກສີພາຍນອກ (Exterior Colorways):' : lang === 'th' ? 'เลือกสีภายนอก (Exterior Colors):' : 'Exterior Colors:'}
               </span>
-              <span className="text-sm font-semibold text-white">{selectedColor.name}</span>
+              <span className="text-sm font-semibold text-white">{selectedColor?.name || ''}</span>
             </div>
             <div className="flex items-center gap-3">
               {vehicle.colors.map((c) => (
@@ -111,7 +115,7 @@ export default function VehicleModal({
                   key={c.name}
                   onClick={() => setSelectedColor(c)}
                   className={`w-7 h-7 rounded-full transition-transform ${c.previewClass} ${
-                    selectedColor.name === c.name ? 'ring-2 ring-white scale-110' : 'opacity-70 hover:opacity-100'
+                    selectedColor?.name === c.name ? 'ring-2 ring-white scale-110' : 'opacity-70 hover:opacity-100'
                   }`}
                   title={c.name}
                 />

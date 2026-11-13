@@ -39,7 +39,7 @@ import {
   ReceiptText,
   UploadCloud
 } from 'lucide-react';
-import { isMonthlyInstallmentBill } from '../../utils/installment';
+import { DEFAULT_ANNUAL_INTEREST_RATE, isMonthlyInstallmentBill } from '../../utils/installment';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl } from '../../utils/whatsapp';
@@ -791,7 +791,19 @@ export default function BillsManagementView({
     window.print();
   };
 
-  const handleDirectPrintBill = (bill: InvoiceBillRecord) => {
+  const waitForBillPaint = () =>
+    new Promise<void>((resolve) => {
+      const check = (attempts = 0) => {
+        if (document.getElementById('printable-official-bill') || attempts >= 20) {
+          requestAnimationFrame(() => resolve());
+        } else {
+          requestAnimationFrame(() => check(attempts + 1));
+        }
+      };
+      requestAnimationFrame(() => check(0));
+    });
+
+  const handleDirectPrintBill = async (bill: InvoiceBillRecord) => {
     setSelectedBillForPrint(bill);
     logIssuedDocument({
       docType: 'official_bill',
@@ -810,48 +822,46 @@ export default function BillsManagementView({
       amountLAK: bill.netTotalLAK || bill.amountLAK,
       notes: `ພິມໃບບິນ ${bill.billNumber}`,
     });
-    setTimeout(() => {
-      window.print();
-    }, 150);
+    await waitForBillPaint();
+    window.print();
   };
 
-  const handleDirectDownloadBill = (bill: InvoiceBillRecord) => {
+  const handleDirectDownloadBill = async (bill: InvoiceBillRecord) => {
     setSelectedBillForPrint(bill);
-    setTimeout(async () => {
-      try {
-        setIsExportingBillPdf(true);
-        const cleanName = (bill.customerName || bill.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
-        const filename = `AVATR_Bill_${bill.billNumber}_${cleanName}.pdf`;
-        await exportElementToPdf('printable-official-bill', {
-          filename,
-          margin: [0, 0, 0, 0],
-          orientation: 'portrait',
-          singlePage: true,
-        });
-        logIssuedDocument({
-          docType: 'official_bill',
-          docTitle: 'ໃບບິນທາງການ / ໃບແຈ້ງໜີ້ (Official Invoice & Bill)',
-          docNumber: bill.billNumber,
-          customerName: bill.customerName || 'ລູກຄ້າທົ່ວໄປ',
-          customerPhone: bill.customerPhone,
-          leadId: bill.leadId,
-          billId: bill.id,
-          vin: bill.vin,
-          model: bill.model,
-          action: 'export_pdf',
-          formatLabel: 'PDF (A4)',
-          issuedBy: bill.recordedBy || currentUser?.name || 'Admin',
-          amountUSD: bill.netTotalUSD || bill.amountUSD,
-          amountLAK: bill.netTotalLAK || bill.amountLAK,
-          notes: `ດາວໂຫຼດ PDF ໃບບິນ ${bill.billNumber}`,
-        });
-        showToast(`ບັນທຶກປະຫວັດການດາວໂຫຼດ PDF ${bill.billNumber} ສຳເລັດ`, 'success');
-      } catch (err) {
-        console.error('Error generating bill PDF:', err);
-      } finally {
-        setIsExportingBillPdf(false);
-      }
-    }, 150);
+    await waitForBillPaint();
+    try {
+      setIsExportingBillPdf(true);
+      const cleanName = (bill.customerName || bill.billNumber).replace(/[^a-zA-Z0-9\u0E80-\u0EFF_-]/g, '_');
+      const filename = `AVATR_Bill_${bill.billNumber}_${cleanName}.pdf`;
+      await exportElementToPdf('printable-official-bill', {
+        filename,
+        margin: [0, 0, 0, 0],
+        orientation: 'portrait',
+        singlePage: true,
+      });
+      logIssuedDocument({
+        docType: 'official_bill',
+        docTitle: 'ໃບບິນທາງການ / ໃບແຈ້ງໜີ້ (Official Invoice & Bill)',
+        docNumber: bill.billNumber,
+        customerName: bill.customerName || 'ລູກຄ້າທົ່ວໄປ',
+        customerPhone: bill.customerPhone,
+        leadId: bill.leadId,
+        billId: bill.id,
+        vin: bill.vin,
+        model: bill.model,
+        action: 'export_pdf',
+        formatLabel: 'PDF (A4)',
+        issuedBy: bill.recordedBy || currentUser?.name || 'Admin',
+        amountUSD: bill.netTotalUSD || bill.amountUSD,
+        amountLAK: bill.netTotalLAK || bill.amountLAK,
+        notes: `ດາວໂຫຼດ PDF ໃບບິນ ${bill.billNumber}`,
+      });
+      showToast(`ບັນທຶກປະຫວັດການດາວໂຫຼດ PDF ${bill.billNumber} ສຳເລັດ`, 'success');
+    } catch (err) {
+      console.error('Error generating bill PDF:', err);
+    } finally {
+      setIsExportingBillPdf(false);
+    }
   };
 
   const handleDownloadBillPdf = async () => {
@@ -2598,32 +2608,30 @@ export default function BillsManagementView({
                     </div>
 
                     {/* Dedicated Installment / Financing Breakdown */}
-                    {isInstallmentBill(selectedBillForPrint) && (
+                    {isInstallmentBill(selectedBillForPrint) && (() => {
+                      const dpPct = selectedBillForPrint.downPaymentPercent ?? 30;
+                      const dpUSD = selectedBillForPrint.downPaymentUSD ?? Math.round(selectedBillForPrint.netTotalUSD * (dpPct / 100));
+                      const principalUSD = Math.max(0, selectedBillForPrint.netTotalUSD - dpUSD);
+                      const tenure = selectedBillForPrint.tenureMonths || 48;
+                      const estMonthlyUSD = Math.round((principalUSD * (1 + DEFAULT_ANNUAL_INTEREST_RATE * (tenure / 12))) / tenure);
+                      return (
                       <div className="pt-0.5 mt-0.5 text-[10px] font-sans space-y-0.5 bg-amber-500/10 p-1.5 rounded border border-amber-500/30">
                         <div className="flex justify-between font-mono font-bold text-black">
-                          <span>ເງິນດາວ ({selectedBillForPrint.downPaymentPercent || 30}%):</span>
-                          <span>${(selectedBillForPrint.downPaymentUSD || Math.round(selectedBillForPrint.netTotalUSD * ((selectedBillForPrint.downPaymentPercent || 30) / 100))).toLocaleString()} USD</span>
+                          <span>ເງິນດາວ ({dpPct}%):</span>
+                          <span>${dpUSD.toLocaleString()} USD</span>
                         </div>
                         <div className="flex justify-between font-mono text-black">
                           <span>ຍອດກູ້ຢືມສິນເຊື່ອ:</span>
-                          <span>${(selectedBillForPrint.netTotalUSD - (selectedBillForPrint.downPaymentUSD || Math.round(selectedBillForPrint.netTotalUSD * ((selectedBillForPrint.downPaymentPercent || 30) / 100)))).toLocaleString()} USD</span>
+                          <span>${principalUSD.toLocaleString()} USD</span>
                         </div>
                         <div className="flex justify-between font-mono text-black">
                           <span>ໄລຍະເວລາຜ່ອນ:</span>
-                          <span>{selectedBillForPrint.tenureMonths || 48} ເດືອນ</span>
+                          <span>{tenure} ເດືອນ</span>
                         </div>
                         <div className="flex justify-between font-mono text-black">
                           <span>ຄ່າງວດຕໍ່ເດືອນ:</span>
                           <span>
-                            ~${Math.round(
-                              (selectedBillForPrint.netTotalUSD -
-                                (selectedBillForPrint.downPaymentUSD ||
-                                  Math.round(
-                                    selectedBillForPrint.netTotalUSD *
-                                      ((selectedBillForPrint.downPaymentPercent || 30) / 100)
-                                  ))) /
-                                (selectedBillForPrint.tenureMonths || 48)
-                            ).toLocaleString()} USD/ເດືອນ
+                            ~${estMonthlyUSD.toLocaleString()} USD/ເດືອນ
                           </span>
                         </div>
                         <div className="pt-0.5 mt-0.5 border-t border-black/30 flex justify-between font-mono font-black text-black">
@@ -2633,11 +2641,12 @@ export default function BillsManagementView({
                               : 'ຊຳລະເງິນດາວໃນໃບບິນນີ້:'}
                           </span>
                           <span className="text-black font-extrabold">
-                            ${(selectedBillForPrint.amountUSD || selectedBillForPrint.downPaymentUSD || selectedBillForPrint.netTotalUSD).toLocaleString()} USD
+                            ${(selectedBillForPrint.amountUSD ?? selectedBillForPrint.downPaymentUSD ?? selectedBillForPrint.netTotalUSD).toLocaleString()} USD
                           </span>
                         </div>
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

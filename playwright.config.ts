@@ -74,7 +74,7 @@ export default defineConfig({
   webServer: {
     command: 'node ./node_modules/vite/bin/vite.js --port=3000 --host=0.0.0.0 --mode test',
     url: 'http://localhost:3000',
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },
 });

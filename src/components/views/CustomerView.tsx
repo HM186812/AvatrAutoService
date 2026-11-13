@@ -1,6 +1,7 @@
 import { withVehicleFromBills } from '../../utils/documentCustomer';
 import { isAdminRole } from '../../utils/roles';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
+import { ErrorBoundary } from '../ErrorBoundary';
 import {
   Lead,
   VehicleModel,
@@ -53,24 +54,23 @@ import {
   Pencil,
   CalendarClock,
 } from 'lucide-react';
-import {
-  ConfirmDeleteModal,
-  CustomerDocumentsModal,
-  InstallmentLedgerModal,
-  PaymentConfirmModal,
-  ServiceModal,
-  CustomerAfterSalesModal,
-  CustomerAfterSalesProfile
-} from '../modals';
+import ConfirmDeleteModal from '../modals/ConfirmDeleteModal';
+import type { CustomerAfterSalesProfile } from '../modals/CustomerAfterSalesModal';
+import type { DocumentType } from '../modals/CustomerDocumentsModal';
+
+const CustomerDocumentsModal = lazy(() => import('../modals/CustomerDocumentsModal'));
+const CustomerDetailView = lazy(() => import('./CustomerDetailView'));
+const InstallmentLedgerModal = lazy(() => import('../modals/InstallmentLedgerModal'));
+const PaymentConfirmModal = lazy(() => import('../modals/PaymentConfirmModal'));
+const ServiceModal = lazy(() => import('../modals/ServiceModal'));
+const CustomerAfterSalesModal = lazy(() => import('../modals/CustomerAfterSalesModal'));
+const ContactLogModal = lazy(() => import('../modals/ContactLogModal'));
+const PipelineActionModal = lazy(() => import('../modals/PipelineActionModal'));
+const ImportBookingCsvModal = lazy(() => import('../modals/ImportBookingCsvModal'));
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
 import { deleteLead, saveLead, updateLeadStatus, saveBillRecord, fetchLeadsByDateRange, updateServiceAppointment } from '../../backend/data';
 import { newRecordId } from '../../backend/ids';
-import ContactLogModal from '../modals/ContactLogModal';
-import CustomerDetailView from './CustomerDetailView';
-import PipelineActionModal from '../modals/PipelineActionModal';
-import ImportBookingCsvModal from '../modals/ImportBookingCsvModal';
-import type { DocumentType } from '../modals/CustomerDocumentsModal';
 import { PIPELINE_LABELS, PIPELINE_STAGE_KEYS, getPipelineCurrentIndex, getPipelineDone } from '../../utils/pipeline';
 import { getFollowUpState, makeContactEntry, formatDateKey } from '../../utils/followUp';
 import InstallmentDashboardView from './InstallmentDashboardView';
@@ -214,7 +214,11 @@ export default function CustomerView({
           });
         }
       })
-      .catch(() => { })
+      .catch((err) => {
+        if (!cancelled) {
+          showToast(err instanceof Error ? err.message : 'Could not load customer range.', 'error');
+        }
+      })
       .finally(() => {
         if (!cancelled) setIsLoadingRangeLeads(false);
       });
@@ -351,8 +355,12 @@ export default function CustomerView({
   const [followUpFilter, setFollowUpFilter] = useState<'all' | 'today' | 'overdue'>('all');
   // Customer detail page (one place for info, next step, documents and timeline)
   const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
-  const detailLead = detailLeadId ? leads.find(l => l.id === detailLeadId) || null : null;
+  const [detailFallbackLead, setDetailFallbackLead] = useState<Lead | null>(null);
+  const detailLead = detailLeadId
+    ? leads.find(l => l.id === detailLeadId) || (detailFallbackLead?.id === detailLeadId ? detailFallbackLead : null)
+    : null;
   const openCustomerDetail = (lead: Lead) => {
+    setDetailFallbackLead(lead);
     setDetailLeadId(lead.id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -552,9 +560,9 @@ export default function CustomerView({
           ],
         };
         setLeads(prev => prev.map(l => (l.id === leadId ? updatedLead : l)));
-        // Persist the history entry (falls back to the older payload when the pipeline migration is missing)
+        // Persist the history entry (surface error instead of silently swallowing)
         if (currentUser?.id) {
-          await saveLead(updatedLead, currentUser.id).catch(() => undefined);
+          await saveLead(updatedLead, currentUser.id);
         }
       }
       showToast(`ອັບເດດສະຖານະ ${name}: ${statusText[newStatus] || newStatus}`, 'success');
@@ -1065,7 +1073,7 @@ export default function CustomerView({
     return existingCustomers.filter(item => {
       if (!matchesCrmTime(item.purchaseDate)) return false;
       if (crmSearch.trim() && !matchesSearch(crmSearch, {
-        texts: [item.customerName, item.vin, item.idCardNumber, item.plateNumber, item.engineNumber, item.model],
+        texts: [item.customerName, item.vin, item.idCardNumber, item.plateNumber, item.engineNumber, item.model, item.billRecord?.billNumber, item.leadRecord?.paymentReceiptNo],
         phones: [item.phone],
       })) return false;
       if (existingModelFilter !== 'all' && item.model !== existingModelFilter) return false;
@@ -1348,28 +1356,34 @@ export default function CustomerView({
     <div className="mx-auto max-w-screen-2xl space-y-5 pb-12">
       {/* WRAPPER FOR CRM VIEWS - SUPPRESSED DURING PRINT WHEN A CUSTOMER DOCUMENT IS OPEN */}
       {detailLead && (
-        <div className={selectedCustomerForDocs ? 'print:hidden hide-on-print-doc' : ''}>
-          <CustomerDetailView
-            lead={detailLead}
-            lang={lang}
-            vehicles={vehicles}
-            bills={getLeadBills(detailLead)}
-            issuedDocs={getCustomerIssuedDocs(detailLead.customerName, detailLead.phone, detailLead.vin, detailLead.id)}
-            isPurchased={isLeadPurchased(detailLead) || isLeadInstallment(detailLead)}
-            isInstallment={isLeadInstallment(detailLead)}
-            staffName={currentUser?.name}
-            onBack={() => setDetailLeadId(null)}
-            onEdit={onEditLead ? () => onEditLead(detailLead) : undefined}
-            onIssueQuote={() => handleIssueQuote(detailLead)}
-            onSell={onSelectCustomerForPOS ? () => onSelectCustomerForPOS(detailLead) : undefined}
-            onReopen={() => handleUpdateStatus(detailLead.id, 'contacted')}
-            onOpenDocuments={(doc) => openDocuments(detailLead, doc)}
-            onOpenInstallments={() => setSelectedCustomerForInstallments(detailLead)}
-            onRecordBooking={() => setPipelineAction({ mode: 'booking', leadId: detailLead.id })}
-            onRecordDelivery={() => setPipelineAction({ mode: 'delivery', leadId: detailLead.id })}
-            onSaveContact={handleSaveContactLog}
-          />
-        </div>
+        <Suspense fallback={
+          <div className="flex items-center justify-center py-24 text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
+        }>
+          <div className={selectedCustomerForDocs ? 'print:hidden hide-on-print-doc' : ''}>
+            <CustomerDetailView
+              lead={detailLead}
+              lang={lang}
+              vehicles={vehicles}
+              bills={getLeadBills(detailLead)}
+              issuedDocs={getCustomerIssuedDocs(detailLead.customerName, detailLead.phone, detailLead.vin, detailLead.id)}
+              isPurchased={isLeadPurchased(detailLead) || isLeadInstallment(detailLead)}
+              isInstallment={isLeadInstallment(detailLead)}
+              staffName={currentUser?.name}
+              onBack={() => setDetailLeadId(null)}
+              onEdit={onEditLead ? () => onEditLead(detailLead) : undefined}
+              onIssueQuote={() => handleIssueQuote(detailLead)}
+              onSell={onSelectCustomerForPOS ? () => onSelectCustomerForPOS(detailLead) : undefined}
+              onReopen={() => handleUpdateStatus(detailLead.id, 'contacted')}
+              onOpenDocuments={(doc) => openDocuments(detailLead, doc)}
+              onOpenInstallments={() => setSelectedCustomerForInstallments(detailLead)}
+              onRecordBooking={() => setPipelineAction({ mode: 'booking', leadId: detailLead.id })}
+              onRecordDelivery={() => setPipelineAction({ mode: 'delivery', leadId: detailLead.id })}
+              onSaveContact={handleSaveContactLog}
+            />
+          </div>
+        </Suspense>
       )}
       <div className={`${selectedCustomerForDocs ? "print:hidden hide-on-print-doc space-y-6" : "space-y-6"}${detailLead ? ' hidden' : ''}`}>
         <header className="theme-adaptive-dark-surface rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
@@ -1508,19 +1522,29 @@ export default function CustomerView({
               </div>
             )}
             {showBookingImport && currentUser && (
-              <ImportBookingCsvModal
-                vehicles={vehicles}
-                leads={leads}
-                bills={bills}
-                currentUserId={currentUser.id}
-                lang={lang}
-                onClose={() => setShowBookingImport(false)}
-                onImported={(imported) => {
-                  const ids = new Set(imported.map(l => l.id));
-                  setLeads(prev => [...imported, ...prev.filter(p => !ids.has(p.id))]);
-                  showToast(lang === 'en' ? `Imported ${imported.length} customers` : `ນຳເຂົ້າລູກຄ້າ ${imported.length} ລາຍ ສຳເລັດ`, 'success');
-                }}
-              />
+              <ErrorBoundary>
+                <Suspense
+                  fallback={
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs text-white text-sm font-medium">
+                      ກຳລັງໂຫຼດ...
+                    </div>
+                  }
+                >
+                  <ImportBookingCsvModal
+                    vehicles={vehicles}
+                    leads={leads}
+                    bills={bills}
+                    currentUserId={currentUser.id}
+                    lang={lang}
+                    onClose={() => setShowBookingImport(false)}
+                    onImported={(imported) => {
+                      const ids = new Set(imported.map(l => l.id));
+                      setLeads(prev => [...imported, ...prev.filter(p => !ids.has(p.id))]);
+                      showToast(lang === 'en' ? `Imported ${imported.length} customers` : `ນຳເຂົ້າລູກຄ້າ ${imported.length} ລາຍ ສຳເລັດ`, 'success');
+                    }}
+                  />
+                </Suspense>
+              </ErrorBoundary>
             )}
 
             {customerClassificationTab === 'installment_customers' && (
@@ -2754,7 +2778,7 @@ export default function CustomerView({
               hideTextSearch
               leads={leads.filter(l => (isActiveInstallmentLead(l) || (isInstallmentCompleted(l) && isLeadInstallment(l))) && matchesCrmTime(l.paymentDate || l.createdAt) && leadMatchesSearch(l))}
               setLeads={setLeads}
-              bills={bills.filter(b => matchesCrmTime(b.date) && billMatchesSearch(b))}
+              bills={bills}
               setBills={setBills}
               vehicles={vehicles}
               currentUser={currentUser}
@@ -2768,73 +2792,85 @@ export default function CustomerView({
       </div>
 
       {/* Customer Document Suite Modal (ໃບຮັບເງິນ, ໃບມອບສິດ, ໃບມອບລົດ, ຕາຕະລາງຜ່ອນ) */}
-      {selectedCustomerForDocs && (
-        <CustomerDocumentsModal
-          isOpen={!!selectedCustomerForDocs}
-          onClose={() => { setSelectedCustomerForDocs(null); setDocsInitialDoc(undefined); }}
-          customer={withVehicleFromBills(selectedCustomerForDocs, bills)}
-          initialDoc={docsInitialDoc}
-          vehicles={vehicles}
-          currentUser={currentUser}
-          lang={lang}
-          customerGroup={customerClassificationTab}
-          onConfirmPayment={handleConfirmCustomerPayment}
-        />
-      )}
-
-      {/* Installment Payment Tracking Modal (ຕາຕະລາງຕິດຕາມການເກັບເງິນງວດ) */}
-      {selectedCustomerForInstallments && (
-        <InstallmentLedgerModal
-          isOpen={!!selectedCustomerForInstallments}
-          onClose={() => setSelectedCustomerForInstallments(null)}
-          customer={selectedCustomerForInstallments}
-          vehicles={vehicles}
-          currentUser={currentUser}
-          lang={lang}
-          onUpdateCustomerRecords={handleUpdateCustomerRecords}
-        />
-      )}
-
-      {/* Payment Confirmation Modal (ຢືນຢັນການຊຳລະ & ຍ້າຍໄປຊ່ອງ "ຈ່າຍແລ້ວ") */}
-      {customerToConfirmPayment && (
-        <PaymentConfirmModal
-          isOpen={!!customerToConfirmPayment}
-          onClose={() => setCustomerToConfirmPayment(null)}
-          customer={customerToConfirmPayment}
-          vehicles={vehicles}
-          currentUser={currentUser}
-          lang={lang}
-          onConfirmPayment={handleConfirmCustomerPayment}
-        />
-      )}
-
-      {/* Booking deposit / vehicle delivery */}
-      {pipelineAction && (() => {
-        const target = leads.find(l => l.id === pipelineAction.leadId);
-        return target ? (
-          <PipelineActionModal
-            mode={pipelineAction.mode}
-            lead={target}
-            staffName={currentUser?.name}
-            staffOptions={Array.from(new Set(leads.map(l => l.assignedTo).filter((n): n is string => Boolean(n))))}
+      <ErrorBoundary>
+        <Suspense
+          fallback={
+            selectedCustomerForDocs || selectedCustomerForInstallments || customerToConfirmPayment || pipelineAction || contactLead ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs text-white text-sm font-medium">
+                ກຳລັງໂຫຼດ...
+              </div>
+            ) : null
+          }
+        >
+        {selectedCustomerForDocs && (
+          <CustomerDocumentsModal
+            isOpen={!!selectedCustomerForDocs}
+            onClose={() => { setSelectedCustomerForDocs(null); setDocsInitialDoc(undefined); }}
+            customer={withVehicleFromBills(selectedCustomerForDocs, bills)}
+            initialDoc={docsInitialDoc}
+            vehicles={vehicles}
+            currentUser={currentUser}
             lang={lang}
-            onClose={() => setPipelineAction(null)}
-            onSave={handlePipelineSave}
+            customerGroup={customerClassificationTab}
+            onConfirmPayment={handleConfirmCustomerPayment}
           />
-        ) : null;
-      })()}
+        )}
 
-      {/* Contact Log & Follow-up Modal */}
-      {contactLead && (
-        <ContactLogModal
-          lead={leads.find(l => l.id === contactLead.id) || contactLead}
-          staffName={currentUser?.name}
-          isAdmin={isAdminUser}
-          lang={lang}
-          onClose={() => setContactLead(null)}
-          onSave={handleSaveContactLog}
-        />
-      )}
+        {/* Installment Payment Tracking Modal (ຕາຕະລາງຕິດຕາມການເກັບເງິນງວດ) */}
+        {selectedCustomerForInstallments && (
+          <InstallmentLedgerModal
+            isOpen={!!selectedCustomerForInstallments}
+            onClose={() => setSelectedCustomerForInstallments(null)}
+            customer={selectedCustomerForInstallments}
+            vehicles={vehicles}
+            currentUser={currentUser}
+            lang={lang}
+            onUpdateCustomerRecords={handleUpdateCustomerRecords}
+          />
+        )}
+
+        {/* Payment Confirmation Modal (ຢືນຢັນການຊຳລະ & ຍ້າຍໄປຊ່ອງ "ຈ່າຍແລ້ວ") */}
+        {customerToConfirmPayment && (
+          <PaymentConfirmModal
+            isOpen={!!customerToConfirmPayment}
+            onClose={() => setCustomerToConfirmPayment(null)}
+            customer={customerToConfirmPayment}
+            vehicles={vehicles}
+            currentUser={currentUser}
+            lang={lang}
+            onConfirmPayment={handleConfirmCustomerPayment}
+          />
+        )}
+
+        {/* Booking deposit / vehicle delivery */}
+        {pipelineAction && (() => {
+          const target = leads.find(l => l.id === pipelineAction.leadId);
+          return target ? (
+            <PipelineActionModal
+              mode={pipelineAction.mode}
+              lead={target}
+              staffName={currentUser?.name}
+              staffOptions={Array.from(new Set(leads.map(l => l.assignedTo).filter((n): n is string => Boolean(n))))}
+              lang={lang}
+              onClose={() => setPipelineAction(null)}
+              onSave={handlePipelineSave}
+            />
+          ) : null;
+        })()}
+
+        {/* Contact Log & Follow-up Modal */}
+        {contactLead && (
+          <ContactLogModal
+            lead={leads.find(l => l.id === contactLead.id) || contactLead}
+            staffName={currentUser?.name}
+            isAdmin={isAdminUser}
+            lang={lang}
+            onClose={() => setContactLead(null)}
+            onSave={handleSaveContactLog}
+          />
+        )}
+        </Suspense>
+      </ErrorBoundary>
 
       {/* Confirmation Popup Modal for Deleting Customer */}
       <ConfirmDeleteModal
@@ -2853,41 +2889,53 @@ export default function CustomerView({
         lang={lang}
       />
 
-      {/* Customer After-Sales & Warranty Profile Editor Modal */}
-      {selectedOwnerForAfterSales && (
-        <CustomerAfterSalesModal
-          isOpen={isAfterSalesModalOpen}
-          onClose={() => {
-            setIsAfterSalesModalOpen(false);
-            setSelectedOwnerForAfterSales(null);
-          }}
-          customer={selectedOwnerForAfterSales}
-          vehicles={vehicles}
-          lang={lang}
-          onSave={handleSaveAfterSalesProfile}
-        />
-      )}
+      <ErrorBoundary>
+        <Suspense
+          fallback={
+            selectedOwnerForAfterSales || serviceModalCustomer ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs text-white text-sm font-medium">
+                ກຳລັງໂຫຼດ...
+              </div>
+            ) : null
+          }
+        >
+        {/* Customer After-Sales & Warranty Profile Editor Modal */}
+        {selectedOwnerForAfterSales && (
+          <CustomerAfterSalesModal
+            isOpen={isAfterSalesModalOpen}
+            onClose={() => {
+              setIsAfterSalesModalOpen(false);
+              setSelectedOwnerForAfterSales(null);
+            }}
+            customer={selectedOwnerForAfterSales}
+            vehicles={vehicles}
+            lang={lang}
+            onSave={handleSaveAfterSalesProfile}
+          />
+        )}
 
-      {/* Service Appointment Booking Modal for After-Sales */}
-      {serviceModalCustomer && (
-        <ServiceModal
-          isOpen={!!serviceModalCustomer}
-          onClose={() => setServiceModalCustomer(null)}
-          onAddService={async (newService) => {
-            // Parent handler saves, toasts success/error, and throws on failure
-            // so the modal stays open with the user's input.
-            if (onAddService) await onAddService(newService);
-          }}
-          lang={lang}
-          modelOptions={vehicles.map(v => v.name)}
-          initialCustomerName={serviceModalCustomer.name}
-          initialPhone={serviceModalCustomer.phone}
-          initialPlateNumber={serviceModalCustomer.plateNumber}
-          initialModel={serviceModalCustomer.model}
-          initialMileageKm={serviceModalCustomer.mileageKm}
-          initialBatteryHealthPercent={serviceModalCustomer.batteryHealthPercent}
-        />
-      )}
+        {/* Service Appointment Booking Modal for After-Sales */}
+        {serviceModalCustomer && (
+          <ServiceModal
+            isOpen={!!serviceModalCustomer}
+            onClose={() => setServiceModalCustomer(null)}
+            onAddService={async (newService) => {
+              // Parent handler saves, toasts success/error, and throws on failure
+              // so the modal stays open with the user's input.
+              if (onAddService) await onAddService(newService);
+            }}
+            lang={lang}
+            modelOptions={vehicles.map(v => v.name)}
+            initialCustomerName={serviceModalCustomer.name}
+            initialPhone={serviceModalCustomer.phone}
+            initialPlateNumber={serviceModalCustomer.plateNumber}
+            initialModel={serviceModalCustomer.model}
+            initialMileageKm={serviceModalCustomer.mileageKm}
+            initialBatteryHealthPercent={serviceModalCustomer.batteryHealthPercent}
+          />
+        )}
+        </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }

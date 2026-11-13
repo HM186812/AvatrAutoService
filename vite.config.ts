@@ -81,8 +81,7 @@ export default defineConfig(({ mode, command }) => {
             if (
               id.includes('node_modules/jspdf') ||
               id.includes('node_modules/html2canvas') ||
-              id.includes('node_modules/html2pdf') ||
-              id.includes('node_modules/docx')
+              id.includes('node_modules/canvg')
             ) {
               return 'vendor-pdf';
             }

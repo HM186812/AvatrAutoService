@@ -117,7 +117,7 @@ export async function exportElementToPdf(
       leftHeight -= pageCanvasHeight;
 
       while (leftHeight > 0) {
-        position = position - pageHeight;
+        position = position - availableHeight;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', marginLeft, position, availableWidth, (canvas.height * availableWidth) / canvas.width, undefined, 'FAST');
         leftHeight -= pageCanvasHeight;

@@ -10,7 +10,8 @@ import {
   deleteVehicleModelFromSupabase,
   saveInventoryItemToSupabase
 } from '../../supabase';
-import { ConfirmDeleteModal, EditVehicleModelModal } from '../modals';
+import ConfirmDeleteModal from '../modals/ConfirmDeleteModal';
+import EditVehicleModelModal from '../modals/EditVehicleModelModal';
 import { showToast, ToastType } from '../common';
 import {
   PackagePlus,

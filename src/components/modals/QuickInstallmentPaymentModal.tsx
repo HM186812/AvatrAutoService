@@ -41,14 +41,14 @@ export default function QuickInstallmentPaymentModal({
   lang = 'lo',
   onPaymentSuccess,
 }: QuickInstallmentPaymentModalProps) {
-  if (!isOpen || !customer) return null;
-
-  const matchingVehicle = vehicles.find(v => v.name === customer.interestedModel) || vehicles[0];
+  const matchingVehicle = customer
+    ? vehicles.find(v => v.name === customer.interestedModel) || vehicles[0]
+    : vehicles[0];
   const vehiclePriceUSD = matchingVehicle?.priceStartingUSD || 45000;
 
   // Load customer schedule
-  const records = generateInstallmentSchedule(customer, vehiclePriceUSD);
-  
+  const records = customer ? generateInstallmentSchedule(customer, vehiclePriceUSD) : [];
+
   // Find the earliest unpaid period
   const nextUnpaidRecord = records.find(r => r.status !== 'paid') || records[records.length - 1];
   const paidCount = records.filter(r => r.status === 'paid').length;
@@ -59,8 +59,8 @@ export default function QuickInstallmentPaymentModal({
   const [bankName, setBankName] = useState('BCEL One (ທຄຕລ)');
   const [payRef, setPayRef] = useState(() => `TRF-${Math.floor(100000 + Math.random() * 900000)}`);
   const [payAmountUSD, setPayAmountUSD] = useState<number>(nextUnpaidRecord?.amountUSD || 780);
-  const [payNotes, setPayNotes] = useState(() => `ຊຳລະຄ່າງວດລົດ ${customer.interestedModel} ງວດທີ ${nextUnpaidRecord?.period || 1}`);
-  
+  const [payNotes, setPayNotes] = useState(() => `ຊຳລະຄ່າງວດລົດ ${customer?.interestedModel || ''} ງວດທີ ${nextUnpaidRecord?.period || 1}`);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [receiptCreated, setReceiptCreated] = useState<{
     receiptNo: string;
@@ -70,6 +70,9 @@ export default function QuickInstallmentPaymentModal({
     date: string;
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isExportingReceiptPdf, setIsExportingReceiptPdf] = useState(false);
+
+  if (!isOpen || !customer) return null;
 
   const amountLAK = Math.round(payAmountUSD * DEFAULT_EXCHANGE_RATE_LAK);
 
@@ -81,15 +84,16 @@ export default function QuickInstallmentPaymentModal({
     setErrorMsg(null);
 
     const receiptNumber = `REC-INS-${customer.id.replace(/\D/g, '').slice(-4) || '001'}-${String(nextUnpaidRecord.period).padStart(2, '0')}`;
-    
+
     const updatedRecords = records.map(r => {
       if (r.period === nextUnpaidRecord.period) {
+        const finalUSD = Number(payAmountUSD) || r.amountUSD;
         return {
           ...r,
           status: 'paid' as const,
           paidDate: payDate,
-          paidAmountUSD: Number(payAmountUSD) || r.amountUSD,
-          paidAmountLAK: (Number(payAmountUSD) || r.amountUSD) * DEFAULT_EXCHANGE_RATE_LAK,
+          paidAmountUSD: finalUSD,
+          paidAmountLAK: Math.round(finalUSD * DEFAULT_EXCHANGE_RATE_LAK),
           paymentMethod: payMethod,
           bankName: payMethod === 'transfer' ? bankName : undefined,
           transferRef: payMethod === 'transfer' ? payRef.trim() : undefined,
@@ -103,20 +107,20 @@ export default function QuickInstallmentPaymentModal({
 
     try {
       await onPaymentSuccess(customer.id, updatedRecords);
+      const finalUSD = Number(payAmountUSD) || nextUnpaidRecord.amountUSD;
       setReceiptCreated({
         receiptNo: receiptNumber,
         period: nextUnpaidRecord.period,
-        amountUSD: Number(payAmountUSD) || nextUnpaidRecord.amountUSD,
-        amountLAK: (Number(payAmountUSD) || nextUnpaidRecord.amountUSD) * DEFAULT_EXCHANGE_RATE_LAK,
+        amountUSD: finalUSD,
+        amountLAK: Math.round(finalUSD * DEFAULT_EXCHANGE_RATE_LAK),
         date: payDate,
       });
     } catch (err: any) {
       setErrorMsg(err?.message || 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກຮັບເງິນງວດ');
+    } finally {
       setIsSubmitting(false);
     }
   };
-
-  const [isExportingReceiptPdf, setIsExportingReceiptPdf] = useState(false);
 
   const handleDownloadReceiptPdf = async () => {
     if (!receiptCreated) return;

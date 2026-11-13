@@ -6,7 +6,7 @@ import {
   Calendar, 
   Car
 } from 'lucide-react';
-import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
+import { DEFAULT_EXCHANGE_RATE_LAK, generateInstallmentSchedule } from '../../utils/installment';
 
 interface PaymentConfirmModalProps {
   isOpen: boolean;
@@ -26,48 +26,56 @@ export default function PaymentConfirmModal({
   currentUser,
   onConfirmPayment,
 }: PaymentConfirmModalProps) {
-  if (!isOpen || !customer) return null;
-
-  const matchingVehicle = vehicles.find(v => v.name === customer.interestedModel) || vehicles[0];
+  const matchingVehicle = customer
+    ? vehicles.find(v => v.name === customer.interestedModel) || vehicles[0]
+    : vehicles[0];
   const vehiclePriceUSD = matchingVehicle?.priceStartingUSD || 45000;
 
-  const isInstallment = customer.paymentType === 'installment' || customer.paymentType === 'finance';
+  const isInstallment = customer?.paymentType === 'installment' || customer?.paymentType === 'finance';
   const defaultPayType: 'deposit' | 'down_payment' | 'full' = isInstallment ? 'down_payment' : 'full';
 
   const [paymentTypeConfirmed, setPaymentTypeConfirmed] = useState<'deposit' | 'down_payment' | 'full' | 'installment'>(defaultPayType);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  
+
   // Intelligent pre-filled default amount
-  const initialAmountUSD = isInstallment 
-    ? (customer.downPaymentUSD || Math.round(vehiclePriceUSD * ((customer.downPaymentPercent || 30) / 100)))
+  const downPct = customer?.downPaymentPercent != null ? Number(customer.downPaymentPercent) : 30;
+  const initialAmountUSD = isInstallment
+    ? (customer?.downPaymentUSD != null ? Number(customer.downPaymentUSD) : Math.round(vehiclePriceUSD * (downPct / 100)))
     : vehiclePriceUSD;
 
   const [amountUSD, setAmountUSD] = useState<number>(initialAmountUSD);
   const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'cash' | 'finance'>('transfer');
-  const [payerAccountName, setPayerAccountName] = useState(customer.customerName);
+  const [payerAccountName, setPayerAccountName] = useState(customer?.customerName || '');
   const [transferRef, setTransferRef] = useState(`REF-${Math.floor(100000 + Math.random() * 900000)}`);
-  const [receiptNo, setReceiptNo] = useState(`REC-${customer.id.replace(/\D/g, '') || '01'}/KM7`);
+  const [receiptNo, setReceiptNo] = useState(`REC-${customer?.id?.replace(/\D/g, '') || '01'}/KM7`);
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState(
     isInstallment ? 'ຢືນຢັນຮັບເງິນວາງດາວ ແລະ ເຊັນສັນຍາສິນເຊື່ອຮຽບຮ້ອຍ' : 'ຢືນຢັນການຊຳລະຄົບຖ້ວນ ຍ້າຍສະຖານະໄປຈ່າຍແລ້ວ'
   );
 
+  if (!isOpen || !customer) return null;
+
   // When paymentTypeConfirmed changes, intelligently adapt amount
   const handleTypeChange = (type: 'deposit' | 'down_payment' | 'full' | 'installment') => {
     setPaymentTypeConfirmed(type);
     if (type === 'deposit') {
-      setAmountUSD(2000);
+      setAmountUSD(customer.bookingDepositUSD || 2000);
       setNotes('ຢືນຢັນຮັບເງິນມັດຈຳຈອງຍານພາຫະນະ EV');
     } else if (type === 'down_payment') {
-      const downUSD = customer.downPaymentUSD || Math.round(vehiclePriceUSD * ((customer.downPaymentPercent || 30) / 100));
+      const dpPct = customer.downPaymentPercent != null ? Number(customer.downPaymentPercent) : 30;
+      const downUSD = customer.downPaymentUSD != null
+        ? Number(customer.downPaymentUSD)
+        : Math.round(vehiclePriceUSD * (dpPct / 100));
       setAmountUSD(downUSD);
       setNotes('ຢືນຢັນຮັບເງິນວາງດາວສຳເລັດ ພ້ອມມອບລົດ');
     } else if (type === 'full') {
       setAmountUSD(vehiclePriceUSD);
       setNotes('ຢືນຢັນຮັບຊຳລະຄ່າລົດເຕັມຈຳນວນ (ຈ່າຍແລ້ວ 100%)');
     } else if (type === 'installment') {
-      const monthlyUSD = Math.round(customer.monthlyPaymentLAK ? customer.monthlyPaymentLAK / DEFAULT_EXCHANGE_RATE_LAK : 850);
+      const monthlyUSD = customer.monthlyPaymentLAK
+        ? Math.round(customer.monthlyPaymentLAK / DEFAULT_EXCHANGE_RATE_LAK)
+        : (generateInstallmentSchedule(customer, vehiclePriceUSD)[0]?.amountUSD || 0);
       setAmountUSD(monthlyUSD);
       setNotes('ຢືນຢັນຮັບເງິນງວດປະຈຳເດືອນ');
     }
@@ -78,21 +86,35 @@ export default function PaymentConfirmModal({
     setIsSubmitting(true);
     setSubmitError(null);
 
+    const trimmedPayer = payerAccountName.trim();
+    const payerNote = trimmedPayer && trimmedPayer !== customer.customerName ? ` [ຜູ້ໂອນ: ${trimmedPayer}]` : '';
+    const trimmedNotes = notes.trim();
+    const paymentMethodRef =
+      paymentMethod === 'transfer'
+        ? (transferRef.trim() || 'TRANSFER')
+        : paymentMethod === 'finance'
+          ? (transferRef.trim() || 'FINANCE-PLAN')
+          : 'CASH-PAYMENT';
+    const paymentBank =
+      paymentMethod === 'transfer' ? 'TRANSFER' : paymentMethod === 'finance' ? 'FINANCE' : 'CASH';
+
     const updatedLead: Lead = {
       ...customer,
       // The user specifically requested: "ເມື່ອປ້ອນຂໍ້ມູນຢືນຢັນຂໍມູນລູກຄ້າຈະຍ້າຍໄປຢູ່ຊ່ອງຈ້າຍແລ້ວ"
       status: 'delivered', // Move customer to "ຈ່າຍແລ້ວ / ສົ່ງມອບສຳເລັດ"
       installmentStatus: isInstallment ? 'contract_signed' : customer.installmentStatus,
       paidAmountUSD: Number(amountUSD) || 0,
-      paidAmountLAK: (Number(amountUSD) || 0) * DEFAULT_EXCHANGE_RATE_LAK,
+      paidAmountLAK: Math.round((Number(amountUSD) || 0) * DEFAULT_EXCHANGE_RATE_LAK),
       paymentDate: paymentDate ? `${paymentDate} ${new Date().toTimeString().slice(0, 5)}` : new Date().toISOString().slice(0, 16).replace('T', ' '),
-      paymentMethodRef: paymentMethod === 'transfer' ? transferRef.trim() : 'CASH-PAYMENT',
-      paymentBank: paymentMethod === 'transfer' ? 'TRANSFER' : 'CASH',
+      paymentMethodRef,
+      paymentBank,
       paymentReceiptNo: receiptNo.trim(),
       paymentConfirmedBy: currentUser?.name || customer.assignedTo || 'Admin',
       paymentTypeConfirmed: paymentTypeConfirmed,
       lastFollowUp: paymentDate ? `${paymentDate} ${new Date().toTimeString().slice(0, 5)}` : new Date().toISOString().slice(0, 16).replace('T', ' '),
-      notes: notes.trim() ? `${customer.notes ? customer.notes + ' | ' : ''}[ຢືນຢັນຊຳລະແລ້ວ: $${amountUSD.toLocaleString()} USD]: ${notes.trim()}` : customer.notes,
+      notes: trimmedNotes
+        ? `${customer.notes ? customer.notes + ' | ' : ''}[ຢືນຢັນຊຳລະແລ້ວ: $${amountUSD.toLocaleString()} USD]${payerNote}: ${trimmedNotes}`
+        : `${customer.notes || ''}${payerNote}`.trim(),
     };
 
     try {
@@ -228,7 +250,7 @@ export default function PaymentConfirmModal({
                 ມູນຄ່າທຽບເທົ່າ (LAK)
               </label>
               <div className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-emerald-400 font-mono text-base font-bold flex items-center justify-between">
-                <span>{(amountUSD * DEFAULT_EXCHANGE_RATE_LAK).toLocaleString()}</span>
+                <span>{Math.round(amountUSD * DEFAULT_EXCHANGE_RATE_LAK).toLocaleString()}</span>
                 <span className="text-zinc-500 text-xs font-normal">ກີບ (LAK)</span>
               </div>
             </div>

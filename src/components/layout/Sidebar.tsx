@@ -25,7 +25,6 @@ interface SidebarProps {
   lowStockCount: number;
   outOfStockCount: number;
   billsCount?: number;
-  installmentCount?: number;
   pendingRequestsCount?: number;
   currentUser: SystemUser;
   allUsers: SystemUser[];

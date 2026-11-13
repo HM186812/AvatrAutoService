@@ -2,7 +2,6 @@ export { default as NewLeadModal } from './NewLeadModal';
 export { default as QuotationModal } from './QuotationModal';
 export { default as ServiceModal } from './ServiceModal';
 export { default as TestDriveModal } from './TestDriveModal';
-export { default as VehicleModal } from './VehicleModal';
 export { default as CurrencyModal } from './CurrencyModal';
 export { default as ConfirmDeleteModal } from './ConfirmDeleteModal';
 export { default as CustomerDocumentsModal } from './CustomerDocumentsModal';

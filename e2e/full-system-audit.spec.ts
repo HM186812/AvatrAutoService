@@ -3,7 +3,7 @@ import path from 'path';
 import { TEST_CREDENTIALS } from './helpers/auth';
 
 test('Full Comprehensive System Test - Every View and Action', async ({ page }) => {
-  const screenshotsDir = path.resolve(process.cwd(), 'docs/verification-screenshots/full-audit');
+  const screenshotsDir = path.resolve(process.cwd(), 'test-results/screenshots/full-audit');
 
   console.log('=== [1/11] AUTHENTICATION & LOGIN ===');
   await page.goto('/');

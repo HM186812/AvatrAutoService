@@ -52,7 +52,7 @@ function findSaleBill(lead: Lead, bills: InvoiceBillRecord[]): InvoiceBillRecord
 /** Contract price: the customer's recorded price → the sale bill → the model's starting price. */
 export function getContractPriceUSD(lead: Lead, vehicles: VehicleModel[], bills: InvoiceBillRecord[] = []): number {
   const recorded = Number(lead.listPriceUSD);
-  if (recorded > 0) return recorded;
+  if (recorded > 0) return Math.max(0, recorded - Math.max(0, Number(lead.discountUSD) || 0));
   const fromBill = billPriceUSD(findSaleBill(lead, bills));
   if (fromBill) return fromBill;
   const model = vehicles.find(v => v.name === lead.interestedModel);
@@ -150,7 +150,7 @@ export function buildInstallmentContracts(
 }
 
 export function summarizeInstallmentPortfolio(contracts: InstallmentContract[], today: Date = new Date()) {
-  const todayKey = today.toISOString().slice(0, 10);
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   let totalVehicleValueUSD = 0;
   let totalDownPaymentUSD = 0;
   let totalFinancedUSD = 0;

@@ -3,7 +3,7 @@ import path from 'path';
 import { TEST_CREDENTIALS } from './helpers/auth';
 
 test('Verify Live Website Login with test admin credentials', async ({ page }) => {
-  const screenshotsDir = path.resolve(process.cwd(), 'docs/verification-screenshots');
+  const screenshotsDir = path.resolve(process.cwd(), 'test-results/screenshots');
 
   console.log('--- Step 1: Navigate to Web Application ---');
   await page.goto('/');

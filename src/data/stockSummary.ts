@@ -3,7 +3,7 @@ import type { InventoryItem, StockStatus, VehicleModel } from '../types';
 export const LOW_STOCK_THRESHOLD = 5;
 
 /** Units that exist but are not physically here or not fit to sell. */
-export const NOT_ON_HAND_STATUSES: StockStatus[] = ['in_transit', 'problem', 'parts_donor'];
+export const NOT_ON_HAND_STATUSES: StockStatus[] = ['in_transit', 'problem', 'parts_donor', 'removed'];
 
 /** Statuses a salesperson may sell from, once PDI has passed. */
 export const SALE_READY_STATUSES: StockStatus[] = ['ready', 'event', 'promotion'];

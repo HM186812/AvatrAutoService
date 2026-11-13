@@ -43,9 +43,10 @@ A modern, high-performance Dealership CRM, POS, and Auto Service Management Syst
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons
-- **Backend & Cloud**: Supabase (PostgreSQL, Supabase Auth, Supabase Storage, Realtime Subscriptions)
-- **Testing & Verification**: Playwright E2E Suite (34 automated live & chaos integration tests)
-- **Local Persistence**: Browser Session & Development Demo Storage (Dev Sandbox Only)
+- **Backend & Cloud**: Supabase (PostgreSQL, Supabase Auth, Supabase Storage, Deno Edge Functions, Realtime Subscriptions)
+- **Hosting & CDN**: Cloudflare Workers Static Assets
+- **Testing & Verification**: Playwright E2E Suite (configured via `.env.test` against a dedicated staging/local Supabase project)
+- **Local Persistence**: Browser Session & Development Demo Storage (`VITE_ENABLE_OFFLINE_DEMO=true` dev sandbox only)
 
 ---
 
@@ -85,7 +86,6 @@ npx supabase link --project-ref your-project-ref
 # Push all database migrations, RLS policies, RPCs, and storage buckets
 npx supabase db push
 ```
-> Note: Legacy `supabase_schema.sql` has been archived in `docs/legacy/` and should not be used for new deployments.
 
 ### 5. Run the Application
 ```bash

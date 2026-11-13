@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { VehicleModel, Language } from '../../types';
+import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import AvatrLogo from '../layout/AvatrLogo';
 import { X, Printer, Download, CheckCircle, Loader2, Calendar } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
@@ -31,6 +32,10 @@ export default function QuotationModal({
   const [latestIssuance, setLatestIssuance] = useState(() =>
     getLatestDocumentIssuance('quotation', customerName)
   );
+  const [quotationNumber] = useState(
+    () => `AVATR-QT-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
+  );
+  const companyBankInfo = getStoredCompanyBankInfo();
   const rateLAK = 22000;
 
   if (!isOpen) return null;
@@ -46,7 +51,6 @@ export default function QuotationModal({
   const monthlyPaymentUSD = Math.round(totalRepaymentUSD / loanMonths);
   const monthlyPaymentLAK = monthlyPaymentUSD * rateLAK;
 
-  const quotationNumber = `AVATR-QT-2026-${Math.floor(100000 + Math.random() * 900000)}`;
   const dateStr = quoteDate 
     ? new Date(quoteDate).toLocaleDateString('lo-LA', { year: 'numeric', month: 'long', day: 'numeric' })
     : new Date().toLocaleDateString('lo-LA', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -175,13 +179,13 @@ export default function QuotationModal({
                     ສັນຕິພາບ ເອກະລາດ ປະຊາທິປະໄຕ ເອກະພາບ ວັດທະນາຖາວອນ
                   </p>
                   <h2 className="text-base sm:text-lg font-black tracking-widest text-black leading-tight">
-                    AVATR AUTO SERVICE SOLE CO., LTD
+                    {companyBankInfo.accountName}
                   </h2>
                   <p className="text-[11px] text-black font-semibold tracking-wide">
                     Changan × Huawei × CATL Luxury Intelligent EVs (Laos)
                   </p>
                   <p className="text-[10px] text-black mt-0.5">
-                    ໂຊຣູມໃຫຍ່: ຫຼັກ 3 ຖະໜົນທ່າເດື່ອ, ນະຄອນຫຼວງວຽງຈັນ | Hotline: +856 20 55575537
+                    {companyBankInfo.branch} | Hotline: {companyBankInfo.hotline}
                   </p>
                 </div>
                 <div className="hidden sm:block shrink-0 w-[3cm]" aria-hidden="true" />
@@ -382,7 +386,7 @@ export default function QuotationModal({
             {/* Complimentary Perks & Inclusions */}
             <div className="bg-zinc-50 border border-black rounded-lg p-3 text-[11px] text-black space-y-1.5">
               <span className="font-bold text-black block text-xs uppercase">
-                ສິດທິພິເສດ ແລະ ຂອງແຖມມາດຕະຖານ avatrAutoService:
+                ສິດທິພິເສດ ແລະ ຂອງແຖມມາດຕະຖານ {companyBankInfo.accountName}:
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
                 <div className="flex items-center gap-1.5">
@@ -417,7 +421,7 @@ export default function QuotationModal({
               <div className="border-b border-dashed border-black w-44 text-center pb-0.5">
                 <span className="font-bold text-black">AVATR Executive</span>
               </div>
-              <p className="text-black mt-1 text-[11px]">avatrAutoService Laos</p>
+              <p className="text-black mt-1 text-[11px]">{companyBankInfo.accountName}</p>
             </div>
           </div>
         </div>

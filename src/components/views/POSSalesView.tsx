@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { isAdminRole } from '../../utils/roles';
 import { InventoryItem, VehicleModel, Language, InvoiceBillRecord, StockLogRecord, SystemUser, Lead } from '../../types';
-import { getStoredCompanyBankInfo, saveStoredCompanyBankInfo, CompanyBankInfo } from '../../data/companySettings';
+import { getStoredCompanyBankInfo, saveStoredCompanyBankInfo, CompanyBankInfo, DEFAULT_COMPANY_BANK_INFO } from '../../data/companySettings';
 import { translations } from '../../data/translations';
 import { LAO_PROVINCES } from '../../data/laoProvinces';
 import {
@@ -1651,7 +1651,7 @@ export default function POSSalesView({
                       <div className="w-full max-w-sm flex flex-col items-center justify-center p-5 sm:p-6 bg-white rounded-3xl shadow-2xl text-black space-y-3.5 border border-zinc-200">
                         <div className="w-full text-center border-b border-zinc-200 pb-2">
                           <span className="text-xs font-black tracking-wider text-black block truncate">
-                            {companyBankInfo.accountName || 'AVATR AUTO SERVICE SOLE CO., LTD'}
+                            {companyBankInfo.accountName || DEFAULT_COMPANY_BANK_INFO.accountName}
                           </span>
                         </div>
 
@@ -2198,7 +2198,7 @@ export default function POSSalesView({
               <div className="p-4 bg-white rounded-2xl shadow-xl flex flex-col items-center justify-center space-y-2 text-black">
                 <div className="w-full text-center border-b border-zinc-200 pb-1">
                   <span className="text-xs font-black tracking-wider text-black block truncate">
-                    AVATR AUTO SERVICE LAOS
+                    {companyBankInfo.accountName || DEFAULT_COMPANY_BANK_INFO.accountName}
                   </span>
                   <span className="text-[10px] font-bold text-zinc-700 block">
                     {t.scanQrToPay}
@@ -2317,7 +2317,7 @@ export default function POSSalesView({
                       ສັນຕິພາບ ເອກະລາດ ປະຊາທິປະໄຕ ເອກະພາບ ວັດທະນາຖາວອນ
                     </p>
                     <span className="font-black tracking-widest text-base sm:text-lg text-black block leading-tight">
-                      AVATR AUTO SERVICE SOLE CO., LTD
+                      {companyBankInfo.accountName || DEFAULT_COMPANY_BANK_INFO.accountName}
                     </span>
                     <p className="text-[10.5px] text-black font-semibold">
                       ສູນຈຳໜ່າຍ ແລະ ບໍລິການລົດຍົນໄຟຟ້າ AVATR ຢ່າງເປັນທາງການ

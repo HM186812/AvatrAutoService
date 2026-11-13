@@ -7,7 +7,8 @@ import {
   deleteInventoryItemFromSupabase,
   saveVehicleModelToSupabase
 } from '../../supabase';
-import { ConfirmDeleteModal, EditVehicleModelModal } from '../modals';
+import ConfirmDeleteModal from '../modals/ConfirmDeleteModal';
+import EditVehicleModelModal from '../modals/EditVehicleModelModal';
 import ImportStockCsvModal from '../modals/ImportStockCsvModal';
 import { showToast, ToastType } from '../common';
 import {
@@ -344,7 +345,7 @@ export default function InventoryView({
   // Stored timestamps are UTC; show them as local (Laos) date and time
   const formatLogTime = (value?: string) => {
     if (!value) return '';
-    if (!/[zZ]|[+-]d{2}:?d{2}$/.test(value)) return value;
+    if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(value)) return value;
     const d = new Date(value);
     if (isNaN(d.getTime())) return value;
     const pad = (n: number) => String(n).padStart(2, '0');

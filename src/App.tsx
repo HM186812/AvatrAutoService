@@ -27,13 +27,13 @@ import {
 } from './backend/data';
 import { DEFAULT_OFFLINE_USERS } from './backend/offlineStore';
 import { getDueFollowUps, makeContactEntry } from './utils/followUp';
-import { getInstallmentCustomers } from './utils/installmentPortfolio';
 import { isAdminRole, canAccessMenu, normalizeRole, ROLE_LABELS } from './utils/roles';
 import { isMonthlyInstallmentBill } from './utils/installment';
 import { newRecordId } from './backend/ids';
 // Categorized Components & Views
 import { Sidebar } from './components/layout';
 import AvatrLogo from './components/layout/AvatrLogo';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { CompanyBankInfo, getStoredCompanyBankInfo, saveStoredCompanyBankInfo } from './data/companySettings';
 import { ToastContainer, showToast, ToastType, ViewSkeleton } from './components/common';
 import { LoginView } from './components/auth';
@@ -55,7 +55,6 @@ const NewLeadModal = lazy(() => import('./components/modals/NewLeadModal'));
 const QuotationModal = lazy(() => import('./components/modals/QuotationModal'));
 const ServiceModal = lazy(() => import('./components/modals/ServiceModal'));
 const TestDriveModal = lazy(() => import('./components/modals/TestDriveModal'));
-const VehicleModal = lazy(() => import('./components/modals/VehicleModal'));
 const CustomerPickerModal = lazy(() => import('./components/modals/CustomerPickerModal'));
 import { 
   Menu, 
@@ -450,10 +449,6 @@ export default function App() {
   const lowStockCount = modelStockSummaries.filter(m => m.isLowStock).length;
   const outOfStockCount = modelStockSummaries.filter(m => m.isOutOfStock).length;
 
-  // Active installment & leasing portfolio count
-  // Same customer set as the Dashboard and the Installment page
-  const installmentCount = useMemo(() => getInstallmentCustomers(leads, bills).length, [leads, bills]);
-
   // Modal States
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
   const [leadToEdit, setLeadToEdit] = useState<Lead | null>(null);
@@ -461,9 +456,6 @@ export default function App() {
   const [isServiceOpen, setIsServiceOpen] = useState(false);
   const [isTestDriveOpen, setIsTestDriveOpen] = useState(false);
   const [testDriveInitialModel, setTestDriveInitialModel] = useState('AVATR 12');
-  
-  const [selectedVehicleForModal] = useState<VehicleModel | null>(null);
-  const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
 
   const [quoteVehicle, setQuoteVehicle] = useState<VehicleModel | null>(null);
   const [quoteCustomerName, setQuoteCustomerName] = useState<string | undefined>(undefined);
@@ -742,11 +734,6 @@ export default function App() {
     }
   };
 
-  const handleOpenTestDriveForModel = (modelName: string) => {
-    setTestDriveInitialModel(modelName);
-    setIsTestDriveOpen(true);
-  };
-
   const handleOpenQuoteForVehicle = (vehicle: VehicleModel, customerName?: string) => {
     setQuoteVehicle(vehicle);
     setQuoteCustomerName(customerName);
@@ -817,7 +804,6 @@ export default function App() {
         lowStockCount={lowStockCount}
         outOfStockCount={outOfStockCount}
         billsCount={bills.length}
-        installmentCount={installmentCount}
         currentUser={currentUser}
         allUsers={users}
         isMobileOpen={isMobileSidebarOpen}
@@ -971,7 +957,8 @@ export default function App() {
 
         {/* Content Views */}
         <main className="app-content flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto">
-          <Suspense fallback={<ViewSkeleton />}>
+          <ErrorBoundary>
+            <Suspense fallback={<ViewSkeleton />}>
             {currentMenu === 'dashboard' && (
             <DashboardView
               leads={leads}
@@ -1160,14 +1147,24 @@ export default function App() {
               setLeads={setLeads}
             />
           )}
-          </Suspense>
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 
 
 
       {/* Lazy-loaded Modals with Suspense */}
-      <Suspense fallback={null}>
+      <ErrorBoundary>
+        <Suspense
+          fallback={
+            isNewLeadOpen || Boolean(leadToEdit) || isCustomerPickerOpen || isServiceOpen || isTestDriveOpen || (quoteVehicle && isQuoteOpen) ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs text-white text-sm font-medium">
+                ກຳລັງໂຫຼດ...
+              </div>
+            ) : null
+          }
+        >
         {(isNewLeadOpen || leadToEdit) && (
           <NewLeadModal
             key={leadToEdit ? `edit-${leadToEdit.id}` : 'new'}
@@ -1220,17 +1217,6 @@ export default function App() {
           />
         )}
 
-        {isVehicleModalOpen && (
-          <VehicleModal
-            vehicle={selectedVehicleForModal}
-            isOpen={isVehicleModalOpen}
-            onClose={() => setIsVehicleModalOpen(false)}
-            onOpenQuote={handleOpenQuoteForVehicle}
-            onOpenTestDrive={handleOpenTestDriveForModel}
-            lang={lang}
-          />
-        )}
-
         {quoteVehicle && isQuoteOpen && (
           <QuotationModal
             isOpen={isQuoteOpen}
@@ -1240,7 +1226,8 @@ export default function App() {
             lang={lang}
           />
         )}
-      </Suspense>
+        </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }

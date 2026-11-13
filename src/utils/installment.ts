@@ -27,15 +27,17 @@ export function generateInstallmentSchedule(
   }
 
   const tenure = Number(customer.tenureMonths) || 48;
-  const downPaymentPercent = Number(customer.downPaymentPercent) || 30;
-  const downPaymentUSD = customer.downPaymentUSD || Math.round(vehiclePriceUSD * (downPaymentPercent / 100));
+  const downPaymentPercent = customer.downPaymentPercent != null ? Number(customer.downPaymentPercent) : 30;
+  const downPaymentUSD = customer.downPaymentUSD != null
+    ? Number(customer.downPaymentUSD)
+    : Math.round(vehiclePriceUSD * (downPaymentPercent / 100));
   const principalFinancedUSD = Math.max(0, vehiclePriceUSD - downPaymentUSD);
 
   const totalInterestUSD = Math.round(principalFinancedUSD * annualInterestRate * (tenure / 12));
-  const monthlyInterestUSD = Math.round(totalInterestUSD / tenure);
+  const monthlyTotalUSD = Math.round((principalFinancedUSD + totalInterestUSD) / tenure);
   const monthlyPrincipalUSD = Math.round(principalFinancedUSD / tenure);
-  const monthlyTotalUSD = monthlyPrincipalUSD + monthlyInterestUSD;
-  const monthlyTotalLAK = monthlyTotalUSD * exchangeRate;
+  const monthlyInterestUSD = Math.max(0, monthlyTotalUSD - monthlyPrincipalUSD);
+  const monthlyTotalLAK = Math.round(monthlyTotalUSD * exchangeRate);
 
   // Base contract date
   const baseDate = customer.createdAt ? new Date(customer.createdAt.replace(' ', 'T')) : new Date();
@@ -97,11 +99,13 @@ export function calculateInstallmentSummary(
   exchangeRate: number = DEFAULT_EXCHANGE_RATE_LAK
 ) {
   const tenure = Number(customer.tenureMonths) || (records.length || 48);
-  const downPaymentPercent = Number(customer.downPaymentPercent) || 30;
-  const downPaymentUSD = customer.downPaymentUSD || Math.round(vehiclePriceUSD * (downPaymentPercent / 100));
-  const downPaymentLAK = downPaymentUSD * exchangeRate;
+  const downPaymentPercent = customer.downPaymentPercent != null ? Number(customer.downPaymentPercent) : 30;
+  const downPaymentUSD = customer.downPaymentUSD != null
+    ? Number(customer.downPaymentUSD)
+    : Math.round(vehiclePriceUSD * (downPaymentPercent / 100));
+  const downPaymentLAK = Math.round(downPaymentUSD * exchangeRate);
   const principalFinancedUSD = Math.max(0, vehiclePriceUSD - downPaymentUSD);
-  const principalFinancedLAK = principalFinancedUSD * exchangeRate;
+  const principalFinancedLAK = Math.round(principalFinancedUSD * exchangeRate);
 
   const paidRecords = records.filter(r => r.status === 'paid');
   const paidCount = paidRecords.length;
@@ -117,8 +121,8 @@ export function calculateInstallmentSummary(
   const dueNowRecords = records.filter(r => r.status === 'due');
   const overdueRecords = records.filter(r => r.status === 'overdue');
 
-  const monthlyPaymentUSD = records[0]?.amountUSD || Math.round(((principalFinancedUSD * (1 + 0.075 * (tenure / 12))) / tenure));
-  const monthlyPaymentLAK = records[0]?.amountLAK || (monthlyPaymentUSD * exchangeRate);
+  const monthlyPaymentUSD = records[0]?.amountUSD ?? Math.round((principalFinancedUSD * (1 + DEFAULT_ANNUAL_INTEREST_RATE * (tenure / 12))) / tenure);
+  const monthlyPaymentLAK = records[0]?.amountLAK ?? Math.round(monthlyPaymentUSD * exchangeRate);
 
   const progressPercent = totalCount > 0 ? Math.round((paidCount / totalCount) * 100) : 0;
 

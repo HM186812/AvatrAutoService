@@ -1,5 +1,6 @@
 import { withVehicleFromBills } from '../../utils/documentCustomer';
 import { phoneMatches } from '../../utils/search';
+import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Lead,
@@ -112,7 +113,7 @@ export default function InstallmentDashboardView({
   // 1+2. Installment contracts: shared with the Dashboard and the Sidebar badge so every page and account agrees
   const leadsWithSummaries = useMemo(() => {
     const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
     return buildInstallmentContracts(leads, bills, vehicles).map(({ lead, priceUSD, records, summary, isCompleted }) => {
       const matchedVeh = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
@@ -124,7 +125,7 @@ export default function InstallmentDashboardView({
       const isDueSoon = nextUnpaid ? (new Date(nextUnpaid.dueDate).getTime() - today.getTime()) / (1000 * 3600 * 24) <= 7 : false;
       const isOverdue = nextUnpaid ? nextUnpaid.dueDate < todayStr : false;
 
-      const contractNo = lead.paymentReceiptNo || `AVT-FIN-${lead.id.replace(/D/g, "").slice(-4) || "001"}`;
+      const contractNo = lead.paymentReceiptNo || `AVT-FIN-${lead.id.replace(/\D/g, "").slice(-4) || "001"}`;
 
       return {
         lead,
@@ -322,6 +323,7 @@ export default function InstallmentDashboardView({
     const monthlyLAK = nextUnpaid?.amountLAK || summary.monthlyPaymentLAK;
     const monthlyUSD = nextUnpaid?.amountUSD || summary.monthlyPaymentUSD;
 
+    const bankInfo = getStoredCompanyBankInfo();
     const message = `ສະບາຍດີ ທ່ານ ${lead.customerName}, ຈາກສູນລົດໄຟຟ້າ AVATR Laos.
 
 ຂໍແຈ້ງເຕືອນຄ່າງວດລົດ ${lead.interestedModel} (ເລກສັນຍາ: ${contractNo}):
@@ -330,8 +332,8 @@ export default function InstallmentDashboardView({
 - ວັນຄົບກຳນົດ: ${nextDueDate}
 
 ຊ່ອງທາງການຊຳລະ:
-- ທະນາຄານການຄ້າຕ່າງປະເທດລາວ (BCEL): 010-12-00-08849201-001
-- ຊື່ບັນຊີ: AVATR AUTO LAOS CO., LTD
+- ${bankInfo.bankName}: ${bankInfo.usdAccount}
+- ຊື່ບັນຊີ: ${bankInfo.accountName}
 
 ເມື່ອຊຳລະແລ້ວ ກະລຸນາສົ່ງສະລິບຢັ້ງຢືນມາຍັງ WhatsApp ນີ້. ຂໍຂອບໃຈ.`;
 
