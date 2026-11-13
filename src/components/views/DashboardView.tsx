@@ -1,5 +1,6 @@
 import { withVehicleFromBills } from '../../utils/documentCustomer';
 import { phoneMatches } from '../../utils/search';
+import { downloadCsv } from '../../utils/csv';
 import { useState, useMemo, useEffect } from 'react';
 import {
   Lead,
@@ -53,12 +54,14 @@ import { getWhatsAppUrl } from '../../utils/whatsapp';
 import { buildInstallmentContracts, summarizeInstallmentPortfolio } from '../../utils/installmentPortfolio';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 import CustomerDocumentsModal from '../modals/CustomerDocumentsModal';
-import { saveLead } from '../../backend/data';
+import { confirmCustomerPayment, fetchDashboardSalesSummary } from '../../backend/data';
+import { isAdminRole } from '../../utils/roles';
 import TopSalesWidget from './TopSalesWidget';
-import { parseBillDate, isInPeriod, computeLeaderboard } from '../../utils/salesLeaderboard';
+import { parseBillDate, isInPeriod, computeLeaderboard, getCloudSalesSyncKey } from '../../utils/salesLeaderboard';
 import { usePeriodBills } from '../../utils/usePeriodBills';
 import { isMonthlyInstallmentBill } from '../../utils/installment';
 import { getDueFollowUps, getFollowUpState, formatDateKey } from '../../utils/followUp';
+import { syncInstallmentBillState, type InstallmentRecordSyncMeta } from '../../utils/installmentBillSync';
 
 interface DashboardViewProps {
   leads: Lead[];
@@ -68,6 +71,7 @@ interface DashboardViewProps {
   testDrives: TestDriveBooking[];
   vehicles: VehicleModel[];
   bills?: InvoiceBillRecord[];
+  setBills?: React.Dispatch<React.SetStateAction<InvoiceBillRecord[]>>;
   currentUser?: SystemUser | null;
   lang: Language;
   isAdmin?: boolean;
@@ -88,6 +92,7 @@ export default function DashboardView({
   testDrives,
   vehicles,
   bills = [],
+  setBills,
   currentUser,
   lang,
   isAdmin = false,
@@ -253,41 +258,38 @@ export default function DashboardView({
     });
   }, [installmentLeads, installmentStatusFilter, installmentSearchQuery]);
 
-  const handleUpdateCustomerRecords = async (customerId: string, updatedRecords: InstallmentPaymentRecord[]) => {
-    const targetLead = leads.find(l => l.id === customerId);
-    if (!targetLead) throw new Error('Customer record not found.');
-    const paidRecords = updatedRecords.filter(r => r.status === 'paid');
-    const totalPaidLAK = paidRecords.reduce((sum, r) => sum + r.amountLAK, 0);
-    const totalPaidUSD = paidRecords.reduce((sum, r) => sum + r.amountUSD, 0);
-    const updatedCust: Lead = {
-      ...targetLead,
-      installmentRecords: updatedRecords,
-      paidAmountLAK: totalPaidLAK,
-      paidAmountUSD: totalPaidUSD,
-      installmentStatus: paidRecords.length === updatedRecords.length && updatedRecords.length > 0 ? 'completed' : 'active_repaying',
-      lastFollowUp: new Date().toISOString(),
-    };
-    if (!currentUser?.id) {
-      throw new Error('Sign in again before saving installment ledger.');
-    }
-    await saveLead(updatedCust, currentUser.id);
-    if (setLeads) {
-      setLeads(prev => prev.map(l => l.id === customerId ? updatedCust : l));
+  const handleUpdateCustomerRecords = async (
+    customerId: string,
+    updatedRecords: InstallmentPaymentRecord[],
+    meta?: InstallmentRecordSyncMeta
+  ) => {
+    const updatedCust = syncInstallmentBillState({
+      customerId,
+      updatedRecords,
+      meta,
+      leads,
+      bills,
+      vehicles,
+      currentUserName: currentUser?.name,
+      setLeads,
+      setBills,
+    });
+    if (selectedLeadForLedger?.id === customerId) {
+      setSelectedLeadForLedger(updatedCust);
     }
   };
 
   const handleExportInstallmentCsv = () => {
     if (installmentLeads.length === 0) return;
     const headers = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ແຂວງ', 'ລຸ້ນລົດ', 'ເງິນດາວ %', 'ເງິນດາວ (USD)', 'ຍອດກູ້ຢືມ (USD)', 'ໄລຍະຜ່ອນ (ເດືອນ)', 'ຄ່າງວດ/ເດືອນ (USD)', 'ຄ່າງວດ/ເດືອນ (LAK)', 'ຈ່າຍແລ້ວ (ງວດ)', 'ສະຖານະ'];
-    const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const rows = installmentContracts.map(({ lead, summary, isCompleted }) => {
       const monthlyUSD = lead.monthlyPaymentUSD || summary.monthlyPaymentUSD;
       const monthlyLAK = lead.monthlyPaymentLAK || summary.monthlyPaymentLAK;
       return [
-        csvCell(lead.customerName),
-        csvCell(lead.phone),
-        csvCell(lead.province || 'Vientiane'),
-        csvCell(lead.interestedModel || 'AVATR'),
+        lead.customerName,
+        lead.phone,
+        lead.province || 'Vientiane',
+        lead.interestedModel || 'AVATR',
         `${summary.downPaymentPercent}%`,
         summary.downPaymentUSD,
         summary.principalFinancedUSD,
@@ -295,19 +297,10 @@ export default function DashboardView({
         monthlyUSD,
         monthlyLAK,
         `${summary.paidCount}/${summary.totalCount}`,
-        csvCell(isCompleted ? 'ຜ່ອນຄົບແລ້ວ' : lead.status === 'delivered' ? 'ຈ່າຍດາວແລ້ວ' : 'ກຳລັງຜ່ອນ'),
-      ].join(',');
+        isCompleted ? 'ຜ່ອນຄົບແລ້ວ' : lead.status === 'delivered' ? 'ຈ່າຍດາວແລ້ວ' : 'ກຳລັງຜ່ອນ',
+      ];
     });
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `AVATR_Installment_Customers_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCsv(`AVATR_Installment_Customers_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   // Timestamp filtering for Day, Week, Month, Year (Local time aware)
@@ -319,17 +312,42 @@ export default function DashboardView({
 
   // Every bill of the selected period (the app only keeps the latest 100 in memory)
   const { bills: periodBills } = usePeriodBills(bills || [], timeframe);
+  const [cloudSummary, setCloudSummary] = useState<{
+    totalUnits: number;
+    vehicleSalesRevenueUSD: number;
+    monthlyInstallmentCollectedUSD: number;
+  } | null>(null);
+  const cloudSyncKey = useMemo(() => getCloudSalesSyncKey(bills, leads), [bills, leads]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchDashboardSalesSummary(timeframe).then((summary) => {
+      if (!cancelled) setCloudSummary(summary);
+    }).catch(() => {
+      if (!cancelled) setCloudSummary(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [timeframe, cloudSyncKey]);
 
   // Vehicle sales come from the same calculation as the Top Sales page (1 car = 1 deal, voided bills and
   // monthly receipts excluded, Excel-imported deliveries included). Monthly receipts are reported separately
   // so a financed car is never counted twice (full price at sale + its installments).
   const kpiData = useMemo(() => {
     const ranking = computeLeaderboard(periodBills, leads, timeframe, now);
-    const salesCount = ranking.reduce((sum, r) => sum + r.totalUnits, 0);
-    const vehicleSalesRevenueUSD = ranking.reduce((sum, r) => sum + r.totalRevenueUSD, 0);
-    const monthlyInstallmentCollectedUSD = periodBills
+    const localSalesCount = ranking.reduce((sum, r) => sum + r.totalUnits, 0);
+    const localVehicleSalesRevenueUSD = ranking.reduce((sum, r) => sum + r.totalRevenueUSD, 0);
+    const localMonthlyInstallmentCollectedUSD = periodBills
       .filter(b => b.status !== 'voided' && isMonthlyInstallmentBill(b) && isWithinTimeframe(b.date || b.timestamp, timeframe))
       .reduce((sum, b) => sum + Number(b.amountUSD || b.netTotalUSD || 0), 0);
+
+    const salesCount = cloudSummary ? cloudSummary.totalUnits : localSalesCount;
+    const vehicleSalesRevenueUSD = cloudSummary ? cloudSummary.vehicleSalesRevenueUSD : localVehicleSalesRevenueUSD;
+    const monthlyInstallmentCollectedUSD = cloudSummary
+      ? cloudSummary.monthlyInstallmentCollectedUSD
+      : localMonthlyInstallmentCollectedUSD;
+
     return {
       leads: leads.filter(l => isWithinTimeframe(l.createdAt, timeframe)).length,
       revenueUSD: vehicleSalesRevenueUSD,
@@ -341,7 +359,7 @@ export default function DashboardView({
       label: { day: t.tfDay, week: t.tfWeek, month: t.tfMonth, year: t.tfYear }[timeframe],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodBills, leads, testDrives, timeframe, t]);
+  }, [periodBills, cloudSummary, leads, testDrives, timeframe, t]);
 
   // Timeframe-filtered sales bills for the live sales table
   const timeframeSaleBills = useMemo(() => {
@@ -1810,10 +1828,21 @@ export default function DashboardView({
           currentUser={currentUser || undefined}
           initialDoc="installment_schedule"
           onConfirmPayment={async (updated) => {
-            if (!currentUser?.id) {
-              throw new Error('Sign in again before confirming payment.');
+            if (!currentUser?.id || (!isAdminRole(currentUser) && !isAdmin)) {
+              throw new Error('Only administrators may confirm customer payments.');
             }
-            await saveLead(updated, currentUser.id);
+            await confirmCustomerPayment(updated.id, {
+              paidAmountUSD: updated.paidAmountUSD || 0,
+              paidAmountLAK: updated.paidAmountLAK || 0,
+              installmentStatus: updated.installmentStatus,
+              paymentDate: updated.paymentDate,
+              paymentMethodRef: updated.paymentMethodRef,
+              paymentBank: updated.paymentBank,
+              paymentReceiptNo: updated.paymentReceiptNo,
+              paymentConfirmedBy: updated.paymentConfirmedBy,
+              paymentTypeConfirmed: updated.paymentTypeConfirmed,
+              notes: updated.notes,
+            });
             if (setLeads) {
               setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
             }

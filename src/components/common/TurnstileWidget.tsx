@@ -25,6 +25,7 @@ interface TurnstileWidgetProps {
   onVerify: (token: string) => void;
   onExpire?: () => void;
   onError?: () => void;
+  resetSignal?: number;
   theme?: 'light' | 'dark' | 'auto';
   action?: string;
   className?: string;
@@ -36,6 +37,7 @@ export default function TurnstileWidget({
   onVerify,
   onExpire,
   onError,
+  resetSignal = 0,
   theme = 'auto',
   action = 'login',
   className = '',
@@ -114,6 +116,16 @@ export default function TurnstileWidget({
       }
     };
   }, [siteKey, theme, action]);
+
+  useEffect(() => {
+    if (resetSignal > 0 && widgetIdRef.current && window.turnstile) {
+      try {
+        window.turnstile.reset(widgetIdRef.current);
+      } catch {
+        // ignore reset error
+      }
+    }
+  }, [resetSignal]);
 
   if (!siteKey) {
     return null;

@@ -1,6 +1,6 @@
 import { isResponse, jsonResponse, optionsResponse, requireActiveStaff } from '../_shared/staff-auth.ts';
 
-const allowedRoles = new Set(['super_admin', 'admin', 'sales', 'technician', 'general_user']);
+const allowedRoles = new Set(['super_admin', 'admin', 'sales']);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {

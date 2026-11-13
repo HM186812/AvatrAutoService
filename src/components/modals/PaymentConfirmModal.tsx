@@ -6,7 +6,9 @@ import {
   Calendar, 
   Car
 } from 'lucide-react';
-import { DEFAULT_EXCHANGE_RATE_LAK, generateInstallmentSchedule } from '../../utils/installment';
+import { generateInstallmentSchedule } from '../../utils/installment';
+import { isAdminRole } from '../../utils/roles';
+import { resolveLakExchangeRate } from '../../data/currencies';
 
 interface PaymentConfirmModalProps {
   isOpen: boolean;
@@ -56,6 +58,9 @@ export default function PaymentConfirmModal({
 
   if (!isOpen || !customer) return null;
 
+  const isAdmin = isAdminRole(currentUser);
+  const lakRate = resolveLakExchangeRate();
+
   // When paymentTypeConfirmed changes, intelligently adapt amount
   const handleTypeChange = (type: 'deposit' | 'down_payment' | 'full' | 'installment') => {
     setPaymentTypeConfirmed(type);
@@ -74,7 +79,7 @@ export default function PaymentConfirmModal({
       setNotes('ຢືນຢັນຮັບຊຳລະຄ່າລົດເຕັມຈຳນວນ (ຈ່າຍແລ້ວ 100%)');
     } else if (type === 'installment') {
       const monthlyUSD = customer.monthlyPaymentLAK
-        ? Math.round(customer.monthlyPaymentLAK / DEFAULT_EXCHANGE_RATE_LAK)
+        ? Math.round(customer.monthlyPaymentLAK / lakRate)
         : (generateInstallmentSchedule(customer, vehiclePriceUSD)[0]?.amountUSD || 0);
       setAmountUSD(monthlyUSD);
       setNotes('ຢືນຢັນຮັບເງິນງວດປະຈຳເດືອນ');
@@ -83,6 +88,10 @@ export default function PaymentConfirmModal({
 
   const handleConfirmSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      setSubmitError('ສະເພາະ Admin / Super Admin ເທົ່ານັ້ນທີ່ສາມາດຢືນຢັນການຊຳລະເງິນໄດ້');
+      return;
+    }
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -104,7 +113,7 @@ export default function PaymentConfirmModal({
       status: 'delivered', // Move customer to "ຈ່າຍແລ້ວ / ສົ່ງມອບສຳເລັດ"
       installmentStatus: isInstallment ? 'contract_signed' : customer.installmentStatus,
       paidAmountUSD: Number(amountUSD) || 0,
-      paidAmountLAK: Math.round((Number(amountUSD) || 0) * DEFAULT_EXCHANGE_RATE_LAK),
+      paidAmountLAK: Math.round((Number(amountUSD) || 0) * lakRate),
       paymentDate: paymentDate ? `${paymentDate} ${new Date().toTimeString().slice(0, 5)}` : new Date().toISOString().slice(0, 16).replace('T', ' '),
       paymentMethodRef,
       paymentBank,
@@ -250,7 +259,7 @@ export default function PaymentConfirmModal({
                 ມູນຄ່າທຽບເທົ່າ (LAK)
               </label>
               <div className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-emerald-400 font-mono text-base font-bold flex items-center justify-between">
-                <span>{Math.round(amountUSD * DEFAULT_EXCHANGE_RATE_LAK).toLocaleString()}</span>
+                <span>{Math.round(amountUSD * lakRate).toLocaleString()}</span>
                 <span className="text-zinc-500 text-xs font-normal">ກີບ (LAK)</span>
               </div>
             </div>
@@ -376,11 +385,17 @@ export default function PaymentConfirmModal({
 
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="w-full sm:flex-1 py-3 bg-white hover:bg-zinc-200 text-black font-extrabold rounded-xl text-xs transition-all shadow-xl flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
+              disabled={!isAdmin || isSubmitting}
+              className="w-full sm:flex-1 py-3 bg-white hover:bg-zinc-200 text-black font-extrabold rounded-xl text-xs transition-all shadow-xl flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle2 className="w-4 h-4 text-black" />
-              <span>{isSubmitting ? 'ກຳລັງບັນທຶກລົງຖານຂໍ້ມູນ...' : 'ຢືນຢັນການຊຳລະເງິນ & ຍ້າຍໄປຊ່ອງ "ຈ່າຍແລ້ວ"'}</span>
+              <span>
+                {!isAdmin
+                  ? 'ສະເພາະ Admin ເທົ່ານັ້ນທີ່ສາມາດຢືນຢັນໄດ້'
+                  : isSubmitting
+                    ? 'ກຳລັງບັນທຶກລົງຖານຂໍ້ມູນ...'
+                    : 'ຢືນຢັນການຊຳລະເງິນ & ຍ້າຍໄປຊ່ອງ "ຈ່າຍແລ້ວ"'}
+              </span>
             </button>
           </div>
         </form>

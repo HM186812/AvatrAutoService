@@ -52,7 +52,7 @@ export async function exportElementToPdf(
     const canvas = await html2canvas(element, {
       scale,
       useCORS: true,
-      allowTaint: true,
+      allowTaint: false,
       logging: false,
       backgroundColor: '#ffffff',
       windowWidth: orientation === 'portrait' ? 794 : 1123,

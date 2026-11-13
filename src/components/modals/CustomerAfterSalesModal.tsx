@@ -46,6 +46,7 @@ interface CustomerAfterSalesModalProps {
   onClose: () => void;
   customer: CustomerAfterSalesProfile | null;
   vehicles: VehicleModel[];
+  isAdmin?: boolean;
   lang?: Language;
   onSave: (updatedData: {
     customerName: string;
@@ -76,9 +77,12 @@ export default function CustomerAfterSalesModal({
   onClose,
   customer,
   vehicles,
+  isAdmin = false,
   lang = 'lo',
   onSave,
 }: CustomerAfterSalesModalProps) {
+  const hasRecordedBill = Boolean(customer?.billRecord);
+  const canEditModel = isAdmin;
   // Form State
   const [customerName, setCustomerName] = useState(customer?.customerName || '');
   const [phone, setPhone] = useState(customer?.phone || '');
@@ -367,8 +371,9 @@ export default function CustomerAfterSalesModal({
                 <label className="block text-zinc-400 mb-1 font-medium">ລຸ້ນລົດ AVATR *</label>
                 <select
                   value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white font-medium"
+                  disabled={!canEditModel}
+                  onChange={(e) => { if (canEditModel) setModel(e.target.value); }}
+                  className={`w-full border border-zinc-800 rounded-xl px-3 py-2 focus:outline-none focus:border-white font-medium ${canEditModel ? 'bg-zinc-900 text-white' : 'bg-zinc-900/50 text-zinc-400 cursor-not-allowed'}`}
                 >
                   {vehicles.map((v) => (
                     <option key={v.id || v.name} value={v.name}>{v.name}</option>
@@ -405,10 +410,12 @@ export default function CustomerAfterSalesModal({
                 <label className="block text-zinc-400 mb-1 font-medium">ເລກ VIN (17 ຫຼັກ) *</label>
                 <input
                   type="text"
+                  readOnly={hasRecordedBill}
+                  disabled={hasRecordedBill}
                   value={vin}
-                  onChange={(e) => setVin(e.target.value.toUpperCase())}
+                  onChange={(e) => { if (!hasRecordedBill) setVin(e.target.value.toUpperCase()); }}
                   placeholder="LS6J3E1E2TK185001"
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono uppercase focus:outline-none focus:border-white"
+                  className={`w-full border border-zinc-800 rounded-xl px-3 py-2 font-mono uppercase focus:outline-none focus:border-white ${hasRecordedBill ? 'bg-zinc-900/50 text-zinc-400 cursor-not-allowed' : 'bg-zinc-900 text-white'}`}
                 />
               </div>
 

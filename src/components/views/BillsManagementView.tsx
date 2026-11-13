@@ -1,5 +1,8 @@
 import { withVehicleFromBills } from '../../utils/documentCustomer';
+import { syncInstallmentBillState, type InstallmentRecordSyncMeta } from '../../utils/installmentBillSync';
 import { isAdminRole } from '../../utils/roles';
+import { downloadCsv } from '../../utils/csv';
+import { resolveLakExchangeRate } from '../../data/currencies';
 import { useState, useMemo, useEffect, useRef, useDeferredValue } from 'react';
 import {
   InvoiceBillRecord,
@@ -47,7 +50,7 @@ import { isSupabaseConfigured } from '../../supabase';
 import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 import QuotationModal from '../modals/QuotationModal';
-import { saveLead, fetchBillsByDateRange, attachSlipToBill, archiveFiscalYearBills, BILL_QUERY_LIMIT } from '../../backend/data';
+import { confirmCustomerPayment, fetchBillsByDateRange, attachSlipToBill, archiveFiscalYearBills, BILL_QUERY_LIMIT } from '../../backend/data';
 import SlipPreviewModal from '../modals/SlipPreviewModal';
 import IssuedDocumentsRegistryTab from './IssuedDocumentsRegistryTab';
 import { getIssuedDocumentLogs, deleteIssuedDocumentLog, logIssuedDocument, DOCUMENT_LOG_EVENT, fetchDocumentLogsFromCloud } from '../../utils/documentLogger';
@@ -180,7 +183,7 @@ export default function BillsManagementView({
         model: log.model || 'AVATR',
         vin: log.vin || 'N/A',
         netTotalUSD: log.amountUSD || 0,
-        netTotalLAK: log.amountLAK || (log.amountUSD ? log.amountUSD * 22000 : 0),
+        netTotalLAK: log.amountLAK || (log.amountUSD ? Math.round(log.amountUSD * resolveLakExchangeRate()) : 0),
         unitPriceUSD: log.amountUSD || 0,
         unitPriceLAK: log.amountLAK || 0,
         discountUSD: 0,
@@ -719,18 +722,25 @@ export default function BillsManagementView({
     setIsVoiding(true);
     const single = voidTargets.length === 1;
     let ok = 0;
+    const succeededIds = new Set<string>();
     const failed: string[] = [];
     for (const bill of voidTargets) {
       try {
-        if (await voidBill(bill, reason, !single)) ok++;
-        else failed.push(bill.billNumber || bill.id);
+        if (await voidBill(bill, reason, !single)) {
+          ok++;
+          succeededIds.add(bill.id);
+        } else {
+          failed.push(bill.billNumber || bill.id);
+        }
       } catch {
         failed.push(bill.billNumber || bill.id);
       }
     }
     setIsVoiding(false);
     setVoidTargets(null);
-    setSelectedBillIds(prev => prev.filter(id => !voidTargets.some(b => b.id === id && ok > 0)));
+    if (succeededIds.size > 0) {
+      setSelectedBillIds(prev => prev.filter(id => !succeededIds.has(id)));
+    }
     if (!single) {
       if (failed.length === 0) {
         showToast(lang === 'lo' ? `ຍົກເລີກ ${ok} ບິນແລ້ວ` : `Voided ${ok} bill(s)`, 'success');
@@ -976,28 +986,23 @@ export default function BillsManagementView({
 
 
 
-  // Callback to update customer records from InstallmentLedgerModal
-  const handleUpdateCustomerRecords = async (customerId: string, updatedRecords: InstallmentPaymentRecord[]) => {
-    const targetLead = leads.find(l => l.id === customerId);
-    if (!targetLead) throw new Error('Customer record not found.');
-    const paidRecords = updatedRecords.filter(r => r.status === 'paid');
-    const totalPaidLAK = paidRecords.reduce((sum, r) => sum + r.amountLAK, 0);
-    const totalPaidUSD = paidRecords.reduce((sum, r) => sum + r.amountUSD, 0);
-    const updatedCust: Lead = {
-      ...targetLead,
-      installmentRecords: updatedRecords,
-      paidAmountLAK: totalPaidLAK,
-      paidAmountUSD: totalPaidUSD,
-      installmentStatus: paidRecords.length === updatedRecords.length && updatedRecords.length > 0 ? 'completed' : 'active_repaying',
-      lastFollowUp: new Date().toISOString(),
-    };
-    if (!currentUser?.id) {
-      throw new Error('Sign in again before saving installment ledger.');
-    }
-    await saveLead(updatedCust, currentUser.id);
-    if (setLeads) {
-      setLeads(prev => prev.map(l => l.id === customerId ? updatedCust : l));
-    }
+  // Callback to update customer records after InstallmentLedgerModal RPC completes
+  const handleUpdateCustomerRecords = async (
+    customerId: string,
+    updatedRecords: InstallmentPaymentRecord[],
+    meta?: InstallmentRecordSyncMeta
+  ) => {
+    const updatedCust = syncInstallmentBillState({
+      customerId,
+      updatedRecords,
+      meta,
+      leads,
+      bills,
+      vehicles,
+      currentUserName: currentUser?.name,
+      setLeads,
+      setBills,
+    });
     if (selectedCustomerForLedger?.id === customerId) {
       setSelectedCustomerForLedger(updatedCust);
     }
@@ -1005,32 +1010,18 @@ export default function BillsManagementView({
 
   // Export installment bills or contracts to CSV
   const handleExportInstallmentCsv = () => {
-    const csvCell = (val: unknown): string => {
-      const str = String(val ?? '').replace(/\r?\n/g, ' ');
-      return `"${str.replace(/"/g, '""')}"`;
-    };
-
     if (filterType === 'installment' && installmentSubTab === 'contracts') {
       const cHeaders = [
         'CustomerName', 'Phone', 'IDCard', 'Province', 'Model', 'VIN', 'PlateNumber',
         'DownPaymentPercent', 'DownPaymentUSD', 'TenureMonths', 'InstallmentStatus', 'PaymentDate'
       ];
       const cRows = filteredInstallmentContracts.map(c => [
-        csvCell(c.customerName), csvCell(c.phone), csvCell(c.idCardNumber), csvCell(c.province),
-        csvCell(c.interestedModel), csvCell(c.vin), csvCell(c.plateNumber),
+        c.customerName, c.phone, c.idCardNumber, c.province,
+        c.interestedModel, c.vin, c.plateNumber,
         c.downPaymentPercent ?? '', c.downPaymentUSD ?? '', c.tenureMonths ?? '',
-        csvCell(c.installmentStatus || c.status), csvCell(c.paymentDate || c.createdAt?.slice(0, 10))
+        c.installmentStatus || c.status, c.paymentDate || c.createdAt?.slice(0, 10)
       ]);
-      const cContent = '\uFEFF' + [cHeaders.join(','), ...cRows.map(r => r.join(','))].join('\n');
-      const blob = new Blob([cContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `AVATR_Installment_Contracts_${formatLocalYMD(new Date())}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      downloadCsv(`AVATR_Installment_Contracts_${formatLocalYMD(new Date())}.csv`, cHeaders, cRows);
       return;
     }
     const headers = [
@@ -1050,31 +1041,22 @@ export default function BillsManagementView({
     ];
 
     const rows = filteredBills.map(b => [
-      csvCell(b.billNumber),
-      csvCell(b.billType || b.installmentType || 'sale'),
-      csvCell(b.date),
-      csvCell(b.customerName || b.supplierName),
-      csvCell(b.customerPhone),
-      csvCell(b.model),
-      csvCell(b.vin),
+      b.billNumber,
+      b.billType || b.installmentType || 'sale',
+      b.date,
+      b.customerName || b.supplierName,
+      b.customerPhone,
+      b.model,
+      b.vin,
       b.unitPriceUSD ?? '',
       b.downPaymentUSD ?? '',
       b.tenureMonths ?? '',
       b.netTotalUSD ?? b.amountUSD ?? '',
-      csvCell(b.recordedBy),
-      csvCell(b.status === 'voided' ? 'voided' : 'completed')
+      b.recordedBy,
+      b.status === 'voided' ? 'voided' : 'completed'
     ]);
 
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `AVATR_Bills_${filterType}_${formatLocalYMD(new Date())}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCsv(`AVATR_Bills_${filterType}_${formatLocalYMD(new Date())}.csv`, headers, rows);
   };
 
   return (
@@ -2718,10 +2700,21 @@ export default function BillsManagementView({
           lang={lang}
           initialDoc={selectedCustomerForDocs.docType || 'installment_schedule'}
           onConfirmPayment={async (updatedCust) => {
-            if (!currentUser?.id) {
-              throw new Error('Sign in again before confirming payment.');
+            if (!currentUser?.id || !isAdminRole(currentUser)) {
+              throw new Error('Only administrators may confirm customer payments.');
             }
-            await saveLead(updatedCust, currentUser.id);
+            await confirmCustomerPayment(updatedCust.id, {
+              paidAmountUSD: updatedCust.paidAmountUSD || 0,
+              paidAmountLAK: updatedCust.paidAmountLAK || 0,
+              installmentStatus: updatedCust.installmentStatus,
+              paymentDate: updatedCust.paymentDate,
+              paymentMethodRef: updatedCust.paymentMethodRef,
+              paymentBank: updatedCust.paymentBank,
+              paymentReceiptNo: updatedCust.paymentReceiptNo,
+              paymentConfirmedBy: updatedCust.paymentConfirmedBy,
+              paymentTypeConfirmed: updatedCust.paymentTypeConfirmed,
+              notes: updatedCust.notes,
+            });
             if (setLeads) {
               setLeads(prev => prev.map(l => l.id === updatedCust.id ? updatedCust : l));
             }

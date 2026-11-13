@@ -1,4 +1,5 @@
 import { withVehicleFromBills } from '../../utils/documentCustomer';
+import { syncInstallmentBillState, type InstallmentRecordSyncMeta } from '../../utils/installmentBillSync';
 import { phoneMatches } from '../../utils/search';
 import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -36,14 +37,14 @@ import {
 } from 'lucide-react';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, openWhatsAppWithMessage } from '../../utils/whatsapp';
-import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
+import { resolveLakExchangeRate } from '../../data/currencies';
+import { isAdminRole } from '../../utils/roles';
 import { buildInstallmentContracts, summarizeInstallmentPortfolio } from '../../utils/installmentPortfolio';
 import InstallmentLedgerModal from '../modals/InstallmentLedgerModal';
 import CustomerDocumentsModal from '../modals/CustomerDocumentsModal';
 import QuickInstallmentPaymentModal from '../modals/QuickInstallmentPaymentModal';
 import ConfirmPayoffModal from '../modals/ConfirmPayoffModal';
-import { saveLead, saveBillRecord } from '../../backend/data';
-import { newRecordId } from '../../backend/ids';
+import { confirmCustomerPayment, confirmInstallmentPayoff } from '../../backend/data';
 
 interface InstallmentDashboardViewProps {
   leads: Lead[];
@@ -178,11 +179,12 @@ export default function InstallmentDashboardView({
     const activeContractsCount = shared.activeContracts;
     const dueOrOverdueCount = leadsWithSummaries.filter(c => !c.isCompleted && (c.isDueSoon || c.isOverdue)).length;
 
+    const lakRate = resolveLakExchangeRate();
     return {
       totalPortfolioBalanceUSD,
-      totalPortfolioBalanceLAK: totalPortfolioBalanceUSD * DEFAULT_EXCHANGE_RATE_LAK,
+      totalPortfolioBalanceLAK: totalPortfolioBalanceUSD * lakRate,
       totalCollectedUSD,
-      totalCollectedLAK: totalCollectedUSD * DEFAULT_EXCHANGE_RATE_LAK,
+      totalCollectedLAK: totalCollectedUSD * lakRate,
       activeContractsCount,
       dueOrOverdueCount,
       totalContracts: leadsWithSummaries.length,
@@ -190,94 +192,34 @@ export default function InstallmentDashboardView({
   }, [leadsWithSummaries]);
 
   // Update customer records from ledger or quick payment
-  const handleUpdateCustomerRecords = async (customerId: string, updatedRecords: InstallmentPaymentRecord[]) => {
-    const targetLead = leads.find(l => l.id === customerId);
-    if (!targetLead) throw new Error('Customer record not found.');
-
-    const paidRecords = updatedRecords.filter(r => r.status === 'paid');
-    const totalPaidLAK = paidRecords.reduce((sum, r) => sum + (r.paidAmountLAK || r.amountLAK), 0);
-    const totalPaidUSD = paidRecords.reduce((sum, r) => sum + (r.paidAmountUSD || r.amountUSD), 0);
-    const isCompleted = paidRecords.length === updatedRecords.length && updatedRecords.length > 0;
-
-    const updatedCust: Lead = {
-      ...targetLead,
-      installmentRecords: updatedRecords,
-      paidAmountLAK: totalPaidLAK,
-      paidAmountUSD: totalPaidUSD,
-      installmentStatus: isCompleted ? 'completed' : 'active_repaying',
-      lastFollowUp: new Date().toISOString(),
-    };
-
-    if (!currentUser?.id) {
-      throw new Error('Sign in again before saving installment ledger.');
-    }
-
-    await saveLead(updatedCust, currentUser.id);
-    if (setLeads) {
-      setLeads(prev => prev.map(l => l.id === customerId ? updatedCust : l));
-    }
-
-    // Synchronize newly paid installment receipts into bills collection
-    if (setBills) {
-      for (const r of paidRecords) {
-        const receiptNo = r.receiptNo || `REC-INS-${targetLead.id.replace(/\D/g, '').slice(-4) || '001'}-${String(r.period).padStart(2, '0')}`;
-        const alreadyInBills = bills.some(b => b.billNumber === receiptNo || (b.leadId === targetLead.id && b.installmentPeriod === r.period));
-        if (!alreadyInBills) {
-          const matchedVeh = vehicles.find(v => v.name === targetLead.interestedModel);
-          const payUSD = Number(r.paidAmountUSD || r.amountUSD) || 0;
-          const payLAK = Number(r.paidAmountLAK || r.amountLAK) || Math.round(payUSD * DEFAULT_EXCHANGE_RATE_LAK);
-          const newReceiptBill: InvoiceBillRecord = {
-            id: newRecordId(),
-            billType: 'installment',
-            installmentType: 'monthly_installment',
-            billNumber: receiptNo,
-            date: r.paidDate || new Date().toISOString().slice(0, 10),
-            model: targetLead.interestedModel || matchedVeh?.name || 'AVATR',
-            vin: targetLead.vin || '',
-            plateNumber: targetLead.plateNumber || '',
-            color: targetLead.color || '',
-            quantity: 1,
-            unitPriceUSD: payUSD,
-            unitPriceLAK: payLAK,
-            discountUSD: 0,
-            discountLAK: 0,
-            netTotalUSD: payUSD,
-            netTotalLAK: payLAK,
-            amountUSD: payUSD,
-            amountLAK: payLAK,
-            customerName: targetLead.customerName,
-            customerPhone: targetLead.phone,
-            leadId: targetLead.id,
-            customerIDCard: targetLead.idCardNumber,
-            customerAddress: [targetLead.village, targetLead.district, targetLead.province].filter(Boolean).join(', '),
-            customerProvince: targetLead.province,
-            paymentMethod: (r.paymentMethod as any) || 'transfer',
-            bankName: r.bankName,
-            transferRef: r.transferRef,
-            installmentPeriod: r.period,
-            tenureMonths: targetLead.tenureMonths,
-            monthlyPaymentLAK: payLAK,
-            financeCompany: targetLead.financeCompany,
-            salesRep: r.collectedBy || currentUser?.name || 'Admin',
-            recordedBy: currentUser?.name || 'Admin',
-            notes: r.notes || `ຮັບເງິນງວດທີ ${r.period} ລູກຄ້າ ${targetLead.customerName}`,
-          };
-          try {
-            await saveBillRecord(newReceiptBill, currentUser.id);
-            setBills(prev => [newReceiptBill, ...prev]);
-          } catch (err) {
-            // The payment itself is saved on the customer; only the receipt bill failed.
-            showToast(`ບັນທຶກງວດແລ້ວ ແຕ່ອອກໃບຮັບເງິນງວດທີ ${r.period} ບໍ່ສຳເລັດ: ${err instanceof Error ? err.message : 'unknown error'}`, 'error');
-          }
-        }
-      }
+  const handleUpdateCustomerRecords = async (
+    customerId: string,
+    updatedRecords: InstallmentPaymentRecord[],
+    meta?: InstallmentRecordSyncMeta
+  ) => {
+    const updatedCust = syncInstallmentBillState({
+      customerId,
+      updatedRecords,
+      meta,
+      leads,
+      bills,
+      vehicles,
+      currentUserName: currentUser?.name,
+      setLeads,
+      setBills,
+    });
+    if (selectedLeadForLedger?.id === customerId) {
+      setSelectedLeadForLedger(updatedCust);
     }
 
     showToast('ບັນທຶກຮັບເງິນງວດ ແລະ ອັບເດດຕາຕະລາງຜ່ອນສຳເລັດແລ້ວ!');
   };
 
-  // Confirm Final Payoff and Move to Completed Customers Page
+  // Confirm Final Payoff and Move to Completed Customers Page (Admin-only via authoritative RPC)
   const handleConfirmPayoff = async (customerId: string) => {
+    if (!currentUser?.id || !isAdminRole(currentUser)) {
+      throw new Error('Only administrators may confirm full installment payoff.');
+    }
     const target = leadsWithSummaries.find(item => item.lead.id === customerId);
     if (!target) throw new Error('Customer record not found.');
     const { lead, summary, contractNo } = target;
@@ -286,6 +228,9 @@ export default function InstallmentDashboardView({
       throw new Error('ລູກຄ້າຕ້ອງຊຳລະຄົບທຸກງວດ (100%) ຈຶ່ງສາມາດຢືນຢັນການຊຳລະສຳເລັດໄດ້.');
     }
 
+    const payoffNote = `[${new Date().toLocaleDateString('lo-LA')}] ຢືນຢັນການຊຳລະຄົບຖ້ວນທຸກງວດ (ສັນຍາເລກທີ ${contractNo}) ໂດຍ ${currentUser.name || 'Admin'}`;
+    await confirmInstallmentPayoff(customerId, payoffNote);
+
     const updatedCust: Lead = {
       ...lead,
       installmentStatus: 'completed',
@@ -293,15 +238,10 @@ export default function InstallmentDashboardView({
       status: 'delivered',
       paymentTypeConfirmed: 'installment_completed',
       paidDate: new Date().toISOString().slice(0, 10),
-      notes: (lead.notes ? lead.notes + '\n' : '') + `[${new Date().toLocaleDateString('lo-LA')}] ຢືນຢັນການຊຳລະຄົບຖ້ວນທຸກງວດ (ສັນຍາເລກທີ ${contractNo}) ໂດຍ ${currentUser?.name || 'Admin'}`,
+      notes: (lead.notes ? lead.notes + '\n' : '') + payoffNote,
       lastFollowUp: new Date().toISOString(),
     };
 
-    if (!currentUser?.id) {
-      throw new Error('Sign in again before confirming payoff.');
-    }
-
-    await saveLead(updatedCust, currentUser.id);
     if (setLeads) {
       setLeads(prev => prev.map(l => l.id === customerId ? updatedCust : l));
     }
@@ -686,17 +626,29 @@ export default function InstallmentDashboardView({
                       </button>
                     )}
 
-                    {/* Payoff Confirmation Button: Active when 100% fully paid, disabled with remaining periods when not */}
+                    {/* Payoff Confirmation Button: Admin-only and active when 100% fully paid */}
                     {summary.isFullyPaid ? (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedLeadForPayoff({ lead, summary, contractNo })}
-                        className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/25 transition-all cursor-pointer active:scale-95 animate-pulse"
-                        title="ຢືນຢັນການຊຳລະສຳເລັດ ແລະ ຍ້າຍຂໍ້ມູນໄປໜ້າລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ"
-                      >
-                        <CheckCircle2 className="w-4 h-4 text-zinc-950" />
-                        <span>ຢືນຢັນການຊຳລະສຳເລັດ</span>
-                      </button>
+                      isAdminRole(currentUser) ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedLeadForPayoff({ lead, summary, contractNo })}
+                          className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/25 transition-all cursor-pointer active:scale-95 animate-pulse"
+                          title="ຢືນຢັນການຊຳລະສຳເລັດ ແລະ ຍ້າຍຂໍ້ມູນໄປໜ້າລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-zinc-950" />
+                          <span>ຢືນຢັນການຊຳລະສຳເລັດ</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-3 py-2 bg-zinc-900/60 text-zinc-500 border border-zinc-800/80 font-medium rounded-xl text-xs flex items-center gap-1.5 cursor-not-allowed opacity-75"
+                          title="ຕ້ອງໃຫ້ Admin ຢືນຢັນການຊຳລະສຳເລັດ"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-zinc-600" />
+                          <span>ລໍຖ້າ Admin ຢືນຢັນຊຳລະຄົບ</span>
+                        </button>
+                      )
                     ) : (
                       <button
                         type="button"
@@ -877,14 +829,25 @@ export default function InstallmentDashboardView({
                       <td className="py-3.5 px-4 text-center font-sans">
                         <div className="flex items-center justify-center gap-1.5">
                           {summary.isFullyPaid ? (
-                            <button
-                              onClick={() => setSelectedLeadForPayoff({ lead, summary, contractNo })}
-                              className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm animate-pulse"
-                              title="ຢືນຢັນການຊຳລະສຳເລັດ ແລະ ຍ້າຍຂໍ້ມູນໄປໜ້າລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5 text-zinc-950" />
-                              <span>ຢືນຢັນຊຳລະຄົບ</span>
-                            </button>
+                            isAdminRole(currentUser) ? (
+                              <button
+                                onClick={() => setSelectedLeadForPayoff({ lead, summary, contractNo })}
+                                className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm animate-pulse"
+                                title="ຢືນຢັນການຊຳລະສຳເລັດ ແລະ ຍ້າຍຂໍ້ມູນໄປໜ້າລູກຄ້າທີ່ຊຳລະສຳເລັດແລ້ວ"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 text-zinc-950" />
+                                <span>ຢືນຢັນຊຳລະຄົບ</span>
+                              </button>
+                            ) : (
+                              <button
+                                disabled
+                                className="px-2 py-1.5 bg-zinc-900 text-zinc-500 border border-zinc-800 rounded-xl text-[11px] font-medium flex items-center gap-1 cursor-not-allowed opacity-70"
+                                title="ຕ້ອງໃຫ້ Admin ຢືນຢັນຊຳລະຄົບ"
+                              >
+                                <Lock className="w-3 h-3 text-zinc-600" />
+                                <span>ລໍຖ້າ Admin</span>
+                              </button>
+                            )
                           ) : (
                             <>
                               <button
@@ -987,10 +950,21 @@ export default function InstallmentDashboardView({
           initialDoc="installment_schedule"
           customerGroup="installment_customers"
           onConfirmPayment={async (updatedCust) => {
-            if (!currentUser?.id) {
-              throw new Error('Sign in again before confirming payment.');
+            if (!currentUser?.id || !isAdminRole(currentUser)) {
+              throw new Error('Only administrators may confirm customer payments.');
             }
-            await saveLead(updatedCust, currentUser.id);
+            await confirmCustomerPayment(updatedCust.id, {
+              paidAmountUSD: updatedCust.paidAmountUSD || 0,
+              paidAmountLAK: updatedCust.paidAmountLAK || 0,
+              installmentStatus: updatedCust.installmentStatus,
+              paymentDate: updatedCust.paymentDate,
+              paymentMethodRef: updatedCust.paymentMethodRef,
+              paymentBank: updatedCust.paymentBank,
+              paymentReceiptNo: updatedCust.paymentReceiptNo,
+              paymentConfirmedBy: updatedCust.paymentConfirmedBy,
+              paymentTypeConfirmed: updatedCust.paymentTypeConfirmed,
+              notes: updatedCust.notes,
+            });
             if (setLeads) {
               setLeads(prev => prev.map(l => l.id === updatedCust.id ? updatedCust : l));
             }

@@ -3,6 +3,7 @@ import { Download, Loader2 } from 'lucide-react';
 import type { InvoiceBillRecord, Language, Lead, VehicleModel } from '../../types';
 import { computeMonthlyBrandReport, reportYears } from '../../utils/brandReport';
 import { fetchBillsByDateRange } from '../../backend/data';
+import { downloadCsv } from '../../utils/csv';
 
 interface MonthlyBrandReportProps {
   bills: InvoiceBillRecord[]; // bills already in memory (latest page)
@@ -52,22 +53,13 @@ export default function MonthlyBrandReport({ bills, leads, vehicles, lang }: Mon
   const report = useMemo(() => computeMonthlyBrandReport(sourceBills, leads, vehicles, year), [sourceBills, leads, vehicles, year]);
 
   const exportCsv = () => {
-    const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
     const header = [L('ຍີ່ຫໍ້', 'Brand', 'ยี่ห้อ'), L('ປະເພດ', 'Type', 'ประเภท'), ...months, L('ລວມ', 'Total', 'รวม')];
-    const lines = [header.map(esc).join(',')];
+    const rows: unknown[][] = [];
     report.rows.forEach(r => {
-      lines.push([esc(r.brand), esc(L('ຍອດຈອງ', 'Bookings', 'ยอดจอง')), ...r.bookings, r.bookingTotal].join(','));
-      lines.push([esc(r.brand), esc(L('ຍອດຂາຍ', 'Sales', 'ยอดขาย')), ...r.sales, r.salesTotal].join(','));
+      rows.push([r.brand, L('ຍອດຈອງ', 'Bookings', 'ยอดจอง'), ...r.bookings, r.bookingTotal]);
+      rows.push([r.brand, L('ຍອດຂາຍ', 'Sales', 'ยอดขาย'), ...r.sales, r.salesTotal]);
     });
-    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `booking_sales_by_brand_${year}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadCsv(`booking_sales_by_brand_${year}.csv`, header, rows);
   };
 
   const cell = 'px-2 py-2 text-center font-mono tabular-nums';

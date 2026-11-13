@@ -313,7 +313,7 @@ export async function fetchLeaderboardFromCloud(
   try {
     const { data, error } = await supabase.rpc('get_sales_leaderboard', {
       p_period: period,
-      p_target_date: targetDate || new Date().toISOString().slice(0, 10),
+      p_target_date: targetDate || new Date().toLocaleDateString('en-CA'),
     });
     if (error) {
       console.warn('Supabase get_sales_leaderboard notice:', error.message);
@@ -324,4 +324,100 @@ export async function fetchLeaderboardFromCloud(
     console.warn('Failed to fetch sales leaderboard from cloud:', err);
     return null;
   }
+}
+
+/**
+ * Merges authoritative showroom totals from `get_sales_leaderboard` with locally visible
+ * per-rep breakdowns (`salesBreakdown` / `activeLeadsCount`) so sales staff see full
+ * showroom rankings without exposing other reps' underlying bill rows.
+ */
+export function mergeCloudLeaderboardStats(
+  localStats: RepPerformanceRecord[],
+  cloudRows: CloudLeaderboardRow[] | null | undefined,
+  leads: Lead[] = [],
+  period: LeaderboardPeriod = 'month',
+  now = new Date(),
+  lakRate = DEFAULT_LAK_PER_USD,
+): RepPerformanceRecord[] {
+  if (!cloudRows || cloudRows.length === 0) {
+    return localStats;
+  }
+
+  const localByKey = new Map<string, RepPerformanceRecord>();
+  localStats.forEach((rec) => {
+    localByKey.set(normalizeRepName(rec.repName).toLowerCase(), rec);
+  });
+
+  const activeLeadsByKey = new Map<string, number>();
+  (leads || []).forEach((lead) => {
+    if (!lead.assignedTo) return;
+    if (lead.status === 'delivered' || lead.status === 'lost') return;
+    if (isInPeriod(parseBillDate(lead.createdAt), period, now)) {
+      const key = normalizeRepName(lead.assignedTo).toLowerCase();
+      activeLeadsByKey.set(key, (activeLeadsByKey.get(key) || 0) + 1);
+    }
+  });
+
+  const consumed = new Set<string>();
+  const merged: RepPerformanceRecord[] = cloudRows.map((row) => {
+    const repName = normalizeRepName(row.staff_name);
+    const key = repName.toLowerCase();
+    const local = localByKey.get(key);
+    if (local) consumed.add(key);
+
+    const totalUnits = Number(row.delivered_units) || 0;
+    const totalRevenueUSD = Number(row.total_revenue_usd) || 0;
+    const totalRevenueLAK =
+      local && local.totalUnits === totalUnits && local.totalRevenueUSD === totalRevenueUSD && local.totalRevenueLAK > 0
+        ? local.totalRevenueLAK
+        : Math.round(totalRevenueUSD * lakRate);
+    const avgDealSizeUSD = totalUnits > 0 ? Math.round(totalRevenueUSD / totalUnits) : 0;
+    const activeLeadsCount = local ? local.activeLeadsCount : (activeLeadsByKey.get(key) || 0);
+    const deliveredLeadsCount = totalUnits;
+    const totalOpportunities = deliveredLeadsCount + activeLeadsCount;
+    const conversionRate = totalOpportunities > 0 ? Math.round((deliveredLeadsCount / totalOpportunities) * 100) : null;
+
+    return {
+      repName,
+      avatarInitials: local?.avatarInitials || getInitials(repName),
+      totalUnits,
+      totalRevenueUSD,
+      totalRevenueLAK,
+      avgDealSizeUSD,
+      deliveredLeadsCount,
+      activeLeadsCount,
+      conversionRate,
+      salesBreakdown: local?.salesBreakdown || [],
+    };
+  });
+
+  localStats.forEach((local) => {
+    const key = normalizeRepName(local.repName).toLowerCase();
+    if (!consumed.has(key) && (local.totalUnits > 0 || local.activeLeadsCount > 0)) {
+      merged.push(local);
+    }
+  });
+
+  return merged.sort((a, b) =>
+    b.totalUnits - a.totalUnits ||
+    b.totalRevenueUSD - a.totalRevenueUSD ||
+    (b.conversionRate ?? -1) - (a.conversionRate ?? -1) ||
+    a.repName.localeCompare(b.repName),
+  );
+}
+
+/**
+ * Lightweight change signature to re-query authoritative cloud KPI/leaderboard RPCs when local
+ * bills or delivered customer counts change (new sale, void, payment confirmation).
+ */
+export function getCloudSalesSyncKey(bills: InvoiceBillRecord[] = [], leads: Lead[] = []): string {
+  let voidedCount = 0;
+  for (const b of bills) {
+    if (b.status === 'voided') voidedCount += 1;
+  }
+  let deliveredCount = 0;
+  for (const l of leads) {
+    if (l.status === 'delivered') deliveredCount += 1;
+  }
+  return `${bills.length}:${voidedCount}:${deliveredCount}`;
 }

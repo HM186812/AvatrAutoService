@@ -1,6 +1,6 @@
 import { isResponse, jsonResponse, optionsResponse, requireActiveStaff } from '../_shared/staff-auth.ts';
 
-const allowedRoles = new Set(['super_admin', 'admin', 'sales', 'technician', 'general_user']);
+const allowedRoles = new Set(['super_admin', 'admin', 'sales']);
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return optionsResponse(req);

@@ -1,5 +1,6 @@
 import type {
   ContactLogEntry,
+  InstallmentPaymentRecord,
   InventoryItem,
   InvoiceBillRecord,
   Lead,
@@ -49,6 +50,30 @@ import { showToast } from '../components/common/Toast';
 import { localRangeToUtc } from '../utils/search';
 
 const isUuid = (val?: string | null): val is string => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val));
+
+async function resolveStaffUuid(client: ReturnType<typeof requireSupabase>, rawIdentifier?: string | null): Promise<string | null> {
+  const val = String(rawIdentifier || '').trim();
+  if (!val) return null;
+  const uuidCandidate: string | undefined = val;
+  if (isUuid(uuidCandidate)) return uuidCandidate;
+  const lower = val.toLowerCase();
+  const cachedMatch = (cachedStaffUsers || []).find(
+    (u) => u.id === val || u.name?.trim().toLowerCase() === lower || u.email?.trim().toLowerCase() === lower
+  );
+  if (cachedMatch && isUuid(cachedMatch.id)) return cachedMatch.id;
+  try {
+    const { data, error } = await client.rpc('get_staff_directory');
+    if (!error && Array.isArray(data)) {
+      const hit = (data as DbRow[]).find(
+        (row) => String(row.id) === val || String(row.name || '').trim().toLowerCase() === lower
+      );
+      if (hit?.id && isUuid(String(hit.id))) return String(hit.id);
+    }
+  } catch {
+    // Fallback to caller actorId
+  }
+  return null;
+}
 import {
   sanitizeText,
   sanitizePhone,
@@ -756,9 +781,10 @@ export async function loadBackendData(
       let customersData: DbRow[] = [];
       let settingsConfig: Record<string, unknown> = {};
 
-      const [rpcInit, profilesResult] = await Promise.all([
+      const [rpcInit, profilesResult, directoryResult] = await Promise.all([
         client.rpc('get_showroom_initial_data'),
         client.from('staff_profiles').select('id,email,name,phone,role,department,role_title,status,created_at,last_login'),
+        client.rpc('get_staff_directory'),
       ]);
 
       if (!rpcInit.error && rpcInit.data) {
@@ -789,8 +815,16 @@ export async function loadBackendData(
       }
 
       const profiles = profilesResult.error ? [] : (profilesResult.data || []);
+      const directoryRows = directoryResult.error ? [] : ((directoryResult.data as DbRow[]) || []);
+      const mergedProfilesById = new Map<string, DbRow>();
+      for (const dirRow of directoryRows) {
+        if (dirRow?.id) mergedProfilesById.set(String(dirRow.id), dirRow);
+      }
+      for (const profRow of profiles) {
+        if (profRow?.id) mergedProfilesById.set(String(profRow.id), { ...(mergedProfilesById.get(String(profRow.id)) || {}), ...profRow });
+      }
       if (modelsData.length > 0) cachedVehicleModels = modelsData;
-      const users = profiles.map((row: DbRow) => mapStaffProfile(row));
+      const users = Array.from(mergedProfilesById.values()).map((row: DbRow) => mapStaffProfile(row));
       if (users.length > 0) cachedStaffUsers = users;
       const staffById = new Map(users.map((user) => [user.id, user]));
       const dbModels = modelsData.map(mapVehicleModel);
@@ -1012,22 +1046,15 @@ export async function linkTestDriveToCustomer(bookingId: string, phone: string) 
   if (error) throw error;
 }
 
-export async function saveDealershipSettingsPatch(patch: Record<string, unknown>, actorId: string) {
+export async function saveDealershipSettingsPatch(patch: Record<string, unknown>, _actorId: string) {
   if (!isSupabaseConfigured) {
     requireOfflineDemo();
     return offlineSaveSettingsPatch(patch);
   }
   const client = requireSupabase();
-  const { data: existing, error: readError } = await client.from('dealership_settings').select('config').eq('id', true).maybeSingle();
-  if (readError) throw readError;
-  const config = { ...((existing?.config || {}) as DbRow), ...patch };
-  // .select() makes a write that row-level security silently ignored come back empty instead of looking successful.
-  const { data: saved, error } = await client.from('dealership_settings').upsert({ id: true, config, updated_by: actorId }).select('config');
+  const { data, error } = await client.rpc('patch_dealership_settings', { p_patch: patch });
   if (error) throw error;
-  if (!saved || saved.length === 0) {
-    throw new Error('ບັນທຶກການຕັ້ງຄ່າບໍລິສັດບໍ່ສຳເລັດ: ບັນຊີນີ້ບໍ່ມີສິດແກ້ໄຂ');
-  }
-  return config;
+  return (data || patch) as Record<string, unknown>;
 }
 
 /** Saves a customer and returns the saved copy (its contact history merged with the latest one in the database). */
@@ -1084,25 +1111,7 @@ export async function saveLead(
   let finalAssignedStaffId: string | null = null;
 
   if (lead.assignedTo) {
-    if (isUuid(lead.assignedTo)) {
-      finalAssignedStaffId = lead.assignedTo;
-    } else {
-      try {
-        const safeAssignee = sanitizeText(lead.assignedTo, 120).replace(/["\\]/g, '');
-        const { data: matchedStaff } = safeAssignee
-          ? await client
-              .from('staff_profiles')
-              .select('id')
-              .or(`name.eq."${safeAssignee}",email.eq."${safeAssignee}"`)
-              .maybeSingle()
-          : { data: null };
-        if (matchedStaff?.id) {
-          finalAssignedStaffId = matchedStaff.id;
-        }
-      } catch {
-        // Ignore matching error
-      }
-    }
+    finalAssignedStaffId = await resolveStaffUuid(client, lead.assignedTo);
   }
 
   if (!finalAssignedStaffId && isUuid(lead.id)) {
@@ -1232,41 +1241,22 @@ export async function saveLead(
     return { ...lead, id: safeLeadId };
   }
 
-  // Merge contact history with the copy in the database so entries added by other accounts are never overwritten
-  let savedHistory: ContactLogEntry[] = Array.isArray(lead.contactHistory) ? lead.contactHistory : [];
-  {
-    const latest = await client.from('customers').select('contact_history').eq('id', safeLeadId).maybeSingle();
-    if (!latest.error) {
-      const latestHistory = Array.isArray(latest.data?.contact_history) ? latest.data.contact_history as ContactLogEntry[] : [];
-      savedHistory = mergeContactHistory(savedHistory, latestHistory, options?.removedContactIds);
-    } else if (options?.removedContactIds?.length) {
-      savedHistory = savedHistory.filter(e => !options.removedContactIds!.includes(e.id));
-    }
-    pipelineLeadPayload.contact_history = sanitizeContactHistory(savedHistory);
-    parityLeadPayload.contact_history = pipelineLeadPayload.contact_history;
-  }
+  const sanitizedHistory = sanitizeContactHistory(Array.isArray(lead.contactHistory) ? lead.contactHistory : []);
+  parityLeadPayload.contact_history = sanitizedHistory;
 
-  const isMissingColumn = (e: { code?: string; message?: string } | null) =>
-    Boolean(e && (e.code === 'PGRST204' || e.code === '42703' || e.message?.includes('column')));
-
-  let { error } = await client.from('customers').upsert(parityLeadPayload);
-  if (isMissingColumn(error)) {
-    warnMissingColumns('20261110120000_excel_parity_fields', 'ຂໍ້ມູນລາຄາ/ສ່ວນຫຼຸດ/ຂອງແຖມ ຂອງລູກຄ້າ');
-    ({ error } = await client.from('customers').upsert(pipelineLeadPayload));
-  }
-  if (isMissingColumn(error)) {
-    // Pipeline migration not applied yet: save everything else
-    warnMissingColumns('20261109120000_customer_pipeline_fields', 'ປະຫວັດການຕິດຕໍ່/ມັດຈຳ/ສົ່ງມອບ ຂອງລູກຄ້າ');
-    ({ error } = await client.from('customers').upsert(extendedLeadPayload));
-  }
-  if (isMissingColumn(error)) {
-    // Fallback if new after-sales columns have not been migrated on the remote DB yet
-    ({ error } = await client.from('customers').upsert(baseLeadPayload));
-  }
+  const { data: rpcResult, error } = await client.rpc('upsert_customer_pipeline', {
+    p_customer: parityLeadPayload,
+    p_removed_contact_ids: options?.removedContactIds || [],
+  });
   if (error) throw error;
 
-  const saved: Lead = { ...lead, id: safeLeadId, contactHistory: savedHistory };
-  // Sync offline store for instant local cache availability
+  const returnedHistory = Array.isArray(rpcResult?.contact_history)
+    ? (rpcResult.contact_history as ContactLogEntry[])
+    : (options?.removedContactIds?.length
+        ? (Array.isArray(lead.contactHistory) ? lead.contactHistory : []).filter(e => !options.removedContactIds!.includes(e.id))
+        : (Array.isArray(lead.contactHistory) ? lead.contactHistory : []));
+
+  const saved: Lead = { ...lead, id: safeLeadId, contactHistory: returnedHistory };
   offlineSaveLead(saved);
   return saved;
 }
@@ -1283,14 +1273,15 @@ export async function updateLeadStatus(id: string, status: Lead['status']) {
     }
     return;
   }
-  const { data, error } = await requireSupabase()
-    .from('customers')
-    .update({ status, last_follow_up: new Date().toISOString() })
-    .eq('id', id)
-    .select('id')
-    .maybeSingle();
+  const { error } = await requireSupabase().rpc('upsert_customer_pipeline', {
+    p_customer: {
+      id,
+      status,
+      last_follow_up: new Date().toISOString(),
+    },
+    p_removed_contact_ids: [],
+  });
   if (error) throw error;
-  if (!data) throw new Error('Customer was not updated. Check your access and try again.');
 }
 
 export async function deleteLead(id: string) {
@@ -1501,100 +1492,8 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     ? bill.leadId
     : null;
 
-  // Handle installment payment receipts or updates to an already-recorded bill without re-triggering stock movement RPC
-  let existingBill: { id: string } | null = null;
-  if (!customerPayload && bill.id) {
-    const { data, error: existingErr } = await client.from('bills').select('id').eq('id', bill.id).maybeSingle();
-    if (existingErr) throw existingErr;
-    existingBill = data;
-  }
-  if (type === 'installment' || existingBill) {
-    const baseDirectBill: Record<string, unknown> = {
-      id: bill.id,
-      bill_number: sanitizeText(bill.billNumber, 60),
-      type,
-      bill_date: sanitizeText(bill.date?.slice(0, 10), 20) || new Date().toISOString().slice(0, 10),
-      customer_id: customerId,
-      customer_name: sanitizeText(bill.customerName, 120) || null,
-      customer_phone: sanitizePhone(bill.customerPhone, 30) || null,
-      customer_id_card: sanitizeText(bill.customerIDCard, 60) || null,
-      customer_address: sanitizeText(bill.customerAddress, 250) || null,
-      customer_province: sanitizeText(bill.customerProvince, 100) || null,
-      sales_rep: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId) ? actorId : null,
-      recorded_by: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId) ? actorId : null,
-      payment_method: sanitizePaymentMethod(bill.paymentMethod, type === 'installment'),
-      qr_used: sanitizeText(bill.qrUsed, 60) || null,
-      bank_name: sanitizeText(bill.bankName, 100) || null,
-      transfer_ref: sanitizeText(bill.transferRef, 100) || null,
-      finance_company: sanitizeText(bill.financeCompany, 100) || null,
-      down_payment_percent: bill.downPaymentPercent != null ? sanitizeNumber(bill.downPaymentPercent, 0, 0, 100) : null,
-      down_payment_usd: bill.downPaymentUSD != null ? sanitizeNumber(bill.downPaymentUSD, 0) : null,
-      tenure_months: bill.tenureMonths != null ? sanitizeNumber(bill.tenureMonths, 0, 1, 120) : null,
-      monthly_payment_lak: bill.monthlyPaymentLAK != null ? sanitizeNumber(bill.monthlyPaymentLAK, 0) : null,
-      free_gifts: bill.freeGifts || [],
-      warranty_terms: sanitizeText(bill.warrantyTerms, 500) || null,
-      payment_slip_path: sanitizeText(bill.paymentSlipPath, 300) || null,
-      total_usd: sanitizeNumber(bill.netTotalUSD, 0),
-      total_lak: sanitizeNumber(bill.netTotalLAK, 0),
-      notes: sanitizeText(bill.notes, 1000) || null,
-    };
-
-    const extendedDirectBill: Record<string, unknown> = {
-      ...baseDirectBill,
-      installment_period: bill.installmentPeriod != null ? sanitizeNumber(bill.installmentPeriod, 0, 1, 120) : null,
-      warranty_start_date: sanitizeText(bill.warrantyStartDate, 30) || null,
-      warranty_expiry_date: sanitizeText(bill.warrantyExpiryDate, 30) || null,
-      warranty_years: bill.warrantyYears != null ? sanitizeNumber(bill.warrantyYears, 0, 1, 30) : null,
-      warranty_distance_km: bill.warrantyDistanceKm != null ? sanitizeNumber(bill.warrantyDistanceKm, 0) : null,
-      current_mileage_km: bill.currentMileageKm != null ? sanitizeNumber(bill.currentMileageKm, 0) : null,
-      battery_health_soh: bill.batteryHealthSOH != null ? sanitizeNumber(bill.batteryHealthSOH, 0, 0, 100) : null,
-      after_sales_notes: sanitizeText(bill.afterSalesNotes, 1000) || null,
-    };
-
-    // Editing an existing bill must not overwrite who originally sold/recorded it.
-    if (existingBill) {
-      for (const payload of [baseDirectBill, extendedDirectBill]) {
-        delete payload.sales_rep;
-        delete payload.recorded_by;
-      }
-    }
-
-    let { error: directErr } = await client.from('bills').upsert(extendedDirectBill);
-    if (directErr && (directErr.code === 'PGRST204' || directErr.message?.includes('column'))) {
-      const retry = await client.from('bills').upsert(baseDirectBill);
-      directErr = retry.error;
-    }
-    if (directErr) throw new Error(directErr.message || 'Bill could not be saved.');
-
-    if (existingBill && (bill.plateNumber || bill.model || bill.color || bill.engineNumber)) {
-      const { error: itemUpdateErr } = await client
-        .from('bill_items')
-        .update({
-          model_name: sanitizeText(bill.model, 100) || undefined,
-          plate_number: sanitizeText(bill.plateNumber, 30) || null,
-          color: sanitizeText(bill.color, 60) || null,
-          engine_number: sanitizeText(bill.engineNumber, 60) || null,
-        })
-        .eq('bill_id', bill.id);
-      if (itemUpdateErr) throw new Error(itemUpdateErr.message || 'Bill item details could not be updated.');
-    } else if (!existingBill && type === 'installment' && sanitizeVIN(bill.vin)) {
-      const { error: itemInsertErr } = await client.from('bill_items').insert({
-        id: newRecordId(),
-        bill_id: bill.id,
-        line_number: 1,
-        vehicle_vin: sanitizeVIN(bill.vin),
-        engine_number: sanitizeText(bill.engineNumber, 60) || null,
-        model_name: sanitizeText(bill.model, 100) || 'AVATR',
-        plate_number: sanitizeText(bill.plateNumber, 30) || null,
-        color: sanitizeText(bill.color, 60) || null,
-        unit_price_usd: sanitizeNumber(bill.unitPriceUSD, 0),
-        unit_price_lak: sanitizeNumber(bill.unitPriceLAK, 0),
-      });
-      if (itemInsertErr) throw new Error(itemInsertErr.message || 'Installment bill item could not be saved.');
-    }
-
-    offlineSaveBill(bill);
-    return;
+  if (type === 'installment') {
+    throw new Error('Installment receipts must be recorded via recordInstallmentPayment.');
   }
 
   let vehiclePayload: Record<string, unknown> | null = null;
@@ -1613,13 +1512,14 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     }
     if (!model) {
       const fallbackId = `model-${newRecordId().slice(0, 8)}`;
-      await client.from('vehicle_models').upsert({
+      const { error: upsertModelError } = await client.from('vehicle_models').upsert({
         id: fallbackId,
         name: vehicle.model || 'AVATR',
         category: 'EV',
         price_starting_usd: vehicle.priceUSD || 45000,
         price_starting_lak: vehicle.priceLAK || null,
       }, { onConflict: 'id' });
+      if (upsertModelError) throw upsertModelError;
       model = { id: fallbackId };
     }
 
@@ -1642,6 +1542,9 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     vehiclePayload = {
       model_id: model.id,
       engine_number: sanitizeText(vehicle.engineNumber, 60) || null,
+      front_motor_number: sanitizeText(vehicle.frontMotorNumber, 60) || null,
+      rear_motor_number: sanitizeText(vehicle.rearMotorNumber, 60) || null,
+      powertrain_type: vehicle.powertrainType === 'BEV' || vehicle.powertrainType === 'REEV' ? vehicle.powertrainType : null,
       plate_number: sanitizeText(vehicle.plateNumber, 30) || null,
       color: sanitizeText(vehicle.color, 60) || null,
       color_hex: sanitizeText(vehicle.colorHex, 20) || null,
@@ -1659,6 +1562,9 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
       reserved_for_customer: isUuid(vehicle.reservedForCustomer) ? vehicle.reservedForCustomer : null,
       arrival_date: arrivalDateIso,
       mileage_km: sanitizeNumber(vehicle.mileageKm, 0),
+      incoming_batch: sanitizeText(vehicle.incomingBatch, 120) || null,
+      expected_arrival_date: sanitizeText(vehicle.expectedArrivalDate, 10) || null,
+      issue_note: sanitizeText(vehicle.issueNote, 1000) || null,
       event_campaign: sanitizeText(vehicle.eventCampaign, 100) || null,
       event_start_date: eventStartIso,
       event_end_date: eventEndIso,
@@ -1667,6 +1573,8 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
       promotion_notes: sanitizeText(vehicle.promotionNotes, 500) || null,
     };
   }
+
+  const resolvedSalesRep = (await resolveStaffUuid(client, bill.salesRep)) || actorId;
 
   const billRow = {
     id: bill.id,
@@ -1679,7 +1587,7 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
     id_card: sanitizeText(bill.customerIDCard, 60) || null,
     address: sanitizeText(bill.customerAddress, 250) || null,
     province: sanitizeText(bill.customerProvince, 100) || null,
-    sales_rep: actorId,
+    sales_rep: resolvedSalesRep,
     recorded_by: actorId,
     payment_method: sanitizePaymentMethod(bill.paymentMethod, false),
     qr_used: sanitizeText(bill.qrUsed, 60) || null,
@@ -1751,30 +1659,9 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
   if (vehiclePayload) {
     rpcParams.p_vehicle = vehiclePayload;
   }
-  let { error } = await client.rpc('record_vehicle_bill', rpcParams);
-  if (error && error.code === 'PGRST202' && vehiclePayload) {
-    await saveInventoryItem(vehicle!);
-    delete rpcParams.p_vehicle;
-    const retry = await client.rpc('record_vehicle_bill', rpcParams);
-    error = retry.error;
-  }
+  const { error } = await client.rpc('record_vehicle_bill', rpcParams);
   if (error) {
     throw new Error(error.message || 'Sale could not be saved.');
-  }
-  if (vehicle && vehiclePayload) {
-    // record_vehicle_bill writes a fixed column list; add the Excel-parity fields after it
-    const parity = {
-      front_motor_number: sanitizeText(vehicle.frontMotorNumber, 60) || null,
-      rear_motor_number: sanitizeText(vehicle.rearMotorNumber, 60) || null,
-      powertrain_type: vehicle.powertrainType === 'BEV' || vehicle.powertrainType === 'REEV' ? vehicle.powertrainType : null,
-      incoming_batch: sanitizeText(vehicle.incomingBatch, 120) || null,
-      expected_arrival_date: sanitizeText(vehicle.expectedArrivalDate, 10) || null,
-      issue_note: sanitizeText(vehicle.issueNote, 1000) || null,
-    };
-    if (Object.values(parity).some(v => v != null)) {
-      const { error: parityError } = await client.from('vehicles').update(parity).eq('vin', sanitizeVIN(vehicle.vin));
-      if (parityError) warnMissingColumns('20261110120000_excel_parity_fields', 'ເລກມໍເຕີ/ລອດ/ກຳນົດມາຮອດ ຂອງລົດ');
-    }
   }
   offlineSaveBill(bill);
 }
@@ -1829,7 +1716,10 @@ export async function attachSlipToBill(billId: string, file: File): Promise<stri
     return path;
   }
   const client = requireSupabase();
-  const { error } = await client.from('bills').update({ payment_slip_path: path }).eq('id', billId);
+  const { error } = await client.rpc('attach_bill_payment_slip', {
+    p_bill_id: billId,
+    p_slip_path: path,
+  });
   if (error) throw error;
   return path;
 }
@@ -1887,33 +1777,23 @@ export async function saveStaffProfile(user: SystemUser) {
     if (!parsed.unavailable) {
       throw new Error(parsed.message);
     }
-    console.warn('manage-staff update unavailable, trying direct update fallback:', parsed.message);
+    const { data: authData } = await client.auth.getUser();
+    if (authData?.user?.id === user.id) {
+      const { error: selfErr } = await client.rpc('update_own_staff_profile', {
+        p_name: user.name,
+        p_phone: user.phone || null,
+        p_department: user.department || null,
+      });
+      if (selfErr) throw selfErr;
+      const mapped = { ...user, roleTitleLo: ROLE_LABELS[user.role] };
+      cachedStaffUsers = null;
+      offlineSaveUser(mapped);
+      return mapped;
+    }
+    throw new Error(parsed.message || 'Staff profile update requires the manage-staff Edge Function.');
   }
 
-  // Fallback direct table update when edge function is unreachable or not deployed
-  const { data: updatedProfile, error: updateError } = await client
-    .from('staff_profiles')
-    .update({
-      name: user.name,
-      phone: user.phone || null,
-      department: user.department || null,
-      role: roleForSave(user),
-      role_title: ROLE_LABELS[user.role],
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', user.id)
-    .select('id,email,name,phone,role,department,role_title,status,created_at,last_login')
-    .maybeSingle();
-
-  if (updateError) throw updateError;
-  if (!updatedProfile) {
-    throw new Error('Staff profile could not be updated. Check your permissions and try again.');
-  }
-
-  const mapped = mapStaffProfile(updatedProfile);
-  cachedStaffUsers = null;
-  offlineSaveUser(mapped);
-  return mapped;
+  throw new Error('Staff profile could not be updated. Check your permissions and try again.');
 }
 
 export async function deactivateStaffProfile(id: string) {
@@ -1932,25 +1812,7 @@ export async function deactivateStaffProfile(id: string) {
     return;
   }
   const parsed = await parseEdgeError(edgeError);
-  if (!parsed.unavailable) {
-    throw new Error(parsed.message);
-  }
-  console.warn('manage-staff suspend unavailable, trying direct update fallback:', parsed.message);
-
-  const { data, error } = await client
-    .from('staff_profiles')
-    .update({ status: 'suspended', updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select('id')
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) {
-    throw new Error('Staff account could not be suspended. Check your permissions and try again.');
-  }
-
-  cachedStaffUsers = null;
-  offlineDeactivateUser(id);
+  throw new Error(parsed.message || 'Staff account could not be suspended.');
 }
 
 export async function reactivateStaffProfile(id: string) {
@@ -1977,18 +1839,7 @@ export async function reactivateStaffProfile(id: string) {
     return;
   }
 
-  const { data, error } = await client
-    .from('staff_profiles')
-    .update({ status: 'active', updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select('id')
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) {
-    throw new Error('Staff account could not be reactivated. Check your permissions and try again.');
-  }
-  cachedStaffUsers = null;
+  throw new Error(rpcError.message || parsed.message || 'Staff account could not be reactivated.');
 }
 
 export async function deleteStaffProfile(id: string) {
@@ -2079,6 +1930,7 @@ export interface BillVoidInfo {
   voidReason: string;
   voidedBy: string;
   voidedAt: string;
+  revertedCustomerId?: string | null;
 }
 
 /** Void a bill (Admin only). A reason is required and is stored with who voided it and when. */
@@ -2093,33 +1945,13 @@ export async function deleteBill(id: string, reason: string, actorName: string):
   }
   const client = requireSupabase();
   const { data, error } = await client.rpc('void_bill_with_reason', { p_bill_id: id, p_reason: cleanReason });
-  if (!error) {
-    return {
-      voidReason: data?.reason || cleanReason,
-      voidedBy: data?.voided_by_name || actorName,
-      voidedAt: data?.voided_at || fallbackInfo.voidedAt,
-    };
-  }
-  const rpcMissing = error.code === 'PGRST202' || error.code === '42883' || /void_bill_with_reason/.test(error.message || '');
-  if (!rpcMissing) throw error;
-
-  // Migration 20261111120000_bill_void_reason not applied yet: void the old way and keep the reason in the bill notes
-  const { error: voidError } = await client.rpc('delete_vehicle_bill', { p_bill_id: id });
-  if (voidError) throw voidError;
-  const { data: current } = await client.from('bills').select('notes').eq('id', id).maybeSingle();
-  const stamp = `[ຍົກເລີກ ${fallbackInfo.voidedAt.slice(0, 10)} ໂດຍ ${actorName}: ${cleanReason}]`;
-  const notes = [current?.notes, stamp].filter(Boolean).join('\n');
-  const { error: notesError } = await client.from('bills').update({ notes }).eq('id', id);
-  if (!warnedMigrations.has('20261111120000_bill_void_reason')) {
-    warnedMigrations.add('20261111120000_bill_void_reason');
-    showToast(
-      notesError
-        ? 'ຍົກເລີກບິນແລ້ວ ແຕ່ບັນທຶກເຫດຜົນບໍ່ສຳເລັດ. ກະລຸນາແຈ້ງ Admin ໃຫ້ apply migration 20261111120000_bill_void_reason'
-        : 'ຍົກເລີກບິນແລ້ວ. ເຫດຜົນຖືກບັນທຶກໄວ້ໃນໝາຍເຫດບິນ (ຊົ່ວຄາວ) ຈົນກວ່າຈະ apply migration 20261111120000_bill_void_reason',
-      'warning'
-    );
-  }
-  return fallbackInfo;
+  if (error) throw error;
+  return {
+    voidReason: data?.reason || cleanReason,
+    voidedBy: data?.voided_by_name || actorName,
+    voidedAt: data?.voided_at || fallbackInfo.voidedAt,
+    revertedCustomerId: data?.reverted_customer_id || null,
+  };
 }
 
 export async function handoverStaffPendingLeads(
@@ -2132,37 +1964,23 @@ export async function handoverStaffPendingLeads(
     return offlineCount;
   }
   const client = requireSupabase();
-  try {
-    let query = client
-      .from('customers')
-      .update({
-        assigned_to: toStaff.id,
-        updated_at: new Date().toISOString(),
-      });
-
-    if (leadIds && leadIds.length > 0) {
-      const validUuids = leadIds.filter(isUuid);
-      if (validUuids.length > 0) {
-        query = query.in('id', validUuids);
-      } else {
-        return offlineCount;
-      }
-    } else if (isUuid(fromStaff.id)) {
-      query = query
-        .eq('assigned_to', fromStaff.id)
-        .not('status', 'in', '("delivered","lost")');
-    }
-
-    const { data, error } = await query.select('id');
-    if (error) {
-      console.error('Supabase handoverStaffPendingLeads error:', error.message);
-      throw error;
-    }
-    return data?.length ?? offlineCount;
-  } catch (err) {
-    console.error('Supabase handoverStaffPendingLeads exception:', err);
-    throw err;
+  if (!isUuid(toStaff.id)) {
+    throw new Error('Target staff ID must be a valid UUID.');
   }
+  const validLeadUuids = (leadIds || []).filter(isUuid);
+  if (leadIds && leadIds.length > 0 && validLeadUuids.length === 0) {
+    return offlineCount;
+  }
+  const { data, error } = await client.rpc('handover_staff_leads', {
+    p_from_staff_id: isUuid(fromStaff.id) ? fromStaff.id : null,
+    p_to_staff_id: toStaff.id,
+    p_lead_ids: validLeadUuids.length > 0 ? validLeadUuids : null,
+  });
+  if (error) {
+    console.error('Supabase handoverStaffPendingLeads error:', error.message);
+    throw error;
+  }
+  return typeof data === 'number' ? data : Number(data) || offlineCount;
 }
 
 export async function generateNextBillNumber(prefix: string = 'INV'): Promise<string> {
@@ -2182,5 +2000,263 @@ export async function generateNextBillNumber(prefix: string = 'INV'): Promise<st
   } catch (err) {
     console.warn('generate_next_bill_number RPC error:', err);
     return fallback;
+  }
+}
+
+export interface InstallmentPaymentInput {
+  paidAmountUSD?: number;
+  paidAmountLAK?: number;
+  paidDate?: string;
+  paymentMethod?: 'cash' | 'transfer' | string;
+  bankName?: string;
+  transferRef?: string;
+  notes?: string;
+}
+
+export interface InstallmentPaymentResult {
+  billId: string;
+  billNumber: string;
+  paidAmountUSD: number;
+  paidAmountLAK: number;
+  installmentStatus: Lead['installmentStatus'];
+  updatedRecords: InstallmentPaymentRecord[];
+}
+
+export async function recordInstallmentPayment(
+  customerId: string,
+  period: number,
+  payment: InstallmentPaymentInput,
+): Promise<InstallmentPaymentResult> {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    const data = getOfflineBackendData();
+    const lead = data.leads.find((l) => l.id === customerId);
+    const records = Array.isArray(lead?.installmentRecords) ? [...lead.installmentRecords] : [];
+    const billId = newRecordId();
+    const billNumber = `INS-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+    const updatedRecords = records.map((rec) =>
+      rec.period === period
+        ? {
+            ...rec,
+            status: 'paid' as const,
+            paidDate: payment.paidDate || new Date().toISOString().slice(0, 10),
+            paidAmountUSD: payment.paidAmountUSD ?? rec.amountUSD,
+            paidAmountLAK: payment.paidAmountLAK ?? rec.amountLAK,
+            paymentMethod: (payment.paymentMethod === 'cash' ? 'cash' : 'transfer') as 'cash' | 'transfer',
+            bankName: payment.bankName,
+            transferRef: payment.transferRef,
+            receiptNo: billNumber,
+            notes: payment.notes,
+          }
+        : rec,
+    );
+    const paidUSD = updatedRecords.filter((r) => r.status === 'paid').reduce((s, r) => s + (r.paidAmountUSD ?? r.amountUSD), 0);
+    const paidLAK = updatedRecords.filter((r) => r.status === 'paid').reduce((s, r) => s + (r.paidAmountLAK ?? r.amountLAK), 0);
+    const allPaid = updatedRecords.length > 0 && updatedRecords.every((r) => r.status === 'paid');
+    const installmentStatus: Lead['installmentStatus'] = allPaid ? 'completed' : 'active_repaying';
+    if (lead) {
+      offlineSaveLead({ ...lead, installmentRecords: updatedRecords, paidAmountUSD: paidUSD, paidAmountLAK: paidLAK, installmentStatus });
+    }
+    return { billId, billNumber, paidAmountUSD: paidUSD, paidAmountLAK: paidLAK, installmentStatus, updatedRecords };
+  }
+
+  const client = requireSupabase();
+  const payload = {
+    paidAmountUSD: payment.paidAmountUSD != null ? sanitizeNumber(payment.paidAmountUSD, 0) : undefined,
+    paidAmountLAK: payment.paidAmountLAK != null ? sanitizeNumber(payment.paidAmountLAK, 0) : undefined,
+    paidDate: sanitizeText(payment.paidDate, 20) || undefined,
+    paymentMethod: payment.paymentMethod === 'cash' ? 'cash' : 'transfer',
+    bankName: sanitizeText(payment.bankName, 100) || undefined,
+    transferRef: sanitizeText(payment.transferRef, 100) || undefined,
+    notes: sanitizeText(payment.notes, 1000) || undefined,
+  };
+  const { data, error } = await client.rpc('record_installment_payment', {
+    p_customer_id: customerId,
+    p_period: period,
+    p_payment: payload,
+  });
+  if (error) throw error;
+  return {
+    billId: String(data?.bill_id || ''),
+    billNumber: String(data?.bill_number || ''),
+    paidAmountUSD: Number(data?.paid_amount_usd) || 0,
+    paidAmountLAK: Number(data?.paid_amount_lak) || 0,
+    installmentStatus: (data?.installment_status || 'active_repaying') as Lead['installmentStatus'],
+    updatedRecords: Array.isArray(data?.updated_records) ? (data.updated_records as InstallmentPaymentRecord[]) : [],
+  };
+}
+
+export async function revertInstallmentPayment(
+  customerId: string,
+  period: number,
+  reason?: string,
+): Promise<{
+  updatedRecords: InstallmentPaymentRecord[];
+  paidAmountUSD: number;
+  paidAmountLAK: number;
+  voidedBillIds: string[];
+}> {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    const data = getOfflineBackendData();
+    const lead = data.leads.find((l) => l.id === customerId);
+    const updatedRecords = (lead?.installmentRecords || []).map((rec) =>
+      rec.period === period
+        ? { period: rec.period, dueDate: rec.dueDate, amountUSD: rec.amountUSD, amountLAK: rec.amountLAK, principalUSD: rec.principalUSD, interestUSD: rec.interestUSD, status: 'pending' as const }
+        : rec,
+    );
+    const paidAmountUSD = updatedRecords.filter((r) => r.status === 'paid').reduce((s, r) => s + (r.paidAmountUSD ?? r.amountUSD), 0);
+    const paidAmountLAK = updatedRecords.filter((r) => r.status === 'paid').reduce((s, r) => s + (r.paidAmountLAK ?? r.amountLAK), 0);
+    if (lead) {
+      offlineSaveLead({ ...lead, installmentRecords: updatedRecords, paidAmountUSD, paidAmountLAK, installmentStatus: 'active_repaying', isPaymentCompleted: false });
+    }
+    return { updatedRecords, paidAmountUSD, paidAmountLAK, voidedBillIds: [] };
+  }
+
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('revert_installment_payment', {
+    p_customer_id: customerId,
+    p_period: period,
+    p_reason: sanitizeText(reason || 'Payment reverted', 500),
+  });
+  if (error) throw error;
+  return {
+    updatedRecords: Array.isArray(data?.updated_records) ? (data.updated_records as InstallmentPaymentRecord[]) : [],
+    paidAmountUSD: Number(data?.paid_amount_usd) || 0,
+    paidAmountLAK: Number(data?.paid_amount_lak) || 0,
+    voidedBillIds: Array.isArray(data?.voided_bill_ids) ? (data.voided_bill_ids as string[]) : [],
+  };
+}
+
+export async function confirmInstallmentPayoff(
+  customerId: string,
+  notes?: string,
+): Promise<Record<string, unknown> | null> {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    const data = getOfflineBackendData();
+    const lead = data.leads.find((l) => l.id === customerId);
+    if (lead) {
+      offlineSaveLead({
+        ...lead,
+        installmentStatus: 'completed',
+        isPaymentCompleted: true,
+        status: 'delivered',
+        paymentTypeConfirmed: 'installment_completed',
+        paidDate: new Date().toISOString().slice(0, 10),
+        notes: notes || lead.notes,
+      });
+    }
+    return null;
+  }
+
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('confirm_installment_payoff', {
+    p_customer_id: customerId,
+    p_notes: sanitizeText(notes, 1000) || null,
+  });
+  if (error) throw error;
+  return (data as Record<string, unknown>) || null;
+}
+
+export interface CustomerPaymentConfirmationInput {
+  paidAmountUSD: number;
+  paidAmountLAK: number;
+  installmentStatus?: Lead['installmentStatus'];
+  paymentDate?: string;
+  paymentMethodRef?: string;
+  paymentBank?: string;
+  paymentReceiptNo?: string;
+  paymentConfirmedBy?: string;
+  paymentTypeConfirmed?: Lead['paymentTypeConfirmed'];
+  notes?: string;
+}
+
+export async function confirmCustomerPayment(
+  customerId: string,
+  payment: CustomerPaymentConfirmationInput,
+): Promise<Record<string, unknown> | null> {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    const data = getOfflineBackendData();
+    const lead = data.leads.find((l) => l.id === customerId);
+    if (lead) {
+      offlineSaveLead({
+        ...lead,
+        status: 'delivered',
+        ...payment,
+        isPaymentCompleted: payment.paymentTypeConfirmed === 'full' ? true : lead.isPaymentCompleted,
+      });
+    }
+    return null;
+  }
+
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('confirm_customer_payment', {
+    p_customer_id: customerId,
+    p_payment: {
+      paidAmountUSD: sanitizeNumber(payment.paidAmountUSD, 0),
+      paidAmountLAK: sanitizeNumber(payment.paidAmountLAK, 0),
+      installmentStatus: payment.installmentStatus || null,
+      paymentDate: sanitizeText(payment.paymentDate, 40) || null,
+      paymentMethodRef: sanitizeText(payment.paymentMethodRef, 120) || null,
+      paymentBank: sanitizeText(payment.paymentBank, 100) || null,
+      paymentReceiptNo: sanitizeText(payment.paymentReceiptNo, 100) || null,
+      paymentConfirmedBy: sanitizeText(payment.paymentConfirmedBy, 120) || null,
+      paymentTypeConfirmed: payment.paymentTypeConfirmed || null,
+      notes: sanitizeText(payment.notes, 1000) || null,
+    },
+  });
+  if (error) throw error;
+  return (data as Record<string, unknown>) || null;
+}
+
+export async function updateBillAfterSales(
+  billId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  if (!isSupabaseConfigured) {
+    requireOfflineDemo();
+    return;
+  }
+  const client = requireSupabase();
+  const { error } = await client.rpc('update_bill_after_sales', {
+    p_bill_id: billId,
+    p_payload: payload,
+  });
+  if (error) throw error;
+}
+
+export interface DashboardSalesSummary {
+  totalUnits: number;
+  vehicleSalesRevenueUSD: number;
+  monthlyInstallmentCollectedUSD: number;
+}
+
+export async function fetchDashboardSalesSummary(
+  period: 'day' | 'week' | 'month' | 'year' = 'month',
+  targetDate?: string,
+): Promise<DashboardSalesSummary | null> {
+  if (!isSupabaseConfigured) {
+    return null;
+  }
+  try {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc('get_dashboard_sales_summary', {
+      p_period: period,
+      p_target_date: targetDate || new Date().toLocaleDateString('en-CA'),
+    });
+    if (error || !data) {
+      if (error) console.warn('get_dashboard_sales_summary notice:', error.message);
+      return null;
+    }
+    return {
+      totalUnits: Number(data.total_units) || 0,
+      vehicleSalesRevenueUSD: Number(data.vehicle_sales_revenue_usd) || 0,
+      monthlyInstallmentCollectedUSD: Number(data.monthly_installment_collected_usd) || 0,
+    };
+  } catch (err) {
+    console.warn('Failed to fetch dashboard sales summary:', err);
+    return null;
   }
 }

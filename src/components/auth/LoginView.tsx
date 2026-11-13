@@ -110,6 +110,7 @@ export default function LoginView({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileResetSignal, setTurnstileResetSignal] = useState(0);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,6 +131,8 @@ export default function LoginView({
       setSuccessMessage(`${lang === 'th' ? 'เข้าสู่ระบบสำเร็จ' : lang === 'lo' ? 'ເຂົ້າລະບົບສຳເລັດ' : 'Signed in'}: ${user.name}`);
       onLoginSuccess(user, rememberMe);
     } catch (error) {
+      setTurnstileToken(null);
+      setTurnstileResetSignal(s => s + 1);
       setErrorMessage(formatAuthError(error, lang));
     } finally {
       setIsLoading(false);
@@ -460,6 +463,7 @@ export default function LoginView({
 
             <TurnstileWidget
               action="login"
+              resetSignal={turnstileResetSignal}
               theme={isDark ? 'dark' : 'light'}
               onVerify={(token) => setTurnstileToken(token)}
               onExpire={() => setTurnstileToken(null)}

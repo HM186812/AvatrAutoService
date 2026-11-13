@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CustomCurrencyConfig, Language } from '../../types';
 import { translations } from '../../data/translations';
-import { saveStoredCurrencies } from '../../data/currencies';
+import { DEFAULT_LAK_EXCHANGE_RATE, saveStoredCurrencies } from '../../data/currencies';
 import { saveDealershipConfigToSupabase } from '../../supabase';
 import { DollarSign, Plus, Trash2, Check, X, RefreshCw, ShieldCheck } from 'lucide-react';
 import { showToast } from '../common';
@@ -111,7 +111,7 @@ export default function CurrencyModal({
   const handleResetDefaults = () => {
     const defaultList: CustomCurrencyConfig[] = [
       { code: 'USD', nameLo: 'ໂດລາສະຫະລັດ (USD)', symbol: '$', rateToUSD: 1 },
-      { code: 'LAK', nameLo: 'ກີບລາວ (LAK)', symbol: '₭', rateToUSD: 22000 },
+      { code: 'LAK', nameLo: 'ກີບລາວ (LAK)', symbol: '₭', rateToUSD: DEFAULT_LAK_EXCHANGE_RATE },
       { code: 'THB', nameLo: 'ບາດໄທ (THB)', symbol: '฿', rateToUSD: 35.5 },
     ];
     setList(defaultList);

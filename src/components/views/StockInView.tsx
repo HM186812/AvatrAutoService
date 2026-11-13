@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, InvoiceBillRecord, StockLogRecord, SystemUser } from '../../types';
 import { translations } from '../../data/translations';
+import { resolveLakExchangeRate } from '../../data/currencies';
 import { newRecordId } from '../../backend/ids';
 import { generateNextBillNumber } from '../../backend/data';
 import { SALE_READY_STATUSES } from '../../data/stockSummary';
@@ -176,7 +177,7 @@ export default function StockInView({
       tagline: newModelCategory || 'ຍົນລະກຳອັດສະລິຍະພຣີມຽມ',
       category: newModelCategory,
       priceStartingUSD: Number(newModelPriceUSD) || 45000,
-      priceStartingLAK: (Number(newModelPriceUSD) || 45000) * 22000,
+      priceStartingLAK: (Number(newModelPriceUSD) || 45000) * resolveLakExchangeRate(),
       acceleration: '3.98s (0-100 km/h)',
       rangeCLTC: '700 km',
       batteryCapacity: newModelBattery || '94.5 kWh',
@@ -316,11 +317,12 @@ export default function StockInView({
   };
 
   const [isSubmittingStockIn, setIsSubmittingStockIn] = useState(false);
+  const submitLockRef = useRef(false);
 
   // SUBMIT IMPORT & GENERATE INBOUND BILL
   const handleSubmitStockIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmittingStockIn) return;
+    if (submitLockRef.current || isSubmittingStockIn) return;
 
     if (!vin.trim()) {
       triggerToast('ກະລຸນາປ້ອນເລກຖັງ (VIN) ກ່ອນ!', 'error');
@@ -402,91 +404,98 @@ export default function StockInView({
       return;
     }
     const finalPriceUSD = rawVal;
-    const finalPriceLAK = Math.round(finalPriceUSD * 22000);
+    const finalPriceLAK = Math.round(finalPriceUSD * resolveLakExchangeRate());
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
     const importDateTime = importDate ? `${importDate} ${new Date().toTimeString().slice(0, 8)}` : now;
-    const grnNumber = await generateNextBillNumber('GRN');
-
     const finalColor = color.trim() ? color.trim() : (lang === 'lo' ? 'ມາດຕະຖານ' : lang === 'th' ? 'มาตรฐาน' : 'Standard');
 
-    const newItem: InventoryItem = {
-      vin: cleanVin,
-      engineNumber: engineNumber.trim() || undefined,
-      frontMotorNumber: cleanFront || undefined,
-      rearMotorNumber: cleanRear || undefined,
-      powertrainType: powertrainType || undefined,
-      model,
-      trim,
-      plateNumber: plateNumber.trim() ? plateNumber.trim() : undefined,
-      color: finalColor,
-      interiorColor,
-      battery,
-      priceUSD: finalPriceUSD,
-      priceLAK: finalPriceLAK,
-      status,
-      stockQuantity: qty,
-      pdiStatus,
-      destinationWarehouse,
-      arrivalDate: importDateTime,
-      expectedArrivalDate: status === 'in_transit' ? expectedArrivalDate : undefined,
-      importDocNumber: customsDocNumber || undefined,
-      image: finalImage,
-      imageUrl: finalImage,
-      notes: notes.trim() || undefined,
-      pdiInspector,
-      eventCampaign: (status === 'event' || status === 'promotion') ? eventCampaign : undefined,
-      eventStartDate: (status === 'event' || status === 'promotion') ? eventStartDate : undefined,
-      eventEndDate: (status === 'event' || status === 'promotion') ? eventEndDate : undefined,
-      eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
-      promotionDiscountUSD: (status === 'event' || status === 'promotion') && promotionDiscountUSD > 0 ? promotionDiscountUSD : undefined,
-      promotionNotes: (status === 'event' || status === 'promotion') && promotionNotes.trim() ? promotionNotes.trim() : undefined,
-    };
-
-    // Create official inbound bill (goods receipt note).
-    const newBill: InvoiceBillRecord = {
-      id: newRecordId(),
-      billType: 'import',
-      billNumber: grnNumber,
-      date: importDateTime,
-      vin: cleanVin,
-      engineNumber: engineNumber.trim() || undefined,
-      model,
-      trim,
-      plateNumber: newItem.plateNumber,
-      color: finalColor,
-      interiorColor,
-      battery,
-      quantity: qty,
-      unitPriceUSD: finalPriceUSD,
-      unitPriceLAK: finalPriceLAK,
-      discountUSD: 0,
-      discountLAK: 0,
-      netTotalUSD: finalPriceUSD * qty,
-      netTotalLAK: finalPriceLAK * qty,
-      amountUSD: finalPriceUSD * qty,
-      amountLAK: finalPriceLAK * qty,
-      supplierName,
-      customsDocNumber,
-      importEntryPort,
-      destinationWarehouse,
-      inspectorName: pdiInspector,
-      pdiStatusInitial: pdiStatus,
-      statusInitial: status,
-      eventCampaign: (status === 'event' || status === 'promotion') ? eventCampaign : undefined,
-      eventStartDate: (status === 'event' || status === 'promotion') ? eventStartDate : undefined,
-      eventEndDate: (status === 'event' || status === 'promotion') ? eventEndDate : undefined,
-      eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
-      recordedBy,
-      notes: notes.trim() || undefined,
-    };
-
+    submitLockRef.current = true;
     setIsSubmittingStockIn(true);
+
+    let grnNumber = '';
+    let newItem!: InventoryItem;
+    let newBill!: InvoiceBillRecord;
+
     try {
+      grnNumber = await generateNextBillNumber('GRN');
+
+      newItem = {
+        vin: cleanVin,
+        engineNumber: engineNumber.trim() || undefined,
+        frontMotorNumber: cleanFront || undefined,
+        rearMotorNumber: cleanRear || undefined,
+        powertrainType: powertrainType || undefined,
+        model,
+        trim,
+        plateNumber: plateNumber.trim() ? plateNumber.trim() : undefined,
+        color: finalColor,
+        interiorColor,
+        battery,
+        priceUSD: finalPriceUSD,
+        priceLAK: finalPriceLAK,
+        status,
+        stockQuantity: qty,
+        pdiStatus,
+        destinationWarehouse,
+        arrivalDate: importDateTime,
+        expectedArrivalDate: status === 'in_transit' ? expectedArrivalDate : undefined,
+        importDocNumber: customsDocNumber || undefined,
+        image: finalImage,
+        imageUrl: finalImage,
+        notes: notes.trim() || undefined,
+        pdiInspector,
+        eventCampaign: (status === 'event' || status === 'promotion') ? eventCampaign : undefined,
+        eventStartDate: (status === 'event' || status === 'promotion') ? eventStartDate : undefined,
+        eventEndDate: (status === 'event' || status === 'promotion') ? eventEndDate : undefined,
+        eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
+        promotionDiscountUSD: (status === 'event' || status === 'promotion') && promotionDiscountUSD > 0 ? promotionDiscountUSD : undefined,
+        promotionNotes: (status === 'event' || status === 'promotion') && promotionNotes.trim() ? promotionNotes.trim() : undefined,
+      };
+
+      // Create official inbound bill (goods receipt note).
+      newBill = {
+        id: newRecordId(),
+        billType: 'import',
+        billNumber: grnNumber,
+        date: importDateTime,
+        vin: cleanVin,
+        engineNumber: engineNumber.trim() || undefined,
+        model,
+        trim,
+        plateNumber: newItem.plateNumber,
+        color: finalColor,
+        interiorColor,
+        battery,
+        quantity: qty,
+        unitPriceUSD: finalPriceUSD,
+        unitPriceLAK: finalPriceLAK,
+        discountUSD: 0,
+        discountLAK: 0,
+        netTotalUSD: finalPriceUSD * qty,
+        netTotalLAK: finalPriceLAK * qty,
+        amountUSD: finalPriceUSD * qty,
+        amountLAK: finalPriceLAK * qty,
+        supplierName,
+        customsDocNumber,
+        importEntryPort,
+        destinationWarehouse,
+        inspectorName: pdiInspector,
+        pdiStatusInitial: pdiStatus,
+        statusInitial: status,
+        eventCampaign: (status === 'event' || status === 'promotion') ? eventCampaign : undefined,
+        eventStartDate: (status === 'event' || status === 'promotion') ? eventStartDate : undefined,
+        eventEndDate: (status === 'event' || status === 'promotion') ? eventEndDate : undefined,
+        eventLocation: (status === 'event' || status === 'promotion') ? eventLocation : undefined,
+        recordedBy,
+        notes: notes.trim() || undefined,
+      };
+
       await saveBillToSupabase(newBill, newItem);
     } catch (error) {
       triggerToast(error instanceof Error ? error.message : 'Stock-in could not be saved.', 'error');
       return;
     } finally {
+      submitLockRef.current = false;
       setIsSubmittingStockIn(false);
     }
     setInventory(prev => [newItem, ...prev]);

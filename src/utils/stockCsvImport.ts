@@ -1,4 +1,5 @@
 import type { InventoryItem, StockStatus, VehicleModel } from '../types';
+import { resolveLakExchangeRate } from '../data/currencies';
 
 /** RFC 4180 CSV parser (quotes, escaped quotes, CRLF, BOM). */
 export function parseCsv(text: string): string[][] {
@@ -24,7 +25,7 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
-type Field = 'model' | 'vin' | 'front' | 'rear' | 'engine' | 'color' | 'interior' | 'remark' | 'status' | 'customer' | 'mileage';
+type Field = 'model' | 'vin' | 'front' | 'rear' | 'engine' | 'color' | 'interior' | 'remark' | 'status' | 'customer' | 'mileage' | 'price';
 
 // Header synonyms seen across the stock workbook's sheets (lower-cased, spaces collapsed)
 const HEADER_RULES: [Field, RegExp][] = [
@@ -39,6 +40,7 @@ const HEADER_RULES: [Field, RegExp][] = [
   ['customer', /ຊື່ລູກຄ້າ|booking/],
   ['status', /ສະຖານ/],
   ['mileage', /mileage/],
+  ['price', /price|unit\s*price|ລາຄາ|ราคา/],
 ];
 
 export interface StockCsvRow {
@@ -138,13 +140,20 @@ export function parseStockCsv(
     if (!vinLooksReal && !matchedModel) continue; // notes under the table (e.g. 'Note | Wheel')
     if (!vinLooksReal && !/^[A-Za-z]/.test(rawModel)) continue; // summary block ("ລົດ AVATR 07 | 8")
 
+    const rawCsvPrice = at(r, 'price')[0] || '';
+    const parsedCsvPrice = rawCsvPrice ? Number(rawCsvPrice.replace(/[^\d.]/g, '')) : 0;
+    const priceUSD = Number.isFinite(parsedCsvPrice) && parsedCsvPrice > 0
+      ? parsedCsvPrice
+      : (matchedModel?.priceStartingUSD || 0);
+
     const problems: string[] = [];
     if (!/^[A-Z0-9]{17}$/.test(vin)) problems.push('vin_invalid');
     if (!rawModel) problems.push('model_missing');
     else if (!matchedModel) problems.push('model_unknown');
+    if (!(priceUSD > 0)) problems.push('price_missing');
 
     let state: StockCsvRow['state'] = 'new';
-    if (problems.includes('vin_invalid')) state = 'invalid';
+    if (problems.includes('vin_invalid') || problems.includes('price_missing')) state = 'invalid';
     else if (existingVins.has(vin)) state = 'exists';
     else if (seenVins.has(vin)) state = 'duplicate';
     if (state === 'new') seenVins.add(vin);
@@ -159,6 +168,10 @@ export function parseStockCsv(
     const status: StockStatus = inferred.status === 'ready' ? 'imported' : inferred.status;
     const rear = at(r, 'rear');
     const modelName = matchedModel?.name || rawModel;
+    const lakRate = resolveLakExchangeRate();
+    const priceLAK = parsedCsvPrice > 0
+      ? Math.round(priceUSD * lakRate)
+      : (matchedModel?.priceStartingLAK || Math.round(priceUSD * lakRate));
 
     const item: InventoryItem | undefined = state === 'invalid' ? undefined : {
       vin,
@@ -171,8 +184,8 @@ export function parseStockCsv(
       color: at(r, 'color')[0] || '-',
       interiorColor: at(r, 'interior')[0] || '',
       battery: '',
-      priceUSD: matchedModel?.priceStartingUSD || 0,
-      priceLAK: matchedModel?.priceStartingLAK || 0,
+      priceUSD,
+      priceLAK,
       stockQuantity: status === 'sold' ? 0 : 1,
       status,
       pdiStatus: 'pending',

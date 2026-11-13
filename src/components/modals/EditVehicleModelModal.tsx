@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { VehicleModel, Language } from '../../types';
 import { X, Edit3, DollarSign, Tag, Sparkles } from 'lucide-react';
+import { resolveLakExchangeRate } from '../../data/currencies';
 
 interface EditVehicleModelModalProps {
   isOpen: boolean;
@@ -67,6 +68,7 @@ export default function EditVehicleModelModal({
 
     setIsSaving(true);
     try {
+      const lakRate = resolveLakExchangeRate();
       const updatedModel: VehicleModel = {
         ...model,
         name: cleanName,
@@ -75,7 +77,7 @@ export default function EditVehicleModelModal({
         subTitle: category.trim() || model.subTitle || 'Next-Gen Intelligent EV',
         tagline: category.trim() || model.tagline || 'ຍົນລະກຳອັດສະລິຍະພຣີມຽມ',
         priceStartingUSD: priceNum,
-        priceStartingLAK: priceNum * 22000,
+        priceStartingLAK: Math.round(priceNum * lakRate),
       };
 
       await onSave(updatedModel, oldName);
@@ -221,7 +223,7 @@ export default function EditVehicleModelModal({
             </div>
             {typeof priceUSD === 'number' && priceUSD > 0 && (
               <p className="text-[10px] text-zinc-500 font-mono mt-1">
-                ≈ {(priceUSD * 22000).toLocaleString()} LAK (ອັດຕາແລກປ່ຽນ 1$ = 22,000 ກີບ)
+                ≈ {Math.round(priceUSD * resolveLakExchangeRate()).toLocaleString()} LAK (ອັດຕາແລກປ່ຽນ 1$ = {resolveLakExchangeRate().toLocaleString()} ກີບ)
               </p>
             )}
           </div>

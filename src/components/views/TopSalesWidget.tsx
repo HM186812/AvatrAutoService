@@ -5,7 +5,16 @@ import {
   Sparkles
 } from 'lucide-react';
 import { usePeriodBills } from '../../utils/usePeriodBills';
-import { computeLeaderboard, assignRanks, type LeaderboardPeriod } from '../../utils/salesLeaderboard';
+import { resolveLakExchangeRate } from '../../data/currencies';
+import {
+  computeLeaderboard,
+  mergeCloudLeaderboardStats,
+  fetchLeaderboardFromCloud,
+  assignRanks,
+  getCloudSalesSyncKey,
+  type CloudLeaderboardRow,
+  type LeaderboardPeriod,
+} from '../../utils/salesLeaderboard';
 import { InvoiceBillRecord, Lead, VehicleModel, Language } from '../../types';
 
 export interface TopSalesWidgetProps {
@@ -43,7 +52,25 @@ export default function TopSalesWidget({
 
   // Shared computation with the full leaderboard page (single source of truth)
   const { bills: periodBills } = usePeriodBills(bills, period);
-  const leaderboardData = useMemo(() => computeLeaderboard(periodBills, leads, period), [periodBills, leads, period]);
+  const [cloudRows, setCloudRows] = useState<CloudLeaderboardRow[] | null>(null);
+  const cloudSyncKey = useMemo(() => getCloudSalesSyncKey(bills, leads), [bills, leads]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLeaderboardFromCloud(period).then((rows) => {
+      if (!cancelled) setCloudRows(rows);
+    }).catch(() => {
+      if (!cancelled) setCloudRows(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [period, cloudSyncKey]);
+
+  const leaderboardData = useMemo(() => {
+    const localStats = computeLeaderboard(periodBills, leads, period);
+    return mergeCloudLeaderboardStats(localStats, cloudRows, leads, period, undefined, resolveLakExchangeRate());
+  }, [periodBills, cloudRows, leads, period]);
   const ranks = useMemo(() => assignRanks(leaderboardData), [leaderboardData]);
 
   const top1 = leaderboardData[0];

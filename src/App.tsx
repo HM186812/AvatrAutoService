@@ -35,6 +35,7 @@ import { Sidebar } from './components/layout';
 import AvatrLogo from './components/layout/AvatrLogo';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CompanyBankInfo, getStoredCompanyBankInfo, saveStoredCompanyBankInfo } from './data/companySettings';
+import { saveStoredCurrencies } from './data/currencies';
 import { ToastContainer, showToast, ToastType, ViewSkeleton } from './components/common';
 import { LoginView } from './components/auth';
 
@@ -276,11 +277,7 @@ export default function App() {
         // ignore quota or private mode errors
       }
       if (Array.isArray(settings.currencies)) {
-        try {
-          localStorage.setItem('avatr_custom_currencies_v1', JSON.stringify(settings.currencies));
-        } catch {
-          // ignore
-        }
+        saveStoredCurrencies(settings.currencies as Parameters<typeof saveStoredCurrencies>[0]);
       }
     }
     // Offline demo warnings are informational, not database errors
@@ -622,7 +619,7 @@ export default function App() {
           ]);
         }
       }
-      // A voided sale / down-payment bill means the deal is off: the customer goes back to negotiating.
+      // void_bill_with_reason atomically reverts the customer state server-side; sync local leads state to match.
       let customerNote = '';
       const billType = targetBill ? (targetBill.billType || targetBill.type) : undefined;
       if (targetBill && (billType === 'sale' || billType === 'installment') && !isMonthlyInstallmentBill(targetBill)) {
@@ -649,13 +646,8 @@ export default function App() {
               makeContactEntry('status', `ບິນ ${targetBill.billNumber} ຖືກຍົກເລີກ (ເຫດຜົນ: ${voidInfo.voidReason}): ກັບໄປເປັນລູກຄ້າກຳລັງຕໍ່ລອງ`, currentUser.name),
             ],
           };
-          try {
-            await saveLead(reverted, currentUser.id);
-            setLeads(prev => prev.map(l => l.id === lead.id ? reverted : l));
-            customerNote = ` ລູກຄ້າ ${lead.customerName} ກັບໄປເປັນ "ກຳລັງຕໍ່ລອງ".`;
-          } catch (err) {
-            customerNote = ` ແຕ່ອັບເດດລູກຄ້າບໍ່ສຳເລັດ: ${err instanceof Error ? err.message : ''}`;
-          }
+          setLeads(prev => prev.map(l => l.id === lead.id ? reverted : l));
+          customerNote = ` ລູກຄ້າ ${lead.customerName} ກັບໄປເປັນ "ກຳລັງຕໍ່ລອງ".`;
         }
       }
       if (!options.silent) {
@@ -968,6 +960,7 @@ export default function App() {
               testDrives={testDrives}
               vehicles={vehicles}
               bills={bills}
+              setBills={setBills}
               currentUser={currentUser}
               lang={lang}
               isAdmin={isAdmin}

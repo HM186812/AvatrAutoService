@@ -2,6 +2,7 @@ import type { IssuedDocumentRecord, IssuedDocType, IssuedDocumentAction } from '
 import { supabase, isSupabaseConfigured, isOfflineDemoEnabled } from '../backend/client';
 import { newRecordId } from '../backend/ids';
 import { showToast } from '../components/common/Toast';
+import { downloadCsv } from './csv';
 
 const STORAGE_KEY = 'avatr_offline_document_logs';
 export const DOCUMENT_LOG_EVENT = 'avatr_document_logged';
@@ -405,29 +406,20 @@ export function exportDocumentLogsCsv(logs: IssuedDocumentRecord[]): void {
   ];
 
   const rows = logs.map((l) => [
-    `"${l.id}"`,
-    `"${l.issuedDate} ${new Date(l.issuedAt).toLocaleTimeString('lo-LA', { hour: '2-digit', minute: '2-digit' })}"`,
-    `"${(l.docNumber || '').replace(/"/g, '""')}"`,
-    `"${l.docType}"`,
-    `"${(l.docTitle || '').replace(/"/g, '""')}"`,
-    `"${(l.customerName || '').replace(/"/g, '""')}"`,
-    `"${l.customerPhone || ''}"`,
-    `"${l.model || ''}"`,
-    `"${l.vin || ''}"`,
-    `"${l.formatLabel || l.action}"`,
-    `"${(l.issuedBy || '').replace(/"/g, '""')}"`,
+    l.id,
+    `${l.issuedDate} ${new Date(l.issuedAt).toLocaleTimeString('lo-LA', { hour: '2-digit', minute: '2-digit' })}`,
+    l.docNumber || '',
+    l.docType,
+    l.docTitle || '',
+    l.customerName || '',
+    l.customerPhone || '',
+    l.model || '',
+    l.vin || '',
+    l.formatLabel || l.action,
+    l.issuedBy || '',
     l.amountUSD || 0,
-    `"${(l.notes || '').replace(/"/g, '""')}"`,
+    l.notes || '',
   ]);
 
-  const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', `AVATR_Issued_Documents_Log_${new Date().toISOString().slice(0, 10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  downloadCsv(`AVATR_Issued_Documents_Log_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
 }

@@ -10,6 +10,7 @@ import {
 } from '../../supabase';
 import { newRecordId } from '../../backend/ids';
 import { saveLead, uploadPaymentSlip, generateNextBillNumber } from '../../backend/data';
+import { resolveLakExchangeRate } from '../../data/currencies';
 import { generateInstallmentSchedule } from '../../utils/installment';
 import AvatrLogo from '../layout/AvatrLogo';
 import CustomerDocumentsModal, { DocumentType } from '../modals/CustomerDocumentsModal';
@@ -189,7 +190,9 @@ export default function POSSalesView({
     }
   }, [selectedVehicle?.vin]);
 
+  const isAdmin = isAdminRole(currentUser);
   const handleDiscountChange = (val: number | '') => {
+    if (!isAdmin) return;
     if (val === '' || isNaN(val) || val <= 0) {
       setDiscountUSD('');
       return;
@@ -402,7 +405,7 @@ export default function POSSalesView({
   const netPriceUSD = Math.max(0, basePriceUSD - (discountUSD || 0));
   const effectiveExchangeRate = selectedVehicle && selectedVehicle.priceUSD > 0 && selectedVehicle.priceLAK > 0
     ? Math.round(selectedVehicle.priceLAK / selectedVehicle.priceUSD)
-    : 22000;
+    : resolveLakExchangeRate();
   const netPriceLAK = netPriceUSD * effectiveExchangeRate;
 
   // Effective Down Payment Amount in USD
@@ -527,11 +530,12 @@ export default function POSSalesView({
   });
 
   const [isProcessingSale, setIsProcessingSale] = useState(false);
+  const submitLockRef = useRef(false);
 
   // CONFIRM SALE & DEDUCT STOCK
   const handleProcessSale = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isProcessingSale) return;
+    if (submitLockRef.current || isProcessingSale) return;
 
     if (!selectedVehicle) {
       triggerToast('ກະລຸນາເລືອກລົດຍົນທີ່ຕ້ອງການຂາຍກ່ອນ!', 'error');
@@ -543,32 +547,42 @@ export default function POSSalesView({
       return;
     }
 
-    const currentQty = selectedVehicle.stockQuantity;
-    const remainingQty = Math.max(0, currentQty - 1);
-    const invoiceNum = await generateNextBillNumber('INV');
-    const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const saleDateTime = saleDate ? `${saleDate} ${new Date().toTimeString().slice(0, 5)}` : now;
+    submitLockRef.current = true;
+    setIsProcessingSale(true);
 
-    const effectiveVillage = customerVillage === '__custom__' ? customerCustomVillage.trim() : customerVillage;
-    const fullAddress = [
-      customerAddressDetail.trim(),
-      effectiveVillage,
-      customerDistrict,
-      customerProvince
-    ].filter(Boolean).join(', ');
+    let customerLead!: Lead;
+    let newBill!: InvoiceBillRecord;
+    let remainingQty = 0;
+    let invoiceNum = '';
+    let saleDateTime = '';
 
-    // 1. DEDUCT STOCK (ຕັດສະຕ໋ອກອອກ)
+    try {
+      if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
 
-    const normalizedPhone = customerPhone.replace(/\D/g, '');
-    const matchedLead = prefilledCustomer
-      ? (leads.find(lead => lead.id === prefilledCustomer.id) || prefilledCustomer)
-      : (normalizedPhone
-        ? leads.find(lead => lead.phone.replace(/\D/g, '') === normalizedPhone)
-        : undefined);
+      const currentQty = selectedVehicle.stockQuantity;
+      remainingQty = Math.max(0, currentQty - 1);
+      invoiceNum = await generateNextBillNumber('INV');
+      const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+      saleDateTime = saleDate ? `${saleDate} ${new Date().toTimeString().slice(0, 5)}` : now;
 
-    const effectiveSalesRep = salesRepName.trim() || matchedLead?.assignedTo || currentUser?.name || 'Admin';
+      const effectiveVillage = customerVillage === '__custom__' ? customerCustomVillage.trim() : customerVillage;
+      const fullAddress = [
+        customerAddressDetail.trim(),
+        effectiveVillage,
+        customerDistrict,
+        customerProvince
+      ].filter(Boolean).join(', ');
 
-    let customerLead: Lead;
+      // 1. DEDUCT STOCK (ຕັດສະຕ໋ອກອອກ)
+
+      const normalizedPhone = customerPhone.replace(/\D/g, '');
+      const matchedLead = prefilledCustomer
+        ? (leads.find(lead => lead.id === prefilledCustomer.id) || prefilledCustomer)
+        : (normalizedPhone
+          ? leads.find(lead => lead.phone.replace(/\D/g, '') === normalizedPhone)
+          : undefined);
+
+      const effectiveSalesRep = salesRepName.trim() || matchedLead?.assignedTo || currentUser?.name || 'Admin';
     if (matchedLead) {
       customerLead = {
         ...matchedLead,
@@ -656,7 +670,7 @@ export default function POSSalesView({
     }
 
     // 2. CREATE OFFICIAL INVOICE BILL RECORD
-    const newBill: InvoiceBillRecord = {
+    newBill = {
       id: newRecordId(),
       billType: 'sale',
       billNumber: invoiceNum,
@@ -700,16 +714,16 @@ export default function POSSalesView({
       notes: saleNotes || 'ຂາຍອອກຜ່ານລະບົບ POS ໂຊຣູມໃຫຍ່ ຫຼັກ 3 ທ່າເດື່ອ ພ້ອມຕັດສະຕ໋ອກອັດຕະໂນມັດ',
     };
 
-    setIsProcessingSale(true);
-    try {
-      if (!currentUser?.id) throw new Error('Sign in again before recording this sale.');
-
       if (paymentMethod === 'transfer' && slipFile) {
         try {
           const uploadedPath = await uploadPaymentSlip(slipFile, newBill.billNumber || selectedVehicle.vin);
           newBill.paymentSlipPath = uploadedPath;
         } catch (slipErr) {
-          console.warn('Payment slip upload warning:', slipErr);
+          throw new Error(
+            slipErr instanceof Error
+              ? `ອັບໂຫຼດສະລິບໂອນເງິນບໍ່ສຳເລັດ: ${slipErr.message}`
+              : 'ອັບໂຫຼດສະລິບໂອນເງິນບໍ່ສຳເລັດ ກະລຸນາລອງໃໝ່!'
+          );
         }
       }
       await saveLead(customerLead, currentUser.id, newBill);
@@ -729,6 +743,7 @@ export default function POSSalesView({
       triggerToast(friendlyMsg, 'error');
       return;
     } finally {
+      submitLockRef.current = false;
       setIsProcessingSale(false);
     }
     // Mark sold vehicle as sold & stockQuantity = 0 in inventory
@@ -1291,8 +1306,11 @@ export default function POSSalesView({
                       id="pos-sales-rep"
                       required
                       value={salesRepName}
-                      onChange={(e) => setSalesRepName(e.target.value)}
-                      className="w-full min-w-0 bg-zinc-900 border border-amber-500/40 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 focus-visible:ring-2 focus-visible:ring-amber-400/20 transition-colors"
+                      disabled={!isAdmin}
+                      onChange={(e) => {
+                        if (isAdmin) setSalesRepName(e.target.value);
+                      }}
+                      className={`w-full min-w-0 bg-zinc-900 border border-amber-500/40 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 focus-visible:ring-2 focus-visible:ring-amber-400/20 transition-colors ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       <option value="" disabled>{lang === 'lo' ? 'ເລືອກທີ່ປຶກສາການຂາຍ...' : 'Choose a sales consultant...'}</option>
                       {salesRepSuggestions.map((rep) => (
@@ -1869,11 +1887,13 @@ export default function POSSalesView({
                   </div>
                 )}
 
-                {/* Discount Input (USD Only) */}
+                {/* Discount Input (USD Only - Admin Controlled) */}
                 <div className="text-xs pt-2">
                   <div className="max-w-md">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-zinc-400 font-medium">ສ່ວນຫຼຸດພິເສດ ($ USD)</label>
+                      <label className="block text-zinc-400 font-medium">
+                        ສ່ວນຫຼຸດພິເສດ ($ USD){!isAdmin ? (lang === 'lo' ? ' (ສຳລັບ Admin)' : ' (Admin Only)') : ''}
+                      </label>
                     </div>
                     <div className="relative">
                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 font-mono text-xs font-bold">
@@ -1884,8 +1904,10 @@ export default function POSSalesView({
                         min="0"
                         placeholder="0"
                         value={discountUSD}
+                        readOnly={!isAdmin}
+                        disabled={!isAdmin}
                         onChange={(e) => handleDiscountChange(e.target.value === '' ? '' : Number(e.target.value))}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-7 pr-3 py-2 text-white font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+                        className={`w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-7 pr-3 py-2 text-white font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
                       />
                     </div>
                   </div>

@@ -1,5 +1,6 @@
 import { withVehicleFromBills } from '../../utils/documentCustomer';
 import { isAdminRole } from '../../utils/roles';
+import { downloadCsv } from '../../utils/csv';
 import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { ErrorBoundary } from '../ErrorBoundary';
 import {
@@ -69,7 +70,8 @@ const PipelineActionModal = lazy(() => import('../modals/PipelineActionModal'));
 const ImportBookingCsvModal = lazy(() => import('../modals/ImportBookingCsvModal'));
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay, openWhatsApp } from '../../utils/whatsapp';
-import { deleteLead, saveLead, updateLeadStatus, saveBillRecord, fetchLeadsByDateRange, updateServiceAppointment } from '../../backend/data';
+import { deleteLead, saveLead, updateLeadStatus, confirmCustomerPayment, updateBillAfterSales, fetchLeadsByDateRange, updateServiceAppointment } from '../../backend/data';
+import { syncInstallmentBillState, type InstallmentRecordSyncMeta } from '../../utils/installmentBillSync';
 import { newRecordId } from '../../backend/ids';
 import { PIPELINE_LABELS, PIPELINE_STAGE_KEYS, getPipelineCurrentIndex, getPipelineDone } from '../../utils/pipeline';
 import { getFollowUpState, makeContactEntry, formatDateKey } from '../../utils/followUp';
@@ -600,32 +602,45 @@ export default function CustomerView({
   };
 
 
-  const handleUpdateCustomerRecords = async (customerId: string, newRecords: InstallmentPaymentRecord[]) => {
-    const targetLead = leads.find(l => l.id === customerId);
-    if (!targetLead) throw new Error('Customer record not found.');
-    const updatedLead: Lead = {
-      ...targetLead,
-      installmentRecords: newRecords,
-      lastFollowUp: new Date().toISOString(),
-    };
-    try {
-      if (!currentUser?.id) throw new Error('Sign in again before saving installment ledger.');
-      await saveLead(updatedLead, currentUser.id);
-      setLeads(prev => prev.map(l => l.id === customerId ? updatedLead : l));
-      if (selectedCustomerForInstallments?.id === customerId) {
-        setSelectedCustomerForInstallments(updatedLead);
-      }
-      showToast('ບັນທຶກ ແລະ ອັບເດດຕາຕະລາງເກັບເງິນງວດຮຽບຮ້ອຍແລ້ວ');
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Installment ledger could not be saved.', 'error');
-      throw error;
+  const handleUpdateCustomerRecords = async (
+    customerId: string,
+    newRecords: InstallmentPaymentRecord[],
+    meta?: InstallmentRecordSyncMeta
+  ) => {
+    const updatedLead = syncInstallmentBillState({
+      customerId,
+      updatedRecords: newRecords,
+      meta,
+      leads,
+      bills,
+      vehicles,
+      currentUserName: currentUser?.name,
+      setLeads,
+      setBills,
+    });
+    if (selectedCustomerForInstallments?.id === customerId) {
+      setSelectedCustomerForInstallments(updatedLead);
     }
+    showToast('ບັນທຶກ ແລະ ອັບເດດຕາຕະລາງເກັບເງິນງວດຮຽບຮ້ອຍແລ້ວ');
   };
 
   const handleConfirmCustomerPayment = async (updatedLead: Lead) => {
     try {
-      if (!currentUser?.id) throw new Error('Sign in again before confirming payment.');
-      await saveLead(updatedLead, currentUser.id);
+      if (!currentUser?.id || !isAdminUser) {
+        throw new Error('Only administrators may confirm customer payments.');
+      }
+      await confirmCustomerPayment(updatedLead.id, {
+        paidAmountUSD: updatedLead.paidAmountUSD || 0,
+        paidAmountLAK: updatedLead.paidAmountLAK || 0,
+        installmentStatus: updatedLead.installmentStatus,
+        paymentDate: updatedLead.paymentDate,
+        paymentMethodRef: updatedLead.paymentMethodRef,
+        paymentBank: updatedLead.paymentBank,
+        paymentReceiptNo: updatedLead.paymentReceiptNo,
+        paymentConfirmedBy: updatedLead.paymentConfirmedBy,
+        paymentTypeConfirmed: updatedLead.paymentTypeConfirmed,
+        notes: updatedLead.notes,
+      });
       setLeads(prev => prev.map(l => l.id === updatedLead.id ? updatedLead : l));
       if (selectedCustomerForDocs?.id === updatedLead.id) {
         setSelectedCustomerForDocs(updatedLead);
@@ -702,18 +717,19 @@ export default function CustomerView({
         setLeads(prev => prev.map(l => l.id === updatedLead.id ? updatedLead : l));
       }
 
-      // 2. If customer has a billRecord, update and save bill
+      // 2. If customer has a billRecord, persist non-financial after-sales updates via RPC
       if (selectedOwnerForAfterSales.billRecord) {
         const targetBill = selectedOwnerForAfterSales.billRecord;
+        const effectiveModel = isAdminUser ? updatedData.model : targetBill.model;
         const updatedBill: InvoiceBillRecord = {
           ...targetBill,
           customerName: updatedData.customerName,
           customerPhone: updatedData.phone,
           customerIDCard: updatedData.idCardNumber,
           customerProvince: updatedData.province,
-          model: updatedData.model,
+          model: effectiveModel,
           plateNumber: updatedData.plateNumber,
-          vin: updatedData.vin,
+          vin: targetBill.vin || updatedData.vin,
           engineNumber: updatedData.engineNumber,
           color: updatedData.color,
           currentMileageKm: updatedData.currentMileageKm,
@@ -727,7 +743,25 @@ export default function CustomerView({
           notes: updatedData.afterSalesNotes || targetBill.notes,
         };
 
-        await saveBillRecord(updatedBill, currentUser.id);
+        await updateBillAfterSales(targetBill.id, {
+          customer_name: updatedData.customerName,
+          customer_phone: updatedData.phone,
+          customer_id_card: updatedData.idCardNumber,
+          customer_province: updatedData.province,
+          ...(isAdminUser ? { model_name: effectiveModel } : {}),
+          plate_number: updatedData.plateNumber,
+          engine_number: updatedData.engineNumber,
+          color: updatedData.color,
+          current_mileage_km: updatedData.currentMileageKm,
+          battery_health_soh: updatedData.batteryHealthSOH,
+          warranty_start_date: updatedData.warrantyStartDate,
+          warranty_expiry_date: updatedData.warrantyExpiryDate,
+          warranty_years: updatedData.warrantyYears,
+          warranty_distance_km: updatedData.warrantyDistanceKm,
+          warranty_terms: updatedData.warrantyTerms,
+          after_sales_notes: updatedData.afterSalesNotes,
+          notes: updatedData.afterSalesNotes || targetBill.notes,
+        });
         if (setBills) {
           setBills(prev => prev.map(b => b.id === updatedBill.id ? updatedBill : b));
         }
@@ -735,6 +769,7 @@ export default function CustomerView({
 
       // 3. If there was no leadRecord (e.g. only bill), synthesize and persist leadRecord so it's fully indexed
       if (!selectedOwnerForAfterSales.leadRecord) {
+        const authoritativeVin = selectedOwnerForAfterSales.billRecord?.vin || updatedData.vin;
         const syntheticLead: Lead = {
           id: selectedOwnerForAfterSales.id.replace(/^owner-(?:bill|inst-completed)-/, '') || newRecordId(),
           customerName: updatedData.customerName,
@@ -745,17 +780,17 @@ export default function CustomerView({
           village: updatedData.village,
           category: 'walk_in',
           source: 'Showroom Delivery',
-          interestedModel: updatedData.model,
+          interestedModel: selectedOwnerForAfterSales.billRecord?.model || updatedData.model,
           status: 'delivered',
           priority: 'vip',
-          notes: updatedData.afterSalesNotes || `ລົດສົ່ງມອບແລ້ວ: ${updatedData.model} VIN: ${updatedData.vin}`,
+          notes: updatedData.afterSalesNotes || `ລົດສົ່ງມອບແລ້ວ: ${updatedData.model} VIN: ${authoritativeVin}`,
           paymentType: 'cash',
           paymentDate: updatedData.purchaseDate,
-          paymentReceiptNo: updatedData.plateNumber || updatedData.vin,
-          assignedTo: currentUser?.name || 'Admin',
+          paymentReceiptNo: updatedData.plateNumber || authoritativeVin,
+          assignedTo: selectedOwnerForAfterSales.billRecord?.salesRep || currentUser?.name || 'Admin',
           createdAt: updatedData.purchaseDate || new Date().toISOString(),
           plateNumber: updatedData.plateNumber,
-          vin: updatedData.vin,
+          vin: authoritativeVin,
           engineNumber: updatedData.engineNumber,
           color: updatedData.color,
           currentMileageKm: updatedData.currentMileageKm,
@@ -1131,32 +1166,18 @@ export default function CustomerView({
 
   // Export Customer CRM to CSV File (ນຳອອກ)
   const handleExportCSV = () => {
-    const csvCell = (val: unknown): string => {
-      const str = String(val ?? '').replace(/\r?\n/g, ' ');
-      return `"${str.replace(/"/g, '""')}"`;
-    };
-
     if (customerClassificationTab === 'existing_customers') {
       const eHeaders = [
         'Customer Name', 'Phone', 'ID Card / Passport', 'Province', 'Model', 'Plate Number', 'VIN',
         'Purchase Date', 'Payment Type', 'Mileage (km)', 'Battery SOH (%)', 'Warranty Expiry', 'Warranty Status', 'Service Count', 'Notes'
       ];
       const eRows = filteredExistingCustomers.map(item => [
-        csvCell(item.customerName), csvCell(item.phone), csvCell(item.idCardNumber), csvCell(item.province),
-        csvCell(item.model), csvCell(item.plateNumber), csvCell(item.vin), csvCell(item.purchaseDate),
-        csvCell(item.paymentType), item.currentMileageKm ?? '', item.batteryHealthSOH ?? '',
-        csvCell(item.warrantyExpiryDate), csvCell(item.warrantyStatus), item.services?.length ?? 0, csvCell(item.afterSalesNotes)
+        item.customerName, item.phone, item.idCardNumber, item.province,
+        item.model, item.plateNumber, item.vin, item.purchaseDate,
+        item.paymentType, item.currentMileageKm ?? '', item.batteryHealthSOH ?? '',
+        item.warrantyExpiryDate, item.warrantyStatus, item.services?.length ?? 0, item.afterSalesNotes
       ]);
-      const eContent = '\uFEFF' + [eHeaders.join(','), ...eRows.map(r => r.join(','))].join('\n');
-      const blob = new Blob([eContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `avatr_crm_existing_owners_${formatLocalYMD(new Date())}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      downloadCsv(`avatr_crm_existing_owners_${formatLocalYMD(new Date())}.csv`, eHeaders, eRows);
       return;
     }
 
@@ -1193,14 +1214,14 @@ export default function CustomerView({
 
     const rows = exportTargetLeads.map(lead => [
       lead.id,
-      `"${(lead.customerName || '').replace(/"/g, '""')}"`,
-      `"${lead.phone || ''}"`,
-      `"${lead.idCardNumber || ''}"`,
-      `"${lead.province || ''}"`,
-      `"${lead.district || ''}"`,
-      `"${lead.village || ''}"`,
+      lead.customerName || '',
+      lead.phone || '',
+      lead.idCardNumber || '',
+      lead.province || '',
+      lead.district || '',
+      lead.village || '',
       lead.category || '',
-      `"${lead.interestedModel || ''}"`,
+      lead.interestedModel || '',
       lead.paymentType || 'cash',
       lead.downPaymentPercent || '',
       lead.downPaymentUSD || '',
@@ -1208,20 +1229,12 @@ export default function CustomerView({
       lead.installmentStatus || '',
       lead.status || '',
       lead.priority || '',
-      `"${lead.assignedTo || ''}"`,
+      lead.assignedTo || '',
       lead.createdAt || '',
-      `"${(lead.notes || '').replace(/"/g, '""')}"`
+      lead.notes || ''
     ]);
 
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `avatr_crm_${customerClassificationTab}_${formatLocalYMD(new Date())}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(`avatr_crm_${customerClassificationTab}_${formatLocalYMD(new Date())}.csv`, headers, rows);
   };
 
   // Customer search panel: free text + date (day / month / year).
@@ -1501,7 +1514,7 @@ export default function CustomerView({
           <div className="w-full lg:w-auto">
             {customerClassificationTab === 'new_leads' && (
               <div className="flex flex-col gap-2 sm:flex-row">
-                {currentUser && (
+                {currentUser && isAdminUser && (
                   <button
                     type="button"
                     onClick={() => setShowBookingImport(true)}
@@ -1521,7 +1534,7 @@ export default function CustomerView({
                 </button>
               </div>
             )}
-            {showBookingImport && currentUser && (
+            {showBookingImport && currentUser && isAdminUser && (
               <ErrorBoundary>
                 <Suspense
                   fallback={
@@ -2851,6 +2864,7 @@ export default function CustomerView({
               lead={target}
               staffName={currentUser?.name}
               staffOptions={Array.from(new Set(leads.map(l => l.assignedTo).filter((n): n is string => Boolean(n))))}
+              isAdmin={isAdminUser}
               lang={lang}
               onClose={() => setPipelineAction(null)}
               onSave={handlePipelineSave}
@@ -2909,6 +2923,7 @@ export default function CustomerView({
             }}
             customer={selectedOwnerForAfterSales}
             vehicles={vehicles}
+            isAdmin={isAdminUser}
             lang={lang}
             onSave={handleSaveAfterSalesProfile}
           />

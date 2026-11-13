@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Lead, VehicleModel, Language, SystemUser, IssuedDocumentRecord } from '../../types';
 import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import AvatrLogo from '../layout/AvatrLogo';
@@ -23,7 +23,7 @@ import { exportElementToPdf } from '../../utils/pdfExport';
 import { showToast } from '../common';
 import WhatsAppIcon from '../common/WhatsAppIcon';
 import { getWhatsAppUrl, formatWhatsAppDisplay } from '../../utils/whatsapp';
-import { DEFAULT_EXCHANGE_RATE_LAK, generateInstallmentSchedule } from '../../utils/installment';
+import { generateInstallmentSchedule } from '../../utils/installment';
 import {
   logIssuedDocument,
   getLatestDocumentIssuance,
@@ -42,6 +42,9 @@ interface CustomerDocumentsModalProps {
   initialDoc?: DocumentType;
   customerGroup?: 'new_leads' | 'existing_customers' | 'installment_customers';
 }
+
+import { isAdminRole } from '../../utils/roles';
+import { resolveLakExchangeRate } from '../../data/currencies';
 
 interface FinanceLenderPreset {
   label: string;
@@ -166,6 +169,8 @@ export default function CustomerDocumentsModal({
   const [showToolbar, setShowToolbar] = useState(false);
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
+  const confirmPaymentLockRef = useRef(false);
   const [, setIsPaymentConfirmedNow] = useState(customer?.status === 'delivered');
   const [customerDocLogs, setCustomerDocLogs] = useState<IssuedDocumentRecord[]>(() =>
     getCustomerDocumentLogs({
@@ -425,7 +430,7 @@ export default function CustomerDocumentsModal({
         formatLabel,
         issuedBy: officerInCharge || currentUser?.name || 'Admin',
         amountUSD: activeDoc === 'receipt' ? depositUSD : (basePriceUSD || defaultBasePrice),
-        amountLAK: (activeDoc === 'receipt' ? depositUSD : (basePriceUSD || defaultBasePrice)) * DEFAULT_EXCHANGE_RATE_LAK,
+        amountLAK: (activeDoc === 'receipt' ? depositUSD : (basePriceUSD || defaultBasePrice)) * resolveLakExchangeRate(),
         notes: `ບັນທຶກ ${action === 'print' ? 'ພິມເອກະສານ' : 'ດາວໂຫຼດ ' + formatLabel} ${docTitles[activeDoc]} ເລກທີ ${docChassisNo}`,
       });
       setLatestIssuance(recorded);
@@ -473,13 +478,23 @@ export default function CustomerDocumentsModal({
     }
   };
 
-  // Confirm Payment directly from inside the document modal
+  // Confirm Payment directly from inside the document modal (Admin-only)
+  const canConfirmPayment = isAdminRole(currentUser);
   const handleConfirmPaymentFromDoc = async () => {
+    if (!canConfirmPayment) {
+      showToast('ສະເພາະ Admin ເທົ່ານັ້ນທີ່ສາມາດຢືນຢັນການຊຳລະເງິນໄດ້', 'error');
+      return;
+    }
+    if (!onConfirmPayment || isConfirmingPayment || confirmPaymentLockRef.current) {
+      return;
+    }
+    confirmPaymentLockRef.current = true;
+    setIsConfirmingPayment(true);
     const updated: Lead = {
       ...customer,
       status: 'delivered', // Moves customer to "ຈ່າຍແລ້ວ"
       paidAmountUSD: depositUSD,
-      paidAmountLAK: depositUSD * DEFAULT_EXCHANGE_RATE_LAK,
+      paidAmountLAK: depositUSD * resolveLakExchangeRate(),
       paymentDate: paymentDateTime,
       paymentMethodRef: payerSourceAccount,
       paymentBank: 'TRANSFER',
@@ -490,12 +505,13 @@ export default function CustomerDocumentsModal({
     };
 
     try {
-      if (onConfirmPayment) {
-        await onConfirmPayment(updated);
-      }
+      await onConfirmPayment(updated);
       setIsPaymentConfirmedNow(true);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not save payment to database.', 'error');
+    } finally {
+      confirmPaymentLockRef.current = false;
+      setIsConfirmingPayment(false);
     }
   };
 
@@ -1502,27 +1518,36 @@ export default function CustomerDocumentsModal({
                   </p>
                 </div>
 
-                {/* Action button in Modal (Hidden when printing): Confirm Payment directly! */}
+                {/* Action button in Modal (Hidden when printing): Confirm Payment directly (Admin-only)! */}
+                {onConfirmPayment && (
                 <div className="print:hidden p-3 bg-emerald-50 border border-emerald-600 rounded-xl flex items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                     <div>
                       <strong className="text-emerald-950 block">ຢືນຢັນການຊຳລະເງິນສຳລັບລູກຄ້ານີ້?</strong>
                       <span className="text-emerald-800 text-[11px]">
-                        ກົດເພື່ອບັນທຶກການຊຳລະ ແລະ ຍ້າຍລູກຄ້າໄປຊ່ອງ <strong className="underline">"ຈ່າຍແລ້ວ / ສົ່ງມອບສຳເລັດ"</strong>
+                        {canConfirmPayment
+                          ? <>ກົດເພື່ອບັນທຶກການຊຳລະ ແລະ ຍ້າຍລູກຄ້າໄປຊ່ອງ <strong className="underline">"ຈ່າຍແລ້ວ / ສົ່ງມອບສຳເລັດ"</strong></>
+                          : 'ຕ້ອງໃຫ້ Admin / Super Admin ເປັນຜູ້ກົດຢືນຢັນການຊຳລະເງິນ'}
                       </span>
                     </div>
                   </div>
 
                   <button
                     type="button"
+                    disabled={!canConfirmPayment || isConfirmingPayment}
                     onClick={handleConfirmPaymentFromDoc}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow transition-colors cursor-pointer flex-shrink-0 flex items-center gap-1.5"
+                    className={`px-4 py-2 font-bold rounded-xl shadow transition-colors flex-shrink-0 flex items-center gap-1.5 ${
+                      canConfirmPayment && !isConfirmingPayment
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                        : 'bg-zinc-300 text-zinc-600 cursor-not-allowed'
+                    }`}
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>ຢືນຢັນການຊຳລະ (ຍ້າຍໄປຈ່າຍແລ້ວ)</span>
+                    <span>{isConfirmingPayment ? 'ກຳລັງບັນທຶກ...' : canConfirmPayment ? 'ຢືນຢັນການຊຳລະ (ຍ້າຍໄປຈ່າຍແລ້ວ)' : 'ສະເພາະ Admin ຢືນຢັນ'}</span>
                   </button>
                 </div>
+                )}
               </div>
 
               {/* Signatures */}

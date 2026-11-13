@@ -7,7 +7,7 @@ import type {
   ContactLogType, InvoiceBillRecord, IssuedDocType, IssuedDocumentRecord, Language, Lead, VehicleModel,
 } from '../../types';
 import { getWhatsAppUrl } from '../../utils/whatsapp';
-import { DEFAULT_EXCHANGE_RATE_LAK } from '../../utils/installment';
+import { resolveLakExchangeRate } from '../../data/currencies';
 import {
   CONTACT_TYPE_LABELS, formatDateKey, getFollowUpState, localDateKey, makeContactEntry,
 } from '../../utils/followUp';
@@ -135,7 +135,7 @@ export default function CustomerDetailView({
   const allPaid = tenure > 0 && paidCount >= tenure;
   const monthlyUSD = lead.monthlyPaymentUSD
     ?? nextDue?.amountUSD
-    ?? (lead.monthlyPaymentLAK ? lead.monthlyPaymentLAK / DEFAULT_EXCHANGE_RATE_LAK : undefined);
+    ?? (lead.monthlyPaymentLAK ? lead.monthlyPaymentLAK / resolveLakExchangeRate() : undefined);
   const noScheduleText = L('ຍັງບໍ່ມີຕາຕະລາງງວດ', 'No schedule yet', 'ยังไม่มีตารางงวด');
   const vehicle = vehicles.find(v => v.name === lead.interestedModel);
   const basePrice = vehicle?.priceStartingUSD;

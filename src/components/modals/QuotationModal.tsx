@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { VehicleModel, Language } from '../../types';
 import { getStoredCompanyBankInfo } from '../../data/companySettings';
+import { resolveLakExchangeRate } from '../../data/currencies';
 import AvatrLogo from '../layout/AvatrLogo';
 import { X, Printer, Download, CheckCircle, Loader2, Calendar } from 'lucide-react';
 import { exportElementToPdf } from '../../utils/pdfExport';
@@ -36,7 +37,7 @@ export default function QuotationModal({
     () => `AVATR-QT-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
   );
   const companyBankInfo = getStoredCompanyBankInfo();
-  const rateLAK = 22000;
+  const rateLAK = resolveLakExchangeRate();
 
   if (!isOpen) return null;
 

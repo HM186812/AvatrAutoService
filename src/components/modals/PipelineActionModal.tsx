@@ -12,6 +12,7 @@ interface PipelineActionModalProps {
   lead: Lead;
   staffName?: string;
   staffOptions?: string[];
+  isAdmin?: boolean;
   lang: Language;
   onClose: () => void;
   /** Persist the updated lead. Throw on failure (the modal stays open). */
@@ -21,10 +22,11 @@ interface PipelineActionModalProps {
 const inputCls = 'w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:border-slate-400 dark:focus:border-zinc-600';
 const labelCls = 'block text-xs font-medium text-slate-700 dark:text-zinc-300 mb-1.5';
 
-export default function PipelineActionModal({ mode, lead, staffName, staffOptions = [], lang, onClose, onSave }: PipelineActionModalProps) {
+export default function PipelineActionModal({ mode, lead, staffName, staffOptions = [], isAdmin = false, lang, onClose, onSave }: PipelineActionModalProps) {
   const L = (lo: string, en: string, th: string) => (lang === 'en' ? en : lang === 'th' ? th : lo);
   const today = localDateKey();
   const isBooking = mode === 'booking';
+  const canEditDiscount = isAdmin;
 
   const [amount, setAmount] = useState<string>(lead.bookingDepositUSD != null ? String(lead.bookingDepositUSD) : '');
   const [method, setMethod] = useState<'cash' | 'transfer'>(lead.bookingPaymentMethod || 'cash');
@@ -40,7 +42,7 @@ export default function PipelineActionModal({ mode, lead, staffName, staffOption
   const [saving, setSaving] = useState(false);
 
   const listPriceNum = toNum(listPrice);
-  const discountNum = toNum(discount) ?? 0;
+  const discountNum = canEditDiscount ? (toNum(discount) ?? 0) : (lead.discountUSD ?? 0);
   const netPrice = listPriceNum != null && Number.isFinite(listPriceNum) ? listPriceNum - discountNum : undefined;
   const depositNum = Number(amount) || 0;
   const remaining = netPrice != null ? netPrice - depositNum : undefined;
@@ -108,7 +110,9 @@ export default function PipelineActionModal({ mode, lead, staffName, staffOption
         bookingDate: date,
         bookingNote: note.trim() || undefined,
         listPriceUSD: listPriceNum,
-        discountUSD: listPriceNum != null || discountNum > 0 ? discountNum : undefined,
+        discountUSD: canEditDiscount
+          ? (listPriceNum != null || discountNum > 0 ? discountNum : undefined)
+          : lead.discountUSD,
         deliveryWindow: deliveryWindow.trim() || undefined,
         giftItems: namedGifts.length > 0 ? namedGifts.map(g => ({ name: g.name.trim(), costUSD: Number(g.costUSD) || 0 })) : undefined,
         giftBudgetUSD: budgetNum,
@@ -194,7 +198,7 @@ export default function PipelineActionModal({ mode, lead, staffName, staffOption
                 </div>
                 <div>
                   <label htmlFor="pa-discount" className={labelCls}>{L('ສ່ວນຫຼຸດ (USD)', 'Discount (USD)', 'ส่วนลด (USD)')}</label>
-                  <input id="pa-discount" type="number" inputMode="decimal" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="500" className={`${inputCls} font-mono`} />
+                  <input id="pa-discount" type="number" inputMode="decimal" min="0" step="0.01" readOnly={!canEditDiscount} disabled={!canEditDiscount} value={canEditDiscount ? discount : (lead.discountUSD != null ? String(lead.discountUSD) : '')} onChange={(e) => { if (canEditDiscount) setDiscount(e.target.value); }} placeholder={canEditDiscount ? '500' : 'Admin only'} className={`${inputCls} font-mono ${!canEditDiscount ? 'opacity-60 cursor-not-allowed' : ''}`} />
                 </div>
               </div>
               {netPrice != null && (

@@ -46,3 +46,16 @@ export function saveStoredCurrencies(currencies: CustomCurrencyConfig[]) {
   }
 }
 
+export const DEFAULT_LAK_EXCHANGE_RATE = 22000;
+
+/** Resolve the configured USD -> LAK exchange rate with a safe positive fallback. */
+export function resolveLakExchangeRate(
+  currencies?: CustomCurrencyConfig[],
+  fallback = DEFAULT_LAK_EXCHANGE_RATE,
+): number {
+  const list = currencies ?? (typeof window !== 'undefined' ? getStoredCurrencies() : DEFAULT_CURRENCIES);
+  const lak = list.find(c => c.code === 'LAK');
+  const rate = Number(lak?.rateToUSD);
+  return Number.isFinite(rate) && rate > 0 ? rate : fallback;
+}
+

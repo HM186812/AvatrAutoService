@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Lead, VehicleModel, Language, SystemUser, InstallmentPaymentRecord } from '../../types';
 import { 
   X, 
@@ -18,12 +18,15 @@ import {
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { showToast } from '../common';
 import { logIssuedDocument } from '../../utils/documentLogger';
+import { downloadCsv } from '../../utils/csv';
+import { isAdminRole } from '../../utils/roles';
+import { resolveLakExchangeRate } from '../../data/currencies';
+import { recordInstallmentPayment, revertInstallmentPayment } from '../../backend/data';
 import AvatrLogo from '../layout/AvatrLogo';
 import { getStoredCompanyBankInfo } from '../../data/companySettings';
 import { 
   generateInstallmentSchedule, 
-  calculateInstallmentSummary,
-  DEFAULT_EXCHANGE_RATE_LAK 
+  calculateInstallmentSummary
 } from '../../utils/installment';
 
 interface InstallmentLedgerModalProps {
@@ -33,7 +36,18 @@ interface InstallmentLedgerModalProps {
   vehicles: VehicleModel[];
   currentUser?: SystemUser;
   lang?: Language;
-  onUpdateCustomerRecords: (customerId: string, records: InstallmentPaymentRecord[]) => Promise<void> | void;
+  onUpdateCustomerRecords: (
+    customerId: string,
+    records: InstallmentPaymentRecord[],
+    meta?: {
+      paidAmountUSD?: number;
+      paidAmountLAK?: number;
+      installmentStatus?: Lead['installmentStatus'];
+      billId?: string;
+      billNumber?: string;
+      voidedBillIds?: string[];
+    }
+  ) => Promise<void> | void;
 }
 
 export default function InstallmentLedgerModal({
@@ -45,6 +59,7 @@ export default function InstallmentLedgerModal({
   lang = 'lo',
   onUpdateCustomerRecords,
 }: InstallmentLedgerModalProps) {
+  const isAdmin = isAdminRole(currentUser);
   const matchingVehicle = customer
     ? vehicles.find(v => v.name === customer.interestedModel) || vehicles[0]
     : vehicles[0];
@@ -58,6 +73,7 @@ export default function InstallmentLedgerModal({
   const [filterTab, setFilterTab] = useState<'all' | 'due' | 'paid' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const submitLockRef = useRef(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
 
   // Selected period to record payment
@@ -84,77 +100,73 @@ export default function InstallmentLedgerModal({
     setLedgerError(null);
   };
 
-  // Submit payment for period
+  // Submit payment for period via authoritative RPC
   const handleSavePayment = async () => {
-    if (!recordingPeriod) return;
+    if (!recordingPeriod || isSaving || submitLockRef.current) return;
+    const parsedUSD = Number(payAmountUSD);
+    if (isAdmin && (!Number.isFinite(parsedUSD) || parsedUSD <= 0)) {
+      setLedgerError('ກະລຸນາປ້ອນຈຳນວນເງິນທີ່ຫຼາຍກວ່າ 0 USD');
+      return;
+    }
+    if (!isAdmin && recordingPeriod.amountUSD <= 0) {
+      setLedgerError('ຈຳນວນເງິນຕາມສັນຍາບໍ່ຖືກຕ້ອງ');
+      return;
+    }
+
+    submitLockRef.current = true;
     setIsSaving(true);
     setLedgerError(null);
 
-    const receiptNumber = `REC-INS-${customer.id.replace(/\D/g, '') || '01'}-${String(recordingPeriod.period).padStart(2, '0')}`;
-    const updatedRecords = records.map(r => {
-      if (r.period === recordingPeriod.period) {
-        return {
-          ...r,
-          status: 'paid' as const,
-          paidDate: payDate,
-          paidAmountUSD: Number(payAmountUSD) || r.amountUSD,
-          paidAmountLAK: (Number(payAmountUSD) || r.amountUSD) * DEFAULT_EXCHANGE_RATE_LAK,
-          paymentMethod: payMethod,
-          bankName: undefined,
-          transferRef: payMethod === 'transfer' ? payRef.trim() : undefined,
-          receiptNo: receiptNumber,
-          notes: payNotes.trim() || undefined,
-          collectedBy: currentUser?.name || customer.assignedTo || 'Admin',
-        };
-      }
-      return r;
-    });
-
     try {
-      await onUpdateCustomerRecords(customer.id, updatedRecords);
-      setRecords(updatedRecords);
+      const lakRate = resolveLakExchangeRate();
+      const customAmountUSD = isAdmin ? parsedUSD : undefined;
+      const customAmountLAK = customAmountUSD !== undefined ? Math.round(customAmountUSD * lakRate) : undefined;
+      const res = await recordInstallmentPayment(customer.id, recordingPeriod.period, {
+        paidAmountUSD: customAmountUSD,
+        paidAmountLAK: customAmountLAK,
+        paidDate: payDate,
+        paymentMethod: payMethod,
+        transferRef: payMethod === 'transfer' ? payRef.trim() : undefined,
+        notes: payNotes.trim() || undefined,
+      });
+      await onUpdateCustomerRecords(customer.id, res.updatedRecords, {
+        paidAmountUSD: res.paidAmountUSD,
+        paidAmountLAK: res.paidAmountLAK,
+        installmentStatus: res.installmentStatus,
+        billId: res.billId,
+        billNumber: res.billNumber,
+      });
+      setRecords(res.updatedRecords);
       setRecordingPeriod(null);
     } catch (err) {
       setLedgerError(err instanceof Error ? err.message : 'Could not save installment record to database.');
     } finally {
+      submitLockRef.current = false;
       setIsSaving(false);
     }
   };
 
-  // Revert payment back to due/pending
+  // Revert payment back to due/pending (Admin-only via authoritative RPC)
   const handleRevertPayment = async (period: number) => {
+    if (!isAdmin || isSaving || submitLockRef.current) return;
     if (!confirm(`ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການຍົກເລີກການບັນທຶກຊຳລະງວດທີ ${period}?`)) return;
+    submitLockRef.current = true;
     setIsSaving(true);
     setLedgerError(null);
 
-    const updatedRecords = records.map(r => {
-      if (r.period === period) {
-        const today = new Date();
-        const dueDate = new Date(r.dueDate);
-        const status = dueDate < today ? ('due' as const) : ('pending' as const);
-        return {
-          ...r,
-          status,
-          paidDate: undefined,
-          paidAmountUSD: undefined,
-          paidAmountLAK: undefined,
-          paymentMethod: undefined,
-          bankName: undefined,
-          transferRef: undefined,
-          receiptNo: undefined,
-          notes: undefined,
-          collectedBy: undefined,
-        };
-      }
-      return r;
-    });
-
     try {
-      await onUpdateCustomerRecords(customer.id, updatedRecords);
-      setRecords(updatedRecords);
+      const res = await revertInstallmentPayment(customer.id, period, `Revert installment period ${period}`);
+      await onUpdateCustomerRecords(customer.id, res.updatedRecords, {
+        paidAmountUSD: res.paidAmountUSD,
+        paidAmountLAK: res.paidAmountLAK,
+        installmentStatus: 'active_repaying',
+        voidedBillIds: res.voidedBillIds,
+      });
+      setRecords(res.updatedRecords);
     } catch (err) {
       setLedgerError(err instanceof Error ? err.message : 'Could not revert installment record.');
     } finally {
+      submitLockRef.current = false;
       setIsSaving(false);
     }
   };
@@ -205,14 +217,7 @@ export default function InstallmentLedgerModal({
       r.collectedBy || ''
     ]);
 
-    const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Installment_Ledger_${customer.customerName.replace(/\s+/g, '_')}_${customer.id}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(`Installment_Ledger_${customer.customerName.replace(/\s+/g, '_')}_${customer.id}.csv`, headers, rows);
     logIssuedDocument({
       docType: 'installment_schedule',
       docTitle: `ຕາຕະລາງຜ່ອນຊຳລະຄ່າງວດລົດ ${customer.interestedModel} (CSV)`,
@@ -588,15 +593,21 @@ export default function InstallmentLedgerModal({
                         </td>
                         <td className="py-2.5 px-3 text-center print:hidden">
                           {isPaid ? (
-                            <button
-                              type="button"
-                              onClick={() => handleRevertPayment(r.period)}
-                              className="px-2 py-1 text-[11px] font-sans text-zinc-400 hover:text-red-400 hover:bg-zinc-900 rounded border border-zinc-800 hover:border-red-900 transition-colors cursor-pointer"
-                              title="ຍົກເລີກການຊຳລະ"
-                            >
-                              <RotateCcw className="w-3 h-3 inline mr-1" />
-                              <span>ຍົກເລີກ</span>
-                            </button>
+                            isAdmin ? (
+                              <button
+                                type="button"
+                                onClick={() => handleRevertPayment(r.period)}
+                                className="px-2 py-1 text-[11px] font-sans text-zinc-400 hover:text-red-400 hover:bg-zinc-900 rounded border border-zinc-800 hover:border-red-900 transition-colors cursor-pointer"
+                                title="ຍົກເລີກການຊຳລະ"
+                              >
+                                <RotateCcw className="w-3 h-3 inline mr-1" />
+                                <span>ຍົກເລີກ</span>
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                ຊຳລະແລ້ວ
+                              </span>
+                            )
                           ) : (
                             <button
                               type="button"
@@ -660,9 +671,13 @@ export default function InstallmentLedgerModal({
                   <input
                     id="ledger-pay-amount"
                     type="number"
-                    value={payAmountUSD}
-                    onChange={(e) => setPayAmountUSD(Number(e.target.value))}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono font-bold focus:outline-none focus:border-white"
+                    min={1}
+                    step="any"
+                    readOnly={!isAdmin}
+                    disabled={!isAdmin}
+                    value={isAdmin ? payAmountUSD : recordingPeriod.amountUSD}
+                    onChange={(e) => { if (isAdmin) setPayAmountUSD(Number(e.target.value)); }}
+                    className={`w-full border border-zinc-700 rounded-xl px-3 py-2 font-mono font-bold focus:outline-none focus:border-white ${isAdmin ? 'bg-zinc-900 text-white' : 'bg-zinc-900/50 text-zinc-400 cursor-not-allowed'}`}
                   />
                 </div>
 

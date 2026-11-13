@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
   CreditCard, 
@@ -14,10 +14,10 @@ import {
   Check
 } from 'lucide-react';
 import { Lead, VehicleModel, Language, SystemUser, InstallmentPaymentRecord } from '../../types';
-import { 
-  generateInstallmentSchedule, 
-  DEFAULT_EXCHANGE_RATE_LAK 
-} from '../../utils/installment';
+import { generateInstallmentSchedule } from '../../utils/installment';
+import { resolveLakExchangeRate } from '../../data/currencies';
+import { isAdminRole } from '../../utils/roles';
+import { recordInstallmentPayment } from '../../backend/data';
 import { logIssuedDocument } from '../../utils/documentLogger';
 import { exportElementToPdf } from '../../utils/pdfExport';
 import { showToast } from '../common';
@@ -29,7 +29,17 @@ interface QuickInstallmentPaymentModalProps {
   vehicles: VehicleModel[];
   currentUser?: SystemUser;
   lang?: Language;
-  onPaymentSuccess: (customerId: string, updatedRecords: InstallmentPaymentRecord[]) => Promise<void> | void;
+  onPaymentSuccess: (
+    customerId: string,
+    updatedRecords: InstallmentPaymentRecord[],
+    meta?: {
+      paidAmountUSD?: number;
+      paidAmountLAK?: number;
+      installmentStatus?: Lead['installmentStatus'];
+      billId?: string;
+      billNumber?: string;
+    }
+  ) => Promise<void> | void;
 }
 
 export default function QuickInstallmentPaymentModal({
@@ -41,6 +51,8 @@ export default function QuickInstallmentPaymentModal({
   lang = 'lo',
   onPaymentSuccess,
 }: QuickInstallmentPaymentModalProps) {
+  const isAdmin = isAdminRole(currentUser);
+  const lakRate = resolveLakExchangeRate();
   const matchingVehicle = customer
     ? vehicles.find(v => v.name === customer.interestedModel) || vehicles[0]
     : vehicles[0];
@@ -62,6 +74,7 @@ export default function QuickInstallmentPaymentModal({
   const [payNotes, setPayNotes] = useState(() => `ຊຳລະຄ່າງວດລົດ ${customer?.interestedModel || ''} ງວດທີ ${nextUnpaidRecord?.period || 1}`);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
   const [receiptCreated, setReceiptCreated] = useState<{
     receiptNo: string;
     period: number;
@@ -72,52 +85,75 @@ export default function QuickInstallmentPaymentModal({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isExportingReceiptPdf, setIsExportingReceiptPdf] = useState(false);
 
+  useEffect(() => {
+    if (!isOpen || !customer) return;
+    setPayDate(new Date().toISOString().slice(0, 10));
+    setPayMethod('transfer');
+    setBankName('BCEL One (ທຄຕລ)');
+    setPayRef(`TRF-${Math.floor(100000 + Math.random() * 900000)}`);
+    setPayAmountUSD(nextUnpaidRecord?.amountUSD || 0);
+    setPayNotes(`ຊຳລະຄ່າງວດລົດ ${customer.interestedModel || ''} ງວດທີ ${nextUnpaidRecord?.period || 1}`);
+    setReceiptCreated(null);
+    setErrorMsg(null);
+    submitLockRef.current = false;
+  }, [isOpen, customer?.id, nextUnpaidRecord?.period]);
+
   if (!isOpen || !customer) return null;
 
-  const amountLAK = Math.round(payAmountUSD * DEFAULT_EXCHANGE_RATE_LAK);
+  const parsedPayUSD = Number(payAmountUSD);
+  const effectiveAmountUSD = isAdmin
+    ? (Number.isFinite(parsedPayUSD) && parsedPayUSD > 0 ? parsedPayUSD : 0)
+    : (nextUnpaidRecord?.amountUSD || 0);
+  const amountLAK = Math.round(effectiveAmountUSD * lakRate);
 
   const handleConfirmPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nextUnpaidRecord || isSubmitting) return;
+    if (!nextUnpaidRecord || isSubmitting || submitLockRef.current) return;
 
+    if (isAdmin && (!Number.isFinite(parsedPayUSD) || parsedPayUSD <= 0)) {
+      setErrorMsg('ກະລຸນາປ້ອນຈຳນວນເງິນທີ່ຫຼາຍກວ່າ 0 USD');
+      return;
+    }
+    if (!isAdmin && nextUnpaidRecord.amountUSD <= 0) {
+      setErrorMsg('ຈຳນວນເງິນຕາມສັນຍາບໍ່ຖືກຕ້ອງ');
+      return;
+    }
+
+    submitLockRef.current = true;
     setIsSubmitting(true);
     setErrorMsg(null);
 
-    const receiptNumber = `REC-INS-${customer.id.replace(/\D/g, '').slice(-4) || '001'}-${String(nextUnpaidRecord.period).padStart(2, '0')}`;
-
-    const updatedRecords = records.map(r => {
-      if (r.period === nextUnpaidRecord.period) {
-        const finalUSD = Number(payAmountUSD) || r.amountUSD;
-        return {
-          ...r,
-          status: 'paid' as const,
-          paidDate: payDate,
-          paidAmountUSD: finalUSD,
-          paidAmountLAK: Math.round(finalUSD * DEFAULT_EXCHANGE_RATE_LAK),
-          paymentMethod: payMethod,
-          bankName: payMethod === 'transfer' ? bankName : undefined,
-          transferRef: payMethod === 'transfer' ? payRef.trim() : undefined,
-          receiptNo: receiptNumber,
-          notes: payNotes.trim() || undefined,
-          collectedBy: currentUser?.name || 'Admin Showroom',
-        };
-      }
-      return r;
-    });
-
     try {
-      await onPaymentSuccess(customer.id, updatedRecords);
-      const finalUSD = Number(payAmountUSD) || nextUnpaidRecord.amountUSD;
+      const customAmountUSD = isAdmin ? parsedPayUSD : undefined;
+      const customAmountLAK = customAmountUSD !== undefined ? Math.round(customAmountUSD * lakRate) : undefined;
+      const res = await recordInstallmentPayment(customer.id, nextUnpaidRecord.period, {
+        paidAmountUSD: customAmountUSD,
+        paidAmountLAK: customAmountLAK,
+        paidDate: payDate,
+        paymentMethod: payMethod,
+        bankName: payMethod === 'transfer' ? bankName : undefined,
+        transferRef: payMethod === 'transfer' ? payRef.trim() : undefined,
+        notes: payNotes.trim() || undefined,
+      });
+      await onPaymentSuccess(customer.id, res.updatedRecords, {
+        paidAmountUSD: res.paidAmountUSD,
+        paidAmountLAK: res.paidAmountLAK,
+        installmentStatus: res.installmentStatus,
+        billId: res.billId,
+        billNumber: res.billNumber,
+      });
+      const updatedPeriod = res.updatedRecords.find(r => r.period === nextUnpaidRecord.period);
       setReceiptCreated({
-        receiptNo: receiptNumber,
+        receiptNo: updatedPeriod?.receiptNo || res.billNumber,
         period: nextUnpaidRecord.period,
-        amountUSD: finalUSD,
-        amountLAK: Math.round(finalUSD * DEFAULT_EXCHANGE_RATE_LAK),
+        amountUSD: Number(updatedPeriod?.paidAmountUSD ?? updatedPeriod?.amountUSD ?? effectiveAmountUSD),
+        amountLAK: Number(updatedPeriod?.paidAmountLAK ?? updatedPeriod?.amountLAK ?? amountLAK),
         date: payDate,
       });
     } catch (err: any) {
       setErrorMsg(err?.message || 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກຮັບເງິນງວດ');
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -403,12 +439,15 @@ export default function QuickInstallmentPaymentModal({
                   type="number"
                   required
                   min={1}
-                  value={payAmountUSD}
-                  onChange={(e) => setPayAmountUSD(Number(e.target.value))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white font-mono font-bold focus:outline-none focus:border-white text-xs"
+                  step="any"
+                  readOnly={!isAdmin}
+                  disabled={!isAdmin}
+                  value={isAdmin ? (payAmountUSD || '') : (nextUnpaidRecord?.amountUSD || 0)}
+                  onChange={(e) => { if (isAdmin) setPayAmountUSD(Number(e.target.value)); }}
+                  className={`w-full border border-zinc-800 rounded-xl px-3 py-2 font-mono font-bold focus:outline-none focus:border-white text-xs ${isAdmin ? 'bg-zinc-900 text-white' : 'bg-zinc-900/50 text-zinc-400 cursor-not-allowed'}`}
                 />
                 <span className="text-[10px] text-zinc-500 font-mono mt-1 block">
-                  ~ {amountLAK.toLocaleString()} LAK (ອັດຕາ {DEFAULT_EXCHANGE_RATE_LAK.toLocaleString()})
+                  ~ {amountLAK.toLocaleString()} LAK (ອັດຕາ {lakRate.toLocaleString()})
                 </span>
               </div>
 

@@ -3,10 +3,16 @@ import { ChevronRight, Download, FileText, Search, X } from 'lucide-react';
 import type { InvoiceBillRecord, Lead, VehicleModel, SystemUser, Language, ActiveMenu } from '../../types';
 import MonthlyBrandReport from './MonthlyBrandReport';
 import { usePeriodBills } from '../../utils/usePeriodBills';
+import { downloadCsv } from '../../utils/csv';
+import { resolveLakExchangeRate } from '../../data/currencies';
 import {
   computeLeaderboard,
+  mergeCloudLeaderboardStats,
+  fetchLeaderboardFromCloud,
   assignRanks,
   getPeriodLabel,
+  getCloudSalesSyncKey,
+  type CloudLeaderboardRow,
   type LeaderboardPeriod,
   type RepPerformanceRecord,
 } from '../../utils/salesLeaderboard';
@@ -58,9 +64,27 @@ export default function SalesLeaderboardView({
   };
 
   const { bills: periodBills, loading: loadingPeriodBills, limitHit } = usePeriodBills(bills, period);
+  const [cloudRows, setCloudRows] = useState<CloudLeaderboardRow[] | null>(null);
+  const cloudSyncKey = useMemo(() => getCloudSalesSyncKey(bills, leads), [bills, leads]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLeaderboardFromCloud(period).then((rows) => {
+      if (!cancelled) setCloudRows(rows);
+    }).catch(() => {
+      if (!cancelled) setCloudRows(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [period, cloudSyncKey]);
+
   const leaderboardStats = useMemo(
-    () => computeLeaderboard(periodBills, leads, period),
-    [periodBills, leads, period],
+    () => {
+      const localStats = computeLeaderboard(periodBills, leads, period);
+      return mergeCloudLeaderboardStats(localStats, cloudRows, leads, period, undefined, resolveLakExchangeRate());
+    },
+    [periodBills, cloudRows, leads, period],
   );
   const filteredLeaderboard = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -85,23 +109,14 @@ export default function SalesLeaderboardView({
     const headers = ['ອັນດັບ', 'ຊື່ທີ່ປຶກສາການຂາຍ', 'ຈຳນວນລົດທີ່ຂາຍ (ຄັນ)', 'ຍອດຂາຍລວມ (USD)', 'ຍອດຂາຍລວມ (LAK)', 'ລາຄາສະເລ່ຍ/ຄັນ (USD)', 'ອັດຕາປິດການຂາຍ %'];
     const rows = leaderboardStats.map(rep => [
       rankByRep.get(rep.repName) || 1,
-      `"${rep.repName.replace(/"/g, '""')}"`,
+      rep.repName,
       rep.totalUnits,
       rep.totalRevenueUSD,
       rep.totalRevenueLAK,
       rep.avgDealSizeUSD,
       rep.conversionRate == null ? '-' : `${rep.conversionRate}%`,
     ]);
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `AVATR_Top_Sales_Leaderboard_${period}_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCsv(`AVATR_Top_Sales_Leaderboard_${period}_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   return (

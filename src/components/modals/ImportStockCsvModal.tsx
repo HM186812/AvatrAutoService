@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { X, Upload, Loader2, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import type { InventoryItem, InvoiceBillRecord, Language, StockLogRecord, StockStatus, VehicleModel } from '../../types';
 import { parseStockCsv, type ParsedStockFile, type StockCsvRow } from '../../utils/stockCsvImport';
@@ -24,6 +24,7 @@ export default function ImportStockCsvModal({ vehicles, inventory, lang, current
   const [includeSold, setIncludeSold] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const importLockRef = useRef(false);
   const [progress, setProgress] = useState(0);
   const [failures, setFailures] = useState<{ vin: string; message: string }[]>([]);
   const [doneCount, setDoneCount] = useState<number | null>(null);
@@ -38,6 +39,7 @@ export default function ImportStockCsvModal({ vehicles, inventory, lang, current
     vin_invalid: L('VIN ບໍ່ຄົບ 17 ຕົວ', 'VIN not 17 chars', 'VIN ไม่ครบ 17 ตัว'),
     model_missing: L('ບໍ່ມີລຸ້ນ', 'No model', 'ไม่มีรุ่น'),
     model_unknown: L('ລຸ້ນບໍ່ມີໃນລະບົບ', 'Model not in system', 'รุ่นไม่มีในระบบ'),
+    price_missing: L('ບໍ່ມີລາຄາຂາຍ (USD)', 'Missing unit price (USD)', 'ไม่มีราคาขาย (USD)'),
   } as Record<string, string>)[p] || p;
 
   const handleFiles = async (list: FileList | null) => {
@@ -78,6 +80,8 @@ export default function ImportStockCsvModal({ vehicles, inventory, lang, current
   const warnings = allRows.filter(r => r.problems.length > 0);
 
   const runImport = async () => {
+    if (importLockRef.current || importing) return;
+    importLockRef.current = true;
     setImporting(true);
     setProgress(0);
     const saved: InventoryItem[] = [];
@@ -85,75 +89,79 @@ export default function ImportStockCsvModal({ vehicles, inventory, lang, current
     const logs: StockLogRecord[] = [];
     const usedNumbers = new Set<string>();
     const failed: { vin: string; message: string }[] = [];
-    const now = new Date();
-    const stamp = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 8)}`;
-    for (const row of importable) {
-      const item = row.item!;
-      try {
-        if (item.status === 'sold') {
-          // Already delivered before this system: kept as history only, with no goods receipt.
-          await saveInventoryItemToSupabase(item);
-        } else {
-          // Same path as the Stock-In form: one goods receipt (GRN) per vehicle, saved together with the vehicle.
-          let grn = await generateNextBillNumber('GRN');
-          while (usedNumbers.has(grn)) grn = `${grn}-${usedNumbers.size + 1}`;
-          usedNumbers.add(grn);
-          const unit: InventoryItem = { ...item, arrivalDate: item.status === 'in_transit' ? item.arrivalDate : (item.arrivalDate || stamp) };
-          const bill: InvoiceBillRecord = {
-            id: newRecordId(),
-            billType: 'import',
-            billNumber: grn,
-            date: stamp,
-            vin: unit.vin,
-            engineNumber: unit.engineNumber,
-            model: unit.model,
-            trim: unit.trim,
-            color: unit.color,
-            interiorColor: unit.interiorColor,
-            battery: unit.battery,
-            quantity: 1,
-            unitPriceUSD: unit.priceUSD,
-            unitPriceLAK: unit.priceLAK,
-            discountUSD: 0,
-            discountLAK: 0,
-            netTotalUSD: unit.priceUSD,
-            netTotalLAK: unit.priceLAK,
-            amountUSD: unit.priceUSD,
-            amountLAK: unit.priceLAK,
-            statusInitial: unit.status,
-            pdiStatusInitial: unit.pdiStatus,
-            recordedBy: currentUserName || 'Admin',
-            notes: `ນຳເຂົ້າຈາກ CSV: ${row.source} (ແຖວ ${row.line})`,
-          } as InvoiceBillRecord;
-          await saveBillToSupabase(bill, unit);
-          bills.push(bill);
-          logs.push({
-            id: `LOG-IN-${bill.id.slice(0, 8)}`,
-            billId: bill.id,
-            type: 'stock_in',
-            vin: unit.vin,
-            model: unit.model,
-            color: unit.color,
-            quantity: 1,
-            priceUSD: unit.priceUSD,
-            priceLAK: unit.priceLAK,
-            timestamp: stamp,
-            recordedBy: currentUserName || 'Admin',
-            notes: `ນຳເຂົ້າຈາກ CSV ໃບຮັບເລກທີ ${grn}`,
-          });
-          item.arrivalDate = unit.arrivalDate;
+    try {
+      const now = new Date();
+      const stamp = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 8)}`;
+      for (const row of importable) {
+        const item = row.item!;
+        try {
+          if (item.status === 'sold') {
+            // Already delivered before this system: kept as history only, with no goods receipt.
+            await saveInventoryItemToSupabase(item);
+          } else {
+            // Same path as the Stock-In form: one goods receipt (GRN) per vehicle, saved together with the vehicle.
+            let grn = await generateNextBillNumber('GRN');
+            while (usedNumbers.has(grn)) grn = `${grn}-${usedNumbers.size + 1}`;
+            usedNumbers.add(grn);
+            const unit: InventoryItem = { ...item, arrivalDate: item.status === 'in_transit' ? item.arrivalDate : (item.arrivalDate || stamp) };
+            const bill: InvoiceBillRecord = {
+              id: newRecordId(),
+              billType: 'import',
+              billNumber: grn,
+              date: stamp,
+              vin: unit.vin,
+              engineNumber: unit.engineNumber,
+              model: unit.model,
+              trim: unit.trim,
+              color: unit.color,
+              interiorColor: unit.interiorColor,
+              battery: unit.battery,
+              quantity: 1,
+              unitPriceUSD: unit.priceUSD,
+              unitPriceLAK: unit.priceLAK,
+              discountUSD: 0,
+              discountLAK: 0,
+              netTotalUSD: unit.priceUSD,
+              netTotalLAK: unit.priceLAK,
+              amountUSD: unit.priceUSD,
+              amountLAK: unit.priceLAK,
+              statusInitial: unit.status,
+              pdiStatusInitial: unit.pdiStatus,
+              recordedBy: currentUserName || 'Admin',
+              notes: `ນຳເຂົ້າຈາກ CSV: ${row.source} (ແຖວ ${row.line})`,
+            } as InvoiceBillRecord;
+            await saveBillToSupabase(bill, unit);
+            bills.push(bill);
+            logs.push({
+              id: `LOG-IN-${bill.id.slice(0, 8)}`,
+              billId: bill.id,
+              type: 'stock_in',
+              vin: unit.vin,
+              model: unit.model,
+              color: unit.color,
+              quantity: 1,
+              priceUSD: unit.priceUSD,
+              priceLAK: unit.priceLAK,
+              timestamp: stamp,
+              recordedBy: currentUserName || 'Admin',
+              notes: `ນຳເຂົ້າຈາກ CSV ໃບຮັບເລກທີ ${grn}`,
+            });
+            item.arrivalDate = unit.arrivalDate;
+          }
+          saved.push(item);
+        } catch (err) {
+          failed.push({ vin: row.vin, message: err instanceof Error ? err.message : String(err) });
         }
-        saved.push(item);
-      } catch (err) {
-        failed.push({ vin: row.vin, message: err instanceof Error ? err.message : String(err) });
+        setProgress(p => p + 1);
       }
-      setProgress(p => p + 1);
+      if (saved.length) onImported(saved, bills, logs);
+      setFailures(failed);
+      setDoneCount(saved.length);
+      setFiles([]);
+    } finally {
+      importLockRef.current = false;
+      setImporting(false);
     }
-    if (saved.length) onImported(saved, bills, logs);
-    setFailures(failed);
-    setDoneCount(saved.length);
-    setFiles([]);
-    setImporting(false);
   };
 
   const th = 'px-2 py-2 text-left font-semibold text-zinc-400 whitespace-nowrap';

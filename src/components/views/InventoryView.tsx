@@ -1,6 +1,7 @@
 import { useState, useMemo, Fragment } from 'react';
 import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SystemUser, InvoiceBillRecord } from '../../types';
 import { translations } from '../../data/translations';
+import { resolveLakExchangeRate } from '../../data/currencies';
 import { getModelStockSummaries, LOW_STOCK_THRESHOLD, brandOf, compareInventory, isSellable, isOnHand, isListedInStock, notSellableReason, SALE_READY_STATUSES } from '../../data/stockSummary';
 import {
   saveInventoryItemToSupabase,
@@ -139,7 +140,7 @@ export default function InventoryView({
     setEditingItem({
       ...editingItem,
       priceUSD: val,
-      priceLAK: Math.round(val * 22000),
+      priceLAK: Math.round(val * resolveLakExchangeRate()),
     });
   };
 
@@ -247,7 +248,7 @@ export default function InventoryView({
       priceUSD: Number(editPriceValue) || 0,
       stockQuantity: originalItem ? originalItem.stockQuantity : editingItem.stockQuantity,
       color: editingItem.color?.trim() || '-',
-      priceLAK: (Number(editPriceValue) || 0) * 22000,
+      priceLAK: Math.round((Number(editPriceValue) || 0) * resolveLakExchangeRate()),
     };
 
     try {
@@ -1610,9 +1611,9 @@ export default function InventoryView({
                       </div>
 
                       <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
-                        <span>{lang === 'lo' ? 'ມູນຄ່າປະມານກີບ (ອັດຕາ 22,000):' : 'Estimated in LAK (Rate 22,000):'}</span>
+                        <span>{lang === 'lo' ? `ມູນຄ່າປະມານກີບ (ອັດຕາ ${resolveLakExchangeRate().toLocaleString()}):` : `Estimated in LAK (Rate ${resolveLakExchangeRate().toLocaleString()}):`}</span>
                         <span className="font-mono font-bold text-zinc-200">
-                          {(Number(editPriceValue || 0) * 22000).toLocaleString()} ₭
+                          {Math.round(Number(editPriceValue || 0) * resolveLakExchangeRate()).toLocaleString()} ₭
                         </span>
                       </div>
                     </div>
