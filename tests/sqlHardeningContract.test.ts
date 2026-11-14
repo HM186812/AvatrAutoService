@@ -132,3 +132,17 @@ test('soft-delete migration preserves staff_profiles for 10-year audit, revokes 
   assert.match(kpiMatch[0], /'monthly_installment_collected_usd',\s*CASE\s+WHEN\s+v_can_view_financials/i);
 });
 
+test('retired roles cleanup migration updates handle_new_auth_user fallback before deleting technician and general_user', () => {
+  const migPath = path.join(ROOT, 'supabase/migrations/20261114232000_remove_retired_staff_roles.sql');
+  assert.ok(fs.existsSync(migPath), 'Missing 20261114232000_remove_retired_staff_roles.sql');
+  const sql = fs.readFileSync(migPath, 'utf8');
+
+  const fnMatch = sql.match(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.handle_new_auth_user\(\)[\s\S]*?\$\$;/i);
+  assert.ok(fnMatch, 'Migration must update handle_new_auth_user() before deleting general_user');
+  assert.doesNotMatch(fnMatch[0], /'general_user'/i);
+  assert.match(fnMatch[0], /v_role\s+text\s*:=\s*'sales'/i);
+  assert.match(fnMatch[0], /v_initial_status\s+text\s*:=\s*'suspended'/i);
+
+  assert.match(sql, /DELETE\s+FROM\s+public\.staff_roles[\s\S]*?role_code\s+IN\s*\(\s*'technician'\s*,\s*'general_user'\s*\)/i);
+});
+
