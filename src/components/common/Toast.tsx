@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -42,8 +41,7 @@ export const ToastContainer: React.FC = () => {
 
   return (
     <div className="fixed top-5 right-5 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0">
-      <AnimatePresence mode="popLayout">
-        {toasts.map((toast) => {
+      {toasts.map((toast) => {
           const type = toast.type || 'success';
 
           const config = {
@@ -84,14 +82,9 @@ export const ToastContainer: React.FC = () => {
           const IconComponent = config.icon;
 
           return (
-            <motion.div
+            <div
               key={toast.id}
-              layout
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 20, scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 26 }}
-              className={`pointer-events-auto relative flex items-start gap-3 p-3.5 rounded-2xl border backdrop-blur-xl ${config.bgColor} ${config.borderColor} ${config.shadow} text-slate-900 dark:text-white transition-all`}
+              className={`animate-toast-in pointer-events-auto relative flex items-start gap-3 p-3.5 rounded-2xl border backdrop-blur-xl ${config.bgColor} ${config.borderColor} ${config.shadow} text-slate-900 dark:text-white transition-all`}
             >
               <div className={`shrink-0 p-1 rounded-xl ${config.badgeBg}`}>
                 <IconComponent className={`w-4 h-4 ${config.iconColor}`} />
@@ -111,10 +104,9 @@ export const ToastContainer: React.FC = () => {
               >
                 <X className="w-3.5 h-3.5" />
               </button>
-            </motion.div>
+            </div>
           );
         })}
-      </AnimatePresence>
     </div>
   );
 };

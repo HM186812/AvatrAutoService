@@ -334,12 +334,68 @@ export function clearIssuedDocumentLogs(): void {
   })();
 }
 
-export function getCustomerDocumentLogs(params: {
+export interface CustomerDocLogQuery {
   leadId?: string;
   customerName?: string;
   customerPhone?: string;
   vin?: string;
-}): IssuedDocumentRecord[] {
+}
+
+/**
+ * Indexes issued document logs once in O(D) so per-customer lookups run in O(1) amortized
+ * instead of O(D) per card across O(C) customer rows.
+ */
+export function createDocumentLogMatcher(logs: IssuedDocumentRecord[]) {
+  const byLeadId = new Map<string, number[]>();
+  const byVin = new Map<string, number[]>();
+  const byPhone = new Map<string, number[]>();
+  const byName = new Map<string, number[]>();
+
+  const pushKey = (map: Map<string, number[]>, key: string, idx: number) => {
+    if (!key) return;
+    const bucket = map.get(key);
+    if (bucket) bucket.push(idx);
+    else map.set(key, [idx]);
+  };
+
+  for (let i = 0; i < logs.length; i++) {
+    const l = logs[i];
+    if (l.leadId) pushKey(byLeadId, l.leadId.trim().toLowerCase(), i);
+    if (l.vin) pushKey(byVin, l.vin.trim().toLowerCase(), i);
+    if (l.customerPhone) {
+      const p = l.customerPhone.replace(/\D/g, '');
+      if (p.length >= 6) pushKey(byPhone, p, i);
+    }
+    if (l.customerName) pushKey(byName, l.customerName.trim().toLowerCase(), i);
+  }
+
+  const matchIndices = (params: CustomerDocLogQuery): Set<number> => {
+    const matched = new Set<number>();
+    const cleanLeadId = params.leadId ? params.leadId.trim().toLowerCase() : '';
+    const cleanVin = params.vin ? params.vin.trim().toLowerCase() : '';
+    const cleanPhone = params.customerPhone ? params.customerPhone.replace(/\D/g, '') : '';
+    const cleanName = params.customerName ? params.customerName.trim().toLowerCase() : '';
+
+    if (cleanLeadId) byLeadId.get(cleanLeadId)?.forEach((i) => matched.add(i));
+    if (cleanVin) byVin.get(cleanVin)?.forEach((i) => matched.add(i));
+    if (cleanPhone.length >= 6) byPhone.get(cleanPhone)?.forEach((i) => matched.add(i));
+    if (cleanName) byName.get(cleanName)?.forEach((i) => matched.add(i));
+    return matched;
+  };
+
+  return {
+    getLogs(params: CustomerDocLogQuery): IssuedDocumentRecord[] {
+      const matched = matchIndices(params);
+      if (matched.size === 0) return [];
+      return Array.from(matched).sort((a, b) => a - b).map((i) => logs[i]);
+    },
+    getCount(params: CustomerDocLogQuery): number {
+      return matchIndices(params).size;
+    },
+  };
+}
+
+export function getCustomerDocumentLogs(params: CustomerDocLogQuery): IssuedDocumentRecord[] {
   const logs = getIssuedDocumentLogs();
   const cleanLeadId = params.leadId ? params.leadId.trim().toLowerCase() : '';
   const cleanName = params.customerName ? params.customerName.trim().toLowerCase() : '';

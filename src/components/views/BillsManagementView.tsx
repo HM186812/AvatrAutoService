@@ -156,10 +156,15 @@ export default function BillsManagementView({
     showToast('ລຶບລາຍການບັນທຶກເອກະສານສຳເລັດ', 'success');
   };
 
+  const vehicleByName = useMemo(
+    () => new Map(vehicles.map(v => [v.name, v])),
+    [vehicles]
+  );
+
   const handleReopenIssuedDoc = (log: IssuedDocumentRecord) => {
     // 1. Quotation: Reopen in QuotationModal
     if (log.docType === 'quotation') {
-      const matchingVehicle = vehicles.find(v => v.name === log.model) || vehicles[0];
+      const matchingVehicle = (log.model ? vehicleByName.get(log.model) : undefined) || vehicles[0];
       if (matchingVehicle) {
         setSelectedQuoteForModal({
           vehicle: matchingVehicle,
@@ -399,11 +404,70 @@ export default function BillsManagementView({
   );
 
   // Voided bills stay listed (with their label) but never count in totals or counts, like the Dashboard and CRM
-  const activeTimeFilteredBills = timeFilteredBills.filter(b => b.status !== 'voided');
-  const voidedInRangeCount = timeFilteredBills.length - activeTimeFilteredBills.length;
-  const saleBills = activeTimeFilteredBills.filter(b => b.billType === 'sale' && !isInstallmentBill(b));
-  const importBills = activeTimeFilteredBills.filter(b => b.billType === 'import');
-  const installmentBills = activeTimeFilteredBills.filter(isInstallmentBill);
+  const {
+    activeTimeFilteredBills,
+    voidedInRangeCount,
+    saleBills,
+    importBills,
+    installmentBills,
+    totalSalesRevenueUSD,
+    totalImportValuationUSD,
+    totalInstallmentCollectionsUSD,
+    totalFinancedLoanUSD,
+  } = useMemo(() => {
+    const active: InvoiceBillRecord[] = [];
+    const sales: InvoiceBillRecord[] = [];
+    const imports: InvoiceBillRecord[] = [];
+    const installments: InvoiceBillRecord[] = [];
+    let salesRevenue = 0;
+    let importVal = 0;
+    let installmentCollections = 0;
+    let financedLoan = 0;
+
+    for (const b of timeFilteredBills) {
+      if (b.status === 'voided') continue;
+      active.push(b);
+      if (b.billType === 'import') {
+        imports.push(b);
+        importVal += b.netTotalUSD;
+      }
+      if (isInstallmentBill(b)) {
+        installments.push(b);
+        const isReceipt = b.billType === 'installment' || b.type === 'installment';
+        if (isReceipt) {
+          installmentCollections += b.netTotalUSD || b.amountUSD || 0;
+        } else {
+          const fullPrice = b.netTotalUSD || b.amountUSD || b.unitPriceUSD || 0;
+          const downUSD = b.downPaymentUSD !== undefined && b.downPaymentUSD !== null
+            ? b.downPaymentUSD
+            : Math.round(fullPrice * ((b.downPaymentPercent || 0) / 100));
+          installmentCollections += downUSD;
+        }
+        if (b.billType === 'sale' || (!b.billType && b.type !== 'installment')) {
+          const fullPrice = b.netTotalUSD || b.unitPriceUSD || b.amountUSD || 0;
+          const downUSD = b.downPaymentUSD !== undefined && b.downPaymentUSD !== null
+            ? b.downPaymentUSD
+            : Math.round(fullPrice * ((b.downPaymentPercent || 30) / 100));
+          financedLoan += Math.max(0, fullPrice - downUSD);
+        }
+      } else if (b.billType === 'sale') {
+        sales.push(b);
+        salesRevenue += b.netTotalUSD;
+      }
+    }
+
+    return {
+      activeTimeFilteredBills: active,
+      voidedInRangeCount: timeFilteredBills.length - active.length,
+      saleBills: sales,
+      importBills: imports,
+      installmentBills: installments,
+      totalSalesRevenueUSD: salesRevenue,
+      totalImportValuationUSD: importVal,
+      totalInstallmentCollectionsUSD: installmentCollections,
+      totalFinancedLoanUSD: financedLoan,
+    };
+  }, [timeFilteredBills]);
 
   // Leads matching installment & down payment category
   const installmentLeads = useMemo(() => {
@@ -416,48 +480,30 @@ export default function BillsManagementView({
     );
   }, [leads]);
 
+  const { leadsById, leadsByPhone } = useMemo(() => {
+    const byId = new Map<string, Lead>();
+    const byPhone = new Map<string, Lead[]>();
+    for (const lead of leads) {
+      byId.set(lead.id, lead);
+      const normPhone = lead.phone.replace(/\D/g, '');
+      if (normPhone) {
+        const arr = byPhone.get(normPhone);
+        if (arr) arr.push(lead);
+        else byPhone.set(normPhone, [lead]);
+      }
+    }
+    return { leadsById: byId, leadsByPhone: byPhone };
+  }, [leads]);
+
   const findLeadForBill = (bill: InvoiceBillRecord) => {
-    const leadById = bill.leadId ? leads.find(lead => lead.id === bill.leadId) : undefined;
+    const leadById = bill.leadId ? leadsById.get(bill.leadId) : undefined;
     if (leadById) return leadById;
 
     const normalizedPhone = (bill.customerPhone || '').replace(/\D/g, '');
     if (!normalizedPhone) return undefined;
-    const phoneMatches = leads.filter(lead => lead.phone.replace(/\D/g, '') === normalizedPhone);
-    return phoneMatches.length === 1 ? phoneMatches[0] : undefined;
+    const phoneMatches = leadsByPhone.get(normalizedPhone);
+    return phoneMatches && phoneMatches.length === 1 ? phoneMatches[0] : undefined;
   };
-
-  // Financial aggregates
-  const totalSalesRevenueUSD = saleBills.reduce((acc, curr) => acc + curr.netTotalUSD, 0);
-  const totalImportValuationUSD = importBills.reduce((acc, curr) => acc + curr.netTotalUSD, 0);
-
-  // Total collected from down payments & installment receipts
-  const totalInstallmentCollectionsUSD = useMemo(() => {
-    return installmentBills.reduce((acc, curr) => {
-      const isReceipt = curr.billType === 'installment' || curr.type === 'installment';
-      if (isReceipt) {
-        return acc + (curr.netTotalUSD || curr.amountUSD || 0);
-      }
-      // For sales contract bills, only count the collected down payment
-      const fullPrice = curr.netTotalUSD || curr.amountUSD || curr.unitPriceUSD || 0;
-      const downUSD = curr.downPaymentUSD !== undefined && curr.downPaymentUSD !== null
-        ? curr.downPaymentUSD
-        : Math.round(fullPrice * ((curr.downPaymentPercent || 0) / 100));
-      return acc + downUSD;
-    }, 0);
-  }, [installmentBills]);
-
-  // Total financed portfolio across installment bills and leads
-  const totalFinancedLoanUSD = useMemo(() => {
-    return installmentBills
-      .filter(b => b.billType === 'sale' || (!b.billType && b.type !== 'installment'))
-      .reduce((acc, curr) => {
-        const fullPrice = curr.netTotalUSD || curr.unitPriceUSD || curr.amountUSD || 0;
-        const downUSD = curr.downPaymentUSD !== undefined && curr.downPaymentUSD !== null
-          ? curr.downPaymentUSD
-          : Math.round(fullPrice * ((curr.downPaymentPercent || 30) / 100));
-        return acc + Math.max(0, fullPrice - downUSD);
-      }, 0);
-  }, [installmentBills]);
 
   // Filter bills based on search and selected filterType
   const availableYears = useMemo(() => {
@@ -701,11 +747,16 @@ export default function BillsManagementView({
     }
   };
 
+  const allLoadedBillsById = useMemo(
+    () => new Map(allLoadedBills.map(b => [b.id, b])),
+    [allLoadedBills]
+  );
+
   // Batch void selected bills: opens the same reason dialog as the single button
   const handleDeleteSelectedBills = () => {
     if (!canBatchVoid || selectedBillIds.length === 0) return;
     const targets = selectedBillIds
-      .map(id => allLoadedBills.find(b => b.id === id))
+      .map(id => allLoadedBillsById.get(id))
       .filter((b): b is InvoiceBillRecord => Boolean(b) && b!.status !== 'voided' && !b!.isArchived);
     if (targets.length === 0) return;
     setVoidReasonInput('');
@@ -1739,7 +1790,7 @@ export default function BillsManagementView({
                     </tr>
                   ) : (
                     paginatedContracts.map((lead) => {
-                      const matchedVeh = vehicles.find(v => v.name === lead.interestedModel);
+                      const matchedVeh = vehicleByName.get(lead.interestedModel);
                       const basePrice = matchedVeh?.priceStartingUSD || 50000;
                       const downUSD = lead.downPaymentUSD || Math.round(basePrice * ((lead.downPaymentPercent || 30) / 100));
 

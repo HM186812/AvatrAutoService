@@ -38,15 +38,30 @@ function billPriceUSD(bill?: InvoiceBillRecord): number | undefined {
   return price > 0 ? price : undefined;
 }
 
+function isSaleBillCandidate(b: InvoiceBillRecord): boolean {
+  return (
+    b.status !== 'voided' &&
+    (b.billType === 'sale' || b.billType === 'installment') &&
+    !isMonthlyInstallmentBill(b)
+  );
+}
+
+function pickNewerBill(a?: InvoiceBillRecord, b?: InvoiceBillRecord): InvoiceBillRecord | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return (b.date || '').localeCompare(a.date || '') > 0 ? b : a;
+}
+
 function findSaleBill(lead: Lead, bills: InvoiceBillRecord[]): InvoiceBillRecord | undefined {
   const phone = digits(lead.phone);
-  return bills
-    .filter(b =>
-      b.status !== 'voided' &&
-      (b.billType === 'sale' || b.billType === 'installment') &&
-      !isMonthlyInstallmentBill(b) &&
-      (b.leadId === lead.id || (phone.length >= 6 && digits(b.customerPhone) === phone)))
-    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+  let best: InvoiceBillRecord | undefined;
+  for (const b of bills) {
+    if (!isSaleBillCandidate(b)) continue;
+    if (b.leadId === lead.id || (phone.length >= 6 && digits(b.customerPhone) === phone)) {
+      best = pickNewerBill(best, b);
+    }
+  }
+  return best;
 }
 
 /** Contract price: the customer's recorded price → the sale bill → the model's starting price. */
@@ -68,13 +83,22 @@ export function getInstallmentCustomers(leads: Lead[], bills: InvoiceBillRecord[
   const includedIds = new Set(result.map(l => l.id));
   const seenPhones = new Set(result.map(l => digits(l.phone)).filter(Boolean));
 
-  bills.filter(isFinancedSaleBill).forEach(bill => {
-    const phone = digits(bill.customerPhone);
-    if (bill.leadId && includedIds.has(bill.leadId)) return;
-    if (phone && seenPhones.has(phone)) return;
+  const leadsById = new Map<string, Lead>();
+  const leadsByPhone = new Map<string, Lead>();
+  for (const l of leads) {
+    leadsById.set(l.id, l);
+    const p = digits(l.phone);
+    if (p.length >= 6 && !leadsByPhone.has(p)) leadsByPhone.set(p, l);
+  }
 
-    const owner = leads.find(l => l.id === bill.leadId) ||
-      (phone.length >= 6 ? leads.find(l => digits(l.phone) === phone) : undefined);
+  for (const bill of bills) {
+    if (!isFinancedSaleBill(bill)) continue;
+    const phone = digits(bill.customerPhone);
+    if (bill.leadId && includedIds.has(bill.leadId)) continue;
+    if (phone && seenPhones.has(phone)) continue;
+
+    const owner = (bill.leadId ? leadsById.get(bill.leadId) : undefined) ||
+      (phone.length >= 6 ? leadsByPhone.get(phone) : undefined);
 
     if (owner) {
       result.push({
@@ -117,7 +141,7 @@ export function getInstallmentCustomers(leads: Lead[], bills: InvoiceBillRecord[
       } as Lead);
     }
     seenPhones.add(phone || bill.id);
-  });
+  }
 
   return result;
 }
@@ -135,8 +159,40 @@ export function buildInstallmentContracts(
   bills: InvoiceBillRecord[],
   vehicles: VehicleModel[]
 ): InstallmentContract[] {
+  const vehicleByName = new Map<string, VehicleModel>();
+  for (const v of vehicles) {
+    if (!vehicleByName.has(v.name)) vehicleByName.set(v.name, v);
+  }
+
+  const saleBillByLeadId = new Map<string, InvoiceBillRecord>();
+  const saleBillByPhone = new Map<string, InvoiceBillRecord>();
+  for (const b of bills) {
+    if (!isSaleBillCandidate(b)) continue;
+    if (b.leadId) {
+      saleBillByLeadId.set(b.leadId, pickNewerBill(saleBillByLeadId.get(b.leadId), b)!);
+    }
+    const bp = digits(b.customerPhone);
+    if (bp.length >= 6) {
+      saleBillByPhone.set(bp, pickNewerBill(saleBillByPhone.get(bp), b)!);
+    }
+  }
+
   return getInstallmentCustomers(leads, bills).map(lead => {
-    const priceUSD = getContractPriceUSD(lead, vehicles, bills);
+    const recorded = Number(lead.listPriceUSD);
+    let priceUSD: number;
+    if (recorded > 0) {
+      priceUSD = Math.max(0, recorded - Math.max(0, Number(lead.discountUSD) || 0));
+    } else {
+      const phone = digits(lead.phone);
+      const bestBill = pickNewerBill(
+        saleBillByLeadId.get(lead.id),
+        phone.length >= 6 ? saleBillByPhone.get(phone) : undefined,
+      );
+      priceUSD = billPriceUSD(bestBill) ??
+        vehicleByName.get(lead.interestedModel)?.priceStartingUSD ??
+        FALLBACK_PRICE_USD;
+    }
+
     const records = generateInstallmentSchedule(lead, priceUSD);
     const summary = calculateInstallmentSummary(lead, records, priceUSD);
     return {
@@ -151,6 +207,8 @@ export function buildInstallmentContracts(
 
 export function summarizeInstallmentPortfolio(contracts: InstallmentContract[], today: Date = new Date()) {
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  let activeContracts = 0;
+  let completedContracts = 0;
   let totalVehicleValueUSD = 0;
   let totalDownPaymentUSD = 0;
   let totalFinancedUSD = 0;
@@ -164,10 +222,12 @@ export function summarizeInstallmentPortfolio(contracts: InstallmentContract[], 
     totalDownPaymentUSD += summary.downPaymentUSD;
     totalFinancedUSD += summary.principalFinancedUSD;
     if (isCompleted) {
+      completedContracts += 1;
       // Paid off (e.g. early payoff): nothing is owed any more, even if the ledger was never filled in
       totalInstallmentsPaidUSD += summary.totalPaidInstallmentsUSD + summary.remainingInstallmentsUSD;
       return;
     }
+    activeContracts += 1;
     totalInstallmentsPaidUSD += summary.totalPaidInstallmentsUSD;
     totalOutstandingUSD += summary.remainingInstallmentsUSD;
     records.forEach(r => {
@@ -181,8 +241,8 @@ export function summarizeInstallmentPortfolio(contracts: InstallmentContract[], 
   const scheduledTotalUSD = totalInstallmentsPaidUSD + totalOutstandingUSD;
   return {
     totalContracts: contracts.length,
-    activeContracts: contracts.filter(c => !c.isCompleted).length,
-    completedContracts: contracts.filter(c => c.isCompleted).length,
+    activeContracts,
+    completedContracts,
     totalVehicleValueUSD,
     totalDownPaymentUSD,
     averageDownPercent: totalVehicleValueUSD > 0 ? Math.round((totalDownPaymentUSD / totalVehicleValueUSD) * 100) : null,

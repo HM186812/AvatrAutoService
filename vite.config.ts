@@ -78,20 +78,12 @@ export default defineConfig(({ mode, command }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (
-              id.includes('node_modules/jspdf') ||
-              id.includes('node_modules/html2canvas') ||
-              id.includes('node_modules/canvg')
-            ) {
-              return 'vendor-pdf';
-            }
             if (id.includes('node_modules/lucide-react')) {
               return 'vendor-icons';
             }
             if (
               id.includes('node_modules/react') ||
-              id.includes('node_modules/react-dom') ||
-              id.includes('node_modules/motion')
+              id.includes('node_modules/react-dom')
             ) {
               return 'vendor-react';
             }

@@ -16,7 +16,7 @@ import {
 import { showToast } from '../common';
 import {
   getIssuedDocumentLogs,
-  getCustomerDocumentLogs,
+  createDocumentLogMatcher,
   DOCUMENT_LOG_EVENT,
 } from '../../utils/documentLogger';
 import {
@@ -101,23 +101,25 @@ export default function InstallmentDashboardView({
     };
   }, []);
 
-  const getCustomerIssuedDocsCount = (lead: Lead) => {
-    return getCustomerDocumentLogs({
+  const docLogMatcher = useMemo(() => createDocumentLogMatcher(issuedDocLogs), [issuedDocLogs]);
+
+  const getCustomerIssuedDocsCount = (lead: Lead) =>
+    docLogMatcher.getCount({
       leadId: lead.id,
       customerName: lead.customerName,
       customerPhone: lead.phone,
       vin: lead.vin,
-    }).length;
-  };
+    });
 
 
   // 1+2. Installment contracts: shared with the Dashboard and the Sidebar badge so every page and account agrees
   const leadsWithSummaries = useMemo(() => {
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const vehicleByName = new Map(vehicles.map(v => [v.name, v]));
 
     return buildInstallmentContracts(leads, bills, vehicles).map(({ lead, priceUSD, records, summary, isCompleted }) => {
-      const matchedVeh = vehicles.find(v => v.name === lead.interestedModel) || vehicles[0];
+      const matchedVeh = vehicleByName.get(lead.interestedModel) || vehicles[0];
       const basePrice = priceUSD;
 
 
@@ -143,6 +145,18 @@ export default function InstallmentDashboardView({
       };
     });
   }, [leads, bills, vehicles]);
+
+  const statusFilterCounts = useMemo(() => {
+    let active = 0;
+    let due = 0;
+    let completed = 0;
+    for (const s of leadsWithSummaries) {
+      if (s.summary.isFullyPaid) completed += 1;
+      else active += 1;
+      if (s.isDueSoon || s.isOverdue) due += 1;
+    }
+    return { active, due, completed };
+  }, [leadsWithSummaries]);
 
   // 3. Filtered Customers
   const filteredCustomers = useMemo(() => {
@@ -455,9 +469,9 @@ export default function InstallmentDashboardView({
             className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-white font-medium"
           >
             <option value="all">ທຸກສະຖານະ ({leadsWithSummaries.length})</option>
-            <option value="active">ກຳລັງຜ່ອນ ({leadsWithSummaries.filter(s => !s.summary.isFullyPaid).length})</option>
-            <option value="due">ຮອດກຳນົດຊຳລະ ({leadsWithSummaries.filter(s => s.isDueSoon || s.isOverdue).length})</option>
-            <option value="completed">ຜ່ອນຄົບ 100% ({leadsWithSummaries.filter(s => s.summary.isFullyPaid).length})</option>
+            <option value="active">ກຳລັງຜ່ອນ ({statusFilterCounts.active})</option>
+            <option value="due">ຮອດກຳນົດຊຳລະ ({statusFilterCounts.due})</option>
+            <option value="completed">ຜ່ອນຄົບ 100% ({statusFilterCounts.completed})</option>
           </select>
         </div>
       </div>

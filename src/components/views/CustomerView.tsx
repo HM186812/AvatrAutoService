@@ -77,7 +77,7 @@ import { PIPELINE_LABELS, PIPELINE_STAGE_KEYS, getPipelineCurrentIndex, getPipel
 import { getFollowUpState, makeContactEntry, formatDateKey } from '../../utils/followUp';
 import InstallmentDashboardView from './InstallmentDashboardView';
 import { IssuedDocumentRecord } from '../../types';
-import { getIssuedDocumentLogs, fetchDocumentLogsFromCloud, DOCUMENT_LOG_EVENT } from '../../utils/documentLogger';
+import { getIssuedDocumentLogs, createDocumentLogMatcher, fetchDocumentLogsFromCloud, DOCUMENT_LOG_EVENT } from '../../utils/documentLogger';
 import { matchesSearch, localDateKey } from '../../utils/search';
 
 interface CustomerViewProps {
@@ -256,23 +256,13 @@ export default function CustomerView({
     };
   }, []);
 
+  const docLogMatcher = useMemo(() => createDocumentLogMatcher(issuedDocLogs), [issuedDocLogs]);
+
   const getCustomerIssuedDocsCount = (customerName: string, phone?: string, vin?: string, leadId?: string) =>
-    getCustomerIssuedDocs(customerName, phone, vin, leadId).length;
+    docLogMatcher.getCount({ customerName, customerPhone: phone, vin, leadId });
 
-  const getCustomerIssuedDocs = (customerName: string, phone?: string, vin?: string, leadId?: string) => {
-    const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
-    const cleanName = customerName.trim().toLowerCase();
-    const cleanVin = vin ? vin.trim().toLowerCase() : '';
-    const cleanLeadId = leadId ? leadId.trim().toLowerCase() : '';
-
-    return issuedDocLogs.filter(log => {
-      if (cleanLeadId && log.leadId && log.leadId.trim().toLowerCase() === cleanLeadId) return true;
-      if (cleanVin && log.vin && log.vin.trim().toLowerCase() === cleanVin) return true;
-      if (cleanPhone.length >= 6 && log.customerPhone && log.customerPhone.replace(/\D/g, '') === cleanPhone) return true;
-      if (cleanName && log.customerName && log.customerName.trim().toLowerCase() === cleanName) return true;
-      return false;
-    });
-  };
+  const getCustomerIssuedDocs = (customerName: string, phone?: string, vin?: string, leadId?: string) =>
+    docLogMatcher.getLogs({ customerName, customerPhone: phone, vin, leadId });
 
   // ===== Customer classification (one rule for all three tabs) =====
   const digitsOf = (v?: string) => (v || '').replace(/\D/g, '');
@@ -285,68 +275,138 @@ export default function CustomerView({
     if (phone.length >= 6 && billPhone === phone) return true;
     return b.leadId === lead.id && (!billPhone || !phone || billPhone === phone);
   };
-  const billsForLead = (lead: Lead) => bills.filter(b => b.billType !== 'import' && b.status !== 'voided' && billBelongsTo(b, lead)); // voided bills never make a customer a buyer
   /** Installment contract paid off (belongs to "paid in full"). */
   const isInstallmentCompleted = (lead: Lead) => lead.installmentStatus === 'completed' || Boolean(lead.isPaymentCompleted);
 
-  // Helper to identify if a lead has already completed a purchase (delivered, sale/installment bill, confirmed payment)
-  const isLeadPurchased = (lead: Lead) => {
-    if (lead.status === 'delivered') return true;
-    if (lead.paymentTypeConfirmed === 'full' || lead.paymentTypeConfirmed === 'down_payment') return true;
-    if (lead.installmentStatus === 'active_repaying' || lead.installmentStatus === 'completed') return true;
-    return billsForLead(lead).length > 0;
-  };
+  // Pre-index bills and leads once in O(L + B) instead of scanning all bills/leads per customer row (O(L * B))
+  const { leadById, leadsByPhone, customerTabByLeadId, purchasedLeadIds } = useMemo(() => {
+    const bByLeadId = new Map<string, InvoiceBillRecord[]>();
+    const bByPhone = new Map<string, InvoiceBillRecord[]>();
+    for (const b of bills) {
+      if (b.billType === 'import' || b.status === 'voided') continue;
+      if (b.leadId) {
+        const arr = bByLeadId.get(b.leadId);
+        if (arr) arr.push(b);
+        else bByLeadId.set(b.leadId, [b]);
+      }
+      const p = digitsOf(b.customerPhone);
+      if (p.length >= 6) {
+        const arr = bByPhone.get(p);
+        if (arr) arr.push(b);
+        else bByPhone.set(p, [b]);
+      }
+    }
 
-  /** Running installment contract (or an installment application in progress): the installment tab. */
-  const isActiveInstallmentLead = (lead: Lead) => {
-    if (isInstallmentCompleted(lead)) return false;
-    if (lead.installmentRecords && lead.installmentRecords.length > 0) return true;
-    if (lead.installmentStatus === 'active_repaying' || lead.installmentStatus === 'approved' ||
-      lead.installmentStatus === 'pending_approval' || lead.installmentStatus === 'contract_signed') return true;
-    if (lead.paymentTypeConfirmed === 'down_payment' || lead.paymentTypeConfirmed === 'installment') return true;
-    if (billsForLead(lead).some(isInstallmentBill)) return true;
-    const installmentPlan = lead.paymentType === 'installment' || lead.paymentType === 'finance' ||
-      Boolean(lead.financeCompany) || Boolean(lead.downPaymentPercent);
-    return installmentPlan && isLeadPurchased(lead);
-  };
+    const lById = new Map<string, Lead>();
+    const lByPhone = new Map<string, Lead[]>();
+    const tabMap = new Map<string, 'new_leads' | 'existing_customers' | 'installment_customers'>();
+    const purchasedIds = new Set<string>();
+
+    for (const lead of leads) {
+      lById.set(lead.id, lead);
+      const phone = digitsOf(lead.phone);
+      if (phone.length >= 6) {
+        const arr = lByPhone.get(phone);
+        if (arr) arr.push(lead);
+        else lByPhone.set(phone, [lead]);
+      }
+
+      let hasNonVoidBill = false;
+      let hasInstBill = false;
+      const seenBillIds = new Set<InvoiceBillRecord>();
+      const checkCandidate = (b: InvoiceBillRecord) => {
+        if (seenBillIds.has(b) || !billBelongsTo(b, lead)) return;
+        seenBillIds.add(b);
+        hasNonVoidBill = true;
+        if (isInstallmentBill(b)) hasInstBill = true;
+      };
+      if (phone.length >= 6) bByPhone.get(phone)?.forEach(checkCandidate);
+      bByLeadId.get(lead.id)?.forEach(checkCandidate);
+
+      const completed = isInstallmentCompleted(lead);
+      const purchased =
+        lead.status === 'delivered' ||
+        lead.paymentTypeConfirmed === 'full' ||
+        lead.paymentTypeConfirmed === 'down_payment' ||
+        lead.installmentStatus === 'active_repaying' ||
+        lead.installmentStatus === 'completed' ||
+        hasNonVoidBill;
+      if (purchased) purchasedIds.add(lead.id);
+
+      const installmentPlan =
+        lead.paymentType === 'installment' ||
+        lead.paymentType === 'finance' ||
+        Boolean(lead.financeCompany) ||
+        Boolean(lead.downPaymentPercent);
+
+      const activeInstallment =
+        !completed &&
+        ((lead.installmentRecords && lead.installmentRecords.length > 0) ||
+          lead.installmentStatus === 'active_repaying' ||
+          lead.installmentStatus === 'approved' ||
+          lead.installmentStatus === 'pending_approval' ||
+          lead.installmentStatus === 'contract_signed' ||
+          lead.paymentTypeConfirmed === 'down_payment' ||
+          lead.paymentTypeConfirmed === 'installment' ||
+          hasInstBill ||
+          (installmentPlan && purchased));
+
+      const tab: 'new_leads' | 'existing_customers' | 'installment_customers' = activeInstallment
+        ? 'installment_customers'
+        : completed || purchased
+          ? 'existing_customers'
+          : 'new_leads';
+      tabMap.set(lead.id, tab);
+    }
+
+    return {
+      leadById: lById,
+      leadsByPhone: lByPhone,
+      customerTabByLeadId: tabMap,
+      purchasedLeadIds: purchasedIds,
+    };
+  }, [leads, bills]);
+
+  const isLeadPurchased = (lead: Lead) => purchasedLeadIds.has(lead.id);
+  const isActiveInstallmentLead = (lead: Lead) => customerTabByLeadId.get(lead.id) === 'installment_customers';
 
   /** Which tab a customer belongs to. */
-  const getCustomerTab = (lead: Lead): 'new_leads' | 'existing_customers' | 'installment_customers' => {
-    if (isActiveInstallmentLead(lead)) return 'installment_customers';
-    if (isInstallmentCompleted(lead) || isLeadPurchased(lead)) return 'existing_customers';
-    return 'new_leads';
-  };
+  const getCustomerTab = (lead: Lead): 'new_leads' | 'existing_customers' | 'installment_customers' =>
+    customerTabByLeadId.get(lead.id) || 'new_leads';
 
   // 1. Prospective leads (Tab 1: ເກັບສະເພາະລູກຄ້າໃໝ່ທີ່ຍັງບໍ່ທັນຕົກລົງຊື້ຂາຍ/ອອກບິນ ຫຼື ຍັງບໍ່ທັນເຂົ້າສູ່ສັນຍາຜ່ອນຊຳລະຕົວຈິງ)
   const prospectiveLeads = useMemo(() => {
     return leads.filter(lead => getCustomerTab(lead) === 'new_leads' && matchesCrmTime(lead.createdAt || lead.paymentDate));
-  }, [leads, bills, crmDateFrom, crmDateTo]);
+  }, [leads, customerTabByLeadId, crmDateFrom, crmDateTo]);
 
-  // Separated Counts (calculated exclusively for prospective leads):
-  // 1. Acquisition Channel counts
-  const followUpCounts = {
-    today: prospectiveLeads.filter(l => getFollowUpState(l) === 'today').length,
-    overdue: prospectiveLeads.filter(l => getFollowUpState(l) === 'overdue').length,
-  };
+  // Single-pass separated counts for prospective leads (instead of 11 full passes per render)
+  const { followUpCounts, channelCounts, statusCounts } = useMemo(() => {
+    const fCounts = { today: 0, overdue: 0 };
+    const cCounts = { all: prospectiveLeads.length, walk_in: 0, online: 0, event: 0 };
+    const sCounts = { all: 0, lost: 0, new: 0, contacted: 0, test_drive: 0, negotiation: 0 };
 
-  const channelCounts = {
-    all: prospectiveLeads.length,
-    walk_in: prospectiveLeads.filter(l => l.category === 'walk_in').length,
-    online: prospectiveLeads.filter(l => l.category === 'online').length,
-    event: prospectiveLeads.filter(l => l.category === 'event').length,
-  };
+    for (const l of prospectiveLeads) {
+      const fState = getFollowUpState(l);
+      if (fState === 'today') fCounts.today += 1;
+      else if (fState === 'overdue') fCounts.overdue += 1;
 
+      if (l.category === 'walk_in') cCounts.walk_in += 1;
+      else if (l.category === 'online') cCounts.online += 1;
+      else if (l.category === 'event') cCounts.event += 1;
 
+      if (l.status === 'lost') {
+        sCounts.lost += 1;
+      } else {
+        sCounts.all += 1;
+        if (l.status === 'new') sCounts.new += 1;
+        else if (l.status === 'contacted') sCounts.contacted += 1;
+        else if (l.status === 'test_drive') sCounts.test_drive += 1;
+        else if (l.status === 'negotiation') sCounts.negotiation += 1;
+      }
+    }
 
-  // 3. Status / Lifecycle counts for active prospective pipeline
-  const statusCounts = {
-    all: prospectiveLeads.filter(l => l.status !== 'lost').length,
-    lost: prospectiveLeads.filter(l => l.status === 'lost').length,
-    new: prospectiveLeads.filter(l => l.status === 'new').length,
-    contacted: prospectiveLeads.filter(l => l.status === 'contacted').length,
-    test_drive: prospectiveLeads.filter(l => l.status === 'test_drive').length,
-    negotiation: prospectiveLeads.filter(l => l.status === 'negotiation').length,
-  };
+    return { followUpCounts: fCounts, channelCounts: cCounts, statusCounts: sCounts };
+  }, [prospectiveLeads]);
 
 
 
@@ -1119,15 +1179,37 @@ export default function CustomerView({
     });
   }, [existingCustomers, existingModelFilter, existingServiceFilter, crmDateFrom, crmDateTo, crmSearch]);
 
+  // Precompute model and service filter counts in O(C) instead of O(V * C) in render
+  const existingCustomerCounts = useMemo(() => {
+    const modelCounts = new Map<string, number>();
+    let hasService = 0;
+    let noService = 0;
+    for (const c of existingCustomers) {
+      modelCounts.set(c.model, (modelCounts.get(c.model) || 0) + 1);
+      if ((c.services?.length ?? 0) > 0) hasService += 1;
+      else noService += 1;
+    }
+    return { modelCounts, hasService, noService };
+  }, [existingCustomers]);
+
   // Dedicated Installment Customers (For Tab 3 - All Installment & Financing Customers)
   const installmentCustomers = useMemo(() => {
     const matchedLeads = leads.filter(l => isActiveInstallmentLead(l) && matchesCrmTime(l.paymentDate || l.createdAt) && leadMatchesSearch(l));
 
-    // Installment bills with no CRM customer at all (bill-only contracts)
-    const extraBills = bills.filter(b => b.status !== 'voided' && isInstallmentBill(b) && matchesCrmTime(b.date) && billMatchesSearch(b) && !leads.some(l => billBelongsTo(b, l)));
+    // Installment bills with no CRM customer at all (bill-only contracts), checked in O(1) via pre-indexed maps
+    const billMatchesAnyLead = (b: InvoiceBillRecord) => {
+      const bp = digitsOf(b.customerPhone);
+      if (bp.length >= 6 && leadsByPhone.has(bp)) return true;
+      if (b.leadId) {
+        const l = leadById.get(b.leadId);
+        if (l && billBelongsTo(b, l)) return true;
+      }
+      return false;
+    };
+    const extraBills = bills.filter(b => b.status !== 'voided' && isInstallmentBill(b) && matchesCrmTime(b.date) && billMatchesSearch(b) && !billMatchesAnyLead(b));
 
     return [...matchedLeads, ...extraBills];
-  }, [leads, bills, crmDateFrom, crmDateTo, crmSearch]);
+  }, [leads, bills, customerTabByLeadId, leadById, leadsByPhone, crmDateFrom, crmDateTo, crmSearch]);
 
   // Filtered Leads (For prospective Leads CRM - Strictly customers who have not yet purchased)
   const filteredLeads = useMemo(() => {
@@ -2344,7 +2426,7 @@ export default function CustomerView({
                       <option value="all">ທຸກລຸ້ນ ({existingCustomers.length})</option>
                       {vehicles.map((v) => (
                         <option key={v.id || v.name} value={v.name}>
-                          {v.name} ({existingCustomers.filter(c => c.model === v.name).length})
+                          {v.name} ({existingCustomerCounts.modelCounts.get(v.name) || 0})
                         </option>
                       ))}
                     </select>
@@ -2361,8 +2443,8 @@ export default function CustomerView({
                       className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-800 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
                     >
                       <option value="all">ທັງໝົດ ({existingCustomers.length})</option>
-                      <option value="has_service">ມີປະຫວັດເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) > 0).length})</option>
-                      <option value="no_service">ຍັງບໍ່ເຄີຍເຂົ້າສູນ ({existingCustomers.filter(c => (c.services?.length ?? 0) === 0).length})</option>
+                      <option value="has_service">ມີປະຫວັດເຂົ້າສູນ ({existingCustomerCounts.hasService})</option>
+                      <option value="no_service">ຍັງບໍ່ເຄີຍເຂົ້າສູນ ({existingCustomerCounts.noService})</option>
                     </select>
                   </div>
                 </div>

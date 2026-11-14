@@ -76,12 +76,23 @@ export const STATUS_SORT_ORDER: StockStatus[] = [
   'ready', 'event', 'promotion', 'pdi', 'imported', 'in_transit', 'reserved', 'problem', 'parts_donor', 'sold',
 ];
 
+const STATUS_ORDER_MAP = new Map<StockStatus, number>(
+  STATUS_SORT_ORDER.map((s, idx) => [s, idx])
+);
+
 /** Sort units brand → model → status → arrival date (oldest first, so older stock sells first). */
 export function compareInventory(vehicles: VehicleModel[]) {
+  const brandByKey = new Map<string, string>();
+  for (const v of vehicles) {
+    const key = v.name.trim().toLowerCase();
+    if (!brandByKey.has(key)) brandByKey.set(key, v.brand?.trim() || 'AVATR');
+  }
+  const getBrand = (model: string) => brandByKey.get(model.trim().toLowerCase()) || 'AVATR';
+
   return (a: InventoryItem, b: InventoryItem): number =>
-    naturalCompare(brandOf(a.model, vehicles), brandOf(b.model, vehicles)) ||
+    naturalCompare(getBrand(a.model), getBrand(b.model)) ||
     naturalCompare(a.model, b.model) ||
-    STATUS_SORT_ORDER.indexOf(a.status) - STATUS_SORT_ORDER.indexOf(b.status) ||
+    (STATUS_ORDER_MAP.get(a.status) ?? -1) - (STATUS_ORDER_MAP.get(b.status) ?? -1) ||
     (a.arrivalDate || '').localeCompare(b.arrivalDate || '') ||
     a.vin.localeCompare(b.vin);
 }
@@ -115,18 +126,53 @@ export function getModelStockSummaries(
   inventory: InventoryItem[]
 ): ModelStockSummary[] {
   const modelNames = new Map<string, string>(); // normalized → display name
-  vehicles.forEach((v) => { if (v.name) modelNames.set(v.name.trim().toLowerCase(), v.name); });
-  inventory.forEach((i) => {
-    const key = (i.model || '').trim().toLowerCase();
-    if (key && !modelNames.has(key)) modelNames.set(key, i.model);
-  });
+  const vehiclesByKey = new Map<string, VehicleModel>();
+  for (const v of vehicles) {
+    if (!v.name) continue;
+    const key = v.name.trim().toLowerCase();
+    modelNames.set(key, v.name);
+    if (!vehiclesByKey.has(key)) vehiclesByKey.set(key, v);
+  }
+
+  const itemsByKey = new Map<string, InventoryItem[]>();
+  for (const item of inventory) {
+    const key = (item.model || '').trim().toLowerCase();
+    if (!key) continue;
+    if (!modelNames.has(key)) modelNames.set(key, item.model);
+    const bucket = itemsByKey.get(key);
+    if (bucket) bucket.push(item);
+    else itemsByKey.set(key, [item]);
+  }
 
   return Array.from(modelNames.entries()).map(([key, name]) => {
-    const matchedModel = vehicles.find((v) => v.name.trim().toLowerCase() === key);
-    const modelItems = inventory.filter((item) => (item.model || '').trim().toLowerCase() === key);
-    const onHand = modelItems.filter(isOnHand);
-    const uncommitted = onHand.filter(isUncommitted);
-    const count = uncommitted.length;
+    const matchedModel = vehiclesByKey.get(key);
+    const modelItems = itemsByKey.get(key) || [];
+    const onHand: InventoryItem[] = [];
+    let count = 0;
+    let sellableCount = 0;
+    let readyCount = 0;
+    let pdiCount = 0;
+    let importedCount = 0;
+    let eventCount = 0;
+    let reservedCount = 0;
+    let inTransitCount = 0;
+    let soldCount = 0;
+
+    for (const item of modelItems) {
+      if (isOnHand(item)) {
+        onHand.push(item);
+        if (isUncommitted(item)) count += 1;
+        if (isSellable(item)) sellableCount += 1;
+        if (item.status === 'ready') readyCount += 1;
+        else if (item.status === 'pdi') pdiCount += 1;
+        else if (item.status === 'imported') importedCount += 1;
+        else if (item.status === 'event' || item.status === 'promotion') eventCount += 1;
+        else if (item.status === 'reserved') reservedCount += 1;
+      }
+      if (item.status === 'in_transit') inTransitCount += 1;
+      if (item.status === 'sold' || (item.stockQuantity ?? 1) <= 0) soldCount += 1;
+    }
+
     const isTracked = modelItems.length > 0;
 
     return {
@@ -135,14 +181,14 @@ export function getModelStockSummaries(
       category: matchedModel?.category || 'ບໍ່ມີໃນລາຍການລຸ້ນ',
       model: matchedModel,
       count,
-      sellableCount: onHand.filter(i => isSellable(i)).length,
-      readyCount: onHand.filter((item) => item.status === 'ready').length,
-      pdiCount: onHand.filter((item) => item.status === 'pdi').length,
-      importedCount: onHand.filter((item) => item.status === 'imported').length,
-      eventCount: onHand.filter((item) => item.status === 'event' || item.status === 'promotion').length,
-      reservedCount: onHand.filter((item) => item.status === 'reserved').length,
-      inTransitCount: modelItems.filter((item) => item.status === 'in_transit').length,
-      soldCount: modelItems.filter((item) => item.status === 'sold' || (item.stockQuantity ?? 1) <= 0).length,
+      sellableCount,
+      readyCount,
+      pdiCount,
+      importedCount,
+      eventCount,
+      reservedCount,
+      inTransitCount,
+      soldCount,
       items: onHand,
       isTracked,
       isLowStock: isTracked && count > 0 && count < LOW_STOCK_THRESHOLD,

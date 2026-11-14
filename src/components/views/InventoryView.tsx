@@ -2,7 +2,7 @@ import { useState, useMemo, Fragment } from 'react';
 import { InventoryItem, VehicleModel, Language, StockStatus, PDIStatus, StockLogRecord, SystemUser, InvoiceBillRecord } from '../../types';
 import { translations } from '../../data/translations';
 import { resolveLakExchangeRate } from '../../data/currencies';
-import { getModelStockSummaries, LOW_STOCK_THRESHOLD, brandOf, compareInventory, isSellable, isOnHand, isListedInStock, notSellableReason, SALE_READY_STATUSES } from '../../data/stockSummary';
+import { getModelStockSummaries, LOW_STOCK_THRESHOLD, compareInventory, isSellable, isOnHand, isListedInStock, notSellableReason, SALE_READY_STATUSES } from '../../data/stockSummary';
 import {
   saveInventoryItemToSupabase,
   deleteInventoryItemFromSupabase,
@@ -304,44 +304,76 @@ export default function InventoryView({
     triggerToast(`ລົບລົດ ${target.model} (VIN: ${target.vin}) ອອກຈາກຖານຂໍ້ມູນສຳເລັດແລ້ວ!`);
   };
 
+  const vehicleByLowerName = useMemo(() => {
+    const map = new Map<string, VehicleModel>();
+    for (const v of vehicles) {
+      const key = v.name.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, v);
+    }
+    return map;
+  }, [vehicles]);
+
+  const brandForModel = (model: string) =>
+    vehicleByLowerName.get(model.trim().toLowerCase())?.brand?.trim() || 'AVATR';
+
+  const summaryByModel = useMemo(
+    () => new Map(modelSummaries.map(m => [m.modelName, m])),
+    [modelSummaries]
+  );
+
   // Brands present in the catalog or in stock, for the brand filter
   const brandOptions = useMemo(() => {
     const set = new Set<string>();
     vehicles.forEach(v => set.add(v.brand?.trim() || 'AVATR'));
-    inventory.forEach(i => set.add(brandOf(i.model, vehicles)));
+    inventory.forEach(i => set.add(brandForModel(i.model)));
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [vehicles, inventory]);
+  }, [vehicles, inventory, vehicleByLowerName]);
 
   // Filtered Inventory, sorted brand → model → status → arrival date
-  const filteredInventory = inventory.filter(item => {
-    if (selectedStatusFilter === 'all') {
-      if (item.status === 'sold' || item.stockQuantity === 0) return false;
-    } else if (selectedStatusFilter === 'sellable') {
-      if (!isSellable(item)) return false;
-    } else if (item.status !== selectedStatusFilter) {
-      return false;
-    }
-    if (selectedBrandFilter !== 'all' && brandOf(item.model, vehicles) !== selectedBrandFilter) return false;
-    if (selectedModelFilter !== 'all' && item.model !== selectedModelFilter) return false;
-    const isEventOrPromo = item.status === 'event' || item.status === 'promotion' || Boolean(item.eventCampaign);
-    if (eventPromoFilter === 'event_only' && !isEventOrPromo) return false;
-    if (eventPromoFilter === 'standard' && isEventOrPromo) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      // Also search motor / engine numbers, the reserving customer and the customs document
-      return [
-        item.vin, item.plateNumber, item.model, item.color, item.trim,
-        item.engineNumber, item.frontMotorNumber, item.rearMotorNumber,
-        item.reservedForCustomer, item.importDocNumber, item.incomingBatch,
-      ].some(v => (v || '').toLowerCase().includes(q));
-    }
-    return true;
-  }).sort(compareInventory(vehicles));
+  const filteredInventory = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return inventory.filter(item => {
+      if (selectedStatusFilter === 'all') {
+        if (item.status === 'sold' || item.stockQuantity === 0) return false;
+      } else if (selectedStatusFilter === 'sellable') {
+        if (!isSellable(item)) return false;
+      } else if (item.status !== selectedStatusFilter) {
+        return false;
+      }
+      if (selectedBrandFilter !== 'all' && brandForModel(item.model) !== selectedBrandFilter) return false;
+      if (selectedModelFilter !== 'all' && item.model !== selectedModelFilter) return false;
+      const isEventOrPromo = item.status === 'event' || item.status === 'promotion' || Boolean(item.eventCampaign);
+      if (eventPromoFilter === 'event_only' && !isEventOrPromo) return false;
+      if (eventPromoFilter === 'standard' && isEventOrPromo) return false;
+      if (q) {
+        // Also search motor / engine numbers, the reserving customer and the customs document
+        return [
+          item.vin, item.plateNumber, item.model, item.color, item.trim,
+          item.engineNumber, item.frontMotorNumber, item.rearMotorNumber,
+          item.reservedForCustomer, item.importDocNumber, item.incomingBatch,
+        ].some(v => (v || '').toLowerCase().includes(q));
+      }
+      return true;
+    }).sort(compareInventory(vehicles));
+  }, [inventory, vehicles, vehicleByLowerName, selectedStatusFilter, selectedBrandFilter, selectedModelFilter, eventPromoFilter, searchQuery]);
+
   // Same rules as the Dashboard and POS: listed = not sold, on hand = in the warehouse, sellable = POS can sell it
-  const sellableCount = inventory.filter(i => isSellable(i)).length;
-  const listedStockCount = inventory.filter(isListedInStock).length;
-  const onHandCount = inventory.filter(isOnHand).length;
-  const notArrivedOrProblemCount = listedStockCount - onHandCount;
+  const { sellableCount, listedStockCount, onHandCount, notArrivedOrProblemCount } = useMemo(() => {
+    let sellable = 0;
+    let listed = 0;
+    let onHand = 0;
+    for (const item of inventory) {
+      if (isSellable(item)) sellable += 1;
+      if (isListedInStock(item)) listed += 1;
+      if (isOnHand(item)) onHand += 1;
+    }
+    return {
+      sellableCount: sellable,
+      listedStockCount: listed,
+      onHandCount: onHand,
+      notArrivedOrProblemCount: listed - onHand,
+    };
+  }, [inventory]);
   // Movements of voided bills stay in the history (marked) but no longer count
   // Stored timestamps are UTC; show them as local (Laos) date and time
   const formatLogTime = (value?: string) => {
@@ -528,8 +560,8 @@ export default function InventoryView({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {modelSummaries.map((summary) => {
                 const isSelected = selectedModelFilter === summary.modelName;
-                const modelObj: VehicleModel = vehicles.find(
-                  v => v.name.trim().toLowerCase() === summary.modelName.trim().toLowerCase()
+                const modelObj: VehicleModel = vehicleByLowerName.get(
+                  summary.modelName.trim().toLowerCase()
                 ) || summary.model || {
                   id: `avatr-${summary.modelName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
                   name: summary.modelName,
@@ -683,7 +715,8 @@ export default function InventoryView({
               currentUserName={currentUser?.name}
               onClose={() => setShowCsvImport(false)}
               onImported={(items, newBills, newLogs) => {
-                setInventory(prev => [...items, ...prev.filter(p => !items.some(i => i.vin === p.vin))]);
+                const importedVins = new Set(items.map(i => i.vin));
+                setInventory(prev => [...items, ...prev.filter(p => !importedVins.has(p.vin))]);
                 if (newBills.length) setBills(prev => [...newBills, ...prev]);
                 if (newLogs.length) setStockLogs(prev => [...newLogs, ...prev]);
                 triggerToast(L3(`ນຳເຂົ້າລົດ ${items.length} ຄັນ ສຳເລັດ`, `Imported ${items.length} vehicles`, `นำเข้ารถ ${items.length} คันสำเร็จ`));
@@ -900,10 +933,10 @@ export default function InventoryView({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredInventory.map((item, idx) => {
                 const prev = filteredInventory[idx - 1];
-                const brand = brandOf(item.model, vehicles);
-                const newBrand = !prev || brandOf(prev.model, vehicles) !== brand;
+                const brand = brandForModel(item.model);
+                const newBrand = !prev || brandForModel(prev.model) !== brand;
                 const newModel = newBrand || prev.model !== item.model;
-                const summary = newModel ? modelSummaries.find(m => m.modelName === item.model) : undefined;
+                const summary = newModel ? summaryByModel.get(item.model) : undefined;
                 return (
                   <Fragment key={item.vin}>
                   {newBrand && (

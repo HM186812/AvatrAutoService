@@ -107,19 +107,27 @@ export function calculateInstallmentSummary(
   const principalFinancedUSD = Math.max(0, vehiclePriceUSD - downPaymentUSD);
   const principalFinancedLAK = Math.round(principalFinancedUSD * exchangeRate);
 
-  const paidRecords = records.filter(r => r.status === 'paid');
-  const paidCount = paidRecords.length;
   const totalCount = records.length;
+  let paidCount = 0;
+  let totalPaidInstallmentsUSD = 0;
+  let totalPaidInstallmentsLAK = 0;
+  let remainingInstallmentsUSD = 0;
+  let remainingInstallmentsLAK = 0;
+  let dueNowCount = 0;
+  let overdueCount = 0;
 
-  const totalPaidInstallmentsUSD = paidRecords.reduce((sum, r) => sum + (r.paidAmountUSD || r.amountUSD), 0);
-  const totalPaidInstallmentsLAK = paidRecords.reduce((sum, r) => sum + (r.paidAmountLAK || r.amountLAK), 0);
-
-  const unpaidRecords = records.filter(r => r.status !== 'paid');
-  const remainingInstallmentsUSD = unpaidRecords.reduce((sum, r) => sum + r.amountUSD, 0);
-  const remainingInstallmentsLAK = unpaidRecords.reduce((sum, r) => sum + r.amountLAK, 0);
-
-  const dueNowRecords = records.filter(r => r.status === 'due');
-  const overdueRecords = records.filter(r => r.status === 'overdue');
+  for (const r of records) {
+    if (r.status === 'paid') {
+      paidCount += 1;
+      totalPaidInstallmentsUSD += r.paidAmountUSD || r.amountUSD;
+      totalPaidInstallmentsLAK += r.paidAmountLAK || r.amountLAK;
+    } else {
+      remainingInstallmentsUSD += r.amountUSD;
+      remainingInstallmentsLAK += r.amountLAK;
+      if (r.status === 'due') dueNowCount += 1;
+      else if (r.status === 'overdue') overdueCount += 1;
+    }
+  }
 
   const monthlyPaymentUSD = records[0]?.amountUSD ?? Math.round((principalFinancedUSD * (1 + DEFAULT_ANNUAL_INTEREST_RATE * (tenure / 12))) / tenure);
   const monthlyPaymentLAK = records[0]?.amountLAK ?? Math.round(monthlyPaymentUSD * exchangeRate);
@@ -145,8 +153,8 @@ export function calculateInstallmentSummary(
     remainingInstallmentsUSD,
     remainingInstallmentsLAK,
     remainingPeriods: Math.max(0, totalCount - paidCount),
-    dueNowCount: dueNowRecords.length,
-    overdueCount: overdueRecords.length,
+    dueNowCount,
+    overdueCount,
     isFullyPaid: totalCount > 0 && paidCount === totalCount,
   };
 }
