@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { isAdminRole } from '../../utils/roles';
+import { validateUploadFile } from '../../utils/fileValidation';
 import { InventoryItem, VehicleModel, Language, InvoiceBillRecord, StockLogRecord, SystemUser, Lead } from '../../types';
 import { getStoredCompanyBankInfo, saveStoredCompanyBankInfo, CompanyBankInfo, DEFAULT_COMPANY_BANK_INFO } from '../../data/companySettings';
 import { translations } from '../../data/translations';
@@ -124,7 +125,7 @@ export default function POSSalesView({
         .map((u) => u.name.trim())
         .filter(Boolean)
     );
-    if (currentUser?.name && currentUser.status !== 'suspended') names.add(currentUser.name.trim());
+    if (currentUser?.name && currentUser.status === 'active') names.add(currentUser.name.trim());
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [users, currentUser?.name, currentUser?.status]);
   const [customerAddress, setCustomerAddress] = useState('');
@@ -1625,7 +1626,7 @@ export default function POSSalesView({
                             <span>{companyBankInfo.qrCodeUrl ? 'ປ່ຽນຮູບ QR ບໍລິສັດ' : 'ອັບໂຫລດຮູບ QR ບໍລິສັດ'}</span>
                             <input
                               type="file"
-                              accept="image/*"
+                              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                               className="hidden"
                               onChange={handleCompanyQrUpload}
                             />
@@ -1731,21 +1732,25 @@ export default function POSSalesView({
                             <Upload className="w-3.5 h-3.5 text-zinc-400" />
                             <input
                               type="file"
-                              accept="image/*,application/pdf"
+                              accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
                               className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  if (file.size > 10 * 1024 * 1024) {
-                                    alert('File exceeds 10MB limit');
-                                    return;
-                                  }
+                              onChange={async (e) => {
+                                const input = e.target;
+                                const file = input.files?.[0];
+                                if (!file) return;
+                                try {
+                                  const validated = await validateUploadFile(file, {
+                                    allowedMimes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+                                  });
                                   setSlipFile(file);
-                                  if (file.type.startsWith('image/')) {
+                                  if (validated.mime.startsWith('image/')) {
                                     setSlipPreviewUrl(URL.createObjectURL(file));
                                   } else {
                                     setSlipPreviewUrl('pdf');
                                   }
+                                } catch (err) {
+                                  input.value = '';
+                                  alert(err instanceof Error ? err.message : 'Invalid file selected.');
                                 }
                               }}
                             />

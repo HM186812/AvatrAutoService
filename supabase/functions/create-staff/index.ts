@@ -1,8 +1,16 @@
-import { isResponse, jsonResponse, optionsResponse, requireActiveStaff } from '../_shared/staff-auth.ts';
+import {
+  isResponse,
+  jsonResponse,
+  optionsResponse,
+  rejectDisallowedOrigin,
+  requireActiveStaff,
+} from '../_shared/staff-auth.ts';
 
 const allowedRoles = new Set(['super_admin', 'admin', 'sales']);
 
 Deno.serve(async (req) => {
+  const blockedOrigin = rejectDisallowedOrigin(req);
+  if (blockedOrigin) return blockedOrigin;
   if (req.method === 'OPTIONS') return optionsResponse(req);
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed.' }, 405, req);
 

@@ -109,3 +109,26 @@ test('follow-up lint migration aligns bill_items COALESCE types to text and remo
   assert.match(sql, /COALESCE\(\s*NULLIF\(p_item->>'status_initial',\s*''\)::public\.vehicle_status::text,\s*v_vehicle\.status::text/i);
   assert.doesNotMatch(sql, /^\s*(?:v_idx|i)\s+integer/m);
 });
+
+test('soft-delete migration preserves staff_profiles for 10-year audit, revokes sessions, and redacts Sales KPI revenue', () => {
+  const migPath = path.join(ROOT, 'supabase/migrations/20261114223500_soft_delete_staff_and_sales_kpi_guard.sql');
+  assert.ok(fs.existsSync(migPath), 'Missing 20261114223500_soft_delete_staff_and_sales_kpi_guard.sql');
+  const sql = fs.readFileSync(migPath, 'utf8');
+
+  assert.match(sql, /ALTER\s+TABLE\s+public\.staff_profiles\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+archived_at/i);
+  assert.match(sql, /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.revoke_staff_sessions/i);
+  assert.match(sql, /REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.revoke_staff_sessions[\s\S]*?GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.revoke_staff_sessions[\s\S]*?TO\s+service_role/i);
+
+  const deleteMatch = sql.match(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.delete_staff_profile[\s\S]*?GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.delete_staff_profile/i);
+  assert.ok(deleteMatch, 'Missing updated delete_staff_profile RPC');
+  assert.match(deleteMatch[0], /status\s*=\s*'archived'/i);
+  assert.doesNotMatch(deleteMatch[0], /DELETE\s+FROM\s+public\.staff_profiles/i);
+  assert.doesNotMatch(deleteMatch[0], /DELETE\s+FROM\s+auth\.users/i);
+
+  const kpiMatch = sql.match(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.get_dashboard_sales_summary[\s\S]*?GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.get_dashboard_sales_summary/i);
+  assert.ok(kpiMatch, 'Missing hardened get_dashboard_sales_summary RPC');
+  assert.match(kpiMatch[0], /has_permission\('canViewFinancials'\)/i);
+  assert.match(kpiMatch[0], /'vehicle_sales_revenue_usd',\s*CASE\s+WHEN\s+v_can_view_financials/i);
+  assert.match(kpiMatch[0], /'monthly_installment_collected_usd',\s*CASE\s+WHEN\s+v_can_view_financials/i);
+});
+

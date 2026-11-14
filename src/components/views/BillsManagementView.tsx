@@ -1,6 +1,7 @@
 import { withVehicleFromBills } from '../../utils/documentCustomer';
 import { syncInstallmentBillState, type InstallmentRecordSyncMeta } from '../../utils/installmentBillSync';
 import { isAdminRole } from '../../utils/roles';
+import { validateUploadFile } from '../../utils/fileValidation';
 import { downloadCsv } from '../../utils/csv';
 import { resolveLakExchangeRate } from '../../data/currencies';
 import { useState, useMemo, useEffect, useRef, useDeferredValue } from 'react';
@@ -239,11 +240,10 @@ export default function BillsManagementView({
   const handlePostAttachSlip = async (bill: InvoiceBillRecord, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      alert(lang === 'lo' ? 'ໄຟລ໌ໃຫຍ່ເກີນ 10 MB' : 'ไฟล์มีขนาดใหญ่เกิน 10 MB');
-      return;
-    }
     try {
+      await validateUploadFile(file, {
+        allowedMimes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+      });
       setIsUploadingSlipId(bill.id);
       const slipPath = await attachSlipToBill(bill.id, file);
       setBills?.(prev => prev.map(b => b.id === bill.id ? { ...b, paymentSlipPath: slipPath } : b));
@@ -2120,7 +2120,7 @@ export default function BillsManagementView({
                                 <span>{isUploadingSlipId === bill.id ? "Uploading..." : (lang === "lo" ? "+ ສະລິບ" : "+ สลิป")}</span>
                                 <input
                                   type="file"
-                                  accept="image/*,application/pdf"
+                                  accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
                                   disabled={isUploadingSlipId === bill.id}
                                   className="hidden"
                                   onChange={(e) => handlePostAttachSlip(bill, e)}

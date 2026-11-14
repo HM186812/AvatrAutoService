@@ -206,12 +206,12 @@ export default function ProfileView({
               )}
 
               <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
-                currentUser.status !== 'suspended'
+                currentUser.status === 'active'
                   ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-600 dark:text-emerald-400'
                   : 'border-rose-400/20 bg-rose-400/10 text-rose-600 dark:text-rose-400'
               }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${currentUser.status !== 'suspended' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                <span>{currentUser.status !== 'suspended'
+                <span className={`h-1.5 w-1.5 rounded-full ${currentUser.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                <span>{currentUser.status === 'active'
                   ? (lang === 'lo' ? 'ໃຊ້ງານຢູ່' : lang === 'th' ? 'ใช้งานอยู่' : 'Active')
                   : (lang === 'lo' ? 'ຖືກລະງັບ' : lang === 'th' ? 'ถูกระงับ' : 'Suspended')}</span>
               </span>

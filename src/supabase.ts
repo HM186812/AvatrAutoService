@@ -1,4 +1,5 @@
 import type { DealershipConfig, InventoryItem, InvoiceBillRecord, SystemUser, VehicleModel } from './types';
+import { validateUploadFile } from './utils/fileValidation';
 import { isAdminRole } from './utils/roles';
 import { isOfflineDemoEnabled, isSupabaseConfigured, requireSupabase, supabase } from './backend/client';
 import {
@@ -81,7 +82,7 @@ export async function resetCompanyQrCode(staff: SystemUser) {
 
 export async function uploadCompanyQrCodeToStorage(file: File, staff: SystemUser) {
   assertCanManageCompanyQr(staff);
-  if (!file.type.startsWith('image/')) throw new Error('ກະລຸນາເລືອກໄຟລ໌ຮູບພາບ (JPG, PNG ຫຼື WebP)');
+  await validateUploadFile(file, { allowedMimes: ['image/jpeg', 'image/png', 'image/webp'] });
   if (!isSupabaseConfigured) {
     const reader = new FileReader();
     const dataUrl = await new Promise<string>((resolve) => {

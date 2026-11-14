@@ -60,7 +60,7 @@ function normalizeOfflineUser(raw: SystemUser): SystemUser {
     name: (user.name || '').replace(/Super\s*Admin/gi, 'Admin').trim(),
     role: role || 'sales',
     roleTitleLo: ROLE_LABELS[role || 'sales'],
-    status: role ? user.status : 'suspended',
+    status: user.status === 'archived' ? 'archived' : (role ? user.status : 'suspended'),
   };
 }
 
@@ -150,7 +150,9 @@ export const DEFAULT_OFFLINE_INVENTORY: InventoryItem[] = [
 ];
 
 function readStorage<T>(key: string, defaultValue: T): T {
-  if (!isOfflineDemoEnabled) return defaultValue;
+  if (!isOfflineDemoEnabled) {
+    return Array.isArray(defaultValue) ? ([...defaultValue] as T) : defaultValue;
+  }
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PREFIX + key);
@@ -255,6 +257,9 @@ export function offlineSignIn(emailOrId: string): SystemUser {
     throw new Error('Offline demo account not found.');
   }
   const activeUser = matched;
+  if (activeUser.status === 'archived') {
+    throw new Error('This account has been archived.');
+  }
   if (activeUser.status === 'suspended') {
     throw new Error(normalizeRole((rawUsers.find(u => u.id === activeUser.id) || activeUser).role) ? 'This account is suspended.' : NO_ROLE_MESSAGE);
   }
@@ -286,7 +291,7 @@ export function offlineSaveUser(user: SystemUser): void {
 
 export function offlineDeleteUser(id: string): void {
   const users = readStorage<SystemUser[]>('users', DEFAULT_OFFLINE_USERS);
-  const updated = users.filter((u) => u.id !== id);
+  const updated = users.map((u) => (u.id === id ? { ...u, status: 'archived' as const } : u));
   writeStorage('users', updated);
 
   const active = offlineGetActiveUser();

@@ -82,6 +82,7 @@ import {
   hasDangerousPatterns
 } from '../utils/security';
 import { compressImageToWebP } from '../utils/imageCompressor';
+import { STORAGE_BUCKET_MAX_BYTES, validateUploadFile } from '../utils/fileValidation';
 
 function sanitizePaymentMethod(method?: string | null, isInstallment?: boolean): 'transfer' | 'cash' | 'finance' | null {
   if (!method) return isInstallment ? 'transfer' : null;
@@ -125,7 +126,7 @@ export function mapStaffProfile(profile: DbRow): SystemUser {
     roleTitleLo: ROLE_LABELS[role || 'sales'],
     department: profile.department || '',
     avatarInitials: initials(profile.name || profile.email || 'S'),
-    status: role && profile.status === 'active' ? 'active' : 'suspended',
+    status: profile.status === 'archived' ? 'archived' : (role && profile.status === 'active' ? 'active' : 'suspended'),
     createdAt: profile.created_at || new Date().toISOString(),
     lastLogin: profile.last_login || undefined,
   };
@@ -952,17 +953,19 @@ async function findCustomerId(phone: string): Promise<string | null> {
 }
 
 export async function uploadDealershipAsset(file: File, folder: 'vehicles' | 'qr') {
-  if (!file.type.startsWith('image/')) throw new Error('Choose a valid image file.');
-  if (file.size > 10 * 1024 * 1024) throw new Error('Image files must be 10 MB or smaller before compression.');
+  await validateUploadFile(file, { allowedMimes: ['image/jpeg', 'image/png', 'image/webp'] });
 
   const targetFile = await compressImageToWebP(file, { maxDimension: 1200, quality: 0.8, maxSizeBytes: 300 * 1024 });
-  const extension = targetFile.type === 'image/webp' ? 'webp' : (targetFile.type === 'image/jpeg' ? 'jpg' : targetFile.type.split('/')[1]);
-  if (!['jpg', 'png', 'webp'].includes(extension)) throw new Error('Use a JPG, PNG, or WebP image.');
+  const validatedTarget = await validateUploadFile(targetFile, {
+    allowedMimes: ['image/jpeg', 'image/png', 'image/webp'],
+    maxImageBytes: STORAGE_BUCKET_MAX_BYTES,
+  });
+  const extension = validatedTarget.extension;
 
   const client = requireSupabase();
   const path = `${folder}/${newRecordId()}.${extension}`;
   const { error } = await client.storage.from('dealership-assets').upload(path, targetFile, {
-    contentType: targetFile.type,
+    contentType: validatedTarget.mime,
     upsert: false,
     cacheControl: '3600',
   });
@@ -1667,19 +1670,21 @@ export async function saveBillRecord(bill: InvoiceBillRecord, actorId: string, v
 }
 
 export async function uploadPaymentSlip(file: File, referenceId?: string): Promise<string> {
-  if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
-    throw new Error('Payment slips must be JPG, PNG, WebP, or PDF.');
-  }
-  if (file.size > 10 * 1024 * 1024) throw new Error('Payment slips must be 10 MB or smaller before compression.');
+  const validated = await validateUploadFile(file, {
+    allowedMimes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+  });
 
   let targetFile = file;
-  if (file.type.startsWith('image/')) {
+  if (validated.mime !== 'application/pdf') {
     targetFile = await compressImageToWebP(file, { maxDimension: 1200, quality: 0.8, maxSizeBytes: 300 * 1024 });
   }
 
-  const extension = targetFile.type === 'application/pdf'
-    ? 'pdf'
-    : (targetFile.type === 'image/webp' ? 'webp' : (targetFile.type === 'image/jpeg' ? 'jpg' : targetFile.type.split('/')[1]));
+  const validatedTarget = await validateUploadFile(targetFile, {
+    allowedMimes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+    maxImageBytes: STORAGE_BUCKET_MAX_BYTES,
+    maxPdfBytes: STORAGE_BUCKET_MAX_BYTES,
+  });
+  const extension = validatedTarget.extension;
   
   const safeRef = referenceId ? referenceId.replace(/[^a-zA-Z0-9_-]/g, '') : newRecordId();
   const path = `sales/slip_${safeRef}_${Date.now()}.${extension}`;
@@ -1690,7 +1695,7 @@ export async function uploadPaymentSlip(file: File, referenceId?: string): Promi
   }
 
   const { error } = await requireSupabase().storage.from('payment-slips').upload(path, targetFile, {
-    contentType: targetFile.type,
+    contentType: validatedTarget.mime,
     upsert: false,
     cacheControl: '3600',
   });
@@ -1851,7 +1856,7 @@ export async function deleteStaffProfile(id: string) {
 
   const client = requireSupabase();
 
-  // 1. Try edge function first (handles auth.admin.deleteUser + staff_profiles cascade)
+  // 1. Try edge function first (soft-archives account, bans login, revokes sessions)
   const { error: edgeError } = await client.functions.invoke('manage-staff', {
     body: { action: 'delete', userId: id },
   });

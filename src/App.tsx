@@ -1167,7 +1167,7 @@ export default function App() {
             initialLead={leadToEdit}
             onUpdateLead={handleUpdateLead}
             existingLeads={leads}
-            staffOptions={users.filter(u => u.status !== 'suspended' && (u.role === 'sales' || u.role === 'admin')).map(u => u.name)}
+            staffOptions={users.filter(u => u.status === 'active' && (u.role === 'sales' || u.role === 'admin')).map(u => u.name)}
             vehicles={vehicles}
             inventory={inventory}
             currentUser={currentUser}

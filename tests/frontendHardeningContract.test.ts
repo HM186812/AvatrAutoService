@@ -142,3 +142,32 @@ test('financial actions, installment RPCs, after-sales locks, and cloud leaderbo
   assert.match(topSrc, /mergeCloudLeaderboardStats[\s\S]{0,120}resolveLakExchangeRate\(\)/);
   assert.match(topSrc, /getCloudSalesSyncKey/);
 });
+
+test('uploads validate magic bytes, block SVG wildcards, and enforce 5 MB bucket caps', () => {
+  for (const rel of [
+    'src/backend/data.ts',
+    'src/supabase.ts',
+    'src/components/views/POSSalesView.tsx',
+    'src/components/views/BillsManagementView.tsx',
+  ]) {
+    const src = readRel(rel);
+    assert.match(src, /validateUploadFile/, `${rel} must call validateUploadFile`);
+    assert.doesNotMatch(src, /accept="image\/\*(?:,application\/pdf)?"/, `${rel} must disallow image/* wildcard that permits SVG`);
+  }
+  const dataSrc = readRel('src/backend/data.ts');
+  assert.match(dataSrc, /STORAGE_BUCKET_MAX_BYTES/, 'data.ts must verify post-compression size against STORAGE_BUCKET_MAX_BYTES');
+});
+
+test('UserManagementView enforces deactivate -> suspended (reactivate / soft-archive) lifecycle and DashboardView hides KPI 4 from Sales', () => {
+  const userMgmt = readRel('src/components/views/UserManagementView.tsx');
+  assert.match(userMgmt, /status\s*!==\s*'archived'/);
+  assert.match(userMgmt, /user\.status\s*===\s*'suspended'/);
+  assert.doesNotMatch(userMgmt, /deletingUser[\s\S]{0,120}ลົບອອກຈາກລະບົບທັງໝົດ/);
+
+  const dash = readRel('src/components/views/DashboardView.tsx');
+  assert.match(dash, /\{isAdmin\s*&&\s*\(\s*<div\s+onClick=\{\(\)\s*=>\s*onNavigateMenu\('bills'\)\}[\s\S]{0,500}KPI 4: Revenue[\s\S]{0,300}kpiRevenueTitle/);
+
+  const appSrc = readRel('src/App.tsx');
+  assert.match(appSrc, /users\.filter\(u\s*=>\s*u\.status\s*===\s*'active'/);
+});
+

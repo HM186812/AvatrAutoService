@@ -1,9 +1,17 @@
-import { isResponse, jsonResponse, optionsResponse, requireActiveStaff } from '../_shared/staff-auth.ts';
+import {
+  isResponse,
+  jsonResponse,
+  optionsResponse,
+  rejectDisallowedOrigin,
+  requireActiveStaff,
+} from '../_shared/staff-auth.ts';
 
 const allowedRoles = new Set(['super_admin', 'admin', 'sales']);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {
+  const blockedOrigin = rejectDisallowedOrigin(req);
+  if (blockedOrigin) return blockedOrigin;
   if (req.method === 'OPTIONS') return optionsResponse(req);
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed.' }, 405, req);
 
@@ -28,10 +36,10 @@ Deno.serve(async (req) => {
 
     if (action === 'delete') {
       if (!isAdmin) {
-        return jsonResponse({ error: 'Only an active admin can delete staff accounts.' }, 403, req);
+        return jsonResponse({ error: 'Only an active admin can archive staff accounts.' }, 403, req);
       }
       if (isSelf) {
-        return jsonResponse({ error: 'You cannot delete your own account.' }, 400, req);
+        return jsonResponse({ error: 'You cannot archive your own account.' }, 400, req);
       }
     } else if (action === 'suspend' || action === 'reactivate') {
       if (!isAdmin) {
@@ -54,37 +62,50 @@ Deno.serve(async (req) => {
 
     const isTargetAdmin = target.role === 'super_admin' || target.role === 'admin';
     if (target.role === 'super_admin' && access.actorProfile.role !== 'super_admin') {
-      return jsonResponse({ error: 'Only a super_admin can modify or delete a super_admin account.' }, 403, req);
+      return jsonResponse({ error: 'Only a super_admin can modify or archive a super_admin account.' }, 403, req);
     }
 
     if (action === 'delete') {
-      if (isTargetAdmin && target.status === 'active') {
+      if (target.status === 'active') {
+        return jsonResponse({ error: 'Deactivate this staff account before archiving it from the web.' }, 400, req);
+      }
+      if (target.status === 'archived') {
+        return jsonResponse({ success: true, archived: true }, 200, req);
+      }
+      if (isTargetAdmin) {
         const { count, error: countError } = await access.admin
           .from('staff_profiles')
           .select('id', { count: 'exact', head: true })
           .in('role', ['super_admin', 'admin'])
           .eq('status', 'active');
         if (countError) throw countError;
-        if ((count || 0) <= 1) return jsonResponse({ error: 'The last active admin cannot be deleted.' }, 409, req);
+        if ((count || 0) <= 0) return jsonResponse({ error: 'The last active admin cannot be archived.' }, 409, req);
       }
 
-      // Delete from auth.admin first; tolerate missing auth user so orphaned profiles can still be removed
-      const { error: authError } = await access.admin.auth.admin.deleteUser(userId);
-      if (authError && !authError.message?.toLowerCase().includes('not found') && authError.status !== 404) {
-        console.error('manage-staff auth deleteUser failed', authError);
-        return jsonResponse({ error: 'Failed to remove authentication account.' }, 500, req);
+      // Soft-delete (archive): keep auth.users + staff_profiles rows intact for 10-year audit trails,
+      // permanently ban auth login, and revoke active sessions.
+      const { error: banError } = await access.admin.auth.admin.updateUserById(userId, { ban_duration: '876000h' });
+      if (banError) throw banError;
+
+      const { error: revokeError } = await access.admin.rpc('revoke_staff_sessions', { p_user_id: userId });
+      if (revokeError) {
+        console.warn('revoke_staff_sessions notice:', revokeError.message);
       }
 
-      const { error: profileError } = await access.admin
+      const nowIso = new Date().toISOString();
+      const { error: archiveError } = await access.admin
         .from('staff_profiles')
-        .delete()
+        .update({ status: 'archived', archived_at: nowIso, updated_at: nowIso })
         .eq('id', userId);
-      if (profileError) throw profileError;
+      if (archiveError) throw archiveError;
 
-      return jsonResponse({ success: true }, 200, req);
+      return jsonResponse({ success: true, archived: true }, 200, req);
     }
 
     if (action === 'suspend') {
+      if (target.status === 'archived') {
+        return jsonResponse({ error: 'Archived staff accounts cannot be suspended.' }, 400, req);
+      }
       if (isTargetAdmin && target.status === 'active') {
         const { count, error: countError } = await access.admin
           .from('staff_profiles')
@@ -95,9 +116,10 @@ Deno.serve(async (req) => {
         if ((count || 0) <= 1) return jsonResponse({ error: 'The last active admin cannot be suspended.' }, 409, req);
       }
 
-      // Ban auth account before marking profile suspended, and roll back if profile update fails
+      // Ban auth account, revoke active sessions, then mark profile suspended (rolling back ban on DB failure)
       const { error: banError } = await access.admin.auth.admin.updateUserById(userId, { ban_duration: '876000h' });
       if (banError) throw banError;
+
       const { error } = await access.admin
         .from('staff_profiles')
         .update({ status: 'suspended', updated_at: new Date().toISOString() })
@@ -106,10 +128,19 @@ Deno.serve(async (req) => {
         await access.admin.auth.admin.updateUserById(userId, { ban_duration: 'none' }).catch(() => {});
         throw error;
       }
+
+      const { error: revokeError } = await access.admin.rpc('revoke_staff_sessions', { p_user_id: userId });
+      if (revokeError) {
+        console.warn('revoke_staff_sessions notice:', revokeError.message);
+      }
+
       return jsonResponse({ success: true }, 200, req);
     }
 
     if (action === 'reactivate') {
+      if (target.status === 'archived') {
+        return jsonResponse({ error: 'Archived staff accounts cannot be reactivated from the web.' }, 400, req);
+      }
       const { error: unbanError } = await access.admin.auth.admin.updateUserById(userId, { ban_duration: 'none' });
       if (unbanError) throw unbanError;
       const { error } = await access.admin
@@ -121,6 +152,10 @@ Deno.serve(async (req) => {
         throw error;
       }
       return jsonResponse({ success: true }, 200, req);
+    }
+
+    if (target.status === 'archived') {
+      return jsonResponse({ error: 'Archived staff accounts cannot be edited.' }, 400, req);
     }
 
     const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '';

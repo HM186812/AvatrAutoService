@@ -20,7 +20,9 @@ import {
   UserCheck,
   Shield,
   AlertTriangle,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Power,
+  RotateCcw
 } from 'lucide-react';
 
 interface UserManagementViewProps {
@@ -169,11 +171,16 @@ export default function UserManagementView({
     );
   };
 
-  // 1. DELETE USER HANDLER
+  // 1. ARCHIVE (SOFT DELETE) USER HANDLER — hides from web while preserving DB record for 10-year audit
   const handleConfirmDelete = async () => {
     if (!deletingUser || isDeleting) return;
     if (deletingUser.id === currentUser.id) {
-      showToast('ບໍ່ສາມາດລົບຕົນເອງ (Admin ປະຈຸບັນ) ອອກຈາກລະບົບໄດ້!', 'error');
+      showToast('ບໍ່ສາມາດລົບຕົນເອງ (Admin ປະຈຸບັນ) ອອກຈາກໜ້າເວັບໄດ້!', 'error');
+      setDeletingUser(null);
+      return;
+    }
+    if (deletingUser.status === 'active') {
+      showToast('ກະລຸນາກົດປິດໃຊ້ງານ (Deactivate) ກ່ອນລົບອອກຈາກໜ້າເວັບ', 'warning');
       setDeletingUser(null);
       return;
     }
@@ -184,7 +191,7 @@ export default function UserManagementView({
            u.id !== deletingUser.id
     );
     if (deletingUser.role === 'admin' && remainingAdmins.length === 0) {
-      showToast('ບໍ່ສາມາດລົບ Admin ຄົນສຸດທ້າຍອອກຈາກລະບົບໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນໃນລະບົບ.', 'warning');
+      showToast('ບໍ່ສາມາດລົບ Admin ຄົນສຸດທ້າຍອອກໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນໃນລະບົບ.', 'warning');
       setDeletingUser(null);
       return;
     }
@@ -192,15 +199,15 @@ export default function UserManagementView({
     setIsDeleting(true);
     try {
       await deleteStaffProfile(deletingUser.id);
-      setUsers(prev => prev.filter(user => user.id !== deletingUser.id));
-      triggerFeedback(`ລົບຜູ້ໃຊ້ "${deletingUser.name}" ອອກຈາກລະບົບສຳເລັດ`);
+      setUsers(prev => prev.map(user => (user.id === deletingUser.id ? { ...user, status: 'archived' } : user)));
+      triggerFeedback(`ລົບບັນຊີ "${deletingUser.name}" ອອກຈາກໜ້າເວັບແລ້ວ (ປະຫວັດຍັງເກັບໃນຖານຂໍ້ມູນ)`);
       setDeletingUser(null);
     } catch (error) {
-      let msg = error instanceof Error ? error.message : 'Could not delete this account.';
+      let msg = error instanceof Error ? error.message : 'Could not archive this account.';
       if (msg.includes('last active')) {
-        msg = 'ບໍ່ສາມາດລົບ Admin ຄົນສຸດທ້າຍອອກຈາກລະບົບໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນ.';
+        msg = 'ບໍ່ສາມາດລົບ Admin ຄົນສຸດທ້າຍອອກໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນ.';
       } else if (msg.includes('own account')) {
-        msg = 'ບໍ່ສາມາດລົບຕົນເອງອອກຈາກລະບົບໄດ້!';
+        msg = 'ບໍ່ສາມາດລົບຕົນເອງອອກໄດ້!';
       } else if (msg.includes('not found') || msg.includes('404')) {
         msg = 'ບໍ່ພົບບັນຊີຜູ້ໃຊ້ນີ້ໃນລະບົບ.';
       }
@@ -225,11 +232,11 @@ export default function UserManagementView({
 
     // Guard: never leave the system without an active admin
     const target = users.find(u => u.id === editingUser.id);
-    const wasActiveAdmin = Boolean(target && target.role === 'admin' && target.status !== 'suspended');
+    const wasActiveAdmin = Boolean(target && target.role === 'admin' && target.status === 'active');
     const willBeAdmin = finalRole === 'admin';
     if (wasActiveAdmin && !willBeAdmin) {
       const otherActiveAdmins = users.filter(
-        u => u.id !== editingUser.id && u.role === 'admin' && u.status !== 'suspended'
+        u => u.id !== editingUser.id && u.role === 'admin' && u.status === 'active'
       );
       if (otherActiveAdmins.length === 0) {
         showToast('ບໍ່ສາມາດປ່ຽນບົດບາດຂອງ Admin ຄົນສຸດທ້າຍໄດ້! ຕ້ອງມີ Admin ຢ່າງໜ້ອຍ 1 ຄົນໃນລະບົບ.', 'warning');
@@ -338,27 +345,23 @@ export default function UserManagementView({
     );
   };
 
-  // Keep account status readable without adding unnecessary motion or intensity.
-  const getStatusBadge = (status?: string, onToggle?: () => void) => {
-    const isActive = status !== 'suspended';
+  // Keep account status readable without hidden badge toggles; explicit row buttons drive lifecycle transitions.
+  const getStatusBadge = (status?: string) => {
+    const isActive = status === 'active';
     return (
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={!onToggle}
-        className={`user-management-status-badge ${isActive ? 'user-management-status-active' : 'user-management-status-suspended'} px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1.5 transition-colors w-fit ${
-          onToggle ? 'cursor-pointer' : 'cursor-default'
-        }`}
-        title={onToggle ? 'ກົດເພື່ອປ່ຽນສະຖານະບັນຊີ (Active / Suspended)' : undefined}
+      <span
+        className={`user-management-status-badge ${isActive ? 'user-management-status-active' : 'user-management-status-suspended'} px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1.5 transition-colors w-fit`}
       >
         <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-        <span>{isActive ? 'ເປີດໃຊ້ງານ (Active)' : 'ລະງັບຊົ່ວຄາວ (Suspended)'}</span>
-      </button>
+        <span>{isActive ? 'ເປີດໃຊ້ງານ (Active)' : 'ປິດໃຊ້ງານຊົ່ວຄາວ (Suspended)'}</span>
+      </span>
     );
   };
 
-  // Filtered users (excluding removed technician demo account)
-  const activeUsers = users.filter(u => u.id !== 'user-tech-01' && !u.name?.includes('ຊ່າງເຕັກນິກ'));
+  // Filtered users (excluding removed technician demo account and archived soft-deleted staff)
+  const activeUsers = users.filter(
+    u => u.id !== 'user-tech-01' && !u.name?.includes('ຊ່າງເຕັກນິກ') && u.status !== 'archived'
+  );
   const filteredUsers = activeUsers.filter(user => {
     if (selectedRoleFilter !== 'all' && user.role !== selectedRoleFilter) return false;
     if (searchQuery.trim()) {
@@ -440,7 +443,7 @@ export default function UserManagementView({
             <span className="user-management-stat-icon user-management-stat-icon-green"><CheckCircle2 className="h-4 w-4" /></span>
             <div>
               <p className="text-xs text-slate-500 dark:text-zinc-400">ບັນຊີທີ່ໃຊ້ງານຢູ່</p>
-              <p className="mt-0.5 text-xl font-bold font-mono text-slate-900 dark:text-white">{activeUsers.filter(user => user.status !== 'suspended').length}</p>
+              <p className="mt-0.5 text-xl font-bold font-mono text-slate-900 dark:text-white">{activeUsers.filter(user => user.status === 'active').length}</p>
             </div>
           </div>
         </div>
@@ -547,7 +550,7 @@ export default function UserManagementView({
                 <div className="space-y-1.5 min-w-37.5">
                   <div className="flex flex-wrap items-center gap-1.5">
                     {getRoleBadge(user)}
-                    {getStatusBadge(user.status, !isCurrentUser ? () => handleToggleUserStatus(user) : undefined)}
+                    {getStatusBadge(user.status)}
                   </div>
                   <span className="text-[11px] text-zinc-500 font-mono block">
                     ເຂົ້າສູ່ລະບົບ: {user.lastLogin || '-'}
@@ -585,20 +588,50 @@ export default function UserManagementView({
                     </button>
                   )}
 
-                  {!isCurrentUser && (
+                  {!isCurrentUser && user.status === 'active' && (
                     <button
-                      onClick={() => setDeletingUser(user)}
+                      type="button"
+                      onClick={() => handleToggleUserStatus(user)}
                       disabled={!canDeleteUsers}
-                      aria-label={!canDeleteUsers ? 'ທ່ານບໍ່ມີສິດລົບຜູ້ໃຊ້' : `ລົບບັນຊີ ${user.name}`}
-                      className={`user-management-delete-button inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 ${
-                        !canDeleteUsers
-                          ? 'bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-50'
-                          : 'bg-zinc-900 hover:bg-rose-950/60 text-zinc-300 hover:text-rose-300 border-zinc-800 hover:border-rose-800/60'
-                      }`}
-                      title={!canDeleteUsers ? 'ທ່ານບໍ່ມີສິດລົບຜູ້ໃຊ້' : 'ລົບຜູ້ໃຊ້ນີ້ອອກຈາກລະບົບ'}
+                      aria-label={`ປິດໃຊ້ງານບັນຊີ ${user.name}`}
+                      className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/20 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                      title="ປິດໃຊ້ງານບັນຊີຊົ່ວຄາວ ແລະ ເຕະ Session ອອກທັນທີ"
                     >
-                      <Trash2 aria-hidden="true" className="w-4 h-4" />
+                      <Power aria-hidden="true" className="w-3.5 h-3.5" />
+                      <span>ປິດໃຊ້ງານ</span>
                     </button>
+                  )}
+
+                  {!isCurrentUser && user.status === 'suspended' && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleUserStatus(user)}
+                        disabled={!canDeleteUsers}
+                        aria-label={`ເປີດໃຊ້ບັນຊີ ${user.name}`}
+                        className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/20 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                        title="ເປີດໃຊ້ງານບັນຊີຄືນໃໝ່"
+                      >
+                        <RotateCcw aria-hidden="true" className="w-3.5 h-3.5" />
+                        <span>ເປີດໃຊ້</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setDeletingUser(user)}
+                        disabled={!canDeleteUsers}
+                        aria-label={!canDeleteUsers ? 'ທ່ານບໍ່ມີສິດລົບຜູ້ໃຊ້' : `ລົບບັນຊີ ${user.name} ອອກຈາກໜ້າເວັບ`}
+                        className={`user-management-delete-button inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                          !canDeleteUsers
+                            ? 'bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed opacity-50'
+                            : 'bg-rose-950/50 hover:bg-rose-900/70 text-rose-300 hover:text-rose-200 border-rose-800/70 hover:border-rose-700'
+                        }`}
+                        title={!canDeleteUsers ? 'ທ່ານບໍ່ມີສິດລົບຜູ້ໃຊ້' : 'ລົບອອກຈາກໜ້າເວັບຖາວອນ (ຍັງເກັບປະຫວັດໃນຖານຂໍ້ມູນ)'}
+                      >
+                        <Trash2 aria-hidden="true" className="w-3.5 h-3.5" />
+                        <span>ລົບເລີຍ</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -847,13 +880,13 @@ export default function UserManagementView({
             </div>
 
             <div className="text-center space-y-2">
-              <h3 className="font-bold text-lg text-white">ຢືນຢັນການລົບຜູ້ໃຊ້?</h3>
+              <h3 className="font-bold text-lg text-white">ຢືນຢັນການລົບບັນຊີອອກຈາກໜ້າເວັບ?</h3>
               <p className="text-xs text-zinc-300">
-                ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການລົບຜູ້ໃຊ້: <strong className="text-white underline">{deletingUser.name}</strong> ({deletingUser.phone}) ອອກຈາກລະບົບ?
+                ຕ້ອງການລົບບັນຊີ: <strong className="text-white underline">{deletingUser.name}</strong> ({deletingUser.email || deletingUser.phone}) ອອກຈາກໜ້າເວັບບໍ່?
               </p>
-              <p className="text-[11px] text-rose-400 bg-rose-950/40 p-2 rounded-xl border border-rose-900/60 flex items-center justify-center gap-1.5">
+              <p className="text-[11px] text-rose-300 bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/60 flex items-center justify-center gap-1.5 text-left">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span>ການກະທຳນີ້ຈະລົບສິດການເຂົ້າເຖິງລະບົບຂອງຜູ້ໃຊ້ນີ້ທັງໝົດ.</span>
+                <span>ບັນຊີນີ້ຈະຖືກຊ່ອນຈາກໜ້າເວັບ ແລະ ປິດສິດເຂົ້າລະບົບຖາວອນ (ຍັງຄົງເກັບຂໍ້ມູນໄວ້ໃນຖານຂໍ້ມູນເພື່ອອ້າງອີງປະຫວັດບິນ 10 ປີ).</span>
               </p>
             </div>
 
@@ -873,7 +906,7 @@ export default function UserManagementView({
                 className="user-management-danger-action px-5 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>{isDeleting ? 'ກຳລັງລົບ...' : 'ຢືນຢັນການລົບຜູ້ໃຊ້'}</span>
+                <span>{isDeleting ? 'ກຳລັງດຳເນີນການ...' : 'ຢືນຢັນລົບອອກຈາກໜ້າເວັບ'}</span>
               </button>
             </div>
           </div>

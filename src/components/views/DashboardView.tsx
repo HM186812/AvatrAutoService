@@ -426,8 +426,8 @@ export default function DashboardView({
       </div>
 
 
-      {/* 4 Dynamic KPI Summary Cards */}
-      <div className="dashboard-kpis grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Dynamic KPI Summary Cards */}
+      <div className={`dashboard-kpis grid grid-cols-1 sm:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
         {/* KPI 1: Leads */}
         <div
           onClick={() => onNavigateMenu('customers')}
@@ -511,34 +511,36 @@ export default function DashboardView({
           </div>
         </div>
 
-        {/* KPI 4: Revenue */}
-        <div
-          onClick={() => onNavigateMenu('bills')}
-          className="dashboard-kpi-card bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 hover:border-blue-500/50 dark:hover:border-zinc-500 rounded-3xl p-5 cursor-pointer transition-all hover:shadow-md group"
-          title="Bills & Invoices"
-        >
-          <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 text-xs mb-3">
-            <span className="font-medium text-slate-900 dark:text-white">{t.kpiRevenueTitle} ({kpiData.label})</span>
-            <span className="p-2.5 bg-blue-50 dark:bg-zinc-900 text-blue-600 dark:text-white rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
-              <FileText className="w-4 h-4" />
-            </span>
+        {isAdmin && (
+          <div
+            onClick={() => onNavigateMenu('bills')}
+            className="dashboard-kpi-card bento-card bg-white dark:bg-zinc-950 border border-slate-200/90 dark:border-zinc-800 hover:border-blue-500/50 dark:hover:border-zinc-500 rounded-3xl p-5 cursor-pointer transition-all hover:shadow-md group"
+            title="Bills & Invoices"
+          >
+            {/* KPI 4: Revenue */}
+            <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400 text-xs mb-3">
+              <span className="font-medium text-slate-900 dark:text-white">{t.kpiRevenueTitle} ({kpiData.label})</span>
+              <span className="p-2.5 bg-blue-50 dark:bg-zinc-900 text-blue-600 dark:text-white rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <FileText className="w-4 h-4" />
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white">
+                ${kpiData.revenueUSD.toLocaleString()}
+              </span>
+              <span className="text-xs text-blue-600 font-mono font-bold">USD</span>
+            </div>
+            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-white">
+              <span className="font-mono text-slate-500 dark:text-zinc-400 font-medium" title={lang === 'lo' ? 'ເງິນງວດທີ່ຮັບໃນຊ່ວງນີ້ (ບໍ່ລວມໃນຍອດຂາຍລົດ)' : 'Installments collected in this period (not part of vehicle sales)'}>
+                {lang === 'lo' ? '+ ເງິນງວດຮັບ' : '+ Installments'} ${kpiData.monthlyInstallmentCollectedUSD.toLocaleString()}
+              </span>
+              <span className="flex items-center gap-1 text-blue-600 dark:text-white font-semibold group-hover:underline">
+                <span>{t.viewBillsAction}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white">
-              ${kpiData.revenueUSD.toLocaleString()}
-            </span>
-            <span className="text-xs text-blue-600 font-mono font-bold">USD</span>
-          </div>
-          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 group-hover:text-blue-600 dark:group-hover:text-white">
-            <span className="font-mono text-slate-500 dark:text-zinc-400 font-medium" title={lang === 'lo' ? 'ເງິນງວດທີ່ຮັບໃນຊ່ວງນີ້ (ບໍ່ລວມໃນຍອດຂາຍລົດ)' : 'Installments collected in this period (not part of vehicle sales)'}>
-              {lang === 'lo' ? '+ ເງິນງວດຮັບ' : '+ Installments'} ${kpiData.monthlyInstallmentCollectedUSD.toLocaleString()}
-            </span>
-            <span className="flex items-center gap-1 text-blue-600 dark:text-white font-semibold group-hover:underline">
-              <span>{t.viewBillsAction}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </span>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* SECTION: Follow-ups due today / overdue */}

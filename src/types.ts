@@ -26,7 +26,7 @@ export interface SystemUser {
   department: string;
   avatarInitials: string;
   avatarUrl?: string;
-  status?: 'active' | 'suspended';
+  status?: 'active' | 'suspended' | 'archived';
   createdAt: string;
   lastLogin?: string;
 }

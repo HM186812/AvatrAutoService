@@ -6,26 +6,39 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:3000',
 ];
 
-function resolveAllowedOrigin(req?: Request): string {
+function getAllowedOrigins(): string[] {
   const configured = (Deno.env.get('ALLOWED_ORIGINS') || Deno.env.get('SITE_URL') || '')
     .split(',')
     .map((o) => o.trim().replace(/\/+$/, ''))
     .filter(Boolean);
-  const allowlist = configured.length > 0 ? configured : DEFAULT_ALLOWED_ORIGINS;
-  const reqOrigin = req?.headers.get('Origin')?.trim().replace(/\/+$/, '');
-  if (reqOrigin && allowlist.includes(reqOrigin)) {
-    return reqOrigin;
-  }
-  return allowlist[0];
+  return configured.length > 0 ? configured : DEFAULT_ALLOWED_ORIGINS;
 }
 
-function buildCorsHeaders(req?: Request) {
-  return {
-    'Access-Control-Allow-Origin': resolveAllowedOrigin(req),
+export function isOriginAllowed(req?: Request): boolean {
+  const reqOrigin = req?.headers.get('Origin')?.trim().replace(/\/+$/, '');
+  if (!reqOrigin) return true;
+  return getAllowedOrigins().includes(reqOrigin);
+}
+
+function buildCorsHeaders(req?: Request): Record<string, string> {
+  const reqOrigin = req?.headers.get('Origin')?.trim().replace(/\/+$/, '');
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin',
   };
+  if (reqOrigin && getAllowedOrigins().includes(reqOrigin)) {
+    headers['Access-Control-Allow-Origin'] = reqOrigin;
+  }
+  return headers;
+}
+
+export function rejectDisallowedOrigin(req?: Request): Response | null {
+  if (!req || isOriginAllowed(req)) return null;
+  return new Response(JSON.stringify({ error: 'Origin not allowed.' }), {
+    status: 403,
+    headers: { 'Content-Type': 'application/json', 'Vary': 'Origin' },
+  });
 }
 
 export function jsonResponse(body: Record<string, unknown>, status = 200, req?: Request) {
@@ -36,7 +49,9 @@ export function jsonResponse(body: Record<string, unknown>, status = 200, req?: 
 }
 
 export function optionsResponse(req?: Request) {
-  return new Response('ok', { headers: buildCorsHeaders(req) });
+  const blocked = rejectDisallowedOrigin(req);
+  if (blocked) return blocked;
+  return new Response(null, { status: 204, headers: buildCorsHeaders(req) });
 }
 
 export async function requireActiveStaff(req: Request): Promise<{
