@@ -15,7 +15,7 @@ graph TD
     subgraph "Supabase Cloud Platform (Region: ap-southeast-1)"
         Auth["Supabase Auth (GoTrue, Signup Disabled / Invite-Only)"]
         EdgeFn["Deno Edge Functions (create-staff, manage-staff)"]
-        Storage["Supabase Storage (dealership-assets, avatr-assets, payment-slips)"]
+        Storage["Supabase Storage (dealership-assets, payment-slips)"]
         
         subgraph "PostgreSQL 17 Core Engine"
             Trigger["Auth Trigger (handle_new_auth_user)"]
@@ -47,7 +47,7 @@ graph TD
 
 ### 2.1 1-RTT Showroom Initialization (`get_showroom_initial_data`)
 - **Problem**: Opening the showroom previously fired 6–11 separate HTTP requests across WAN (~200ms RTT per request).
-- **Solution**: A PostgreSQL `SECURITY DEFINER` function compiles `models`, `vehicles`, `customers` (limit 250), `roles`, and `settings` into a single JSON payload. Initial load drops from >1.5s to ~250ms.
+- **Solution**: A PostgreSQL `SECURITY DEFINER` function compiles `models`, `vehicles`, `customers`, `roles`, and `settings` into a single JSON payload. Initial load drops from >1.5s to ~250ms.
 
 ### 2.2 Bundle Splitting & Lazy-Loaded Modals
 - **Problem**: Main entry bundle loaded heavy PDF export libraries and all views/modals eagerly.
@@ -65,7 +65,7 @@ graph TD
 - **Solution**: Removed duplicate indexes and added missing B-Tree indexes on `vehicles(created_at DESC)`, `customers(created_at DESC)`, `service_appointments(scheduled_date ASC)`, and `test_drives(drive_date ASC)`.
 
 ### 2.5 Offline Resilience & Mutation Queue
-- **Architecture**: `src/backend/offlineSync.ts` provides a client-side mutation queue persisted in `localStorage`.
+- **Architecture**: `src/backend/offlineStore.ts` provides a client-side mutation queue persisted in `localStorage`.
 - When connectivity drops, mutations (leads, bills, appointments) queue safely.
 - On the `online` event, the background worker replays pending mutations with exponential retry backoff.
 
@@ -73,11 +73,11 @@ graph TD
 
 ## 3. Storage Optimization & Media Lifecycle Strategy (Phase 2 Roadmap)
 
-การบริหารจัดการพื้นที่ Supabase Storage Bucket (โควตา Free Tier 1 GB = 1,024 MB):
+Supabase Storage bucket capacity management (Free Tier quota: 1 GB = 1,024 MB):
 
-| แผนยุทธศาสตร์ | ปริมาณข้อมูล / คัน | ขีดความสามารถที่รองรับ | อายุการใช้งานบน Free Tier (1 GB) | แนวทางดำเนินการ |
+| Strategy Plan | Storage / Vehicle | Capacity | Free Tier Lifetime (1 GB) | Operational Approach |
 | :--- | :---: | :---: | :---: | :--- |
-| **แผนที่ 1: บีบอัด WebP (300 KB/รูป)** | ~1.1 MB (รูปรถ 3 รูป + สลิป 1 รูป) | ~930 คัน | **~4.5 – 5 ปี** ✅ | บีบอัดภาพผ่าน Client Canvas เป็น `.webp` สูงสุด 1200px / 300KB ก่อนส่งขึ้น Cloud ไม่ต้องลบประวัติย้อนหลัง |
-| **แผนที่ 2: บีบอัด WebP + ลบสลิปเก่า 90 วัน** | หมุนเวียนสต็อก 30–50 คัน | หมุนเวียนคงที่ | **ไม่มีวันเต็ม (ใช้จริงคงที่ ~150 MB)** 🚀 | ใช้ WebP 300KB ร่วมกับ Retention Policy ล้างภาพสลิปที่บัญชีตรวจและปิดงบไตรมาสเรียบร้อยแล้ว |
+| **Plan 1: WebP Compression (300 KB/image)** | ~1.1 MB (3 vehicle photos + 1 payment slip) | ~930 vehicles | **~4.5 – 5 years** ✅ | Compress images via Client Canvas to `.webp` (max 1200px / 300 KB) before upload; retain full historical records |
+| **Plan 2: WebP + 90-Day Slip Retention** | 30–50 cycling vehicles/quarter | Rolling steady-state | **Virtually unlimited (~150 MB steady)** 🚀 | Combine 300 KB WebP compression with periodic cleanup of audited quarterly payment slips |
 
-> **คำแนะนำเชิงปฏิบัติ**: เริ่มต้นด้วย **แผนที่ 1** ทันทีในระยะสั้นเพื่อหยุดยั้งไฟล์ภาพขนาดใหญ่ (RAW 4K) จากนั้นหากพื้นที่แตะระดับ 500 MB (ประมาณ 2–3 ปีข้างหน้า) ค่อยเปิดใช้ระบบกำจัดสลิปเก่าตาม **แผนที่ 2** โดยไม่ต้องเร่งรีบลบประวัติทางการเงินในช่วงแรก
+> **Practical Recommendation**: Start with **Plan 1** immediately to prevent oversized RAW/4K uploads. Once storage reaches ~500 MB (typically in 2–3 years), optionally enable the aged-slip retention policy from **Plan 2** after accounting sign-off.
