@@ -100,3 +100,12 @@ test('preflight_readiness and config.toml include hardened RPCs and Turnstile te
   assert.match(configToml, /provider\s*=\s*"turnstile"/);
   assert.doesNotMatch(configToml, /provider\s*=\s*"hcaptcha"/);
 });
+
+test('follow-up lint migration aligns bill_items COALESCE types to text and removes shadowed loop vars', () => {
+  const fixPath = path.join(ROOT, 'supabase/migrations/20261114102000_fix_record_vehicle_bill_coalesce_and_lint.sql');
+  assert.ok(fs.existsSync(fixPath), 'Missing 20261114102000_fix_record_vehicle_bill_coalesce_and_lint.sql');
+  const sql = fs.readFileSync(fixPath, 'utf8');
+  assert.match(sql, /COALESCE\(\s*NULLIF\(p_item->>'pdi_status_initial',\s*''\)::public\.pdi_status::text,\s*v_vehicle\.pdi_status::text/i);
+  assert.match(sql, /COALESCE\(\s*NULLIF\(p_item->>'status_initial',\s*''\)::public\.vehicle_status::text,\s*v_vehicle\.status::text/i);
+  assert.doesNotMatch(sql, /^\s*(?:v_idx|i)\s+integer/m);
+});
